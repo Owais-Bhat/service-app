@@ -148,24 +148,35 @@ async function openInquiryDetail(id, onDone) {
   document.body.appendChild(overlay);
   overlay.querySelector('#ci').onclick = overlay.querySelector('#ci2').onclick = () => overlay.remove();
   
-  overlay.querySelector('#assign-btn').onclick = async () => {
+    overlay.querySelector('#assign-btn').onclick = async () => {
     const empId = overlay.querySelector('#assign-to').value;
     if (!empId) { toast('Please select staff', 'warning'); return; }
     
     const btn = overlay.querySelector('#assign-btn');
     btn.disabled = true; btn.textContent = 'Processing...';
 
+    // SMART LINKING: Try to find an existing client by phone number
+    const { data: existingClient } = await supabase.from('profiles')
+      .select('id')
+      .eq('phone', i.phone)
+      .single();
+
     const { data: ticket, error: tErr } = await supabase.from('tickets').insert({
       title: `Service: ${i.service_item.slice(0,30)}`,
-      description: `Inquiry from ${i.full_name}. Requirement: ${i.service_item}`,
+      description: `Inquiry from ${i.full_name}. Phone: ${i.phone}. Requirement: ${i.service_item}`,
       assigned_to: empId,
+      client_id: existingClient ? existingClient.id : null,
       status: 'open',
       category: 'service_request'
     }).select().single();
     
     if (!tErr) {
-      await supabase.from('inquiries').update({ status: 'assigned', ticket_id: ticket.id }).eq('id', i.id);
-      toast('Technician assigned!', 'success');
+      await supabase.from('inquiries').update({ 
+        status: 'assigned', 
+        ticket_id: ticket.id 
+      }).eq('id', i.id);
+      
+      toast(existingClient ? 'Technician assigned & linked to client!' : 'Technician assigned!', 'success');
       overlay.remove();
       onDone();
     } else {
