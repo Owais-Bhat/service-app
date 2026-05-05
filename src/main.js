@@ -6,6 +6,7 @@ import { renderClientDashboard, renderClientTickets } from './pages/client.js';
 import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks } from './pages/admin.js';
 import { renderEmployeeDashboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
+import { renderLandingPage } from './pages/landing.js';
 
 const app = document.getElementById('app');
 let currentUser = null;
@@ -32,7 +33,6 @@ function getNavItems(role) {
       { id: 'profile', icon: '👤', label: 'Profile' },
     ];
   }
-  // admin
   return [...common,
     { id: 'all-tickets', icon: '🎫', label: 'All Tickets' },
     { type: 'section', label: 'Operations' },
@@ -50,26 +50,12 @@ function getNavItems(role) {
 // ── PAGE RENDERER ─────────────────────────────────────
 function getPageRenderer(role, page) {
   const map = {
-    client: {
-      dashboard: renderClientDashboard,
-      'my-tickets': renderClientTickets,
-      profile: renderProfile,
-    },
-    employee: {
-      dashboard: renderEmployeeDashboard,
-      'all-tickets': renderAllTickets, // Still use this but will show assigned
-      profile: renderProfile,
-    },
+    client: { dashboard: renderClientDashboard, 'my-tickets': renderClientTickets, profile: renderProfile },
+    employee: { dashboard: renderEmployeeDashboard, 'all-tickets': renderAllTickets, profile: renderProfile },
     admin: {
-      dashboard: renderAdminDashboard,
-      'all-tickets': renderAllTickets,
-      attendance: renderAttendance,
-      inquiries: renderInquiries,
-      stocks: renderStocks,
-      clients: renderClients,
-      users: renderUsers,
-      profile: renderProfile,
-    },
+      dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
+      inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, users: renderUsers, profile: renderProfile
+    }
   };
   return (map[role] || map.client)[page];
 }
@@ -79,12 +65,14 @@ function navigate(page) {
   const navItems = getNavItems(currentRole);
   const renderer = getPageRenderer(currentRole, page);
   renderLayout({
-    user: currentUser,
-    role: currentRole,
-    activePage,
-    navItems,
-    onNav: navigate,
-    pageContent: renderer || (() => {}),
+    user: currentUser, role: currentRole, activePage, navItems,
+    onNav: navigate, pageContent: renderer || (() => {})
+  });
+}
+
+function showAuth() {
+  renderAuth((user, role) => {
+    currentUser = user; currentRole = role; navigate('dashboard');
   });
 }
 
@@ -92,28 +80,21 @@ function navigate(page) {
 async function boot() {
   app.innerHTML = `<div class="loading-screen"><div class="spinner"></div></div>`;
   const { data: { session } } = await supabase.auth.getSession();
+  
   if (session?.user) {
     currentUser = session.user;
     currentRole = await getUserRole(currentUser.id) || 'client';
     navigate('dashboard');
   } else {
-    renderAuth((user, role) => {
-      currentUser = user;
-      currentRole = role;
-      navigate('dashboard');
-    });
+    // Show Landing Page if not logged in
+    renderLandingPage(app, showAuth);
   }
 }
 
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'SIGNED_OUT') {
-    currentUser = null;
-    currentRole = null;
-    renderAuth((user, role) => {
-      currentUser = user;
-      currentRole = role;
-      navigate('dashboard');
-    });
+    currentUser = null; currentRole = null;
+    renderLandingPage(app, showAuth);
   }
 });
 

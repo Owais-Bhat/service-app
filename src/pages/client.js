@@ -9,19 +9,19 @@ export async function renderClientDashboard(container) {
   container.innerHTML = `
     <div class="page-header">
       <h1>Service Portal</h1>
-      <p>Welcome, ${profile?.full_name || 'Client'}. How can we help you today?</p>
+      <p>Welcome back, ${profile?.full_name || 'Client'}</p>
     </div>
 
-    <div class="grid-layout" style="display:grid; grid-template-columns: 1.5fr 1fr; gap:24px;">
+    <div class="grid-layout">
       <!-- Main Inquiry Form -->
-      <div class="card" style="grid-column: span 1">
+      <div class="card">
         <div class="card-header">
           <span class="card-title">🚀 New Service Request</span>
         </div>
         <div class="card-body">
-          <p style="color:var(--text2); margin-bottom:20px; font-size:0.9rem;">Fill in the details below to request a service or item. Our team will get back to you shortly.</p>
+          <p style="color:var(--text2); margin-bottom:24px; font-size:0.95rem;">Fill in the details below. Our team will get back to you shortly.</p>
           
-          <div class="form-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
             <div class="form-group">
               <label>Full Name</label>
               <input type="text" id="dash-i-name" value="${profile?.full_name || ''}" placeholder="John Doe">
@@ -32,7 +32,7 @@ export async function renderClientDashboard(container) {
             </div>
           </div>
           
-          <div class="form-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
             <div class="form-group">
               <label>Location / Address</label>
               <input type="text" id="dash-i-loc" value="${profile?.address || ''}" placeholder="Area, City">
@@ -45,10 +45,10 @@ export async function renderClientDashboard(container) {
 
           <div class="form-group">
             <label>Service or Item Needed</label>
-            <textarea id="dash-i-service" rows="4" placeholder="Please describe exactly what you need..."></textarea>
+            <textarea id="dash-i-service" rows="4" placeholder="Describe exactly what you need..."></textarea>
           </div>
 
-          <button class="btn btn-primary" id="btn-submit-dash-inquiry" style="margin-top:8px;">Submit Service Request</button>
+          <button class="btn btn-primary" id="btn-submit-dash-inquiry">Submit Request</button>
         </div>
       </div>
 
@@ -61,11 +61,11 @@ export async function renderClientDashboard(container) {
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header"><span class="card-title">Need Technical Support?</span></div>
-          <div class="card-body">
-            <p style="color:var(--text2); font-size:0.85rem; margin-bottom:16px;">If you have an existing ticket or a complex technical issue, use our ticket system.</p>
-            <button class="btn btn-secondary" style="width:100%" id="goto-tickets">View My Tickets</button>
+        <div class="card" style="background:var(--gradient); border:none;">
+          <div class="card-body" style="color:#fff;">
+            <h3 style="margin-bottom:8px;">Need Tech Support?</h3>
+            <p style="font-size:0.9rem; margin-bottom:20px; opacity:0.9;">Have a technical issue or hardware failure? Use our ticket system for deep tracking.</p>
+            <button class="btn btn-secondary" style="width:100%; background:rgba(255,255,255,0.2); backdrop-filter:blur(10px); border:none; color:#fff;" id="goto-tickets">Go to My Tickets</button>
           </div>
         </div>
       </div>
@@ -80,16 +80,14 @@ export async function renderClientDashboard(container) {
     const service = container.querySelector('#dash-i-service').value.trim();
 
     if (!name || !phone || !service) {
-      toast('Please fill in Name, Phone, and Service needed', 'warning');
+      toast('Please fill in Name, Phone, and Service', 'warning');
       return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
+    btn.disabled = true; btn.textContent = 'Sending...';
 
     const { error } = await supabase.from('inquiries').insert({
-      full_name: name,
-      phone,
+      full_name: name, phone,
       location: container.querySelector('#dash-i-loc').value.trim(),
       bill_no: container.querySelector('#dash-i-bill').value.trim(),
       service_item: service
@@ -97,13 +95,11 @@ export async function renderClientDashboard(container) {
 
     if (error) {
       toast(error.message, 'error');
-      btn.disabled = false;
-      btn.textContent = 'Submit Service Request';
+      btn.disabled = false; btn.textContent = 'Submit Request';
     } else {
-      toast('Request submitted! We will contact you soon.', 'success');
+      toast('Request submitted!', 'success');
       container.querySelector('#dash-i-service').value = '';
-      btn.disabled = false;
-      btn.textContent = 'Submit Service Request';
+      btn.disabled = false; btn.textContent = 'Submit Request';
       loadMiniStats(container.querySelector('#client-mini-stats'), user.id);
     }
   };
@@ -117,83 +113,100 @@ export async function renderClientDashboard(container) {
 }
 
 async function loadMiniStats(el, userId) {
-  const { data: tickets } = await supabase.from('tickets').select('status').eq('client_id', userId);
-  const t = tickets || [];
-  const open = t.filter(x => x.status === 'open').length;
-  const resolved = t.filter(x => x.status === 'resolved').length;
+  const { data: t } = await supabase.from('tickets').select('status').eq('client_id', userId);
+  const tickets = t || [];
+  const open = tickets.filter(x => x.status === 'open' || x.status === 'in_progress').length;
+  const resolved = tickets.filter(x => x.status === 'resolved').length;
 
   el.innerHTML = `
-    <div style="display:flex; flex-direction:column; gap:12px;">
+    <div style="display:flex; flex-direction:column; gap:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="color:var(--text2);">Open Tickets</span>
+        <span style="color:var(--text2); font-weight:500;">Active Tasks</span>
         <span class="badge badge-open">${open}</span>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="color:var(--text2);">Resolved</span>
+        <span style="color:var(--text2); font-weight:500;">Completed</span>
         <span class="badge badge-resolved">${resolved}</span>
       </div>
     </div>
   `;
 }
 
-// ── CLIENT TICKETS PAGE ────────────────────────────────
+// ── CLIENT TICKETS PAGE (Responsive) ──────────────────
 export async function renderClientTickets(container) {
   const { data: { user } } = await supabase.auth.getUser();
   const { data: tickets } = await supabase.from('tickets').select('*').eq('client_id', user.id).order('created_at', { ascending: false });
   const list = tickets || [];
 
   container.innerHTML = `
-    <div class="page-header"><h1>My Tickets</h1><p>View and manage your support requests</p></div>
-    <div class="filter-bar">
-      <div class="search-input-wrap"><span>🔍</span><input class="search-input" id="search" placeholder="Search tickets…"/></div>
-      <select id="status-filter" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:.88rem;outline:none;">
-        <option value="">All Statuses</option>
-        <option value="open">Open</option><option value="in_progress">In Progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option>
-      </select>
-      <button class="btn btn-primary btn-sm" id="new-ticket-btn" style="width:auto">+ New Ticket</button>
+    <div class="page-header">
+      <h1>My Tickets</h1>
+      <p>Track your support requests</p>
     </div>
-    <div id="tickets-list"></div>`;
+    
+    <div class="filter-bar">
+      <div class="search-input-wrap">
+        <span>🔍</span>
+        <input class="search-input" id="search" placeholder="Search by title..."/>
+      </div>
+      <div style="display:flex; gap:12px; flex:1; min-width:300px;">
+        <select id="status-filter" style="flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:0 16px; color:#fff; outline:none;">
+          <option value="">All Statuses</option>
+          <option value="open">Open</option>
+          <option value="in_progress">In Progress</option>
+          <option value="resolved">Resolved</option>
+          <option value="closed">Closed</option>
+        </select>
+        <button class="btn btn-primary" id="new-ticket-btn" style="width:auto; white-space:nowrap;">+ New Ticket</button>
+      </div>
+    </div>
+
+    <div id="tickets-list" class="grid-layout" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 350px), 1fr));"></div>
+  `;
 
   let filtered = [...list];
   const render = () => renderTicketList(container.querySelector('#tickets-list'), filtered, user.id, () => renderClientTickets(container));
 
-  container.querySelector('#search').addEventListener('input', e => {
+  container.querySelector('#search').oninput = e => {
     const q = e.target.value.toLowerCase();
     filtered = list.filter(t => t.title.toLowerCase().includes(q));
     render();
-  });
-  container.querySelector('#status-filter').addEventListener('change', e => {
-    const s = e.target.value;
-    filtered = s ? list.filter(t => t.status === s) : [...list];
+  };
+  container.querySelector('#status-filter').onchange = e => {
+    filtered = e.target.value ? list.filter(t => t.status === e.target.value) : [...list];
     render();
-  });
+  };
+
   render();
   container.querySelector('#new-ticket-btn').onclick = () => openTicketModal(user.id, () => renderClientTickets(container));
 }
 
 function renderTicketList(el, tickets, userId, refresh) {
   if (!tickets.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🎫</div><div class="empty-title">No tickets yet</div></div>`;
+    el.innerHTML = `<div class="card" style="grid-column: 1/-1; text-align:center; padding:60px 20px;">
+      <div style="font-size:3rem; margin-bottom:16px;">🎫</div>
+      <h3 style="margin-bottom:8px;">No tickets found</h3>
+      <p style="color:var(--text3);">Try changing your search or create a new ticket.</p>
+    </div>`;
     return;
   }
-  el.innerHTML = `
-    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px;">
-      ${tickets.map(t => `
-        <div class="ticket-card priority-${t.priority||'medium'}" data-id="${t.id}" style="background:var(--bg2); border:1px solid var(--border); border-radius:16px; padding:20px; cursor:pointer; transition:0.2s;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-            <span style="font-size:0.75rem; color:var(--text3);">#${t.id.slice(0,8)}</span>
-            <span class="badge badge-${t.status}">${t.status}</span>
-          </div>
-          <div style="font-weight:700; margin-bottom:16px; font-size:1.1rem;">${t.title}</div>
-          <div style="font-size:0.8rem; color:var(--text3); border-top:1px solid var(--border); padding-top:12px;">
-            📅 ${formatDate(t.created_at)}
-          </div>
-        </div>`).join('')}
-    </div>`;
+  el.innerHTML = tickets.map(t => `
+    <div class="ticket-card priority-${t.priority||'medium'}" data-id="${t.id}" 
+         style="background:var(--bg2); border:1px solid var(--border); border-radius:20px; padding:24px; cursor:pointer; transition:0.2s; position:relative; overflow:hidden;">
+      <div style="position:absolute; top:0; left:0; width:4px; height:100%; background:var(--primary);"></div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+        <span style="font-size:0.75rem; color:var(--text3); font-family:monospace;">#${t.id.slice(0,8)}</span>
+        <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+      </div>
+      <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:12px; color:var(--text);">${t.title}</h3>
+      <div style="font-size:0.85rem; color:var(--text2); display:flex; align-items:center; gap:8px; border-top:1px solid var(--border); padding-top:16px;">
+        <span>📅 ${formatDate(t.created_at)}</span>
+        <span style="margin-left:auto; color:var(--primary); font-weight:600;">View Details →</span>
+      </div>
+    </div>`).join('');
+
   el.querySelectorAll('.ticket-card').forEach(card => {
     card.onclick = () => openTicketDetail(card.dataset.id, refresh);
-    card.onmouseover = () => card.style.borderColor = 'var(--primary)';
-    card.onmouseout = () => card.style.borderColor = 'var(--border)';
   });
 }
 
@@ -204,20 +217,22 @@ function openTicketModal(clientId, onSave) {
     <div class="modal">
       <div class="modal-header"><span class="modal-title">New Support Ticket</span><button class="modal-close" id="close-modal">✕</button></div>
       <div class="modal-body">
-        <div class="form-group"><label>Title</label><input type="text" id="t-title" placeholder="Brief description of issue" required/></div>
-        <div class="form-group"><label>Category</label>
-          <select id="t-category">
-            <option value="network">Network Issue</option><option value="hardware">Hardware</option><option value="other">Other</option>
-          </select>
+        <div class="form-group"><label>Issue Title</label><input type="text" id="t-title" placeholder="e.g. CCTV Camera 4 is offline" required/></div>
+        <div class="grid-layout" style="grid-template-columns: 1fr 1fr; gap:16px;">
+          <div class="form-group"><label>Category</label>
+            <select id="t-category">
+              <option value="network">Network Issue</option><option value="hardware">Hardware</option><option value="software">Software</option><option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Priority</label>
+            <select id="t-priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+          </div>
         </div>
-        <div class="form-group"><label>Priority</label>
-          <select id="t-priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
-        </div>
-        <div class="form-group"><label>Description</label><textarea id="t-desc" placeholder="Describe the issue in detail…"></textarea></div>
+        <div class="form-group"><label>Detailed Description</label><textarea id="t-desc" rows="5" placeholder="Please provide as much detail as possible..."></textarea></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="cancel-modal">Cancel</button>
-        <button class="btn btn-primary" id="submit-ticket" style="width:auto">Submit Ticket</button>
+        <button class="btn btn-primary" id="submit-ticket">Submit Ticket</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -225,15 +240,18 @@ function openTicketModal(clientId, onSave) {
   overlay.querySelector('#submit-ticket').onclick = async () => {
     const title = overlay.querySelector('#t-title').value.trim();
     if (!title) { toast('Please enter a title', 'error'); return; }
-    await supabase.from('tickets').insert({
+    const btn = overlay.querySelector('#submit-ticket');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+    
+    const { error } = await supabase.from('tickets').insert({
       client_id: clientId, title,
       category: overlay.querySelector('#t-category').value,
       priority: overlay.querySelector('#t-priority').value,
       description: overlay.querySelector('#t-desc').value.trim()
     });
-    toast('Ticket submitted!', 'success');
-    overlay.remove();
-    onSave && onSave();
+    
+    if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = 'Submit Ticket'; }
+    else { toast('Ticket created!', 'success'); overlay.remove(); onSave(); }
   };
 }
 
@@ -245,26 +263,40 @@ async function openTicketDetail(ticketId, onClose) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:640px">
+    <div class="modal" style="max-width:700px">
       <div class="modal-header">
         <div><div class="modal-title">${t.title}</div><div style="font-size:.75rem;color:var(--text3);">#${t.id.slice(0,8)}</div></div>
         <button class="modal-close" id="cd">✕</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;gap:8px;margin-bottom:16px"><span class="badge badge-${t.status}">${t.status}</span><span class="badge badge-${t.priority}">${t.priority}</span></div>
-        <p style="color:var(--text2);font-size:.9rem;margin-bottom:20px">${t.description||'No description.'}</p>
+        <div style="display:flex; gap:8px; margin-bottom:20px;">
+          <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+          <span class="badge badge-urgent">${t.priority} priority</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:16px; margin-bottom:32px; border:1px solid var(--border);">
+          <p style="color:var(--text); line-height:1.6; white-space:pre-wrap;">${t.description||'No description provided.'}</p>
+        </div>
         
-        <div style="font-weight:600;margin-bottom:12px">💬 Comments</div>
-        <div id="comments-list" style="margin-bottom:16px; max-height:200px; overflow-y:auto;">
-          ${(comments||[]).map(c => `
-            <div style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:8px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-weight:600;font-size:.85rem">${c.profiles?.full_name||'User'}</span><span style="font-size:.75rem;color:var(--text3)">${formatDateTime(c.created_at)}</span></div>
-              <div style="font-size:.88rem;color:var(--text2)">${c.content}</div>
+        <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:16px;">💬 Communication History</h3>
+        <div id="comments-list" style="margin-bottom:24px; max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+          ${(comments||[]).length === 0 ? '<p style="color:var(--text3); font-style:italic;">No comments yet.</p>' : 
+            comments.map(c => `
+            <div style="background:var(--bg3); border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span style="font-weight:700; font-size:.85rem; color:var(--primary);">${c.profiles?.full_name||'User'}</span>
+                <span style="font-size:.75rem; color:var(--text3)">${formatDateTime(c.created_at)}</span>
+              </div>
+              <div style="font-size:.95rem; color:var(--text); line-height:1.5;">${c.content}</div>
             </div>`).join('')}
         </div>
-        <div class="form-group"><textarea id="new-comment" placeholder="Add a comment…"></textarea></div>
+        <div class="form-group" style="margin-bottom:0;">
+          <textarea id="new-comment" rows="3" placeholder="Add a message or update..."></textarea>
+        </div>
       </div>
-      <div class="modal-footer"><button class="btn btn-secondary" id="cd2">Close</button><button class="btn btn-primary" style="width:auto" id="add-c">Add Comment</button></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cd2">Close</button>
+        <button class="btn btn-primary" id="add-c" style="width:auto;">Send Message</button>
+      </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#cd').onclick = overlay.querySelector('#cd2').onclick = () => { overlay.remove(); onClose && onClose(); };
@@ -273,8 +305,11 @@ async function openTicketDetail(ticketId, onClose) {
     const { data: { user } } = await supabase.auth.getUser();
     const content = overlay.querySelector('#new-comment').value.trim();
     if (!content) return;
+    const btn = overlay.querySelector('#add-c');
+    btn.disabled = true; btn.textContent = 'Sending...';
+
     await supabase.from('ticket_comments').insert({ ticket_id: ticketId, user_id: user.id, content });
-    toast('Comment added', 'success');
+    toast('Message sent', 'success');
     overlay.remove();
     openTicketDetail(ticketId, onClose);
   };

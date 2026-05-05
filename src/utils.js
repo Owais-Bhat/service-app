@@ -14,7 +14,7 @@ export function toast(message, type = 'info', duration = 3500) {
   const container = getToastContainer();
   const el = document.createElement('div');
   const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
-  el.className = `toast toast-${type}`;
+  el.className = `toast ${type}`;
   el.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; el.style.transition = '0.3s'; setTimeout(() => el.remove(), 300); }, duration);

@@ -1,51 +1,51 @@
 import { signIn, signUp, getUserRole } from './supabase.js';
 import { toast } from './utils.js';
 
+const LOGO = new URL('./assets/logo.png', import.meta.url).href;
+
 export function renderAuth(onLogin) {
   const app = document.getElementById('app');
-  let mode = 'login'; // 'login' or 'signup'
+  let mode = 'login';
 
   const render = () => {
     app.innerHTML = `
       <div class="auth-page">
         <div class="auth-card">
-          <div class="auth-logo"><h1>Networking Experts</h1></div>
-          <h2 class="auth-title">${mode === 'login' ? 'Welcome Back' : 'Join as Client'}</h2>
-          <p class="auth-subtitle">${mode === 'login' ? 'Sign in to your portal' : 'Create your account to start'}</p>
+          <div class="auth-logo">
+            <img src="${LOGO}" alt="Networking Experts" onerror="this.style.display='none'" />
+          </div>
+          <h2 class="auth-title">${mode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+          <p class="auth-subtitle">${mode === 'login' ? 'Sign in to your portal' : 'Register as a client'}</p>
           <div id="auth-error" class="auth-error" style="display:none"></div>
-          
+
           <form id="auth-form">
             ${mode === 'signup' ? `
               <div class="form-group">
                 <label>Full Name</label>
                 <input type="text" id="full_name" placeholder="John Doe" required />
-              </div>
-            ` : ''}
+              </div>` : ''}
             <div class="form-group">
               <label>Email Address</label>
               <input type="email" id="email" placeholder="you@example.com" required autocomplete="email"/>
             </div>
             <div class="form-group">
               <label>Password</label>
-              <input type="password" id="password" placeholder="••••••••" required autocomplete="${mode==='login'?'current-password':'new-password'}"/>
+              <input type="password" id="password" placeholder="••••••••" required autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"/>
             </div>
-            <button type="submit" class="btn btn-primary" id="submit-btn">${mode === 'login' ? 'Sign In' : 'Create Account'}</button>
+            <button type="submit" class="btn btn-primary btn-wide" id="submit-btn">
+              ${mode === 'login' ? 'Sign In →' : 'Create Account →'}
+            </button>
           </form>
 
-          <div style="margin-top:24px;text-align:center;font-size:.9rem;color:var(--text2)">
-            ${mode === 'login' ? 
-              `Don't have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:600">Sign up as Client</a>` : 
-              `Already have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:600">Sign in</a>`
-            }
+          <div style="margin-top:24px;text-align:center;font-size:.88rem;color:var(--text-soft)">
+            ${mode === 'login'
+              ? `Don't have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:700">Sign up</a>`
+              : `Already have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:700">Sign in</a>`}
           </div>
         </div>
       </div>`;
 
-    document.getElementById('toggle-mode').onclick = (e) => {
-      e.preventDefault();
-      mode = mode === 'login' ? 'signup' : 'login';
-      render();
-    };
+    document.getElementById('toggle-mode').onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'signup' : 'login'; render(); };
 
     document.getElementById('auth-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -53,12 +53,12 @@ export function renderAuth(onLogin) {
       const errEl = document.getElementById('auth-error');
       errEl.style.display = 'none';
       btn.disabled = true;
-      btn.textContent = mode === 'login' ? 'Signing in…' : 'Creating account…';
+      btn.textContent = 'Please wait…';
 
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
-      
       let res;
+
       if (mode === 'signup') {
         const fullName = document.getElementById('full_name').value.trim();
         res = await signUp(email, password, fullName);
@@ -70,7 +70,7 @@ export function renderAuth(onLogin) {
         errEl.textContent = res.error.message;
         errEl.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+        btn.textContent = mode === 'login' ? 'Sign In →' : 'Create Account →';
         return;
       }
 

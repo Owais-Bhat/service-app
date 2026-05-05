@@ -1,6 +1,8 @@
 import { signOut } from './supabase.js';
 import { initials } from './utils.js';
 
+const LOGO = new URL('./assets/logo.png', import.meta.url).href;
+
 export function renderLayout({ user, role, activePage, navItems, onNav, pageContent }) {
   const app = document.getElementById('app');
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
@@ -9,7 +11,10 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
     <div class="portal-layout">
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar-logo"><h2>Networking Experts</h2></div>
+        <div class="sidebar-logo">
+          <img src="${LOGO}" alt="Networking Experts" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
+          <span class="logo-text" style="display:none">Networking Experts</span>
+        </div>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
         <div class="sidebar-footer">
           <div class="user-info">
@@ -22,11 +27,12 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
           </div>
         </div>
       </aside>
+
       <div class="main-content">
         <div class="topbar">
           <button class="menu-toggle" id="menu-toggle">☰</button>
           <div class="topbar-title" id="topbar-title"></div>
-          <div class="topbar-actions" id="topbar-actions"></div>
+          <div id="topbar-actions"></div>
         </div>
         <div class="page-content" id="page-content"></div>
       </div>
@@ -34,33 +40,19 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   buildNav(navItems, activePage, onNav);
 
-  // Logout
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await signOut();
     location.reload();
   });
 
-  // Mobile Menu Toggle
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
   const toggle = document.getElementById('menu-toggle');
 
-  const closeSidebar = () => {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('active');
-  };
-
-  toggle.onclick = () => {
-    sidebar.classList.add('open');
-    overlay.classList.add('active');
-  };
-
+  const closeSidebar = () => { sidebar.classList.remove('open'); overlay.classList.remove('active'); };
+  toggle.onclick = () => { sidebar.classList.add('open'); overlay.classList.add('active'); };
   overlay.onclick = closeSidebar;
-
-  // Intercept nav clicks to close sidebar on mobile
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', closeSidebar);
-  });
+  document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', closeSidebar));
 
   renderPage(pageContent, navItems, activePage);
 }
@@ -75,7 +67,7 @@ function buildNav(navItems, activePage, onNav) {
       <span>${item.label}</span>
     </div>`;
   }).join('');
-  
+
   nav.querySelectorAll('[data-nav]').forEach(el => {
     el.addEventListener('click', () => onNav(el.dataset.nav));
   });
