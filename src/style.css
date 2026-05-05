@@ -807,7 +807,7 @@ tr:hover td {
 }
 
 .landing-nav img {
-  height: 40px;
+  height: 80px;
   object-fit: contain;
 }
 
@@ -1278,6 +1278,7 @@ tr:hover td {
 
 /* ─── MOBILE (< 600px) ─── */
 @media (max-width: 600px) {
+
   /* Convert tables to card-view on mobile */
   .table-wrap {
     overflow-x: visible;
@@ -1420,7 +1421,7 @@ tr:hover td {
   }
 
   .landing-nav img {
-    height: 32px;
+    height: 48px;
   }
 
   .hero-section {
@@ -1521,6 +1522,7 @@ tr:hover td {
 
 /* ─── TOUCH DEVICE ENHANCEMENTS ─── */
 @media (hover: none) and (pointer: coarse) {
+
   /* Bigger tap targets on touch devices */
   .nav-item {
     padding: 14px 16px;
