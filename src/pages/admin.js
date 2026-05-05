@@ -50,27 +50,27 @@ export async function renderAdminDashboard(container) {
     </div>
 
     <div class="grid-layout">
-      <!-- Attendance Card -->
+      <!-- Recent Tickets (From Clients) -->
       <div class="card">
-        <div class="card-header"><span class="card-title">Live Attendance (Today)</span></div>
+        <div class="card-header"><span class="card-title">Recent Client Tickets</span></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Employee</th><th>Clock In</th><th>Location</th></tr></thead>
+            <thead><tr><th>Title</th><th>Status</th><th>Priority</th></tr></thead>
             <tbody>
-              ${all_a.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">No records</td></tr>' : 
-                all_a.slice(0,5).map(x => `<tr>
-                  <td><b>${x.profiles?.full_name || '—'}</b></td>
-                  <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
-                  <td><small>${x.location || '—'}</small></td>
+              ${t.filter(x => x.status !== 'resolved' && x.status !== 'closed').length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">No active tickets</td></tr>' : 
+                t.filter(x => x.status !== 'resolved' && x.status !== 'closed').slice(0,5).map(x => `<tr>
+                  <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${x.title}</b></td>
+                  <td><span class="badge badge-${x.status}">${x.status.replace('_', ' ')}</span></td>
+                  <td><span class="badge badge-${x.priority || 'medium'}">${x.priority || 'medium'}</span></td>
                 </tr>`).join('')}
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- Inquiries Card -->
+      <!-- Inquiries Card (From Guests) -->
       <div class="card">
-        <div class="card-header"><span class="card-title">Pending Inquiries</span></div>
+        <div class="card-header"><span class="card-title">Guest Inquiries</span></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Name</th><th>Service</th><th>Action</th></tr></thead>
@@ -275,7 +275,10 @@ export async function renderEODReports(container) {
 }
 
 export async function renderAllTickets(container) {
-  const { data: tickets } = await supabase.from('tickets').select('*, profiles!tickets_client_id_fkey(full_name)').order('created_at', { ascending: false });
+  const { data: tickets } = await supabase.from('tickets').select('*').order('created_at', { ascending: false });
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name');
+  const profileMap = (profiles || []).reduce((acc, p) => ({ ...acc, [p.id]: p.full_name }), {});
+
   container.innerHTML = `
     <div class="page-header"><h1>Tickets & Tasks</h1></div>
     <div class="card">
@@ -284,7 +287,7 @@ export async function renderAllTickets(container) {
           <thead><tr><th>Client</th><th>Title</th><th>Status</th></tr></thead>
           <tbody>
             ${(tickets||[]).map(t => `<tr>
-              <td>${t.profiles?.full_name||'Inquiry'}</td>
+              <td>${t.client_id ? (profileMap[t.client_id] || 'Client') : 'Guest Inquiry'}</td>
               <td>${t.title}</td>
               <td><span class="badge badge-${t.status}">${t.status}</span></td>
             </tr>`).join('')}
