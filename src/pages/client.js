@@ -84,23 +84,31 @@ export async function renderClientDashboard(container) {
       return;
     }
 
-    btn.disabled = true; btn.textContent = 'Sending...';
+    btn.disabled = true; btn.textContent = 'Submitting...';
 
-    const { error } = await supabase.from('inquiries').insert({
-      full_name: name, phone,
-      location: container.querySelector('#dash-i-loc').value.trim(),
-      bill_no: container.querySelector('#dash-i-bill').value.trim(),
-      service_item: service
-    });
+    // DIRECT TICKET CREATION: Since they are logged in, create a ticket directly
+    const { data: ticket, error } = await supabase.from('tickets').insert({
+      client_id: user.id,
+      title: `Service Request: ${service.slice(0, 30)}`,
+      description: `Requirement: ${service}\n\nClient Contact: ${phone}\nLocation: ${container.querySelector('#dash-i-loc').value.trim()}`,
+      category: 'service_request',
+      status: 'open',
+      priority: 'medium'
+    }).select().single();
 
     if (error) {
       toast(error.message, 'error');
       btn.disabled = false; btn.textContent = 'Submit Request';
     } else {
-      toast('Request submitted!', 'success');
+      toast('Ticket created and assigned to our team!', 'success');
       container.querySelector('#dash-i-service').value = '';
       btn.disabled = false; btn.textContent = 'Submit Request';
-      loadMiniStats(container.querySelector('#client-mini-stats'), user.id);
+
+      // Auto-navigate to tickets after a short delay
+      setTimeout(() => {
+        const navItem = document.querySelector('[data-nav="my-tickets"]');
+        if (navItem) navItem.click();
+      }, 1500);
     }
   };
 
@@ -150,7 +158,7 @@ export async function renderClientTickets(container) {
         <input class="search-input" id="search" placeholder="Search by title..."/>
       </div>
       <div style="display:flex; gap:12px; flex:1; min-width:300px;">
-        <select id="status-filter" style="flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:0 16px; color:#fff; outline:none;">
+        <select id="status-filter" style="flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:12px;  border-color:#000; padding:0 16px; color:#000; outline:none;">
           <option value="">All Statuses</option>
           <option value="open">Open</option>
           <option value="in_progress">In Progress</option>
@@ -191,12 +199,12 @@ function renderTicketList(el, tickets, userId, refresh) {
     return;
   }
   el.innerHTML = tickets.map(t => `
-    <div class="ticket-card priority-${t.priority||'medium'}" data-id="${t.id}" 
+    <div class="ticket-card priority-${t.priority || 'medium'}" data-id="${t.id}" 
          style="background:var(--bg2); border:1px solid var(--border); border-radius:20px; padding:24px; cursor:pointer; transition:0.2s; position:relative; overflow:hidden;">
       <div style="position:absolute; top:0; left:0; width:4px; height:100%; background:var(--primary);"></div>
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
-        <span style="font-size:0.75rem; color:var(--text3); font-family:monospace;">#${t.id.slice(0,8)}</span>
-        <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+        <span style="font-size:0.75rem; color:var(--text3); font-family:monospace;">#${t.id.slice(0, 8)}</span>
+        <span class="badge badge-${t.status}">${t.status.replace('_', ' ')}</span>
       </div>
       <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:12px; color:var(--text);">${t.title}</h3>
       <div style="font-size:0.85rem; color:var(--text2); display:flex; align-items:center; gap:8px; border-top:1px solid var(--border); padding-top:16px;">
@@ -242,14 +250,14 @@ function openTicketModal(clientId, onSave) {
     if (!title) { toast('Please enter a title', 'error'); return; }
     const btn = overlay.querySelector('#submit-ticket');
     btn.disabled = true; btn.textContent = 'Submitting...';
-    
+
     const { error } = await supabase.from('tickets').insert({
       client_id: clientId, title,
       category: overlay.querySelector('#t-category').value,
       priority: overlay.querySelector('#t-priority').value,
       description: overlay.querySelector('#t-desc').value.trim()
     });
-    
+
     if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = 'Submit Ticket'; }
     else { toast('Ticket created!', 'success'); overlay.remove(); onSave(); }
   };
@@ -265,25 +273,25 @@ async function openTicketDetail(ticketId, onClose) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:700px">
       <div class="modal-header">
-        <div><div class="modal-title">${t.title}</div><div style="font-size:.75rem;color:var(--text3);">#${t.id.slice(0,8)}</div></div>
+        <div><div class="modal-title">${t.title}</div><div style="font-size:.75rem;color:var(--text3);">#${t.id.slice(0, 8)}</div></div>
         <button class="modal-close" id="cd">✕</button>
       </div>
       <div class="modal-body">
         <div style="display:flex; gap:8px; margin-bottom:20px;">
-          <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+          <span class="badge badge-${t.status}">${t.status.replace('_', ' ')}</span>
           <span class="badge badge-urgent">${t.priority} priority</span>
         </div>
         <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:16px; margin-bottom:32px; border:1px solid var(--border);">
-          <p style="color:var(--text); line-height:1.6; white-space:pre-wrap;">${t.description||'No description provided.'}</p>
+          <p style="color:var(--text); line-height:1.6; white-space:pre-wrap;">${t.description || 'No description provided.'}</p>
         </div>
         
         <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:16px;">💬 Communication History</h3>
         <div id="comments-list" style="margin-bottom:24px; max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
-          ${(comments||[]).length === 0 ? '<p style="color:var(--text3); font-style:italic;">No comments yet.</p>' : 
-            comments.map(c => `
+          ${(comments || []).length === 0 ? '<p style="color:var(--text3); font-style:italic;">No comments yet.</p>' :
+      comments.map(c => `
             <div style="background:var(--bg3); border-radius:12px; padding:16px;">
               <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                <span style="font-weight:700; font-size:.85rem; color:var(--primary);">${c.profiles?.full_name||'User'}</span>
+                <span style="font-weight:700; font-size:.85rem; color:var(--primary);">${c.profiles?.full_name || 'User'}</span>
                 <span style="font-size:.75rem; color:var(--text3)">${formatDateTime(c.created_at)}</span>
               </div>
               <div style="font-size:.95rem; color:var(--text); line-height:1.5;">${c.content}</div>
@@ -300,7 +308,7 @@ async function openTicketDetail(ticketId, onClose) {
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#cd').onclick = overlay.querySelector('#cd2').onclick = () => { overlay.remove(); onClose && onClose(); };
-  
+
   overlay.querySelector('#add-c').onclick = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     const content = overlay.querySelector('#new-comment').value.trim();

@@ -1,6 +1,10 @@
+import { toggleTheme } from '../utils.js';
+
 const LOGO = new URL('../assets/logo.png', import.meta.url).href;
 
 export function renderLandingPage(container, onPortalClick) {
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  
   container.innerHTML = `
     <div class="landing-page">
 
@@ -23,7 +27,10 @@ export function renderLandingPage(container, onPortalClick) {
       <!-- Navbar -->
       <nav class="landing-nav">
         <img src="${LOGO}" alt="Networking Experts" onerror="this.outerHTML='<span style=\'font-size:1.2rem;font-weight:800;color:var(--primary)\'>Networking Experts</span>'"/>
-        <button class="btn btn-primary" id="nav-portal-btn">Client Portal →</button>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <button class="btn btn-secondary theme-toggle-btn" style="padding: 8px 12px; border-radius: 50%; font-size: 1.2rem; min-width: 42px; min-height: 42px;" title="Toggle Theme">${savedTheme === 'dark' ? '☀️' : '🌙'}</button>
+          <button class="btn btn-primary" id="nav-portal-btn">Client Portal →</button>
+        </div>
       </nav>
 
       <!-- Hero -->
@@ -79,6 +86,7 @@ export function renderLandingPage(container, onPortalClick) {
   `;
 
   const go = () => onPortalClick();
+  container.querySelector('.theme-toggle-btn').onclick = toggleTheme;
   container.querySelector('#nav-portal-btn').onclick = go;
   container.querySelector('#hero-portal-btn').onclick = go;
   container.querySelector('#footer-portal-btn').onclick = go;

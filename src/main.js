@@ -7,6 +7,9 @@ import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, ren
 import { renderEmployeeDashboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
+import { initTheme } from './utils.js';
+
+initTheme();
 
 const app = document.getElementById('app');
 let currentUser = null;

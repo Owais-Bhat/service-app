@@ -1,5 +1,5 @@
 import { signIn, signUp, getUserRole } from './supabase.js';
-import { toast } from './utils.js';
+import { toast, toggleTheme } from './utils.js';
 
 const LOGO = new URL('./assets/logo.png', import.meta.url).href;
 
@@ -8,8 +8,10 @@ export function renderAuth(onLogin) {
   let mode = 'login';
 
   const render = () => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
     app.innerHTML = `
       <div class="auth-page">
+        <button class="btn btn-secondary theme-toggle-btn" style="position: absolute; top: 20px; right: 20px; padding: 8px 12px; border-radius: 50%; font-size: 1.2rem; min-width: 42px; min-height: 42px; z-index: 10;" title="Toggle Theme">${savedTheme === 'dark' ? '☀️' : '🌙'}</button>
         <div class="auth-card">
           <div class="auth-logo">
             <img src="${LOGO}" alt="Networking Experts" onerror="this.style.display='none'" />
@@ -44,6 +46,11 @@ export function renderAuth(onLogin) {
           </div>
         </div>
       </div>`;
+
+    app.querySelector('.theme-toggle-btn').addEventListener('click', () => {
+      toggleTheme();
+      render(); // Re-render to update the icon
+    });
 
     document.getElementById('toggle-mode').onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'signup' : 'login'; render(); };
 

@@ -1,11 +1,12 @@
 import { signOut } from './supabase.js';
-import { initials } from './utils.js';
+import { initials, toggleTheme } from './utils.js';
 
 const LOGO = new URL('./assets/logo.png', import.meta.url).href;
 
 export function renderLayout({ user, role, activePage, navItems, onNav, pageContent }) {
   const app = document.getElementById('app');
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+  const savedTheme = localStorage.getItem('theme') || 'light';
 
   app.innerHTML = `
     <div class="portal-layout">
@@ -32,13 +33,17 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
         <div class="topbar">
           <button class="menu-toggle" id="menu-toggle">☰</button>
           <div class="topbar-title" id="topbar-title"></div>
-          <div id="topbar-actions"></div>
+          <div id="topbar-actions">
+            <button class="btn btn-secondary theme-toggle-btn" style="padding: 8px 12px; border-radius: 50%; font-size: 1.2rem; min-width: 42px; min-height: 42px;" title="Toggle Theme">${savedTheme === 'dark' ? '☀️' : '🌙'}</button>
+          </div>
         </div>
         <div class="page-content" id="page-content"></div>
       </div>
     </div>`;
 
   buildNav(navItems, activePage, onNav);
+
+  app.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);
 
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await signOut();
