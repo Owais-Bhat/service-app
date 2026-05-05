@@ -16,19 +16,30 @@ export async function getUserRole(userId) {
     .select('role')
     .eq('id', userId)
     .single();
-  if (error) return null;
+  if (error) return 'client';
   return data?.role || 'client';
 }
 
 export async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  return await supabase.auth.signInWithPassword({ email, password });
+}
+
+export async function signUp(email, password, fullName) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName }
+    }
+  });
+  
   if (data?.user) {
-    // Ensure profile exists for this user
-    await supabase.from('profiles').upsert({ 
-      id: data.user.id, 
-      full_name: data.user.user_metadata?.full_name || email.split('@')[0],
-      role: 'client' 
-    }, { onConflict: 'id' });
+    // Create profile explicitly as 'client'
+    await supabase.from('profiles').insert({
+      id: data.user.id,
+      full_name: fullName,
+      role: 'client'
+    });
   }
   return { data, error };
 }

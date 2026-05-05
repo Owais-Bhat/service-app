@@ -3,7 +3,8 @@ import { supabase, getUserRole } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
 import { renderClientDashboard, renderClientTickets } from './pages/client.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks } from './pages/admin.js';
+import { renderEmployeeDashboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 
 const app = document.getElementById('app');
@@ -26,7 +27,7 @@ function getNavItems(role) {
   }
   if (role === 'employee') {
     return [...common,
-      { id: 'all-tickets', icon: '🎫', label: 'All Tickets' },
+      { id: 'all-tickets', icon: '🎫', label: 'My Tasks' },
       { type: 'section', label: 'Account' },
       { id: 'profile', icon: '👤', label: 'Profile' },
     ];
@@ -34,6 +35,10 @@ function getNavItems(role) {
   // admin
   return [...common,
     { id: 'all-tickets', icon: '🎫', label: 'All Tickets' },
+    { type: 'section', label: 'Operations' },
+    { id: 'attendance', icon: '🕒', label: 'Attendance' },
+    { id: 'inquiries', icon: '📩', label: 'Inquiries' },
+    { id: 'stocks', icon: '📦', label: 'Stocks' },
     { type: 'section', label: 'Management' },
     { id: 'clients', icon: '🏢', label: 'Clients' },
     { id: 'users', icon: '👥', label: 'Users' },
@@ -51,13 +56,16 @@ function getPageRenderer(role, page) {
       profile: renderProfile,
     },
     employee: {
-      dashboard: renderAdminDashboard,
-      'all-tickets': renderAllTickets,
+      dashboard: renderEmployeeDashboard,
+      'all-tickets': renderAllTickets, // Still use this but will show assigned
       profile: renderProfile,
     },
     admin: {
       dashboard: renderAdminDashboard,
       'all-tickets': renderAllTickets,
+      attendance: renderAttendance,
+      inquiries: renderInquiries,
+      stocks: renderStocks,
       clients: renderClients,
       users: renderUsers,
       profile: renderProfile,

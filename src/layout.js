@@ -1,27 +1,15 @@
 import { signOut } from './supabase.js';
 import { initials } from './utils.js';
 
-const LOGO_SVG = `<svg width="130" height="36" viewBox="0 0 130 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="18" cy="18" r="14" fill="#1B4FD8" opacity=".15"/>
-  <circle cx="18" cy="18" r="8" fill="#1B4FD8" opacity=".35"/>
-  <circle cx="18" cy="18" r="4" fill="#1B4FD8"/>
-  <circle cx="18" cy="18" r="1.5" fill="#fff"/>
-  <line x1="18" y1="4" x2="18" y2="8" stroke="#1B4FD8" stroke-width="1.5"/>
-  <line x1="18" y1="28" x2="18" y2="32" stroke="#1B4FD8" stroke-width="1.5"/>
-  <line x1="4" y1="18" x2="8" y2="18" stroke="#1B4FD8" stroke-width="1.5"/>
-  <line x1="28" y1="18" x2="32" y2="18" stroke="#1B4FD8" stroke-width="1.5"/>
-  <text x="38" y="22" font-family="Inter,sans-serif" font-size="11" font-weight="800" fill="#fff">NETWORKING</text>
-  <text x="38" y="33" font-family="Inter,sans-serif" font-size="7.5" font-weight="500" fill="#8892BB" letter-spacing="2">EXPERTS</text>
-</svg>`;
-
 export function renderLayout({ user, role, activePage, navItems, onNav, pageContent }) {
   const app = document.getElementById('app');
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
 
   app.innerHTML = `
     <div class="portal-layout">
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar-logo">${LOGO_SVG}</div>
+        <div class="sidebar-logo"><h2>Networking Experts</h2></div>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
         <div class="sidebar-footer">
           <div class="user-info">
@@ -36,6 +24,7 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
       </aside>
       <div class="main-content">
         <div class="topbar">
+          <button class="menu-toggle" id="menu-toggle">☰</button>
           <div class="topbar-title" id="topbar-title"></div>
           <div class="topbar-actions" id="topbar-actions"></div>
         </div>
@@ -45,9 +34,32 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   buildNav(navItems, activePage, onNav);
 
+  // Logout
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await signOut();
     location.reload();
+  });
+
+  // Mobile Menu Toggle
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const toggle = document.getElementById('menu-toggle');
+
+  const closeSidebar = () => {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+  };
+
+  toggle.onclick = () => {
+    sidebar.classList.add('open');
+    overlay.classList.add('active');
+  };
+
+  overlay.onclick = closeSidebar;
+
+  // Intercept nav clicks to close sidebar on mobile
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', closeSidebar);
   });
 
   renderPage(pageContent, navItems, activePage);
@@ -58,12 +70,12 @@ function buildNav(navItems, activePage, onNav) {
   nav.innerHTML = navItems.map(item => {
     if (item.type === 'section') return `<div class="nav-section">${item.label}</div>`;
     const active = item.id === activePage ? 'active' : '';
-    const badge = item.badge ? `<span class="nav-badge">${item.badge}</span>` : '';
     return `<div class="nav-item ${active}" data-nav="${item.id}">
       <span class="nav-icon">${item.icon}</span>
-      <span>${item.label}</span>${badge}
+      <span>${item.label}</span>
     </div>`;
   }).join('');
+  
   nav.querySelectorAll('[data-nav]').forEach(el => {
     el.addEventListener('click', () => onNav(el.dataset.nav));
   });
@@ -72,7 +84,8 @@ function buildNav(navItems, activePage, onNav) {
 function renderPage(pageContent, navItems, activePage) {
   const item = navItems.find(n => n.id === activePage);
   document.getElementById('topbar-title').textContent = item?.label || '';
-  document.getElementById('page-content').innerHTML = '';
-  if (typeof pageContent === 'function') pageContent(document.getElementById('page-content'));
-  else document.getElementById('page-content').innerHTML = pageContent || '';
+  const container = document.getElementById('page-content');
+  container.innerHTML = '';
+  if (typeof pageContent === 'function') pageContent(container);
+  else container.innerHTML = pageContent || '';
 }

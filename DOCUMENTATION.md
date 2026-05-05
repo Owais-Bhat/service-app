@@ -4,10 +4,11 @@
 The Networking Experts Service Portal is a professional, role-based support and management platform built for IT and security service providers. It allows clients to submit support tickets (CCTV, Networking, Hardware) and enables staff to manage those requests through a centralized command center.
 
 ## 2. Tech Stack
+- **Design:** Modern Blue/Green Gradient Theme, Glassmorphism, Responsive.
 - **Frontend:** Vanilla JavaScript (ES6+), HTML5, CSS3.
 - **Build Tool:** Vite.
 - **Backend/Database:** Supabase (PostgreSQL, Auth, Real-time).
-- **Icons/Typography:** Google Fonts (Inter), Custom SVG Icons.
+- **Icons/Typography:** Google Fonts (Inter).
 
 ## 3. Core Features
 
@@ -25,10 +26,16 @@ The portal automatically adjusts its UI based on the user's role:
 | **Employee** | Staff | View all tickets, update ticket status, add staff notes, manage profile. |
 | **Admin** | Full Control | All Employee features + User/Role management + Client list. |
 
-### 🎫 Ticket Management
+### 🎫 Ticket & Task Management
 - **Status Workflow:** `Open` → `In Progress` → `Resolved` → `Closed`.
 - **Priorities:** `Low`, `Medium`, `High`, `Urgent`.
-- **Comments:** Real-time-ready communication between clients and staff.
+- **Inquiries:** Capture name, phone, and service needs from potential clients.
+- **Feedback:** Star ratings and comments for completed service requests.
+
+### 🕒 Operations & Stocks
+- **Attendance:** Live employee clock-in/out tracking.
+- **Inventory:** Day-to-day stock monitoring with low-stock alerts.
+- **Reports:** One-click CSV/Excel export for attendance, clients, and inventory.
 
 ---
 
