@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS inquiries (
   bill_no TEXT, -- Optional, for existing clients
   service_item TEXT,
   status TEXT DEFAULT 'pending', -- pending, assigned, resolved
-  ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL, -- Link to assigned task
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -66,3 +65,5 @@ CREATE TABLE IF NOT EXISTS eod_reports (
 
 -- Add assigned_to to tickets for task assignment
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES profiles(id) ON DELETE SET NULL;
+  
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location TEXT;
