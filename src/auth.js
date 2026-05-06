@@ -1,9 +1,10 @@
 import { signIn, signUp, getUserRole } from './supabase.js';
 import { toast, toggleTheme } from './utils.js';
+import { ICONS } from './icons.js';
 
 const LOGO = new URL('./assets/logo.png', import.meta.url).href;
 
-export function renderAuth(onLogin) {
+export function renderAuth(onLogin, onBack) {
   const app = document.getElementById('app');
   let mode = 'login';
 
@@ -11,7 +12,18 @@ export function renderAuth(onLogin) {
     const savedTheme = localStorage.getItem('theme') || 'light';
     app.innerHTML = `
       <div class="auth-page">
-        <button class="btn btn-secondary theme-toggle-btn" style="position: absolute; top: 20px; right: 20px; padding: 8px 12px; border-radius: 50%; font-size: 1.2rem; min-width: 42px; min-height: 42px; z-index: 10;" title="Toggle Theme">${savedTheme === 'dark' ? '☀️' : '🌙'}</button>
+        ${onBack ? `
+        <button class="btn btn-secondary" id="auth-back-btn" style="position: absolute; top: 20px; left: 20px; padding: 8px; border-radius: 50%; min-width: 42px; min-height: 42px; z-index: 10; display: flex; align-items: center; justify-content: center;" title="Back">
+          <span style="width: 20px; height: 20px; display: flex;">
+            ${ICONS.arrowLeft}
+          </span>
+        </button>
+        ` : ''}
+        <button class="btn btn-secondary theme-toggle-btn" style="position: absolute; top: 20px; right: 20px; padding: 8px; border-radius: 50%; min-width: 42px; min-height: 42px; z-index: 10; display: flex; align-items: center; justify-content: center;" title="Toggle Theme">
+          <span style="width: 20px; height: 20px; display: flex;">
+            ${savedTheme === 'dark' ? ICONS.sun : ICONS.moon}
+          </span>
+        </button>
         <div class="auth-card">
           <div class="auth-logo">
             <img src="${LOGO}" alt="Networking Experts" onerror="this.style.display='none'" />
@@ -51,6 +63,9 @@ export function renderAuth(onLogin) {
       toggleTheme();
       render(); // Re-render to update the icon
     });
+
+    const backBtn = document.getElementById('auth-back-btn');
+    if (backBtn) backBtn.onclick = onBack;
 
     document.getElementById('toggle-mode').onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'signup' : 'login'; render(); };
 

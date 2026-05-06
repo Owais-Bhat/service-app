@@ -1,5 +1,6 @@
 import { signOut } from './supabase.js';
 import { initials, toggleTheme } from './utils.js';
+import { ICONS } from './icons.js';
 
 const LOGO = new URL('./assets/logo.png', import.meta.url).href;
 
@@ -24,17 +25,17 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
               <div class="user-name">${userName}</div>
               <div class="user-role">${role}</div>
             </div>
-            <button class="logout-btn" id="logout-btn" title="Sign Out">⏻</button>
+            <button class="logout-btn" id="logout-btn" title="Sign Out">${ICONS.logout}</button>
           </div>
         </div>
       </aside>
 
       <div class="main-content">
         <div class="topbar">
-          <button class="menu-toggle" id="menu-toggle">☰</button>
+          <button class="menu-toggle icon-btn" id="menu-toggle" aria-label="Toggle navigation">${ICONS.menu}</button>
           <div class="topbar-title" id="topbar-title"></div>
           <div id="topbar-actions">
-            <button class="btn btn-secondary theme-toggle-btn" style="padding: 8px 12px; border-radius: 50%; font-size: 1.2rem; min-width: 42px; min-height: 42px;" title="Toggle Theme">${savedTheme === 'dark' ? '☀️' : '🌙'}</button>
+            <button class="icon-btn theme-toggle-btn" title="Toggle Theme">${savedTheme === 'dark' ? ICONS.sun : ICONS.moon}</button>
           </div>
         </div>
         <div class="page-content" id="page-content"></div>

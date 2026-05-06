@@ -1,5 +1,6 @@
 import { supabase } from '../supabase.js';
 import { toast, formatDate, formatTime } from '../utils.js';
+import { ICONS } from '../icons.js';
 
 export async function renderEmployeeDashboard(container) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -16,7 +17,7 @@ export async function renderEmployeeDashboard(container) {
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
   } catch (err) {
-    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger)">⚠️ Error</h3><p>${err.message}</p></div></div>`;
+    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
     return;
   }
 
@@ -33,8 +34,9 @@ export async function renderEmployeeDashboard(container) {
 
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-value" style="font-size:1.5rem;color:${isClockedIn ? 'var(--success)' : 'var(--text-dim)'}">
-          ${isClockedIn ? '✅ Clocked In' : '⏸ Not Started'}
+        <div class="stat-value stat-value-inline" style="color:${isClockedIn ? 'var(--success)' : 'var(--text-dim)'};">
+          ${isClockedIn ? ICONS.check : ICONS.pause}
+          <span>${isClockedIn ? 'Clocked In' : 'Not Started'}</span>
         </div>
         <div class="stat-label">${isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : 'Tap Clock In to start'}</div>
       </div>
@@ -51,40 +53,45 @@ export async function renderEmployeeDashboard(container) {
     <div class="grid-2">
       <!-- Attendance Card -->
       <div class="card">
-        <div class="card-header"><span class="card-title">🕒 Attendance</span></div>
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clock}<span>Attendance</span></span></div>
         <div class="card-body" style="text-align:center;padding:32px">
           <div id="live-clock" style="font-size:2.8rem;font-weight:800;color:var(--primary);letter-spacing:-2px;margin-bottom:24px;font-variant-numeric:tabular-nums;">--:--:--</div>
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn ? 'disabled style="opacity:0.5"' : ''}>
-              ✅ Clock In
+            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn ? 'disabled' : ''}>
+              ${ICONS.play}<span>Clock In</span>
             </button>
-            <button class="btn btn-secondary" id="btn-clock-out" ${(!isClockedIn || isClockedOut) ? 'disabled style="opacity:0.5"' : ''}>
-              ⏸ Clock Out
+            <button class="btn btn-secondary" id="btn-clock-out" ${(!isClockedIn || isClockedOut) ? 'disabled' : ''}>
+              ${ICONS.pause}<span>Clock Out</span>
             </button>
           </div>
-          ${attendance?.location ? `<p style="margin-top:16px;font-size:0.8rem;color:var(--text-dim)">📍 ${attendance.location}</p>` : ''}
-          ${isClockedOut ? `<div style="margin-top:20px;padding:14px;border-radius:14px;box-shadow:var(--neu-in);background:var(--bg);font-size:.88rem;color:var(--success);font-weight:600;">
-            ✅ Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}
+          ${attendance?.location ? `<p style="margin-top:16px;font-size:0.8rem;color:var(--text-dim);display:inline-flex;align-items:center;gap:6px;">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
+          ${isClockedOut ? `<div style="margin-top:20px;padding:14px;border-radius:14px;box-shadow:var(--neu-in);background:var(--bg);font-size:.88rem;color:var(--success);font-weight:600;display:inline-flex;align-items:center;gap:8px;">
+            ${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span>
           </div>` : ''}
         </div>
       </div>
 
       <!-- EOD Report Card -->
       <div class="card">
-        <div class="card-header"><span class="card-title">📋 End of Day Report</span></div>
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clipboard}<span>End of Day Summary</span></span></div>
         <div class="card-body">
           ${eodReport ? `
-            <div style="padding:20px;border-radius:16px;box-shadow:var(--neu-in);background:var(--bg);text-align:center;">
-              <div style="font-size:2rem;margin-bottom:8px;">✅</div>
-              <div style="font-weight:700;color:var(--success)">Report Submitted</div>
-              <div style="font-size:.85rem;color:var(--text-soft);margin-top:8px">Great work today!</div>
+            <div class="eod-done">
+              <div class="eod-done-ring">${ICONS.check}</div>
+              <h3 class="eod-done-title">All caught up!</h3>
+              <p class="eod-done-sub">Your EOD report has been submitted.</p>
+              <div class="eod-done-time">Submitted at ${formatTime(eodReport.created_at)}</div>
             </div>
           ` : `
             <div class="form-group">
-              <label>What did you accomplish today?</label>
-              <textarea id="eod-content" rows="5" placeholder="Describe your tasks, progress, and any notes for tomorrow…"></textarea>
+              <label class="sr-icon-label">${ICONS.edit}<span>Today's progress</span></label>
+              <textarea id="eod-content" rows="6"
+                placeholder="What did you achieve today? Break it down briefly…"></textarea>
             </div>
-            <button class="btn btn-primary btn-wide" id="btn-submit-eod">Submit Report →</button>
+            <button class="btn btn-primary btn-wide" id="btn-submit-eod">
+              <span>Submit Daily Report</span> ${ICONS.arrowRight}
+            </button>
+            <p class="eod-fineprint">Reports are visible to your manager immediately.</p>
           `}
         </div>
       </div>
@@ -93,7 +100,7 @@ export async function renderEmployeeDashboard(container) {
     <!-- Tasks Table -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">📌 My Assigned Tasks</span>
+        <span class="card-title sr-icon-title">${ICONS.ticket}<span>My Assigned Tasks</span></span>
         <span class="badge badge-open">${activeTasks.length} active</span>
       </div>
       <div class="table-wrap">

@@ -68,3 +68,22 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES profile
   
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location TEXT;
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
+ALTER TABLE inquiries DISABLE ROW LEVEL SECURITY;
+
+-- ── 2026-05-06 — Service request tracking, billing, feedback ──
+-- Human-readable ticket number (e.g. NE-260506-4821), unique per row.
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS ticket_no TEXT UNIQUE;
+
+-- Billing fields populated by admin when service is closed.
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS bill_amount NUMERIC;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS payment_link TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'unpaid'; -- unpaid | paid
+
+-- Feedback captured from the public tracker once status='closed'.
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS feedback_rating INTEGER CHECK (feedback_rating >= 1 AND feedback_rating <= 5);
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS feedback_comment TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS feedback_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_inquiries_ticket_no ON inquiries(ticket_no);
+-- Status values used: 'open' | 'in_progress' | 'resolved' | 'closed' | 'assigned' | 'pending'
