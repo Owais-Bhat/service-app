@@ -32,7 +32,10 @@ export async function renderEmployeeDashboard(container) {
 
   container.innerHTML = `
     <div class="page-header">
-      <h1>Employee Portal</h1>
+      <h1 style="display:flex; align-items:center; gap:12px;">
+        <span style="width:32px; height:32px; display:flex; color:var(--primary);">${ICONS.staff}</span>
+        <span>Employee Portal</span>
+      </h1>
       <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
     </div>
 
@@ -59,17 +62,23 @@ export async function renderEmployeeDashboard(container) {
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:${isClockedIn ? 'var(--success)' : 'var(--text-dim)'};">
-          ${isClockedIn ? ICONS.check : ICONS.pause}
+          <span style="width:24px; height:24px; display:flex;">${isClockedIn ? ICONS.check : ICONS.pause}</span>
           <span>${isClockedIn ? 'Clocked In' : 'Not Started'}</span>
         </div>
         <div class="stat-label">${isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : 'Tap Clock In to start'}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--warning)">${activeTasks.length}</div>
+        <div class="stat-value stat-value-inline" style="color:var(--warning)">
+          <span style="width:24px; height:24px; display:flex;">${ICONS.wrench}</span>
+          <span>${activeTasks.length}</span>
+        </div>
         <div class="stat-label">Active Tasks</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--success)">${t.filter(x => x.status === 'resolved').length}</div>
+        <div class="stat-value stat-value-inline" style="color:var(--success)">
+          <span style="width:24px; height:24px; display:flex;">${ICONS.check}</span>
+          <span>${t.filter(x => x.status === 'resolved').length}</span>
+        </div>
         <div class="stat-label">Completed</div>
       </div>
     </div>
@@ -112,8 +121,9 @@ export async function renderEmployeeDashboard(container) {
               <textarea id="eod-content" rows="6"
                 placeholder="What did you achieve today? Break it down briefly…"></textarea>
             </div>
-            <button class="btn btn-primary btn-wide" id="btn-submit-eod">
-              <span>Submit Daily Report</span> ${ICONS.arrowRight}
+            <button class="btn btn-primary btn-wide" id="btn-submit-eod" style="display:flex; align-items:center; justify-content:center; gap:10px;">
+              <span>Submit Daily Report</span>
+              <span style="width:18px; height:18px; display:flex;">${ICONS.arrowRight}</span>
             </button>
             <p class="eod-fineprint">Reports are visible to your manager immediately.</p>
           `}
@@ -168,7 +178,7 @@ export async function renderEmployeeDashboard(container) {
                </div>
                
                <div style="margin-top:24px; display:flex; gap:12px;">
-                 <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-status="${inq.status}" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+                 <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
                    <span style="width:18px;height:18px;display:flex;">${ICONS.edit}</span> Update Status
                  </button>
                  <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -230,7 +240,7 @@ export async function renderEmployeeDashboard(container) {
                 ` : ''}
                 
                 <div style="margin-top:16px; display:flex; gap:8px;">
-                  <button class="btn btn-secondary btn-sm task-btn" data-id="${task.id}" data-status="${task.status}" style="flex:1; height:38px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                  <button class="btn btn-secondary btn-sm task-btn" data-id="${task.id}" data-inq-id="${inq ? inq.id : ''}" data-status="${task.status}" style="flex:1; height:38px; display:flex; align-items:center; justify-content:center; gap:6px;">
                     <span style="width:14px;height:14px;display:flex;">${ICONS.edit}</span> Update Status
                   </button>
                   ${inq ? `
@@ -258,7 +268,14 @@ export async function renderEmployeeDashboard(container) {
     let locationStr = 'Unknown';
     try {
       const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
-      locationStr = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+      const { latitude: lat, longitude: lng } = pos.coords;
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+        const data = await res.json();
+        locationStr = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      } catch (err) {
+        locationStr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      }
     } catch (_) {}
 
     const { error } = await supabase.from('attendance').insert({
@@ -291,7 +308,7 @@ export async function renderEmployeeDashboard(container) {
 
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {
-    btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.status, () => renderEmployeeDashboard(container));
+    btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeDashboard(container));
   });
 
   // Accept/Decline logic
@@ -349,7 +366,7 @@ export async function renderEmployeeDashboard(container) {
   }, 5000);
 }
 
-function openTaskModal(taskId, currentStatus, onDone) {
+function openTaskModal(taskId, inqId, currentStatus, onDone) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -377,7 +394,17 @@ function openTaskModal(taskId, currentStatus, onDone) {
   document.body.appendChild(overlay);
   overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = () => overlay.remove();
   overlay.querySelector('#save-update').onclick = async () => {
-    await supabase.from('tickets').update({ status: overlay.querySelector('#new-status').value }).eq('id', taskId);
+    const newStatus = overlay.querySelector('#new-status').value;
+    const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
+    
+    if (inqId) {
+      ops.push(supabase.from('inquiries').update({ status: newStatus }).eq('id', inqId));
+    } else {
+      // Fallback if we only have the ticket ID
+      ops.push(supabase.from('inquiries').update({ status: newStatus }).eq('ticket_id', taskId));
+    }
+
+    await Promise.all(ops);
     toast('Task updated!', 'success');
     overlay.remove();
     onDone();

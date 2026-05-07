@@ -37,6 +37,10 @@ export function renderAuth(onLogin, onBack) {
               <div class="form-group">
                 <label>Full Name</label>
                 <input type="text" id="full_name" placeholder="John Doe" required />
+              </div>
+              <div class="form-group">
+                <label>Employee Access Key</label>
+                <input type="password" id="reg_key" placeholder="Enter secret key" required />
               </div>` : ''}
             <div class="form-group">
               <label>Email Address</label>
@@ -53,8 +57,8 @@ export function renderAuth(onLogin, onBack) {
 
           <div style="margin-top:24px;text-align:center;font-size:.88rem;color:var(--text-soft)">
             ${mode === 'login'
-              ? `Don't have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:700">Sign up</a>`
-              : `Already have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:700">Sign in</a>`}
+        ? `Don't have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:700">Sign up</a>`
+        : `Already have an account? <a href="#" id="toggle-mode" style="color:var(--primary);font-weight:700">Sign in</a>`}
           </div>
         </div>
       </div>`;
@@ -83,7 +87,8 @@ export function renderAuth(onLogin, onBack) {
 
       if (mode === 'signup') {
         const fullName = document.getElementById('full_name').value.trim();
-        res = await signUp(email, password, fullName);
+        const regKey = document.getElementById('reg_key').value.trim();
+        res = await signUp(email, password, fullName, regKey);
       } else {
         res = await signIn(email, password);
       }

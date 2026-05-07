@@ -24,21 +24,31 @@ export async function signIn(email, password) {
   return await supabase.auth.signInWithPassword({ email, password });
 }
 
-export async function signUp(email, password, fullName) {
+export async function signUp(email, password, fullName, regKey) {
+  // Define secret keys
+  const STAFF_KEY = 'NE_STAFF_2026';
+  const ADMIN_KEY = 'NE_ADMIN_SECRET';
+
+  let role = '';
+  if (regKey === STAFF_KEY) role = 'employee';
+  else if (regKey === ADMIN_KEY) role = 'admin';
+  else {
+    return { data: null, error: { message: 'Invalid Employee Access Key. Please contact admin.' } };
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { full_name: fullName }
+      data: { full_name: fullName, role }
     }
   });
   
   if (data?.user) {
-    // Create profile explicitly as 'client'
     await supabase.from('profiles').insert({
       id: data.user.id,
       full_name: fullName,
-      role: 'client'
+      role: role
     });
   }
   return { data, error };

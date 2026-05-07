@@ -1,6 +1,5 @@
-import { toggleTheme } from '../utils.js';
 import { supabase } from '../supabase.js';
-import { toast } from '../utils.js';
+import { toggleTheme, calculateSLA, formatTimeRemaining, toast } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 const LOGO = new URL('../assets/logo.png', import.meta.url).href;
@@ -56,7 +55,7 @@ function generateTicketNo() {
   return `NE-${yy}${mm}${dd}-${rnd}`;
 }
 
-const STATUS_FLOW = ['open', 'in_progress', 'resolved', 'closed'];
+const STATUS_FLOW = ['open', 'assigned', 'in_progress', 'resolved', 'closed'];
 const STATUS_LABELS = {
   pending: 'Received',
   open: 'Received',
@@ -353,7 +352,7 @@ export function renderLandingPage(container, onPortalClick) {
 
   function renderTrackResult(r) {
     const status = r.status || 'open';
-    const flowIdx = STATUS_FLOW.indexOf(status === 'pending' || status === 'assigned' ? 'open' : status);
+    const flowIdx = STATUS_FLOW.indexOf(status === 'pending' ? 'open' : status);
     const closed = status === 'closed';
     const hasBill = r.bill_amount != null && Number(r.bill_amount) > 0;
     const paid = r.payment_status === 'paid';
@@ -363,6 +362,18 @@ export function renderLandingPage(container, onPortalClick) {
       <button class="srf-back" id="srf-track-back">${ICONS.arrowLeft}<span>Look up another</span></button>
       <h2 class="srf-card-title">Ticket ${r.ticket_no || r.id.slice(0, 8)}</h2>
       <p class="srf-card-sub">${r.full_name} · ${r.service_item}</p>
+
+      ${!closed ? `
+        <div style="background:var(--bg-soft); padding:16px; border-radius:16px; margin:20px 0; border:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service SLA</div>
+            <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;">Expected resolution within 12 working hours</div>
+          </div>
+          <div id="live-sla-timer" style="font-family:monospace; font-weight:900; font-size:1.4rem; color:var(--primary); letter-spacing:-0.5px;">
+            ${formatTimeRemaining(calculateSLA(r.created_at))}
+          </div>
+        </div>
+      ` : ''}
 
       <div class="srf-timeline">
         ${STATUS_FLOW.map((s, i) => `
@@ -539,9 +550,19 @@ export function renderLandingPage(container, onPortalClick) {
         if (!navigator.geolocation) return toast('Geolocation not supported', 'error');
         detectBtn.innerHTML = `<span class="srf-spin"></span>`;
         navigator.geolocation.getCurrentPosition(
-          pos => {
-            state.coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            state.locationValue = `GPS: ${state.coords.lat.toFixed(5)}, ${state.coords.lng.toFixed(5)}`;
+          async pos => {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            state.coords = { lat, lng };
+            
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+              const data = await res.json();
+              state.locationValue = data.display_name || `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            } catch (err) {
+              console.error('Reverse geocoding failed:', err);
+              state.locationValue = `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            }
+            
             container.querySelector('#srf-location').value = state.locationValue;
             detectBtn.innerHTML = ICONS.crosshair;
             toast('Location detected', 'success');
@@ -584,7 +605,9 @@ export function renderLandingPage(container, onPortalClick) {
         bill_no: bill || null,
         service_item,
         status: 'open',
+        assignment_status: 'none',
         ticket_no,
+        preferred_time
       });
 
       if (error) {
@@ -723,6 +746,15 @@ export function renderLandingPage(container, onPortalClick) {
       state.trackResult = data;
       render();
     };
+
+    // Live SLA Timer update for tracker
+    const timerEl = container.querySelector('#live-sla-timer');
+    if (timerEl && state.trackResult && state.trackResult.status !== 'closed') {
+      const interval = setInterval(() => {
+        if (!container.querySelector('#live-sla-timer')) return clearInterval(interval);
+        timerEl.innerHTML = formatTimeRemaining(calculateSLA(state.trackResult.created_at));
+      }, 1000);
+    }
   }
 
   render();
