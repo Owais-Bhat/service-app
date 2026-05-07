@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatDateTime, formatTime, exportToCSV } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 const STATUS_LABEL = {
@@ -132,6 +132,23 @@ export async function renderAdminDashboard(container) {
   container.querySelectorAll('.inq-btn').forEach(btn => {
     btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAdminDashboard(container));
   });
+
+  // Real-time listener for new inquiries
+  const channel = supabase.channel('admin-inquiries')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inquiries' }, payload => {
+      toast(`New Request: ${payload.new.full_name}`, 'info');
+      // If the current container is still the dashboard, refresh counts
+      if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
+    })
+    .subscribe();
+
+  // Cleanup channel on container removal (using a simple check)
+  const checkRemoval = setInterval(() => {
+    if (!document.body.contains(container)) {
+      supabase.removeChannel(channel);
+      clearInterval(checkRemoval);
+    }
+  }, 5000);
 }
 
 // ── SERVICE REQUEST DETAIL MODAL ────────────────────────
@@ -159,6 +176,15 @@ async function openInquiryDetail(id, onDone) {
           </div>
           <div><div class="sr-meta-label">Service item</div><div class="sr-meta-value">${i.service_item || '—'}</div></div>
           <div><div class="sr-meta-label">Location</div><div class="sr-meta-value">${i.location || '—'}</div></div>
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value" style="color:var(--primary)">${i.preferred_time || 'Flexible'}</div></div>
+            <div><div class="sr-meta-label">SLA Timer</div><div class="sr-meta-value">${formatTimeRemaining(calculateSLA(i.created_at))}</div></div>
+          </div>
+          ${i.assignment_status === 'declined' ? `
+            <div style="padding:12px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid var(--danger);margin-top:10px;">
+              <div class="sr-meta-label" style="color:var(--danger)">Employee Declined</div>
+              <div class="sr-meta-value" style="font-size:0.85rem">${i.decline_reason || 'No reason provided'}</div>
+            </div>` : ''}
           ${i.feedback_rating ? `
             <div class="sr-fb-shown">
               ${ICONS.star}
@@ -232,7 +258,13 @@ async function openInquiryDetail(id, onDone) {
       bill_amount: billRaw === '' ? null : Number(billRaw),
       payment_link: payLink || null,
       payment_status: payStatus,
+      assigned_employee_id: empId || null,
     };
+
+    if (empId && empId !== i.assigned_employee_id) {
+      updates.assignment_status = 'pending';
+      updates.decline_reason = null;
+    }
 
     // If newly assigned and no ticket exists yet, create a ticket and link it.
     if (empId && !i.ticket_id) {

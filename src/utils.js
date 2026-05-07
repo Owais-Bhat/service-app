@@ -88,3 +88,68 @@ function updateThemeIcon(theme) {
   });
 }
 
+/**
+ * Calculates a deadline based on working hours (10 AM - 6 PM).
+ * Jammu & Kashmir working hours: 10:00 to 18:00 (8 hours per day).
+ * @param {string|Date} createdAt - The starting date.
+ * @param {number} slaHours - Total working hours to add (default 12).
+ */
+export function calculateSLA(createdAt, slaHours = 12) {
+  let date = new Date(createdAt);
+  let hoursRemaining = slaHours;
+
+  const startHour = 10;
+  const endHour = 18;
+
+  while (hoursRemaining > 0) {
+    const curHour = date.getHours();
+    const day = date.getDay(); // 0 = Sunday
+
+    // If it's Sunday, skip to Monday 10 AM
+    if (day === 0) {
+      date.setDate(date.getDate() + 1);
+      date.setHours(startHour, 0, 0, 0);
+      continue;
+    }
+
+    // If it's before 10 AM, move to 10 AM same day
+    if (curHour < startHour) {
+      date.setHours(startHour, 0, 0, 0);
+      continue;
+    }
+
+    // If it's after 6 PM, move to 10 AM next day
+    if (curHour >= endHour) {
+      date.setDate(date.getDate() + 1);
+      date.setHours(startHour, 0, 0, 0);
+      continue;
+    }
+
+    // We are within working hours. Calculate how many hours left in current workday.
+    const endOfDay = new Date(date);
+    endOfDay.setHours(endHour, 0, 0, 0);
+    const workdayRemainingMs = endOfDay.getTime() - date.getTime();
+    const workdayRemainingHours = workdayRemainingMs / (1000 * 60 * 60);
+
+    if (hoursRemaining <= workdayRemainingHours) {
+      date.setMilliseconds(date.getMilliseconds() + hoursRemaining * 60 * 60 * 1000);
+      hoursRemaining = 0;
+    } else {
+      hoursRemaining -= workdayRemainingHours;
+      date.setDate(date.getDate() + 1);
+      date.setHours(startHour, 0, 0, 0);
+    }
+  }
+  return date;
+}
+
+export function formatTimeRemaining(deadline) {
+  const now = new Date();
+  const diff = deadline.getTime() - now.getTime();
+  if (diff <= 0) return `<span style="color:var(--danger);font-weight:700">OVERDUE</span>`;
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  return `<span style="color:var(--primary);font-weight:600">${hours}h ${mins}m left</span>`;
+}
+

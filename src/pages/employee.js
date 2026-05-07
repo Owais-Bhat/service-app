@@ -13,9 +13,11 @@ export async function renderEmployeeDashboard(container) {
     const res = await Promise.all([
       supabase.from('attendance').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('tickets').select('*').eq('assigned_to', user.id).order('created_at', { ascending: false }),
-      supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle()
+      supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
+      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).eq('assignment_status', 'pending')
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
+    const pendingInquiries = res[3].data || [];
   } catch (err) {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
     return;
@@ -31,6 +33,26 @@ export async function renderEmployeeDashboard(container) {
       <h1>Employee Portal</h1>
       <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
     </div>
+
+    ${pendingInquiries.length > 0 ? `
+      <div class="card" style="border: 2px solid var(--primary); background: rgba(16, 185, 129, 0.05);">
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.alert}<span>New Assignments Pending</span></span></div>
+        <div class="card-body">
+          ${pendingInquiries.map(pi => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--bg-soft); border-radius:12px; margin-bottom:10px; box-shadow:var(--neu-sm);">
+              <div>
+                <div style="font-weight:700">${pi.full_name} - ${pi.service_item}</div>
+                <div style="font-size:0.8rem; color:var(--text-soft)">Preferred: ${pi.preferred_time || 'Flexible'}</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}">${ICONS.check} Accept</button>
+                <button class="btn btn-danger btn-sm decline-btn" data-id="${pi.id}">${ICONS.close} Decline</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -168,6 +190,34 @@ export async function renderEmployeeDashboard(container) {
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {
     btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.status, () => renderEmployeeDashboard(container));
+  });
+
+  // Accept/Decline logic
+  container.querySelectorAll('.accept-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const { error } = await supabase.from('inquiries').update({ assignment_status: 'accepted' }).eq('id', btn.dataset.id);
+      if (error) toast(error.message, 'error');
+      else { toast('Task accepted!', 'success'); renderEmployeeDashboard(container); }
+    };
+  });
+
+  container.querySelectorAll('.decline-btn').forEach(btn => {
+    btn.onclick = () => {
+      const reason = prompt('Please provide a reason for declining:');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('Reason is required to decline', 'warning'); return; }
+      
+      (async () => {
+        const { error } = await supabase.from('inquiries').update({ 
+          assignment_status: 'declined', 
+          decline_reason: reason.trim(),
+          status: 'open' // Put back to open for re-assignment
+        }).eq('id', btn.dataset.id);
+        
+        if (error) toast(error.message, 'error');
+        else { toast('Task declined', 'info'); renderEmployeeDashboard(container); }
+      })();
+    };
   });
 }
 

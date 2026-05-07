@@ -256,6 +256,18 @@ export function renderLandingPage(container, onPortalClick) {
         ${state.locationMode === 'gps' ? `<button type="button" class="srf-input-action" id="srf-detect">${ICONS.crosshair}</button>` : ''}
       </div>
 
+      <label class="srf-label" for="srf-time">Preferred Visit Time</label>
+      <div class="srf-input-wrap">
+        <span class="srf-input-icon">${ICONS.clock}</span>
+        <select id="srf-time" class="srf-input srf-select">
+          <option value="Morning (10 AM - 1 PM)">Morning (10 AM - 1 PM)</option>
+          <option value="Afternoon (1 PM - 4 PM)">Afternoon (1 PM - 4 PM)</option>
+          <option value="Evening (4 PM - 6 PM)">Evening (4 PM - 6 PM)</option>
+          <option value="Tomorrow Morning">Tomorrow Morning</option>
+          <option value="Flexible">I'm Flexible</option>
+        </select>
+      </div>
+
       <label class="srf-label" for="srf-bill">Device bill number <span class="srf-optional">(optional)</span></label>
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.receipt}</span>
@@ -549,6 +561,7 @@ export function renderLandingPage(container, onPortalClick) {
     container.querySelector('#srf-submit').onclick = async () => {
       const name = container.querySelector('#srf-name').value.trim();
       const bill = container.querySelector('#srf-bill').value.trim();
+      const preferred_time = container.querySelector('#srf-time').value;
       const issueVal = issueEl.value;
       const issueLabel = ISSUE_OPTIONS.find(o => o.value === issueVal)?.label || '';
       const otherText = container.querySelector('#srf-other')?.value.trim() || '';

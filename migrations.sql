@@ -86,4 +86,10 @@ ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS feedback_comment TEXT;
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS feedback_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_inquiries_ticket_no ON inquiries(ticket_no);
+
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS preferred_time TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS assignment_status TEXT DEFAULT 'pending'; -- pending, accepted, declined
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS decline_reason TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS assigned_employee_id UUID REFERENCES profiles(id);
+
 -- Status values used: 'open' | 'in_progress' | 'resolved' | 'closed' | 'assigned' | 'pending'
