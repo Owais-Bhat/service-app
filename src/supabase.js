@@ -1,7 +1,11 @@
 // Hostinger MySQL Compatibility Layer
 // This file replaces the Supabase client with an API client that connects to our Node.js backend.
 
-const API_URL = 'http://localhost:5000/api';
+const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const API_URL = isProd 
+  ? `${window.location.origin}/api` // Assumes backend is at /api on same host
+  : 'http://localhost:5000/api';
+
 
 // Helper to get headers with JWT
 const getHeaders = () => {
@@ -110,6 +114,14 @@ export const supabase = {
   removeChannel: () => {},
 
   auth: {
+    getSession: async () => {
+      const user = await supabase.auth.getUser();
+      return { data: { session: user.data.user ? { user: user.data.user } : null } };
+    },
+    onAuthStateChange: (callback) => {
+      // Very basic mock
+      return { data: { subscription: { unsubscribe: () => {} } } };
+    },
     getUser: async () => {
       const token = localStorage.getItem('auth_token');
       if (!token) return { data: { user: null } };

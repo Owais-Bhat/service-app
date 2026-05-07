@@ -4,11 +4,16 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the frontend build directory
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
 
 const dbConfig = {
     host: process.env.DB_HOST,
@@ -210,4 +215,10 @@ app.post('/api/data/:table', authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+
+// Catch-all to serve index.html for SPA routing
+app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
