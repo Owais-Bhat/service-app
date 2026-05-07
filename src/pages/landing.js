@@ -429,9 +429,14 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   // ── Bindings ─────────────────────────────────────────
+  const bind = (sel, cb, event = 'onclick') => {
+    const el = container.querySelector(sel);
+    if (el) el[event] = cb;
+  };
+
   function bindCommon() {
-    container.querySelector('.theme-toggle-btn').onclick = () => { toggleTheme(); render(); };
-    container.querySelector('.srf-staff-btn').onclick = () => onPortalClick();
+    bind('.theme-toggle-btn', () => { toggleTheme(); render(); });
+    bind('.srf-staff-btn', onPortalClick);
     container.querySelectorAll('.srf-mode-tab').forEach(t => {
       t.onclick = () => {
         if (state.mode === t.dataset.mode) return;
@@ -462,12 +467,12 @@ export function renderLandingPage(container, onPortalClick) {
       state.phone = e.target.value;
     });
 
-    container.querySelector('#srf-refresh-captcha').onclick = () => {
+    bind('#srf-refresh-captcha', () => {
       state.captcha = makeCaptcha();
       render();
-    };
+    });
 
-    sendBtn.onclick = async () => {
+    if (sendBtn) sendBtn.onclick = async () => {
       if (!/^\d{10}$/.test(state.phone)) return toast('Enter a valid 10-digit number', 'error');
       const ans = parseInt(capEl.value, 10);
       if (ans !== state.captcha.a + state.captcha.b) {
@@ -509,23 +514,23 @@ export function renderLandingPage(container, onPortalClick) {
       });
     });
 
-    container.querySelector('#srf-back').onclick = () => { state.step = 1; render(); };
+    bind('#srf-back', () => { state.step = 1; render(); });
 
-    container.querySelector('#srf-verify-otp').onclick = () => {
+    bind('#srf-verify-otp', () => {
       const entered = boxes.map(b => b.value).join('');
       if (entered.length !== 6) return toast('Enter the full 6-digit code', 'error');
       if (entered !== state.expectedOTP) return toast('Incorrect code', 'error');
       state.step = 3;
       render();
-    };
+    });
 
-    container.querySelector('#srf-resend').onclick = async () => {
+    bind('#srf-resend', async () => {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       state.expectedOTP = code;
       await sendWhatsAppOTP('+91' + state.phone, code);
       toast('New code sent', 'success');
       render();
-    };
+    });
   }
 
   function bindForm() {
@@ -579,7 +584,7 @@ export function renderLandingPage(container, onPortalClick) {
     const locEl = container.querySelector('#srf-location');
     locEl.addEventListener('input', e => { state.locationValue = e.target.value; });
 
-    container.querySelector('#srf-submit').onclick = async () => {
+    bind('#srf-submit', async () => {
       const name = container.querySelector('#srf-name').value.trim();
       const bill = container.querySelector('#srf-bill').value.trim();
       const preferred_time = container.querySelector('#srf-time').value;
@@ -624,28 +629,28 @@ export function renderLandingPage(container, onPortalClick) {
       toast('Request submitted', 'success');
       state.step = 4;
       render();
-    };
+    });
   }
 
   function bindSuccess() {
-    container.querySelector('#srf-copy-ticket').onclick = async () => {
+    bind('#srf-copy-ticket', async () => {
       try {
         await navigator.clipboard.writeText(state.ticketNo);
         toast('Ticket number copied', 'success');
       } catch {
         toast('Copy failed — select and copy manually', 'error');
       }
-    };
+    });
 
-    container.querySelector('#srf-track-now').onclick = () => {
+    bind('#srf-track-now', () => {
       state.mode = 'track';
       state.trackTicketNo = state.ticketNo;
       state.trackPhone = state.phone;
       state.trackResult = null;
       render();
-    };
+    });
 
-    container.querySelector('#srf-new').onclick = () => {
+    bind('#srf-new', () => {
       state.step = 1;
       state.phone = '';
       state.otp = '';
@@ -656,7 +661,7 @@ export function renderLandingPage(container, onPortalClick) {
       state.locationValue = '';
       state.coords = null;
       render();
-    };
+    });
   }
 
   function bindTrack() {
@@ -682,7 +687,7 @@ export function renderLandingPage(container, onPortalClick) {
           b.onclick = () => { chosen = i + 1; stars.dataset.rating = chosen; paint(chosen); };
         });
 
-        container.querySelector('#srf-fb-submit').onclick = async () => {
+        bind('#srf-fb-submit', async () => {
           if (!chosen) return toast('Please pick a star rating', 'error');
           const comment = container.querySelector('#srf-fb-comment').value.trim();
           const btn = container.querySelector('#srf-fb-submit');
@@ -703,7 +708,7 @@ export function renderLandingPage(container, onPortalClick) {
           state.trackResult = { ...state.trackResult, feedback_rating: chosen, feedback_comment: comment || null };
           toast('Thanks for your feedback!', 'success');
           render();
-        };
+        });
       }
       return;
     }
@@ -716,7 +721,7 @@ export function renderLandingPage(container, onPortalClick) {
       state.trackPhone = e.target.value;
     });
 
-    container.querySelector('#srf-track-go').onclick = async () => {
+    bind('#srf-track-go', async () => {
       const tno = state.trackTicketNo;
       const ph = state.trackPhone;
       if (!tno) return toast('Enter your ticket number', 'error');
@@ -745,7 +750,7 @@ export function renderLandingPage(container, onPortalClick) {
       }
       state.trackResult = data;
       render();
-    };
+    });
 
     // Live SLA Timer update for tracker
     const timerEl = container.querySelector('#live-sla-timer');

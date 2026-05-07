@@ -123,11 +123,16 @@ export async function renderAdminDashboard(container) {
   `;
 
   // Bindings
-  container.querySelector('#admin-refresh').onclick = () => renderAdminDashboard(container);
-  container.querySelector('#exp-attendance').onclick = () => exportToCSV('attendance.csv', a);
-  container.querySelector('#exp-clients').onclick = () => exportToCSV('clients.csv', p.filter(x=>x.role==='client'));
-  container.querySelector('#exp-stocks').onclick = () => exportToCSV('stocks.csv', s);
-  container.querySelector('#view-eod').onclick = () => renderEODReports(container);
+  const bind = (sel, cb) => {
+    const el = container.querySelector(sel);
+    if (el) el.onclick = cb;
+  };
+
+  bind('#admin-refresh', () => renderAdminDashboard(container));
+  bind('#exp-attendance', () => exportToCSV('attendance.csv', a));
+  bind('#exp-clients', () => exportToCSV('clients.csv', p.filter(x=>x.role==='client')));
+  bind('#exp-stocks', () => exportToCSV('stocks.csv', s));
+  bind('#view-eod', () => renderEODReports(container));
   
   container.querySelectorAll('.inq-btn').forEach(btn => {
     btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAdminDashboard(container));

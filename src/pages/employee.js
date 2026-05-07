@@ -261,8 +261,13 @@ export async function renderEmployeeDashboard(container) {
   const tick = () => { if (clockEl) clockEl.textContent = new Date().toLocaleTimeString(); };
   tick(); setInterval(tick, 1000);
 
+  const bind = (sel, cb) => {
+    const el = container.querySelector(sel);
+    if (el) el.onclick = cb;
+  };
+
   // Clock In
-  container.querySelector('#btn-clock-in').onclick = async () => {
+  bind('#btn-clock-in', async () => {
     const btn = container.querySelector('#btn-clock-in');
     btn.disabled = true; btn.textContent = 'Getting location…';
     let locationStr = 'Unknown';
@@ -283,27 +288,28 @@ export async function renderEmployeeDashboard(container) {
     });
     if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = '✅ Clock In'; }
     else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
-  };
+  });
 
   // Clock Out
-  container.querySelector('#btn-clock-out').onclick = async () => {
+  bind('#btn-clock-out', async () => {
     const { error } = await supabase.from('attendance').update({ clock_out: new Date().toISOString() })
       .eq('user_id', user.id).eq('date', today);
     if (error) toast(error.message, 'error');
     else { toast('Clocked out!', 'success'); renderEmployeeDashboard(container); }
-  };
+  });
 
   // EOD
   const eodBtn = container.querySelector('#btn-submit-eod');
   if (eodBtn) {
-    eodBtn.onclick = async () => {
+    bind('#btn-submit-eod', async () => {
       const content = container.querySelector('#eod-content').value.trim();
       if (!content) { toast('Please write your report', 'warning'); return; }
-      eodBtn.disabled = true; eodBtn.textContent = 'Submitting…';
+      const eodBtnActual = container.querySelector('#btn-submit-eod');
+      eodBtnActual.disabled = true; eodBtnActual.textContent = 'Submitting…';
       const { error } = await supabase.from('eod_reports').insert({ employee_id: user.id, content, date: today });
-      if (error) { toast(error.message, 'error'); eodBtn.disabled = false; eodBtn.textContent = 'Submit Report →'; }
+      if (error) { toast(error.message, 'error'); eodBtnActual.disabled = false; eodBtnActual.textContent = 'Submit Report →'; }
       else { toast('EOD Report submitted!', 'success'); renderEmployeeDashboard(container); }
-    };
+    });
   }
 
   // Task update buttons

@@ -73,7 +73,12 @@ export async function renderClientDashboard(container) {
   `;
 
   // Handle Inquiry Submission
-  container.querySelector('#btn-submit-dash-inquiry').onclick = async () => {
+  const bind = (sel, cb) => {
+    const el = container.querySelector(sel);
+    if (el) el.onclick = cb;
+  };
+
+  bind('#btn-submit-dash-inquiry', async () => {
     const btn = container.querySelector('#btn-submit-dash-inquiry');
     const name = container.querySelector('#dash-i-name').value.trim();
     const phone = container.querySelector('#dash-i-phone').value.trim();
@@ -110,12 +115,12 @@ export async function renderClientDashboard(container) {
         if (navItem) navItem.click();
       }, 1500);
     }
-  };
+  });
 
-  container.querySelector('#goto-tickets').onclick = () => {
+  bind('#goto-tickets', () => {
     const navItem = document.querySelector('[data-nav="my-tickets"]');
     if (navItem) navItem.click();
-  };
+  });
 
   loadMiniStats(container.querySelector('#client-mini-stats'), user.id);
 }
@@ -186,7 +191,7 @@ export async function renderClientTickets(container) {
   };
 
   render();
-  container.querySelector('#new-ticket-btn').onclick = () => openTicketModal(user.id, () => renderClientTickets(container));
+  bind('#new-ticket-btn', () => openTicketModal(user.id, () => renderClientTickets(container)));
 }
 
 function renderTicketList(el, tickets, userId, refresh) {

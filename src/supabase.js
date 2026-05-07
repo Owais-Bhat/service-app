@@ -3,7 +3,7 @@
 
 const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 const API_URL = isProd 
-  ? `${window.location.origin}/api` // Assumes backend is at /api on same host
+  ? '/api' // Use relative path in production
   : 'http://localhost:5000/api';
 
 

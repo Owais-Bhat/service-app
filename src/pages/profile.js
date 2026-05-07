@@ -26,7 +26,12 @@ export async function renderProfile(container) {
       </div>
     </div>`;
 
-  container.querySelector('#save-profile').onclick = async () => {
+  const bind = (sel, cb) => {
+    const el = container.querySelector(sel);
+    if (el) el.onclick = cb;
+  };
+
+  bind('#save-profile', async () => {
     const { error } = await supabase.from('profiles').upsert({
       id: user.id,
       full_name: container.querySelector('#p-name').value.trim(),
@@ -35,12 +40,12 @@ export async function renderProfile(container) {
     });
     if (error) toast(error.message, 'error');
     else toast('Profile saved!', 'success');
-  };
-  container.querySelector('#save-pass').onclick = async () => {
+  });
+  bind('#save-pass', async () => {
     const pass = container.querySelector('#new-pass').value;
     if (pass.length < 8) { toast('Min 8 characters', 'error'); return; }
     const { error } = await supabase.auth.updateUser({ password: pass });
     if (error) toast(error.message, 'error');
     else toast('Password updated!', 'success');
-  };
+  });
 }
