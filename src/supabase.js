@@ -1,10 +1,170 @@
-import { createClient } from '@supabase/supabase-js';
+// Hostinger MySQL Compatibility Layer
+// This file replaces the Supabase client with an API client that connects to our Node.js backend.
 
-const SUPABASE_URL = 'https://lmwrrtezxhaaaacjqeev.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_FJ2w3dQE7jHrWg04OEiwWA_mqN2oKVk';
+const API_URL = 'http://localhost:5000/api';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Helper to get headers with JWT
+const getHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': token ? `Bearer ${token}` : ''
+  };
+};
 
+// Chainable query builder to mimic Supabase
+class QueryBuilder {
+  constructor(table) {
+    this.table = table;
+    this.params = {};
+  }
+
+  select(fields = '*') {
+    this.params.select = fields;
+    return this;
+  }
+
+  eq(column, value) {
+    this.params.eq = `${column}:${value}`;
+    return this;
+  }
+
+  order(column, { ascending = true } = {}) {
+    this.params.order = `${column}:${ascending ? 'asc' : 'desc'}`;
+    return this;
+  }
+
+  in(column, values) {
+    this.params.in = `${column}:${values.join(',')}`;
+    return this;
+  }
+
+  maybeSingle() {
+    this.isSingle = true;
+    return this;
+  }
+
+  single() {
+    this.isSingle = true;
+    return this;
+  }
+
+  async then(resolve, reject) {
+    try {
+      const queryString = new URLSearchParams(this.params).toString();
+      const response = await fetch(`${API_URL}/data/${this.table}?${queryString}`, {
+        headers: getHeaders()
+      });
+      const data = await response.json();
+      
+      if (!response.ok) return resolve({ data: null, error: { message: data.error } });
+      
+      const result = this.isSingle ? (Array.isArray(data) ? data[0] : data) : data;
+      resolve({ data: result, error: null });
+    } catch (err) {
+      resolve({ data: null, error: { message: err.message } });
+    }
+  }
+
+  async insert(data) {
+    try {
+      const response = await fetch(`${API_URL}/data/${this.table}`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+      });
+      const result = await response.json();
+      if (!response.ok) return { data: null, error: { message: result.error } };
+      return { data: result, error: null };
+    } catch (err) {
+      return { data: null, error: { message: err.message } };
+    }
+  }
+
+  async update(data) {
+    // Basic update implementation
+    try {
+      const queryString = new URLSearchParams(this.params).toString();
+      const response = await fetch(`${API_URL}/data/${this.table}?${queryString}`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+      });
+      const result = await response.json();
+      if (!response.ok) return { data: null, error: { message: result.error } };
+      return { data: result, error: null };
+    } catch (err) {
+      return { data: null, error: { message: err.message } };
+    }
+  }
+}
+
+export const supabase = {
+  from: (table) => new QueryBuilder(table),
+  
+  // Mock channel for real-time (can be implemented later with WebSockets)
+  channel: () => ({
+    on: function() { return this; },
+    subscribe: () => ({ unsubscribe: () => {} })
+  }),
+  removeChannel: () => {},
+
+  auth: {
+    getUser: async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return { data: { user: null } };
+      try {
+        const response = await fetch(`${API_URL}/auth/me`, { headers: getHeaders() });
+        const data = await response.json();
+        if (!response.ok) return { data: { user: null } };
+        return { data: { user: data.user } };
+      } catch {
+        return { data: { user: null } };
+      }
+    },
+    signInWithPassword: async ({ email, password }) => {
+      try {
+        const response = await fetch(`${API_URL}/auth/signin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+        if (!response.ok) return { data: null, error: { message: data.error } };
+        
+        localStorage.setItem('auth_token', data.token);
+        return { data: { user: data.user }, error: null };
+      } catch (err) {
+        return { data: null, error: { message: err.message } };
+      }
+    },
+    signUp: async ({ email, password, options }) => {
+      try {
+        const response = await fetch(`${API_URL}/auth/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            password,
+            fullName: options.data.full_name,
+            role: options.data.role
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) return { data: null, error: { message: data.error } };
+        return { data: { user: { id: data.userId, email } }, error: null };
+      } catch (err) {
+        return { data: null, error: { message: err.message } };
+      }
+    },
+    signOut: async () => {
+      localStorage.removeItem('auth_token');
+      return { error: null };
+    }
+  }
+};
+
+// Re-export convenience functions
 export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser();
   return user;
@@ -25,33 +185,20 @@ export async function signIn(email, password) {
 }
 
 export async function signUp(email, password, fullName, regKey) {
-  // Define secret keys
   const STAFF_KEY = 'NE_STAFF_2026';
   const ADMIN_KEY = 'NE_ADMIN_SECRET';
 
-  let role = '';
+  let role = 'client';
   if (regKey === STAFF_KEY) role = 'employee';
   else if (regKey === ADMIN_KEY) role = 'admin';
-  else {
-    return { data: null, error: { message: 'Invalid Employee Access Key. Please contact admin.' } };
-  }
 
-  const { data, error } = await supabase.auth.signUp({
+  return await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { full_name: fullName, role }
     }
   });
-  
-  if (data?.user) {
-    await supabase.from('profiles').insert({
-      id: data.user.id,
-      full_name: fullName,
-      role: role
-    });
-  }
-  return { data, error };
 }
 
 export async function signOut() {
