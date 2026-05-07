@@ -7,17 +7,19 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, tasks, eodReport;
+  let attendance, tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
 
   try {
     const res = await Promise.all([
       supabase.from('attendance').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
-      supabase.from('tickets').select('*').eq('assigned_to', user.id).order('created_at', { ascending: false }),
+      supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
-      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).eq('assignment_status', 'pending')
+      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted'])
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
-    const pendingInquiries = res[3].data || [];
+    const allInquiries = res[3].data || [];
+    pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending');
+    acceptedInquiries = allInquiries.filter(x => x.assignment_status === 'accepted');
   } catch (err) {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
     return;
@@ -118,28 +120,128 @@ export async function renderEmployeeDashboard(container) {
         </div>
       </div>
     </div>
-
-    <!-- Tasks Table -->
+    
+    <!-- Active Service Jobs -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title sr-icon-title">${ICONS.ticket}<span>My Assigned Tasks</span></span>
+        <span class="card-title sr-icon-title" style="color:var(--primary)">${ICONS.users}<span>Active Service Jobs (Accepted)</span></span>
+      </div>
+      <div class="card-body">
+        ${acceptedInquiries.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No active jobs accepted yet.</div>' : 
+          acceptedInquiries.map(inq => `
+            <div style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-in); margin-bottom:20px; border:1px solid var(--border);">
+               <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+                 <div>
+                   <div style="font-weight:800; font-size:1.2rem; color:var(--primary)">${inq.full_name}</div>
+                   <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
+                   <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
+                 </div>
+                 <span class="badge badge-assigned" style="font-size:0.75rem">${inq.status.replace('_',' ')}</span>
+               </div>
+               
+               <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid rgba(16,185,129,0.1);">
+                 <div>
+                   <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Contact Info</div>
+                   <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
+                     <span style="font-weight:700; font-size:1rem">${inq.phone}</span>
+                     <div style="display:flex; gap:8px;">
+                       <a href="tel:${inq.phone}" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:var(--primary); color:white; box-shadow:0 4px 10px rgba(16,185,129,0.2);">
+                         <span style="width:18px;height:18px;display:flex;">${ICONS.phone}</span>
+                       </a>
+                       <a href="https://wa.me/${inq.phone.replace(/\D/g,'')}" target="_blank" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#25D366; color:white; box-shadow:0 4px 10px rgba(37,211,102,0.2);">
+                         <span style="width:18px;height:18px;display:flex;">${ICONS.whatsapp}</span>
+                       </a>
+                     </div>
+                   </div>
+                 </div>
+                 <div>
+                   <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service Location</div>
+                   <div style="font-size:0.95rem; font-weight:600; margin-top:8px; display:flex; align-items:flex-start; gap:8px;">
+                     <span style="width:20px;height:20px;display:flex;flex-shrink:0;color:var(--primary)">${ICONS.pin}</span>
+                     <span style="line-height:1.4">${inq.location || '—'}</span>
+                   </div>
+                 </div>
+                 <div>
+                   <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Preferred Time</div>
+                   <div style="font-size:0.95rem; font-weight:700; margin-top:8px; color:var(--primary)">${inq.preferred_time || 'Flexible'}</div>
+                 </div>
+               </div>
+               
+               <div style="margin-top:24px; display:flex; gap:12px;">
+                 <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-status="${inq.status}" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+                   <span style="width:18px;height:18px;display:flex;">${ICONS.edit}</span> Update Status
+                 </button>
+                 <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+                   <span style="width:18px;height:18px;display:flex;">${ICONS.pin}</span> Open Maps
+                 </button>
+               </div>
+            </div>
+          `).join('')}
+      </div>
+    </div>
+
+    <!-- Tasks Section -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title sr-icon-title">${ICONS.ticket}<span>My Tasks & Details</span></span>
         <span class="badge badge-open">${activeTasks.length} active</span>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Title</th><th>Status</th><th>Priority</th><th>Action</th></tr>
-          </thead>
-          <tbody>
-            ${t.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-dim)">No tasks assigned yet</td></tr>' :
-              t.map(x => `<tr>
-                <td><b>${x.title}</b></td>
-                <td><span class="badge badge-${x.status}">${x.status.replace('_',' ')}</span></td>
-                <td><span class="badge badge-${x.priority || 'medium'}">${x.priority || 'medium'}</span></td>
-                <td><button class="btn btn-secondary btn-sm task-btn" data-id="${x.id}" data-status="${x.status}">Update</button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
+      <div class="card-body">
+        ${t.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No tasks assigned yet.</div>' : 
+          t.map(task => {
+            const inq = task.inquiries?.[0]; // Get the linked inquiry if it exists
+            return `
+              <div style="padding:16px; border-radius:16px; background:var(--bg-soft); box-shadow:var(--neu-sm); margin-bottom:16px; border:1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                  <div style="flex:1">
+                    <div style="font-weight:800; font-size:1.05rem; color:var(--text)">${task.title}</div>
+                    <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${task.description || 'No description provided.'}</div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+                    <span class="badge badge-${task.status}">${task.status.replace('_',' ')}</span>
+                    <span class="badge badge-${task.priority || 'medium'}">${task.priority || 'medium'}</span>
+                  </div>
+                </div>
+                
+                ${inq ? `
+                  <div style="margin-top:16px; padding:12px; background:var(--bg); border-radius:12px; border:1px dashed var(--primary);">
+                    <div style="font-size:0.75rem; color:var(--primary); font-weight:800; text-transform:uppercase; margin-bottom:8px;">Linked Service Request</div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                      <div>
+                        <div style="font-size:0.7rem; color:var(--text-dim)">Client</div>
+                        <div style="font-size:0.85rem; font-weight:700">${inq.full_name}</div>
+                      </div>
+                      <div>
+                        <div style="font-size:0.7rem; color:var(--text-dim)">Contact</div>
+                        <div style="font-size:0.85rem; font-weight:700; display:flex; align-items:center; gap:6px;">
+                          ${inq.phone}
+                          <a href="tel:${inq.phone}" style="color:var(--primary); display:flex;"><span style="width:14px;height:14px;display:flex;">${ICONS.phone}</span></a>
+                        </div>
+                      </div>
+                      <div style="grid-column: span 2">
+                        <div style="font-size:0.7rem; color:var(--text-dim)">Location</div>
+                        <div style="font-size:0.85rem; font-weight:600; display:flex; align-items:flex-start; gap:6px;">
+                          <span style="width:14px;height:14px;display:flex;flex-shrink:0;color:var(--primary);margin-top:2px;">${ICONS.pin}</span>
+                          ${inq.location || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                <div style="margin-top:16px; display:flex; gap:8px;">
+                  <button class="btn btn-secondary btn-sm task-btn" data-id="${task.id}" data-status="${task.status}" style="flex:1; height:38px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                    <span style="width:14px;height:14px;display:flex;">${ICONS.edit}</span> Update Status
+                  </button>
+                  ${inq ? `
+                    <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:38px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                      <span style="width:14px;height:14px;display:flex;">${ICONS.pin}</span> Route
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
       </div>
     </div>
   `;
@@ -219,6 +321,32 @@ export async function renderEmployeeDashboard(container) {
       })();
     };
   });
+
+  // Real-time listener for new assignments
+  const channel = supabase.channel(`employee-jobs-${user.id}`)
+    .on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'inquiries',
+      filter: `assigned_employee_id=eq.${user.id}`
+    }, payload => {
+      if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new.assignment_status === 'pending')) {
+        toast('New Job Assigned!', 'info');
+        renderEmployeeDashboard(container);
+      } else if (payload.eventType === 'UPDATE') {
+        // Just refresh to update statuses etc.
+        renderEmployeeDashboard(container);
+      }
+    })
+    .subscribe();
+
+  // Cleanup
+  const checkRemoval = setInterval(() => {
+    if (!document.body.contains(container)) {
+      supabase.removeChannel(channel);
+      clearInterval(checkRemoval);
+    }
+  }, 5000);
 }
 
 function openTaskModal(taskId, currentStatus, onDone) {
