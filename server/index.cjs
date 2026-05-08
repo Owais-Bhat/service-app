@@ -36,6 +36,35 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// The public landing page submits and tracks inquiries without logging in.
+// Allow anonymous access for those specific operations on the `inquiries` table:
+//   - POST: anyone can create a new inquiry
+//   - GET:  must filter by ticket_no (so callers can't dump the whole table)
+//   - PATCH: only feedback fields may be updated, and only by id
+// Anything else falls through to the normal JWT check.
+const PUBLIC_INQUIRY_FEEDBACK_FIELDS = new Set(['feedback_rating', 'feedback_comment', 'feedback_at']);
+const dataAuth = (req, res, next) => {
+    if (req.params.table === 'inquiries') {
+        const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
+
+        if (req.method === 'POST') {
+            req.user = { role: 'public' };
+            return next();
+        }
+        if (req.method === 'GET' && eqs.some(e => e.startsWith('ticket_no:'))) {
+            req.user = { role: 'public' };
+            return next();
+        }
+        if (req.method === 'PATCH'
+            && eqs.some(e => e.startsWith('id:'))
+            && Object.keys(req.body || {}).every(k => PUBLIC_INQUIRY_FEEDBACK_FIELDS.has(k))) {
+            req.user = { role: 'public' };
+            return next();
+        }
+    }
+    return authenticateToken(req, res, next);
+};
+
 // --- AUTH ROUTES ---
 
 app.post('/api/auth/signup', async (req, res) => {
@@ -158,23 +187,29 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
 });
 
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
-app.get('/api/data/:table', authenticateToken, async (req, res) => {
+app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
-    const { select, eq, order, in: inFilter } = req.query;
-    
+    const { select, order, in: inFilter } = req.query;
+    const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
+
     try {
         const connection = await mysql.createConnection(dbConfig);
         let query = `SELECT ${select || '*'} FROM ??`;
         let params = [table];
 
         let whereClauses = [];
-        if (eq) {
-            const [field, value] = eq.split(':');
+        eqs.forEach(filter => {
+            const idx = filter.indexOf(':');
+            if (idx === -1) return;
+            const field = filter.slice(0, idx);
+            const value = filter.slice(idx + 1);
             whereClauses.push('?? = ?');
             params.push(field, value);
-        }
+        });
         if (inFilter) {
-            const [field, valuesStr] = inFilter.split(':');
+            const idx = inFilter.indexOf(':');
+            const field = inFilter.slice(0, idx);
+            const valuesStr = inFilter.slice(idx + 1);
             const values = valuesStr.split(',');
             whereClauses.push(`?? IN (${values.map(() => '?').join(', ')})`);
             params.push(field, ...values);
@@ -198,27 +233,35 @@ app.get('/api/data/:table', authenticateToken, async (req, res) => {
     }
 });
 
-app.patch('/api/data/:table', authenticateToken, async (req, res) => {
+app.patch('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
-    const { eq } = req.query;
+    const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
     const data = req.body;
 
-    if (!eq) return res.status(400).json({ error: 'Filter required for update' });
+    if (eqs.length === 0) return res.status(400).json({ error: 'Filter required for update' });
 
     try {
         const connection = await mysql.createConnection(dbConfig);
         const keys = Object.keys(data);
         const values = Object.values(data);
-        const setClause = keys.map(k => `?? = ?`).join(', ');
-        
-        const [field, value] = eq.split(':');
-        const query = `UPDATE ?? SET ${setClause} WHERE ?? = ?`;
-        
+        const setClause = keys.map(() => `?? = ?`).join(', ');
+
+        const whereClauses = [];
+        const whereParams = [];
+        eqs.forEach(filter => {
+            const idx = filter.indexOf(':');
+            if (idx === -1) return;
+            whereClauses.push('?? = ?');
+            whereParams.push(filter.slice(0, idx), filter.slice(idx + 1));
+        });
+
+        const query = `UPDATE ?? SET ${setClause} WHERE ${whereClauses.join(' AND ')}`;
+
         const params = [table];
         keys.forEach((k, i) => {
             params.push(k, values[i]);
         });
-        params.push(field, value);
+        params.push(...whereParams);
 
         await connection.execute(query, params);
         await connection.end();
@@ -228,7 +271,7 @@ app.patch('/api/data/:table', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/data/:table', authenticateToken, async (req, res) => {
+app.post('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
     const data = req.body;
     if (!data.id) data.id = uuidv4();

@@ -21,6 +21,7 @@ class QueryBuilder {
   constructor(table) {
     this.table = table;
     this.params = {};
+    this.eqs = [];
   }
 
   select(fields = '*') {
@@ -29,7 +30,7 @@ class QueryBuilder {
   }
 
   eq(column, value) {
-    this.params.eq = `${column}:${value}`;
+    this.eqs.push(`${column}:${value}`);
     return this;
   }
 
@@ -53,16 +54,22 @@ class QueryBuilder {
     return this;
   }
 
+  _buildQuery() {
+    const sp = new URLSearchParams();
+    Object.entries(this.params).forEach(([k, v]) => sp.set(k, v));
+    this.eqs.forEach(e => sp.append('eq', e));
+    return sp.toString();
+  }
+
   async then(resolve, reject) {
     try {
-      const queryString = new URLSearchParams(this.params).toString();
-      const response = await fetch(`${API_URL}/data/${this.table}?${queryString}`, {
+      const response = await fetch(`${API_URL}/data/${this.table}?${this._buildQuery()}`, {
         headers: getHeaders()
       });
       const data = await response.json();
-      
+
       if (!response.ok) return resolve({ data: null, error: { message: data.error } });
-      
+
       const result = this.isSingle ? (Array.isArray(data) ? data[0] : data) : data;
       resolve({ data: result, error: null });
     } catch (err) {
@@ -86,10 +93,8 @@ class QueryBuilder {
   }
 
   async update(data) {
-    // Basic update implementation
     try {
-      const queryString = new URLSearchParams(this.params).toString();
-      const response = await fetch(`${API_URL}/data/${this.table}?${queryString}`, {
+      const response = await fetch(`${API_URL}/data/${this.table}?${this._buildQuery()}`, {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify(data)
