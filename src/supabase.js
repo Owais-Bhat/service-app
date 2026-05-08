@@ -197,7 +197,17 @@ export async function getUserRole(userId) {
 }
 
 export async function signIn(email, password) {
-  return await supabase.auth.signInWithPassword({ email, password });
+  const response = await fetch(`${API_URL}/auth/signin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const result = await response.json();
+  if (response.ok && result.token) {
+    localStorage.setItem('auth_token', result.token);
+    return { data: { user: result.user }, error: null };
+  }
+  return { data: null, error: { message: result.error || 'Sign in failed' } };
 }
 
 export async function signUp(email, password, fullName, regKey) {
@@ -209,15 +219,17 @@ export async function signUp(email, password, fullName, regKey) {
   else if (regKey === ADMIN_KEY) role = 'admin';
   else return { data: null, error: { message: 'Invalid access key. Use the staff or admin secret key.' } };
 
-  return await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: fullName, role }
-    }
+  const response = await fetch(`${API_URL}/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, fullName, role })
   });
+  const result = await response.json();
+  if (response.ok) return { data: { user: result.userId }, error: null };
+  return { data: null, error: { message: result.error || 'Sign up failed' } };
 }
 
 export async function signOut() {
-  return supabase.auth.signOut();
+  localStorage.removeItem('auth_token');
+  return { error: null };
 }
