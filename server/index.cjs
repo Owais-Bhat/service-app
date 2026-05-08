@@ -112,6 +112,7 @@ app.post('/api/auth/signup', async (req, res) => {
             await connection.end();
         }
     } catch (error) {
+        console.error('Signup error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -155,6 +156,7 @@ app.post('/api/auth/signin', async (req, res) => {
             user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name }
         });
     } catch (error) {
+        console.error('Signin error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -169,6 +171,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         // Profile fields take precedence so the role is the canonical DB value.
         res.json({ user: { ...req.user, ...profiles[0] } });
     } catch (error) {
+        console.error('Me error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -182,6 +185,7 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
         await connection.end();
         res.json(rows[0]);
     } catch (error) {
+        console.error('Profile error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -225,10 +229,11 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
             params.push(field);
         }
 
-        const [rows] = await connection.execute(query, params);
+        const [rows] = await connection.query(query, params);
         await connection.end();
         res.json(rows);
     } catch (error) {
+        console.error('Error fetching data:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -263,10 +268,11 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         });
         params.push(...whereParams);
 
-        await connection.execute(query, params);
+        await connection.query(query, params);
         await connection.end();
         res.json({ success: true });
     } catch (error) {
+        console.error('Error updating data:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -283,10 +289,11 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
         const placeholders = keys.map(() => '?').join(', ');
         
         const query = `INSERT INTO ?? (??) VALUES (${placeholders})`;
-        await connection.execute(query, [table, keys, ...values]);
+        await connection.query(query, [table, keys, ...values]);
         await connection.end();
         res.status(201).json(data);
     } catch (error) {
+        console.error('Error inserting data:', error);
         res.status(500).json({ error: error.message });
     }
 });
