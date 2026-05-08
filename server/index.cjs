@@ -367,8 +367,12 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
     }
 });
 
-// Catch-all to serve index.html for SPA routing (Express 5 syntax)
-app.get('/{*splat}', (req, res) => {
+// Catch-all to serve index.html for SPA routing
+app.get('*', (req, res) => {
+    // If it's an API route that wasn't matched, return 404 instead of index.html
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API route not found' });
+    }
     res.sendFile(path.join(distPath, 'index.html'));
 });
 

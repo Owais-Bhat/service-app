@@ -79,7 +79,8 @@ class QueryBuilder {
   async then(resolve, reject) {
     try {
       const isPost = this.method === 'POST';
-      const queryString = !isPost ? `?${this._buildQuery()}` : '';
+      const hasParams = this.eqs.length > 0 || Object.keys(this.params).length > 0;
+      const queryString = (!isPost && hasParams) ? `?${this._buildQuery()}` : '';
       
       const options = {
         method: this.method,
@@ -90,11 +91,15 @@ class QueryBuilder {
       const response = await fetch(`${API_URL}/data/${this.table}${queryString}`, options);
       const data = await response.json();
 
-      if (!response.ok) return resolve({ data: null, error: { message: data.error || 'Request failed' } });
+      if (!response.ok) {
+        console.error(`[Supabase Mock] ${this.method} ${this.table} failed:`, data.error);
+        return resolve({ data: null, error: { message: data.error || 'Request failed' } });
+      }
 
       const result = this.isSingle ? (Array.isArray(data) ? data[0] : data) : data;
       resolve({ data: result, error: null });
     } catch (err) {
+      console.error(`[Supabase Mock] ${this.method} ${this.table} error:`, err.message);
       resolve({ data: null, error: { message: err.message } });
     }
   }
