@@ -176,6 +176,30 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     }
 });
 
+// Update password
+app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
+    const { password } = req.body;
+    const userId = req.user.id;
+
+    if (!password || password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const connection = await mysql.createConnection(dbConfig);
+        await connection.execute(
+            'UPDATE auth_users SET password_hash = ? WHERE id = ?',
+            [passwordHash, userId]
+        );
+        await connection.end();
+        res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+        console.error('Password update error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- DATABASE ROUTES ---
 
 app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
@@ -349,7 +373,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 app.post('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
     const data = req.body;
-    if (!data.id) data.id = uuidv4();
+    if (!data.id && table !== 'inquiries') data.id = uuidv4();
 
     try {
         const connection = await mysql.createConnection(dbConfig);
@@ -357,22 +381,24 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
         const values = Object.values(data);
         const placeholders = keys.map(() => '?').join(', ');
         
-        const query = `INSERT INTO ?? (??) VALUES (${placeholders})`;
-        await connection.query(query, [table, keys, ...values]);
+        // Build ON DUPLICATE KEY UPDATE clause
+        const updateClause = keys.map(k => `?? = VALUES(??)`).join(', ');
+        const updateParams = keys.flatMap(k => [k, k]);
+
+        const query = `INSERT INTO ?? (??) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateClause}`;
+        const params = [table, keys, ...values, ...updateParams];
+
+        await connection.query(query, params);
         await connection.end();
         res.status(201).json(data);
     } catch (error) {
-        console.error('Error inserting data:', error);
+        console.error('Error inserting/upserting data:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Catch-all to serve index.html for SPA routing
-app.get('*', (req, res) => {
-    // If it's an API route that wasn't matched, return 404 instead of index.html
-    if (req.path.startsWith('/api')) {
-        return res.status(404).json({ error: 'API route not found' });
-    }
+// Catch-all to serve index.html for SPA routing (Express 5 syntax)
+app.get('/{*splat}', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
