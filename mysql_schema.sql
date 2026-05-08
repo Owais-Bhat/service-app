@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     role VARCHAR(20) DEFAULT 'client',
     salary DECIMAL(10, 2) DEFAULT 0,
     address TEXT,
+    phone VARCHAR(20),
+    company VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -42,6 +44,31 @@ CREATE TABLE IF NOT EXISTS inquiries (
     ticket_id VARCHAR(36), -- Link to a ticket if converted
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (assigned_employee_id) REFERENCES profiles(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id VARCHAR(36) PRIMARY KEY,
+    client_id VARCHAR(36),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50),
+    priority VARCHAR(20) DEFAULT 'medium',
+    status VARCHAR(20) DEFAULT 'open',
+    assigned_to VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS ticket_comments (
+    id VARCHAR(36) PRIMARY KEY,
+    ticket_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS stocks (

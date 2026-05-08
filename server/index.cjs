@@ -193,8 +193,23 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
-    const { select, order, in: inFilter } = req.query;
+    let { select, order, in: inFilter } = req.query;
     const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
+
+    // Handle Supabase-style joins: select=*,inquiries(*)
+    const relations = [];
+    if (select) {
+        // Regex to find things like "inquiries(*)" or "comments(*)"
+        const joinRegex = /(\w+)\(\*\)/g;
+        let match;
+        while ((match = joinRegex.exec(select)) !== null) {
+            relations.push(match[1]);
+        }
+        // Remove joins from the main SQL select clause
+        select = select.replace(/,?\s*\w+\(\*\)/g, '').trim();
+        if (select.endsWith(',')) select = select.slice(0, -1);
+        if (!select) select = '*';
+    }
 
     try {
         const connection = await mysql.createConnection(dbConfig);
@@ -230,6 +245,28 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
         }
 
         const [rows] = await connection.query(query, params);
+
+        // Fetch relations if requested
+        if (relations.length > 0 && rows.length > 0) {
+            for (const relTable of relations) {
+                // Find the foreign key. Simple heuristic: 
+                // if we are querying 'tickets', and relation is 'inquiries', 
+                // look for 'ticket_id' in 'inquiries' table.
+                const fk = table === 'tickets' ? 'ticket_id' : `${table.slice(0, -1)}_id`;
+                
+                const ids = rows.map(r => r.id);
+                const [relRows] = await connection.query(
+                    `SELECT * FROM ?? WHERE ?? IN (${ids.map(() => '?').join(', ')})`,
+                    [relTable, fk, ...ids]
+                );
+
+                // Attach related rows to parents
+                rows.forEach(row => {
+                    row[relTable] = relRows.filter(r => r[fk] === row.id);
+                });
+            }
+        }
+
         await connection.end();
         res.json(rows);
     } catch (error) {
