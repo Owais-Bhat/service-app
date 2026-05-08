@@ -214,8 +214,8 @@ app.post('/api/data/:table', authenticateToken, async (req, res) => {
     }
 });
 
-// Catch-all to serve index.html for SPA routing
-app.get('*', (req, res) => {
+// Catch-all to serve index.html for SPA routing (Express 5 syntax)
+app.get('/{*splat}', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
