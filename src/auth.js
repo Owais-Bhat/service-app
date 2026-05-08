@@ -29,7 +29,7 @@ export function renderAuth(onLogin, onBack) {
             <img src="${LOGO}" alt="Networking Experts" onerror="this.style.display='none'" />
           </div>
           <h2 class="auth-title">${mode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
-          <p class="auth-subtitle">${mode === 'login' ? 'Sign in to your portal' : 'Register as a client'}</p>
+          <p class="auth-subtitle">${mode === 'login' ? 'Sign in to continue' : 'Register your account'}</p>
           <div id="auth-error" class="auth-error" style="display:none"></div>
 
           <form id="auth-form">
@@ -102,9 +102,17 @@ export function renderAuth(onLogin, onBack) {
       }
 
       if (mode === 'signup') {
-        toast('Account created! Please sign in.', 'success');
-        mode = 'login';
-        render();
+        // Auto-login after signup so role routing works immediately
+        const loginRes = await signIn(email, password);
+        if (loginRes.error) {
+          toast('Account created! Please sign in.', 'success');
+          mode = 'login';
+          render();
+        } else {
+          const role = await getUserRole(loginRes.data.user.id);
+          toast('Account created successfully!', 'success');
+          onLogin(loginRes.data.user, role);
+        }
       } else {
         const role = await getUserRole(res.data.user.id);
         onLogin(res.data.user, role);
