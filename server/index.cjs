@@ -214,11 +214,33 @@ app.post('/api/data/:table', authenticateToken, async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 5000;
-
 // Catch-all to serve index.html for SPA routing
 app.get('*', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// --- START SERVER ---
+const PORT = process.env.PORT || 5000;
+
+async function startServer() {
+    try {
+        console.log('Testing database connection...');
+        const connection = await mysql.createConnection(dbConfig);
+        console.log('✅ Database connected successfully!');
+        await connection.end();
+
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+            console.log(`Serving frontend from: ${distPath}`);
+        });
+    } catch (error) {
+        console.error('❌ CRITICAL ERROR: Could not connect to database!');
+        console.error(error);
+        // Still start the server so we can at least see the logs and 404/500 errors instead of 503
+        app.listen(PORT, () => {
+            console.log(`⚠️ Server started in ERROR MODE on port ${PORT}. Database is offline.`);
+        });
+    }
+}
+
+startServer();
