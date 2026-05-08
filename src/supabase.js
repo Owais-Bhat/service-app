@@ -22,6 +22,9 @@ class QueryBuilder {
     this.table = table;
     this.params = {};
     this.eqs = [];
+    this.method = 'GET';
+    this.body = null;
+    this.isSingle = false;
   }
 
   select(fields = '*') {
@@ -61,49 +64,38 @@ class QueryBuilder {
     return sp.toString();
   }
 
+  insert(data) {
+    this.method = 'POST';
+    this.body = data;
+    return this;
+  }
+
+  update(data) {
+    this.method = 'PATCH';
+    this.body = data;
+    return this;
+  }
+
   async then(resolve, reject) {
     try {
-      const response = await fetch(`${API_URL}/data/${this.table}?${this._buildQuery()}`, {
+      const isPost = this.method === 'POST';
+      const queryString = !isPost ? `?${this._buildQuery()}` : '';
+      
+      const options = {
+        method: this.method,
         headers: getHeaders()
-      });
+      };
+      if (this.body) options.body = JSON.stringify(this.body);
+
+      const response = await fetch(`${API_URL}/data/${this.table}${queryString}`, options);
       const data = await response.json();
 
-      if (!response.ok) return resolve({ data: null, error: { message: data.error } });
+      if (!response.ok) return resolve({ data: null, error: { message: data.error || 'Request failed' } });
 
       const result = this.isSingle ? (Array.isArray(data) ? data[0] : data) : data;
       resolve({ data: result, error: null });
     } catch (err) {
       resolve({ data: null, error: { message: err.message } });
-    }
-  }
-
-  async insert(data) {
-    try {
-      const response = await fetch(`${API_URL}/data/${this.table}`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(data)
-      });
-      const result = await response.json();
-      if (!response.ok) return { data: null, error: { message: result.error } };
-      return { data: result, error: null };
-    } catch (err) {
-      return { data: null, error: { message: err.message } };
-    }
-  }
-
-  async update(data) {
-    try {
-      const response = await fetch(`${API_URL}/data/${this.table}?${this._buildQuery()}`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        body: JSON.stringify(data)
-      });
-      const result = await response.json();
-      if (!response.ok) return { data: null, error: { message: result.error } };
-      return { data: result, error: null };
-    } catch (err) {
-      return { data: null, error: { message: err.message } };
     }
   }
 }
