@@ -1,13 +1,12 @@
 import './style.css';
-import { supabase, getUserRole } from './supabase.js';
+import { supabase, getUserRole, signOut } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderClientDashboard, renderClientTickets } from './pages/client.js';
 import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts } from './pages/admin.js';
 import { renderEmployeeDashboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
-import { initTheme } from './utils.js';
+import { initTheme, toast } from './utils.js';
 import { ICONS } from './icons.js';
 
 initTheme();
@@ -23,13 +22,6 @@ function getNavItems(role) {
     { type: 'section', label: 'Main' },
     { id: 'dashboard', icon: ICONS.dashboard, label: 'Dashboard' },
   ];
-  if (role === 'client') {
-    return [...common,
-      { id: 'my-tickets', icon: ICONS.ticket, label: 'My Tickets' },
-      { type: 'section', label: 'Account' },
-      { id: 'profile', icon: ICONS.user, label: 'Profile' },
-    ];
-  }
   if (role === 'employee') {
     return [...common,
       { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
@@ -55,14 +47,13 @@ function getNavItems(role) {
 // ── PAGE RENDERER ─────────────────────────────────────
 function getPageRenderer(role, page) {
   const map = {
-    client: { dashboard: renderClientDashboard, 'my-tickets': renderClientTickets, profile: renderProfile },
     employee: { dashboard: renderEmployeeDashboard, 'all-tickets': renderAllTickets, profile: renderProfile },
     admin: {
       dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
       inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile
     }
   };
-  return (map[role] || map.client)[page];
+  return (map[role] || map.admin)[page];
 }
 
 function navigate(page) {
@@ -77,7 +68,18 @@ function navigate(page) {
 
 function showAuth() {
   renderAuth(
-    (user, role) => { currentUser = user; currentRole = role; navigate('dashboard'); },
+    async (user, role) => {
+      if (role !== 'admin' && role !== 'employee') {
+        // Clients should not reach the dashboard — push them back to the public form.
+        await signOut();
+        toast('Client accounts cannot log in here. Please use the public service request form.', 'error');
+        renderLandingPage(app, showAuth);
+        return;
+      }
+      currentUser = user;
+      currentRole = role;
+      navigate('dashboard');
+    },
     () => renderLandingPage(app, showAuth)
   );
 }
@@ -86,10 +88,20 @@ function showAuth() {
 async function boot() {
   app.innerHTML = `<div class="loading-screen"><div class="spinner"></div></div>`;
   const { data: { session } } = await supabase.auth.getSession();
-  
+
   if (session?.user) {
     currentUser = session.user;
-    currentRole = await getUserRole(currentUser.id) || 'client';
+    currentRole = session.user.role || await getUserRole(currentUser.id);
+
+    // Stale client sessions get evicted — the dashboard is staff-only now.
+    if (currentRole !== 'admin' && currentRole !== 'employee') {
+      await signOut();
+      currentUser = null;
+      currentRole = null;
+      renderLandingPage(app, showAuth);
+      return;
+    }
+
     navigate('dashboard');
   } else {
     // Show Landing Page if not logged in

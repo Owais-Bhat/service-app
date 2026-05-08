@@ -40,12 +40,22 @@ const authenticateToken = (req, res, next) => {
 
 app.post('/api/auth/signup', async (req, res) => {
     const { email, password, fullName, role } = req.body;
+
+    // Only staff/admin accounts can be created via the dashboard.
+    // Clients raise requests through the public landing page (no login).
+    if (role !== 'admin' && role !== 'employee') {
+        return res.status(400).json({ error: 'Invalid access key. Only staff and admin can register here.' });
+    }
+
     try {
         const connection = await mysql.createConnection(dbConfig);
-        
+
         // Check if user exists
         const [users] = await connection.execute('SELECT * FROM auth_users WHERE email = ?', [email]);
-        if (users.length > 0) return res.status(400).json({ error: 'User already exists' });
+        if (users.length > 0) {
+            await connection.end();
+            return res.status(400).json({ error: 'User already exists' });
+        }
 
         const userId = uuidv4();
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -65,7 +75,7 @@ app.post('/api/auth/signup', async (req, res) => {
             );
 
             await connection.commit();
-            res.status(201).json({ message: 'User created', userId });
+            res.status(201).json({ message: 'User created', userId, role });
         } catch (error) {
             await connection.rollback();
             throw error;
@@ -82,16 +92,39 @@ app.post('/api/auth/signin', async (req, res) => {
     try {
         const connection = await mysql.createConnection(dbConfig);
         const [users] = await connection.execute('SELECT * FROM auth_users WHERE email = ?', [email]);
-        await connection.end();
 
-        if (users.length === 0) return res.status(400).json({ error: 'User not found' });
+        if (users.length === 0) {
+            await connection.end();
+            return res.status(400).json({ error: 'User not found' });
+        }
 
         const user = users[0];
         const validPassword = await bcrypt.compare(password, user.password_hash);
-        if (!validPassword) return res.status(400).json({ error: 'Invalid password' });
+        if (!validPassword) {
+            await connection.end();
+            return res.status(400).json({ error: 'Invalid password' });
+        }
 
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token, user: { id: user.id, email: user.email } });
+        // Pull role + name from profile so the client can route immediately.
+        const [profiles] = await connection.execute('SELECT role, full_name FROM profiles WHERE id = ?', [user.id]);
+        await connection.end();
+
+        const profile = profiles[0] || { role: 'client', full_name: '' };
+
+        // Block client logins — clients use the public landing page, not the dashboard.
+        if (profile.role !== 'admin' && profile.role !== 'employee') {
+            return res.status(403).json({ error: 'Client accounts cannot log in. Please use the public service request form.' });
+        }
+
+        const token = jwt.sign(
+            { id: user.id, email: user.email, role: profile.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        res.json({
+            token,
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -104,6 +137,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         await connection.end();
 
         if (profiles.length === 0) return res.status(404).json({ error: 'Profile not found' });
+        // Profile fields take precedence so the role is the canonical DB value.
         res.json({ user: { ...req.user, ...profiles[0] } });
     } catch (error) {
         res.status(500).json({ error: error.message });

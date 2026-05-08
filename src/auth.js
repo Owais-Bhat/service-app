@@ -39,8 +39,8 @@ export function renderAuth(onLogin, onBack) {
                 <input type="text" id="full_name" placeholder="John Doe" required />
               </div>
               <div class="form-group">
-                <label>Employee Access Key</label>
-                <input type="password" id="reg_key" placeholder="Enter secret key" required />
+                <label>Staff / Admin Access Key</label>
+                <input type="password" id="reg_key" placeholder="Enter staff or admin secret key" required />
               </div>` : ''}
             <div class="form-group">
               <label>Email Address</label>
@@ -109,12 +109,12 @@ export function renderAuth(onLogin, onBack) {
           mode = 'login';
           render();
         } else {
-          const role = await getUserRole(loginRes.data.user.id);
+          const role = loginRes.data.user.role || await getUserRole(loginRes.data.user.id);
           toast('Account created successfully!', 'success');
           onLogin(loginRes.data.user, role);
         }
       } else {
-        const role = await getUserRole(res.data.user.id);
+        const role = res.data.user.role || await getUserRole(res.data.user.id);
         onLogin(res.data.user, role);
       }
     };

@@ -183,6 +183,10 @@ export async function getCurrentUser() {
 }
 
 export async function getUserRole(userId) {
+  // Prefer the role already attached to the current session — signin and /auth/me both return it.
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.role) return user.role;
+
   const { data, error } = await supabase
     .from('profiles')
     .select('role')
@@ -200,9 +204,10 @@ export async function signUp(email, password, fullName, regKey) {
   const STAFF_KEY = 'NE_STAFF_2026';
   const ADMIN_KEY = 'NE_ADMIN_SECRET';
 
-  let role = 'client';
+  let role;
   if (regKey === STAFF_KEY) role = 'employee';
   else if (regKey === ADMIN_KEY) role = 'admin';
+  else return { data: null, error: { message: 'Invalid access key. Use the staff or admin secret key.' } };
 
   return await supabase.auth.signUp({
     email,
