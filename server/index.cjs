@@ -196,18 +196,19 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
     let { select, order, in: inFilter } = req.query;
     const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
 
-    // Handle Supabase-style joins: select=*,inquiries(*)
+    // Handle Supabase-style joins: select=*,inquiries(*) or select=*,profiles(full_name)
     const relations = [];
     if (select) {
-        // Regex to find things like "inquiries(*)" or "comments(*)"
-        const joinRegex = /(\w+)\(\*\)/g;
+        // Regex to find things like "inquiries(*)" or "profiles(full_name)"
+        const joinRegex = /(\w+)\(([^)]*)\)/g;
         let match;
         while ((match = joinRegex.exec(select)) !== null) {
-            relations.push(match[1]);
+            relations.push({ relTable: match[1], relFields: match[2] === '*' ? '*' : match[2] });
         }
         // Remove joins from the main SQL select clause
-        select = select.replace(/,?\s*\w+\(\*\)/g, '').trim();
+        select = select.replace(/,?\s*\w+\([^)]*\)/g, '').trim();
         if (select.endsWith(',')) select = select.slice(0, -1);
+        if (select.startsWith(',')) select = select.slice(1);
         if (!select) select = '*';
     }
 
@@ -248,22 +249,53 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
 
         // Fetch relations if requested
         if (relations.length > 0 && rows.length > 0) {
-            for (const relTable of relations) {
-                // Find the foreign key. Simple heuristic: 
-                // if we are querying 'tickets', and relation is 'inquiries', 
-                // look for 'ticket_id' in 'inquiries' table.
-                const fk = table === 'tickets' ? 'ticket_id' : `${table.slice(0, -1)}_id`;
+            for (const rel of relations) {
+                const { relTable, relFields } = rel;
                 
-                const ids = rows.map(r => r.id);
-                const [relRows] = await connection.query(
-                    `SELECT * FROM ?? WHERE ?? IN (${ids.map(() => '?').join(', ')})`,
-                    [relTable, fk, ...ids]
-                );
+                // Case A: relTable has the FK (One-to-Many / Child Join)
+                // e.g. tickets (table) -> inquiries (relTable), inquiries has ticket_id
+                let fkInRel = null;
+                if (relTable === 'inquiries' && table === 'tickets') fkInRel = 'ticket_id';
+                else if (relTable === 'ticket_comments' && table === 'tickets') fkInRel = 'ticket_id';
+                else if (relTable === 'feedback' && table === 'tickets') fkInRel = 'ticket_id';
+                else if (relTable === 'feedback' && table === 'inquiries') fkInRel = 'inquiry_id';
+                
+                if (fkInRel) {
+                    const ids = rows.map(r => r.id);
+                    const [relRows] = await connection.query(
+                        `SELECT ${relFields || '*'} FROM ?? WHERE ?? IN (${ids.map(() => '?').join(', ')})`,
+                        [relTable, fkInRel, ...ids]
+                    );
+                    rows.forEach(row => {
+                        row[relTable] = relRows.filter(r => r[fkInRel] === row.id);
+                    });
+                    continue;
+                }
 
-                // Attach related rows to parents
-                rows.forEach(row => {
-                    row[relTable] = relRows.filter(r => r[fk] === row.id);
-                });
+                // Case B: table has the FK (Many-to-One / Parent Join)
+                // e.g. attendance (table) -> profiles (relTable), attendance has user_id
+                let fkInTable = null;
+                if (table === 'attendance' && relTable === 'profiles') fkInTable = 'user_id';
+                else if (table === 'tickets' && relTable === 'profiles') fkInTable = 'assigned_to';
+                else if (table === 'inquiries' && relTable === 'profiles') fkInTable = 'assigned_employee_id';
+                else if (table === 'eod_reports' && relTable === 'profiles') fkInTable = 'employee_id';
+                else if (table === 'ticket_comments' && relTable === 'profiles') fkInTable = 'user_id';
+                
+                if (fkInTable) {
+                    const ids = [...new Set(rows.map(r => r[fkInTable]).filter(Boolean))];
+                    if (ids.length === 0) {
+                        rows.forEach(row => row[relTable] = null);
+                        continue;
+                    }
+                    const [relRows] = await connection.query(
+                        `SELECT ${relFields || '*'} FROM ?? WHERE id IN (${ids.map(() => '?').join(', ')})`,
+                        [relTable, ...ids]
+                    );
+                    rows.forEach(row => {
+                        row[relTable] = relRows.find(r => r.id === row[fkInTable]) || null;
+                    });
+                    continue;
+                }
             }
         }
 
