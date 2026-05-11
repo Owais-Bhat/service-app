@@ -8,7 +8,7 @@ export default defineConfig({
       includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'Networking Experts – Service Portal',
-        short_name: 'NetExp Portal',
+        short_name: 'Nest',
         description: 'Manage tickets, services, and network infrastructure.',
         theme_color: '#0f172a',
         background_color: '#0f172a',
