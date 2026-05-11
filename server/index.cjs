@@ -5,11 +5,27 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const Razorpay = require('razorpay');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+let razorpay = null;
+try {
+    if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_ID !== 'rzp_test_YOUR_KEY_ID') {
+        razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET,
+        });
+        console.log('✅ Razorpay initialized successfully!');
+    } else {
+        console.warn('⚠️ Razorpay keys missing or using placeholders. Payment link generation will be disabled.');
+    }
+} catch (err) {
+    console.error('❌ Razorpay initialization failed:', err.message);
+}
 
 // Serve static files from the frontend build directory
 const distPath = path.join(__dirname, '../dist');
@@ -394,6 +410,48 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
     } catch (error) {
         console.error('Error inserting/upserting data:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// --- PAYMENT ROUTES ---
+
+app.post('/api/payments/create-link', authenticateToken, async (req, res) => {
+    const { amount, description, customer, ticket_no } = req.body;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    if (!razorpay) {
+        return res.status(503).json({ error: 'Payment gateway not configured. Please add Razorpay keys to .env file.' });
+    }
+
+    try {
+        const options = {
+            amount: Math.round(amount * 100), // amount in the smallest currency unit (paise)
+            currency: 'INR',
+            accept_partial: false,
+            description: description || `Payment for Ticket ${ticket_no}`,
+            customer: {
+                name: customer?.name || 'Customer',
+                contact: customer?.phone || '',
+                email: customer?.email || ''
+            },
+            notify: {
+                sms: true,
+                whatsapp: true
+            },
+            reminder_enable: true,
+            notes: {
+                ticket_no: ticket_no
+            }
+        };
+
+        const paymentLink = await razorpay.paymentLink.create(options);
+        res.json({ short_url: paymentLink.short_url });
+    } catch (error) {
+        console.error('Razorpay Error:', error);
+        res.status(500).json({ error: error.description || error.message || 'Failed to create payment link' });
     }
 });
 

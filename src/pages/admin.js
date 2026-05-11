@@ -226,9 +226,13 @@ async function openInquiryDetail(id, onDone) {
         </div>
 
         <div class="form-group">
-          <label>Razorpay Payment Link <small style="color:var(--text-dim);text-transform:none;font-weight:500;">(generate in Razorpay → Payment Links, paste here)</small></label>
-          <input id="sr-pay-link" type="url" placeholder="https://rzp.io/l/..."
-                 value="${i.payment_link ?? ''}" />
+          <label>Razorpay Payment Link</label>
+          <div style="display:flex; gap:8px;">
+            <input id="sr-pay-link" type="url" placeholder="https://rzp.io/l/..."
+                   value="${i.payment_link ?? ''}" style="flex:1" />
+            <button class="btn btn-secondary" id="gen-pay-link" style="width:auto; white-space:nowrap; padding:0 12px;" title="Generate link via Razorpay">✨ Generate</button>
+          </div>
+          <small style="color:var(--text-dim);text-transform:none;font-weight:500;margin-top:4px;display:block;">Click Generate to create a link automatically based on the bill amount.</small>
         </div>
 
         <div class="form-group">
@@ -246,6 +250,52 @@ async function openInquiryDetail(id, onDone) {
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#ci').onclick = overlay.querySelector('#ci2').onclick = () => overlay.remove();
+  
+  // Razorpay Link Generation
+  overlay.querySelector('#gen-pay-link').onclick = async () => {
+    const amount = Number(overlay.querySelector('#sr-bill').value);
+    if (!amount || amount <= 0) {
+      toast('Please enter a valid bill amount first', 'warning');
+      return;
+    }
+
+    const btn = overlay.querySelector('#gen-pay-link');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="srf-spin"></span>`;
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch('/api/payments/create-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          amount,
+          description: `Service Request: ${i.service_item}`,
+          ticket_no: i.ticket_no,
+          customer: {
+            name: i.full_name,
+            phone: i.phone
+          }
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate link');
+
+      overlay.querySelector('#sr-pay-link').value = data.short_url;
+      toast('Payment link generated!', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  };
 
   overlay.querySelector('#save-sr').onclick = async () => {
     const newStatus = overlay.querySelector('#sr-status').value;
