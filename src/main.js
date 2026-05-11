@@ -8,6 +8,10 @@ import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast } from './utils.js';
 import { ICONS } from './icons.js';
+import { registerSW } from 'virtual:pwa-register';
+
+// Register Service Worker for PWA
+registerSW({ immediate: true });
 
 initTheme();
 
