@@ -389,7 +389,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 app.post('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
     const data = req.body;
-    if (!data.id && table !== 'inquiries') data.id = uuidv4();
+    if (!data.id) data.id = uuidv4();
 
     try {
         const connection = await mysql.createConnection(dbConfig);

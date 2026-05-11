@@ -328,7 +328,9 @@ async function openInquiryDetail(id, onDone) {
       assigned_employee_id: empId || null,
     };
 
-    if (empId && empId !== i.assigned_employee_id) {
+    // If assigned to an employee (even if same), ensure it stays or returns to 'pending' 
+    // UNLESS it was already accepted and we are just changing other details.
+    if (empId && i.assignment_status !== 'accepted') {
       updates.assignment_status = 'pending';
       updates.decline_reason = null;
     }
