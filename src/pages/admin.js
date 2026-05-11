@@ -118,6 +118,9 @@ export async function renderAdminDashboard(container) {
         <button class="btn btn-secondary" id="exp-clients">Client List CSV</button>
         <button class="btn btn-secondary" id="exp-stocks">Inventory CSV</button>
         <button class="btn btn-primary" id="view-eod">EOD Summaries</button>
+        <button class="btn btn-primary" id="view-leaves" style="background:var(--warning); color:var(--text); border:none;">Leave Requests</button>
+        <button class="btn btn-primary" id="view-payments" style="background:var(--primary); color:white;">💰 Payments</button>
+        <button class="btn btn-secondary" id="view-pricing">⚙️ Service Pricing</button>
       </div>
     </div>
   `;
@@ -133,6 +136,9 @@ export async function renderAdminDashboard(container) {
   bind('#exp-clients', () => exportToCSV('clients.csv', p.filter(x=>x.role==='client')));
   bind('#exp-stocks', () => exportToCSV('stocks.csv', s));
   bind('#view-eod', () => renderEODReports(container));
+  bind('#view-leaves', () => renderLeaveRequests(container));
+  bind('#view-payments', () => renderPaymentsTab(container));
+  bind('#view-pricing', () => renderPricingTab(container));
   
   container.querySelectorAll('.inq-btn').forEach(btn => {
     btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAdminDashboard(container));
@@ -185,6 +191,11 @@ async function openInquiryDetail(id, onDone) {
             <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value" style="color:var(--primary)">${i.preferred_time || 'Flexible'}</div></div>
             <div><div class="sr-meta-label">SLA Timer</div><div class="sr-meta-value">${formatTimeRemaining(calculateSLA(i.created_at))}</div></div>
           </div>
+          ${i.extra_cost > 0 ? `
+            <div style="padding:12px; border-radius:12px; background:rgba(16,185,129,0.05); border:1px solid var(--primary); margin-top:10px;">
+              <div class="sr-meta-label">Additional Charges</div>
+              <div class="sr-meta-value">₹${i.extra_cost} - <span style="font-size:0.8rem">${i.extra_cost_reason || 'No reason'}</span></div>
+            </div>` : ''}
           ${i.assignment_status === 'declined' ? `
             <div style="padding:12px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid var(--danger);margin-top:10px;">
               <div class="sr-meta-label" style="color:var(--danger)">Employee Declined</div>
@@ -213,10 +224,11 @@ async function openInquiryDetail(id, onDone) {
 
         <div class="form-group">
           <label>Assign to Technician</label>
-          <select id="assign-to">
+          <select id="assign-to" ${i.assignment_status === 'accepted' ? 'disabled' : ''}>
             <option value="">— None —</option>
-            ${(employees||[]).map(e => `<option value="${e.id}">${e.full_name}</option>`).join('')}
+            ${(employees||[]).map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''}>${e.full_name}</option>`).join('')}
           </select>
+          ${i.assignment_status === 'accepted' ? '<small style="color:var(--success); font-weight:700;">✅ Job already accepted by technician.</small>' : ''}
         </div>
 
         <div class="form-group">
@@ -361,27 +373,78 @@ async function openInquiryDetail(id, onDone) {
   };
 }
 
-// ── OTHER PAGES ───────────────────────────────────────
+// ── ATTENDANCE ────────────────────────────────────────
 export async function renderAttendance(container) {
   const { data: logs } = await supabase.from('attendance').select('*, profiles(full_name)').order('date', { ascending: false });
-  container.innerHTML = `
-    <div class="page-header"><h1>Attendance logs</h1></div>
-    <div class="card">
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Location</th></tr></thead>
-          <tbody>
-            ${(logs||[]).map(x => `<tr>
-              <td>${formatDate(x.date)}</td>
-              <td><b>${x.profiles?.full_name || '—'}</b></td>
-              <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
-              <td><small>${x.location || '—'}</small></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
+  const list = logs || [];
+  
+  const render = (items) => {
+    container.innerHTML = `
+      <div class="page-header">
+        <h1>Attendance Logs</h1>
+        <p>Track employee check-ins and locations</p>
       </div>
-    </div>
-  `;
+      
+      <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">
+        <div class="search-input-wrap" style="flex:1; min-width:200px;">
+          <span>🔍</span>
+          <input class="search-input" id="att-search" placeholder="Filter by employee name..."/>
+        </div>
+        <input type="date" id="att-date" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--bg3); color:var(--text);"/>
+        <button class="btn btn-secondary" id="att-clear">Clear</button>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Location</th></tr></thead>
+            <tbody>
+              ${items.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>' : 
+                items.map(x => `<tr>
+                <td>${formatDate(x.date)}</td>
+                <td><b>${x.profiles?.full_name || '—'}</b></td>
+                <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
+                <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
+                <td><small>${x.location || '—'}</small></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const search = container.querySelector('#att-search');
+    const date = container.querySelector('#att-date');
+    
+    const doFilter = () => {
+      const q = search.value.toLowerCase();
+      const d = date.value;
+      const filtered = list.filter(x => {
+        const matchesName = (x.profiles?.full_name || '').toLowerCase().includes(q);
+        const matchesDate = !d || x.date === d;
+        return matchesName && matchesDate;
+      });
+      renderItems(filtered);
+    };
+
+    search.oninput = doFilter;
+    date.onchange = doFilter;
+    container.querySelector('#att-clear').onclick = () => renderAttendance(container);
+  };
+
+  const renderItems = (items) => {
+    const tbody = container.querySelector('tbody');
+    tbody.innerHTML = items.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>' : 
+      items.map(x => `<tr>
+      <td>${formatDate(x.date)}</td>
+      <td><b>${x.profiles?.full_name || '—'}</b></td>
+      <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
+      <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
+      <td><small>${x.location || '—'}</small></td>
+    </tr>`).join('');
+  };
+
+  render(list);
 }
 
 export async function renderInquiries(container) {
@@ -499,18 +562,108 @@ export async function renderStocks(container) {
 
 export async function renderEODReports(container) {
   const { data: reports } = await supabase.from('eod_reports').select('*, profiles(full_name)').order('date', { ascending: false });
+  const list = reports || [];
+
+  const render = (items) => {
+    container.innerHTML = `
+      <div class="page-header">
+        <h1>Daily Summaries</h1>
+        <p>End-of-day progress reports from staff</p>
+      </div>
+
+      <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">
+        <div class="search-input-wrap" style="flex:1; min-width:200px;">
+          <span>🔍</span>
+          <input class="search-input" id="eod-search" placeholder="Filter by staff name..."/>
+        </div>
+        <input type="date" id="eod-date" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--bg3); color:var(--text);"/>
+        <button class="btn btn-secondary" id="eod-clear">Clear</button>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Staff</th><th>Summary</th></tr></thead>
+            <tbody>
+              ${items.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No reports found</td></tr>' : 
+                items.map(x => `<tr>
+                <td>${formatDate(x.date)}</td>
+                <td><b>${x.profiles?.full_name || '—'}</b></td>
+                <td style="max-width:400px;font-size:.9rem; line-height:1.5; padding:16px 8px;">${x.content}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const search = container.querySelector('#eod-search');
+    const date = container.querySelector('#eod-date');
+    
+    const doFilter = () => {
+      const q = search.value.toLowerCase();
+      const d = date.value;
+      const filtered = list.filter(x => {
+        const matchesName = (x.profiles?.full_name || '').toLowerCase().includes(q);
+        const matchesDate = !d || x.date === d;
+        return matchesName && matchesDate;
+      });
+      renderItems(filtered);
+    };
+
+    search.oninput = doFilter;
+    date.onchange = doFilter;
+    container.querySelector('#eod-clear').onclick = () => renderEODReports(container);
+  };
+
+  const renderItems = (items) => {
+    const tbody = container.querySelector('tbody');
+    tbody.innerHTML = items.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No reports found</td></tr>' : 
+      items.map(x => `<tr>
+      <td>${formatDate(x.date)}</td>
+      <td><b>${x.profiles?.full_name || '—'}</b></td>
+      <td style="max-width:400px;font-size:.9rem; line-height:1.5; padding:16px 8px;">${x.content}</td>
+    </tr>`).join('');
+  };
+
+  render(list);
+}
+
+export async function renderAllTickets(container) {
+  const { data: tickets } = await supabase.from('tickets').select('*, inquiries(*)').order('created_at', { ascending: false });
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name');
+  const profileMap = (profiles || []).reduce((acc, p) => ({ ...acc, [p.id]: p.full_name }), {});
+
   container.innerHTML = `
-    <div class="page-header"><h1>Daily Summaries</h1></div>
+    <div class="page-header">
+      <h1>All Tickets & Tasks</h1>
+      <p>Master list of all service requests and internal tasks</p>
+    </div>
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Staff</th><th>Summary</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Ticket ID</th>
+              <th>Customer</th>
+              <th>Contact</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+              <th>Created</th>
+            </tr>
+          </thead>
           <tbody>
-            ${(reports||[]).map(x => `<tr>
-              <td>${formatDate(x.date)}</td>
-              <td><b>${x.profiles?.full_name || '—'}</b></td>
-              <td style="max-width:300px;font-size:.85rem">${x.content}</td>
-            </tr>`).join('')}
+            ${(tickets||[]).map(t => {
+              const inq = t.inquiries?.[0];
+              return `<tr>
+                <td><code style="font-size:0.75rem;">#${t.id.slice(0,8)}</code></td>
+                <td><b>${inq ? inq.full_name : 'Guest'}</b></td>
+                <td>${inq ? `<small>${inq.phone}<br/>${inq.location.slice(0,20)}...</small>` : '—'}</td>
+                <td>${t.assigned_to ? profileMap[t.assigned_to] || 'Staff' : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>
+                <td><span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span></td>
+                <td><small>${formatDate(t.created_at)}</small></td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -518,28 +671,59 @@ export async function renderEODReports(container) {
   `;
 }
 
-export async function renderAllTickets(container) {
-  const { data: tickets } = await supabase.from('tickets').select('*').order('created_at', { ascending: false });
-  const { data: profiles } = await supabase.from('profiles').select('id, full_name');
-  const profileMap = (profiles || []).reduce((acc, p) => ({ ...acc, [p.id]: p.full_name }), {});
+export async function renderLeaveRequests(container) {
+  const { data: leaves } = await supabase.from('leave_requests').select('*, profiles(full_name)').order('created_at', { ascending: false });
+  const list = leaves || [];
 
   container.innerHTML = `
-    <div class="page-header"><h1>Tickets & Tasks</h1></div>
+    <div class="page-header">
+      <h1>Leave Requests</h1>
+      <p>Approve or reject employee time-off requests</p>
+    </div>
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Client</th><th>Title</th><th>Status</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Dates</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            ${(tickets||[]).map(t => `<tr>
-              <td>${t.client_id ? (profileMap[t.client_id] || 'Client') : 'Guest Inquiry'}</td>
-              <td>${t.title}</td>
-              <td><span class="badge badge-${t.status}">${t.status}</span></td>
-            </tr>`).join('')}
+            ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No leave requests found</td></tr>' : 
+              list.map(x => `
+              <tr>
+                <td><b>${x.profiles?.full_name || '—'}</b></td>
+                <td><small>${formatDate(x.start_date)} to ${formatDate(x.end_date)}</small></td>
+                <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${x.reason}">${x.reason}</td>
+                <td><span class="badge badge-${x.status}">${x.status}</span></td>
+                <td>
+                  ${x.status === 'pending' ? `
+                    <div style="display:flex; gap:8px;">
+                      <button class="btn btn-primary btn-sm leave-act" data-id="${x.id}" data-status="approved">Approve</button>
+                      <button class="btn btn-danger btn-sm leave-act" data-id="${x.id}" data-status="rejected">Reject</button>
+                    </div>
+                  ` : '—'}
+                </td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
     </div>
   `;
+
+  container.querySelectorAll('.leave-act').forEach(btn => {
+    btn.onclick = async () => {
+      const status = btn.dataset.status;
+      const { error } = await supabase.from('leave_requests').update({ status }).eq('id', btn.dataset.id);
+      if (error) toast(error.message, 'error');
+      else { toast(`Request ${status}`, 'success'); renderLeaveRequests(container); }
+    };
+  });
 }
 
 // ── CONTACTS (from Service Requests) ────────────────────
@@ -718,5 +902,110 @@ export async function renderUsers(container) {
       await supabase.from('profiles').update({ role: sel.value }).eq('id', sel.dataset.uid);
       toast('Role updated', 'success');
     });
+  });
+}
+
+export async function renderPaymentsTab(container) {
+  const { data: payments } = await supabase.from('inquiries').select('*').not('bill_amount', 'is', null).order('created_at', { ascending: false });
+  const list = payments || [];
+  
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Payment Tracker</h1>
+      <p>Monitor revenue and billing status</p>
+    </div>
+    <div class="stats-grid" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--success)">₹${list.filter(x=>x.payment_status==='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Total Received</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--warning)">₹${list.filter(x=>x.payment_status!=='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Pending Payments</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Ticket</th><th>Customer</th><th>Total Bill</th><th>Status</th><th>Link</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No payment records yet</td></tr>' : 
+              list.map(x => `
+              <tr>
+                <td><code style="font-size:0.75rem;">${x.ticket_no || x.id.slice(0,8)}</code></td>
+                <td><b>${x.full_name}</b></td>
+                <td>₹${Number(x.bill_amount).toLocaleString('en-IN')}</td>
+                <td><span class="badge badge-${x.payment_status === 'paid' ? 'resolved' : 'medium'}">${x.payment_status || 'unpaid'}</span></td>
+                <td>${x.payment_link ? `<a href="${x.payment_link}" target="_blank" style="color:var(--primary); font-size:0.8rem;">View Link</a>` : '—'}</td>
+                <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Details</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  container.querySelectorAll('.inq-btn').forEach(btn => {
+    btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderPaymentsTab(container));
+  });
+}
+
+export async function renderPricingTab(container) {
+  const { data: pricing } = await supabase.from('service_pricing').select('*').order('name');
+  const list = pricing || [];
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h1>Service Pricing</h1>
+        <p>Define standard costs for common services to prevent billing errors</p>
+      </div>
+      <button class="btn btn-primary" id="add-price">${ICONS.plus}<span>Add New Service</span></button>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Service Name</th><th>Fixed Cost</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' : 
+              list.map(x => `
+              <tr>
+                <td><b>${x.name}</b></td>
+                <td>₹${Number(x.cost).toLocaleString('en-IN')}</td>
+                <td>
+                  <button class="btn btn-danger btn-sm del-price" data-id="${x.id}">${ICONS.close}</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#add-price').onclick = () => {
+    const name = prompt('Enter service name:');
+    const cost = prompt('Enter fixed cost (₹):');
+    if (name && cost) {
+      (async () => {
+        await supabase.from('service_pricing').insert({ id: crypto.randomUUID(), name, cost: Number(cost) });
+        renderPricingTab(container);
+      })();
+    }
+  };
+
+  container.querySelectorAll('.del-price').forEach(btn => {
+    btn.onclick = async () => {
+      if (confirm('Delete this service?')) {
+        await supabase.from('service_pricing').delete().eq('id', btn.dataset.id);
+        renderPricingTab(container);
+      }
+    };
   });
 }

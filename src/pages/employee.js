@@ -129,6 +129,17 @@ export async function renderEmployeeDashboard(container) {
           `}
         </div>
       </div>
+
+      <!-- Leave Request Card -->
+      <div class="card">
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clock}<span>Request Leave</span></span></div>
+        <div class="card-body">
+          <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:16px;">Need time off? Submit your request here for approval.</p>
+          <button class="btn btn-secondary btn-wide" id="btn-open-leave-modal">
+            ${ICONS.plus}<span>Submit Leave Request</span>
+          </button>
+        </div>
+      </div>
     </div>
     
     <!-- Active Service Jobs -->
@@ -312,6 +323,9 @@ export async function renderEmployeeDashboard(container) {
     });
   }
 
+  // Leave Request
+  bind('#btn-open-leave-modal', () => openLeaveModal(user.id, () => renderEmployeeDashboard(container)));
+
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {
     btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeDashboard(container));
@@ -373,46 +387,188 @@ export async function renderEmployeeDashboard(container) {
 }
 
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
+  (async () => {
+    const { data: pricing } = await supabase.from('service_pricing').select('*').order('name');
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:450px">
+        <div class="modal-header">
+          <span class="modal-title">Update Task Status</span>
+          <button class="modal-close" id="cm">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>New Status</label>
+            <select id="new-status">
+              <option value="open" ${currentStatus==='open'?'selected':''}>Open</option>
+              <option value="in_progress" ${currentStatus==='in_progress'?'selected':''}>In Progress</option>
+              <option value="resolved" ${currentStatus==='resolved'?'selected':''}>Resolved</option>
+              <option value="closed" ${currentStatus==='closed'?'selected':''}>Closed</option>
+            </select>
+          </div>
+
+          <div id="pricing-section" style="display:${currentStatus==='resolved'||currentStatus==='closed'?'block':'none'}; margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+            <label style="font-weight:700; margin-bottom:8px; display:block;">Select Services Performed</label>
+            <div style="max-height:150px; overflow-y:auto; padding:10px; background:var(--bg-soft); border-radius:10px; margin-bottom:12px;">
+              ${(pricing || []).map(p => `
+                <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
+                  <input type="checkbox" class="service-chk" data-id="${p.id}" data-cost="${p.cost}" />
+                  <span style="font-size:0.9rem;">${p.name} (₹${p.cost})</span>
+                </label>
+              `).join('')}
+              ${(!pricing || pricing.length === 0) ? '<p style="font-size:0.8rem; color:var(--text-dim);">No standard services defined by Admin.</p>' : ''}
+            </div>
+
+            <div class="form-group">
+              <label>Additional Charges (Optional)</label>
+              <input type="number" id="extra-cost" placeholder="₹0" style="margin-bottom:8px;"/>
+              <input type="text" id="extra-reason" placeholder="Reason for extra charge..."/>
+            </div>
+
+            <div style="padding:12px; background:var(--primary-soft); border-radius:10px; text-align:right;">
+              <span style="font-size:0.85rem; color:var(--text-dim);">Total Estimated Bill:</span>
+              <div style="font-size:1.4rem; font-weight:800; color:var(--primary);" id="total-bill-display">₹0</div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:16px;">
+            <label>Work Details / Progress Update <span style="color:var(--danger)">*</span></label>
+            <textarea id="progress-detail" rows="4" placeholder="Describe what you did... (Mandatory)"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cm2">Cancel</button>
+          <button class="btn btn-primary" id="save-update">Save Changes</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const statusSel = overlay.querySelector('#new-status');
+    const pricingSec = overlay.querySelector('#pricing-section');
+    const totalDisplay = overlay.querySelector('#total-bill-display');
+    const extraInput = overlay.querySelector('#extra-cost');
+    const checkboxes = overlay.querySelectorAll('.service-chk');
+
+    const calcTotal = () => {
+      let total = Number(extraInput.value) || 0;
+      checkboxes.forEach(chk => { if (chk.checked) total += Number(chk.dataset.cost); });
+      totalDisplay.textContent = `₹${total.toLocaleString('en-IN')}`;
+    };
+
+    statusSel.onchange = () => {
+      pricingSec.style.display = (statusSel.value === 'resolved' || statusSel.value === 'closed') ? 'block' : 'none';
+    };
+    extraInput.oninput = calcTotal;
+    checkboxes.forEach(chk => chk.onchange = calcTotal);
+
+    overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = () => overlay.remove();
+    overlay.querySelector('#save-update').onclick = async () => {
+      const newStatus = statusSel.value;
+      const detail = overlay.querySelector('#progress-detail').value.trim();
+      
+      if (!detail) { toast('Please provide details of your work', 'warning'); return; }
+
+      const btn = overlay.querySelector('#save-update');
+      btn.disabled = true; btn.textContent = 'Saving...';
+
+      let totalBill = 0;
+      const selectedServiceIds = [];
+      if (newStatus === 'resolved' || newStatus === 'closed') {
+        totalBill = Number(extraInput.value) || 0;
+        checkboxes.forEach(chk => {
+          if (chk.checked) {
+            totalBill += Number(chk.dataset.cost);
+            selectedServiceIds.push(chk.dataset.id);
+          }
+        });
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
+      
+      const inqUpdates = { status: newStatus };
+      if (totalBill > 0) {
+        inqUpdates.bill_amount = totalBill;
+        inqUpdates.extra_cost = Number(extraInput.value) || 0;
+        inqUpdates.extra_cost_reason = overlay.querySelector('#extra-reason').value.trim() || null;
+      }
+
+      if (inqId) {
+        ops.push(supabase.from('inquiries').update(inqUpdates).eq('id', inqId));
+      } else {
+        ops.push(supabase.from('inquiries').update(inqUpdates).eq('ticket_id', taskId));
+      }
+
+      // Add services linking
+      if (inqId && selectedServiceIds.length > 0) {
+        ops.push(supabase.from('inquiry_services').insert(
+          selectedServiceIds.map(sid => ({ inquiry_id: inqId, service_id: sid }))
+        ));
+      }
+
+      // Add progress detail as a comment
+      ops.push(supabase.from('ticket_comments').insert({
+        ticket_id: taskId,
+        user_id: user.id,
+        content: `[Status: ${newStatus.replace('_', ' ')}] ${detail}${totalBill > 0 ? ` (Bill: ₹${totalBill})` : ''}`
+      }));
+
+      await Promise.all(ops);
+      toast('Task updated!', 'success');
+      overlay.remove();
+      onDone();
+    };
+  })();
+}
+
+function openLeaveModal(employeeId, onDone) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:420px">
+    <div class="modal" style="max-width:450px">
       <div class="modal-header">
-        <span class="modal-title">Update Task Status</span>
-        <button class="modal-close" id="cm">✕</button>
+        <span class="modal-title">Submit Leave Request</span>
+        <button class="modal-close" id="cl">✕</button>
       </div>
       <div class="modal-body">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+          <div class="form-group"><label>Start Date</label><input type="date" id="l-start" required/></div>
+          <div class="form-group"><label>End Date</label><input type="date" id="l-end" required/></div>
+        </div>
         <div class="form-group">
-          <label>New Status</label>
-          <select id="new-status">
-            <option value="open" ${currentStatus==='open'?'selected':''}>Open</option>
-            <option value="in_progress" ${currentStatus==='in_progress'?'selected':''}>In Progress</option>
-            <option value="resolved" ${currentStatus==='resolved'?'selected':''}>Resolved</option>
-            <option value="closed" ${currentStatus==='closed'?'selected':''}>Closed</option>
-          </select>
+          <label>Reason for Leave</label>
+          <textarea id="l-reason" rows="4" placeholder="Explain your reason..."></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="cm2">Cancel</button>
-        <button class="btn btn-primary" id="save-update">Save Changes</button>
+        <button class="btn btn-secondary" id="cl2">Cancel</button>
+        <button class="btn btn-primary" id="btn-submit-leave">Submit Request</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = () => overlay.remove();
-  overlay.querySelector('#save-update').onclick = async () => {
-    const newStatus = overlay.querySelector('#new-status').value;
-    const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
-    
-    if (inqId) {
-      ops.push(supabase.from('inquiries').update({ status: newStatus }).eq('id', inqId));
-    } else {
-      // Fallback if we only have the ticket ID
-      ops.push(supabase.from('inquiries').update({ status: newStatus }).eq('ticket_id', taskId));
-    }
+  overlay.querySelector('#cl').onclick = overlay.querySelector('#cl2').onclick = () => overlay.remove();
+  
+  overlay.querySelector('#btn-submit-leave').onclick = async () => {
+    const start = overlay.querySelector('#l-start').value;
+    const end = overlay.querySelector('#l-end').value;
+    const reason = overlay.querySelector('#l-reason').value.trim();
 
-    await Promise.all(ops);
-    toast('Task updated!', 'success');
-    overlay.remove();
-    onDone();
+    if (!start || !end || !reason) { toast('Please fill in all fields', 'warning'); return; }
+
+    const btn = overlay.querySelector('#btn-submit-leave');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+
+    const { error } = await supabase.from('leave_requests').insert({
+      employee_id: employeeId,
+      start_date: start,
+      end_date: end,
+      reason,
+      status: 'pending'
+    });
+
+    if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = 'Submit Request'; }
+    else { toast('Leave request submitted!', 'success'); overlay.remove(); onDone(); }
   };
 }
