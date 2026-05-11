@@ -8,6 +8,37 @@
   padding: 0;
 }
 
+/* PWA Install Button */
+.pwa-install-btn {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--primary);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  border: none;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  z-index: 9999;
+  animation: pwaSlideUp 0.3s ease-out;
+}
+
+.pwa-install-btn:hover {
+  background: var(--primary-hover);
+  transform: translateX(-50%) translateY(-2px);
+}
+
+@keyframes pwaSlideUp {
+  from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
 :root {
   /* LIGHT THEME: Light Green & White */
   --primary: #10B981; /* Vibrant Green */

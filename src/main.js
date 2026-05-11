@@ -13,6 +13,34 @@ import { registerSW } from 'virtual:pwa-register';
 // Register Service Worker for PWA
 registerSW({ immediate: true });
 
+// PWA Install Prompt Logic
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent Chrome 67 and earlier from automatically showing the prompt
+  e.preventDefault();
+  // Stash the event so it can be triggered later.
+  deferredPrompt = e;
+  
+  // Show a custom install button/toast
+  const installBtn = document.createElement('button');
+  installBtn.className = 'pwa-install-btn';
+  installBtn.innerHTML = `${ICONS.download || '📥'} Install App`;
+  document.body.appendChild(installBtn);
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    // Show the prompt
+    deferredPrompt.prompt();
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    }
+    deferredPrompt = null;
+    installBtn.remove();
+  });
+});
+
 initTheme();
 
 const app = document.getElementById('app');

@@ -5,27 +5,29 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg'],
+      includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'Networking Experts – Service Portal',
         short_name: 'NetExp Portal',
         description: 'Manage tickets, services, and network infrastructure.',
         theme_color: '#0f172a',
+        background_color: '#0f172a',
+        display: 'standalone',
         icons: [
           {
-            src: 'favicon.svg',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png'
           },
           {
-            src: 'favicon.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
+            type: 'image/png'
           },
           {
-            src: 'favicon.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any maskable'
           }
         ]
@@ -33,3 +35,4 @@ export default defineConfig({
     })
   ]
 });
+
