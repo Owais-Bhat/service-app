@@ -2560,3 +2560,223 @@ tr:hover td {
   .srf-stepper { font-size: 0.75rem; }
   .srf-step span { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   COMPREHENSIVE MOBILE RESPONSIVE OVERRIDES
+   All rules below OVERRIDE earlier declarations intentionally.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Base: prevent horizontal overflow everywhere ── */
+* { max-width: 100%; box-sizing: border-box; }
+img, svg { max-width: 100%; height: auto; }
+input, select, textarea { max-width: 100%; }
+
+/* ── Tables: revert card-view, use horizontal scroll instead ──
+   The card-view at <600px relies on data-label attrs that
+   aren't present in the JS-generated tables, so we revert
+   to scrollable tables which always work.                    */
+@media (max-width: 600px) {
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0;
+  }
+  table         { display: table; min-width: 500px; width: 100%; }
+  thead         { display: table-header-group; }
+  tbody         { display: table-row-group; }
+  tr            { display: table-row; background: none; border-radius: 0;
+                  margin-bottom: 0; padding: 0; box-shadow: none; }
+  th, td        { display: table-cell; width: auto; }
+  td            { padding: 10px 12px; font-size: 0.82rem;
+                  border-bottom: 1px solid var(--border);
+                  white-space: nowrap; }
+  td::before    { display: none; }
+  th            { padding: 10px 12px; font-size: 0.78rem; white-space: nowrap; }
+  tbody tr:hover td { background: var(--bg-soft); }
+}
+
+/* ── Filter bar: horizontal scroll on mobile ── */
+@media (max-width: 640px) {
+  .sr-filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    width: 100%;
+    max-width: 100%;
+    padding-bottom: 6px;
+  }
+  .sr-filter-bar::-webkit-scrollbar { display: none; }
+  .sr-filter { flex-shrink: 0; }
+
+  /* Filter bar with search + status tabs (payments page) */
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-bar #pay-status-tabs {
+    width: 100%;
+  }
+}
+
+/* ── Page header: stack title + action button on mobile ── */
+@media (max-width: 560px) {
+  /* Page headers that have inline style="display:flex" */
+  .page-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+  .page-header > button,
+  .page-header > .btn,
+  .page-header > a {
+    align-self: flex-start;
+  }
+  /* Card headers with title + search input */
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .card-header .search-input-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: unset;
+  }
+  .card-header > div[style*="min-width"],
+  .card-header > div[style*="max-width"] {
+    width: 100% !important;
+    min-width: unset !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ── Modals: scrollable with max-height on all mobile ── */
+@media (max-width: 768px) {
+  .modal {
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+  }
+  .modal-footer {
+    flex-shrink: 0;
+  }
+}
+
+/* ── sr-meta-row: single column on small screens ── */
+@media (max-width: 500px) {
+  .sr-meta-row { grid-template-columns: 1fr; gap: 10px; }
+}
+
+/* ── Employee service job cards: stack action buttons ── */
+@media (max-width: 480px) {
+  .emp-job-card { border-radius: 16px !important; padding: 14px !important; }
+}
+
+/* ── Stats grid: 2 col on all mobile, 1 col only tiny ── */
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-value { font-size: 1.6rem; }
+}
+@media (max-width: 340px) {
+  .stats-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Topbar title: truncate gracefully ── */
+@media (max-width: 400px) {
+  .topbar-title {
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 50vw;
+  }
+  .topbar { padding: 0 12px; gap: 8px; }
+}
+
+/* ── Auth card: comfortable on very small screens ── */
+@media (max-width: 360px) {
+  .auth-card { padding: 24px 16px; border-radius: 20px; }
+  .auth-title { font-size: 1.2rem; }
+}
+
+/* ── Landing SRF form card: full-bleed on tiny screens ── */
+@media (max-width: 400px) {
+  .srf-card { padding: 20px 16px; border-radius: 18px; }
+  .srf-nav { padding: 12px 16px; }
+  .srf-logo { height: 38px; }
+  .srf-brand { font-size: 1rem; }
+  .srf-nav-actions { gap: 6px; }
+  .srf-main { padding: 16px 12px 40px; }
+}
+
+/* ── Grid layouts: single column below 480px ── */
+@media (max-width: 480px) {
+  .grid-2,
+  .grid-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* ── Buttons: full-width helpers on mobile ── */
+@media (max-width: 480px) {
+  .btn-wide { width: 100%; }
+  /* Quick action buttons: 2-up grid on mobile */
+  .card-body .btn + .btn { margin-left: 0; }
+}
+
+/* ── PWA install button: keep above mobile nav bar ── */
+@media (max-width: 600px) {
+  .pwa-install-btn {
+    bottom: 1.2rem;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.88rem;
+  }
+}
+
+/* ── Touch: increase tap targets ── */
+@media (hover: none) and (pointer: coarse) {
+  .sr-filter { padding: 10px 16px; min-height: 44px; }
+  .contact-act { width: 40px; height: 40px; }
+  .srf-icon-btn { width: 48px; height: 48px; }
+  .nav-item { min-height: 50px; }
+  select, input, textarea { font-size: 16px !important; } /* prevent iOS zoom */
+}
+
+/* ── Landscape phone: compact topbar + content ── */
+@media (max-height: 420px) and (orientation: landscape) {
+  .topbar { height: 50px; }
+  .page-content { padding: 12px 16px; }
+  .stats-grid { margin-bottom: 14px; }
+  .modal { max-height: 100vh; border-radius: 0; }
+  .modal-overlay { padding: 0; align-items: flex-start; }
+}
+
+/* ── Search input: always flexible ── */
+.search-input-wrap { max-width: 100%; }
+.search-input { min-width: 0; width: 100%; }
+
+/* ── Prevent overflow from inline-style fixed widths ── */
+@media (max-width: 480px) {
+  [style*="min-width:200px"], [style*="min-width: 200px"] { min-width: 0 !important; }
+  [style*="max-width:560px"], [style*="max-width: 560px"] { max-width: 100% !important; }
+  [style*="max-width:520px"], [style*="max-width: 520px"] { max-width: 100% !important; }
+  [style*="width:160px"], [style*="width: 160px"] { width: 100% !important; max-width: 160px; margin: 0 auto; }
+}
+
+/* ── Service request meta in employee modal: responsive ── */
+@media (max-width: 480px) {
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
