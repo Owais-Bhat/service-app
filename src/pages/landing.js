@@ -403,26 +403,57 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
       ` : ''}
 
-      ${closed && !hasFeedback ? `
+      ${!hasFeedback ? `
         <div class="srf-feedback">
           <h3 class="srf-fb-title">How did we do?</h3>
-          <p class="srf-fb-sub">A quick rating helps our technicians improve.</p>
-          <div class="srf-stars" id="srf-stars" data-rating="0">
-            ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}">${ICONS.starOutline}</button>`).join('')}
+          <p class="srf-fb-sub">Your honest feedback helps us serve you better.</p>
+
+          <div style="margin-bottom:18px;">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Overall Experience</div>
+            <div class="srf-stars" id="srf-stars" data-rating="0">
+              ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}">${ICONS.starOutline}</button>`).join('')}
+            </div>
+            <div id="srf-rating-label" style="font-size:0.82rem;color:var(--primary);font-weight:700;margin-top:6px;min-height:18px;"></div>
           </div>
-          <div class="srf-input-wrap">
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
+            <div>
+              <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Service Quality</div>
+              <div class="srf-stars" id="srf-stars-quality" data-rating="0" style="gap:2px;">
+                ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}" style="padding:2px;">${ICONS.starOutline}</button>`).join('')}
+              </div>
+            </div>
+            <div>
+              <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Technician</div>
+              <div class="srf-stars" id="srf-stars-tech" data-rating="0" style="gap:2px;">
+                ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}" style="padding:2px;">${ICONS.starOutline}</button>`).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:18px;" id="srf-rec-wrap">
+            <button class="srf-rec-btn" id="srf-rec-yes" data-val="yes" style="flex:1;padding:10px 8px;border-radius:12px;border:2px solid var(--border);background:var(--bg-soft);font-weight:700;font-size:0.82rem;cursor:pointer;color:var(--text-soft);font-family:inherit;transition:all 0.2s;">👍 Recommend</button>
+            <button class="srf-rec-btn" id="srf-rec-no" data-val="no" style="flex:1;padding:10px 8px;border-radius:12px;border:2px solid var(--border);background:var(--bg-soft);font-weight:700;font-size:0.82rem;cursor:pointer;color:var(--text-soft);font-family:inherit;transition:all 0.2s;">👎 Would Not</button>
+          </div>
+
+          <div class="srf-input-wrap" style="margin-bottom:14px;">
             <span class="srf-input-icon">${ICONS.edit}</span>
-            <input id="srf-fb-comment" type="text" placeholder="Optional comment…" class="srf-input"/>
+            <textarea id="srf-fb-comment" placeholder="Tell us about your experience — what went well, what could improve…" class="srf-input" rows="3" style="padding-top:12px;padding-bottom:12px;resize:vertical;min-height:72px;"></textarea>
           </div>
-          <button class="srf-btn srf-btn-primary" id="srf-fb-submit">
-            <span>Submit feedback</span> ${ICONS.arrowRight}
+
+          <button class="srf-btn srf-btn-primary" id="srf-fb-submit" disabled style="opacity:0.5;cursor:not-allowed;">
+            <span>Submit Feedback</span> ${ICONS.arrowRight}
           </button>
+          <p style="text-align:center;font-size:0.75rem;color:var(--text-dim);margin-top:8px;">Overall star rating is required</p>
         </div>
       ` : ''}
 
-      ${closed && hasFeedback ? `
-        <div class="srf-dev-hint" style="border-style:solid;">
-          ${ICONS.star}<span>Thanks for your feedback — you rated us <strong>${r.feedback_rating}/5</strong>.</span>
+      ${hasFeedback ? `
+        <div class="srf-fb-done">
+          <div class="srf-fb-done-ring">${ICONS.star}</div>
+          <h3 style="font-weight:800;font-size:1.1rem;color:var(--text);margin:0 0 6px;">Thank you for your feedback!</h3>
+          <p style="font-size:0.9rem;color:var(--text-soft);margin:0 0 8px;">You rated us <strong style="color:var(--warning)">${r.feedback_rating}/5 ★</strong></p>
+          ${r.feedback_comment ? `<p style="font-size:0.85rem;color:var(--text-soft);font-style:italic;margin:0;">"${r.feedback_comment}"</p>` : ''}
         </div>
       ` : ''}
     `;
@@ -673,40 +704,81 @@ export function renderLandingPage(container, onPortalClick) {
 
       const stars = container.querySelector('#srf-stars');
       if (stars) {
-        const starButtons = [...stars.querySelectorAll('.srf-star')];
-        let chosen = 0;
-        const paint = (val) => {
-          starButtons.forEach((b, i) => {
-            b.innerHTML = i < val ? ICONS.star : ICONS.starOutline;
-            b.classList.toggle('on', i < val);
+        // Helper: wire up a star row
+        const wireStars = (el, onPick) => {
+          if (!el) return;
+          const btns = [...el.querySelectorAll('.srf-star')];
+          let val = 0;
+          const paint = (v) => btns.forEach((b, i) => {
+            b.innerHTML = i < v ? ICONS.star : ICONS.starOutline;
+            b.classList.toggle('on', i < v);
           });
+          btns.forEach((b, i) => {
+            b.onmouseenter = () => paint(i + 1);
+            b.onmouseleave = () => paint(val);
+            b.onclick = () => { val = i + 1; el.dataset.rating = val; paint(val); if (onPick) onPick(val); };
+          });
+          return () => val;
         };
-        starButtons.forEach((b, i) => {
-          b.onmouseenter = () => paint(i + 1);
-          b.onmouseleave = () => paint(chosen);
-          b.onclick = () => { chosen = i + 1; stars.dataset.rating = chosen; paint(chosen); };
+
+        const RATING_LABELS = ['', '😞 Poor', '😐 Fair', '😊 Good', '😁 Great', '🤩 Excellent!'];
+        let chosenOverall = 0;
+        let recommendVal = '';
+
+        const submitBtn = container.querySelector('#srf-fb-submit');
+        const checkReady = () => {
+          if (submitBtn) { submitBtn.disabled = !chosenOverall; submitBtn.style.opacity = chosenOverall ? '1' : '0.5'; submitBtn.style.cursor = chosenOverall ? 'pointer' : 'not-allowed'; }
+        };
+
+        wireStars(stars, (v) => {
+          chosenOverall = v;
+          const lbl = container.querySelector('#srf-rating-label');
+          if (lbl) lbl.textContent = RATING_LABELS[v] || '';
+          checkReady();
+        });
+        wireStars(container.querySelector('#srf-stars-quality'));
+        wireStars(container.querySelector('#srf-stars-tech'));
+
+        // Recommend buttons
+        container.querySelectorAll('.srf-rec-btn').forEach(btn => {
+          btn.onclick = () => {
+            recommendVal = btn.dataset.val;
+            container.querySelectorAll('.srf-rec-btn').forEach(b => {
+              b.style.borderColor = b.dataset.val === recommendVal ? 'var(--primary)' : 'var(--border)';
+              b.style.color = b.dataset.val === recommendVal ? 'var(--primary)' : 'var(--text-soft)';
+              b.style.background = b.dataset.val === recommendVal ? 'rgba(16,185,129,0.08)' : 'var(--bg-soft)';
+            });
+          };
         });
 
         bind('#srf-fb-submit', async () => {
-          if (!chosen) return toast('Please pick a star rating', 'error');
+          if (!chosenOverall) return toast('Please pick an overall star rating', 'warning');
+          const qualityRating = Number(container.querySelector('#srf-stars-quality')?.dataset.rating || 0);
+          const techRating = Number(container.querySelector('#srf-stars-tech')?.dataset.rating || 0);
           const comment = container.querySelector('#srf-fb-comment').value.trim();
+          const fullComment = [
+            comment,
+            qualityRating ? `Service quality: ${qualityRating}/5` : '',
+            techRating ? `Technician: ${techRating}/5` : '',
+            recommendVal ? (recommendVal === 'yes' ? 'Would recommend ✓' : 'Would not recommend') : '',
+          ].filter(Boolean).join(' | ');
+
           const btn = container.querySelector('#srf-fb-submit');
           btn.disabled = true;
           btn.innerHTML = `<span class="srf-spin"></span><span>Submitting…</span>`;
           const { error } = await supabase.from('inquiries').update({
-            feedback_rating: chosen,
-            feedback_comment: comment || null,
+            feedback_rating: chosenOverall,
+            feedback_comment: fullComment || null,
             feedback_at: new Date().toISOString(),
           }).eq('id', state.trackResult.id);
           if (error) {
             toast('Could not submit feedback', 'error');
-            console.error(error);
             btn.disabled = false;
-            btn.innerHTML = `<span>Submit feedback</span> ${ICONS.arrowRight}`;
+            btn.innerHTML = `<span>Submit Feedback</span> ${ICONS.arrowRight}`;
             return;
           }
-          state.trackResult = { ...state.trackResult, feedback_rating: chosen, feedback_comment: comment || null };
-          toast('Thanks for your feedback!', 'success');
+          state.trackResult = { ...state.trackResult, feedback_rating: chosenOverall, feedback_comment: fullComment || null };
+          toast('Thanks for your feedback! 🙏', 'success');
           render();
         });
       }

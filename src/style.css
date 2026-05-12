@@ -2498,6 +2498,28 @@ tr:hover td {
 }
 .srf-fb-title { font-size: 1.05rem; font-weight: 800; color: var(--text); margin-bottom: 4px; }
 .srf-fb-sub { font-size: 0.86rem; color: var(--text-soft); margin-bottom: 12px; }
+.srf-fb-done {
+  text-align: center;
+  padding: 24px 16px;
+  border-radius: 20px;
+  background: rgba(16,185,129,0.06);
+  border: 1px solid rgba(16,185,129,0.2);
+  margin-top: 16px;
+}
+.srf-fb-done-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--gradient);
+  color: #fff;
+  margin-bottom: 12px;
+  box-shadow: 0 8px 20px rgba(16,185,129,0.3);
+  animation: srf-pop 0.4s ease-out;
+}
+.srf-fb-done-ring svg { width: 28px; height: 28px; }
 .srf-stars { display: flex; gap: 6px; margin-bottom: 14px; }
 .srf-star {
   background: none; border: none; cursor: pointer;

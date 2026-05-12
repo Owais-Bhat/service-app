@@ -455,6 +455,50 @@ app.post('/api/payments/create-link', authenticateToken, async (req, res) => {
     }
 });
 
+// --- RAZORPAY WEBHOOK (auto-mark payment paid) ---
+// Razorpay calls this URL when a payment link is paid.
+// Configure this URL in your Razorpay dashboard under Webhooks:
+//   https://services.networkingexperts.in/api/webhook/razorpay
+// Set RAZORPAY_WEBHOOK_SECRET in .env to the webhook secret from the dashboard.
+app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
+    const signature = req.headers['x-razorpay-signature'];
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (webhookSecret) {
+        const crypto = require('crypto');
+        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(req.body).digest('hex');
+        if (signature !== expectedSig) {
+            console.warn('[Webhook] Invalid Razorpay signature');
+            return res.status(400).json({ error: 'Invalid signature' });
+        }
+    }
+
+    let event;
+    try { event = JSON.parse(req.body); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+
+    if (event.event === 'payment_link.paid') {
+        const notes = event.payload?.payment_link?.entity?.notes || {};
+        const ticket_no = notes.ticket_no;
+        console.log(`[Webhook] Payment received for ticket: ${ticket_no}`);
+
+        if (ticket_no) {
+            try {
+                const connection = await mysql.createConnection(dbConfig);
+                await connection.execute(
+                    'UPDATE inquiries SET payment_status = ? WHERE ticket_no = ?',
+                    ['paid', ticket_no]
+                );
+                await connection.end();
+                console.log(`[Webhook] Marked paid: ${ticket_no}`);
+            } catch (err) {
+                console.error('[Webhook] DB update failed:', err.message);
+            }
+        }
+    }
+
+    res.json({ status: 'ok' });
+});
+
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/{*splat}', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));

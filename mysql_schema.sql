@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS inquiries (
     bill_amount DECIMAL(10, 2),
     payment_link TEXT,
     payment_status VARCHAR(20) DEFAULT 'unpaid',
+    payment_method VARCHAR(20) DEFAULT NULL, -- cash, upi, online, bank
     feedback_rating INT CHECK (feedback_rating >= 1 AND feedback_rating <= 5),
     feedback_comment TEXT,
     feedback_at TIMESTAMP NULL,
