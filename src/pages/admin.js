@@ -17,12 +17,14 @@ const STATUS_LABEL = {
   in_progress: 'In Progress',
   resolved: 'Resolved',
   closed: 'Closed',
+  issue_not_resolved: 'Issue Not Resolved',
 };
 
 function statusBadge(status) {
   const cls = ['resolved', 'closed'].includes(status) ? 'badge-resolved'
     : status === 'in_progress' ? 'badge-in_progress'
     : status === 'assigned' ? 'badge-assigned'
+    : status === 'issue_not_resolved' ? 'badge-danger'
     : 'badge-open';
   return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
 }
@@ -138,19 +140,26 @@ export async function renderAdminDashboard(container) {
       </div>
     </div>
 
-    <div class="card" style="margin-top:24px">
-      <div class="card-header"><span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Company</th><th>Total</th><th>Active</th><th>Resolved</th></tr></thead>
+    <div class="card" style="margin-top:24px" id="company-svc-card">
+      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span>
+        <div class="search-input-wrap" style="min-width:160px;max-width:260px;">
+          <span>🔍</span>
+          <input class="search-input" id="company-search" placeholder="Filter company…" style="padding:6px 10px;font-size:0.82rem;"/>
+        </div>
+      </div>
+      <div class="table-wrap" id="company-table-wrap">
+        <table id="company-svc-table">
+          <thead><tr><th>Company</th><th>Total</th><th>Active</th><th>Resolved</th><th></th></tr></thead>
           <tbody>
             ${companyRows.length === 0
-              ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No service data yet</td></tr>'
-              : companyRows.map(([company, counts]) => `<tr>
+              ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No service data yet</td></tr>'
+              : companyRows.map(([company, counts]) => `<tr data-company="${company}">
                   <td><b>${company}</b></td>
                   <td><span class="badge badge-open">${counts.total}</span></td>
-                  <td style="color:var(--warning)">${counts.active}</td>
-                  <td style="color:var(--success)">${counts.resolved}</td>
+                  <td style="color:var(--warning);font-weight:700">${counts.active}</td>
+                  <td style="color:var(--success);font-weight:700">${counts.resolved}</td>
+                  <td><button class="btn btn-secondary btn-sm view-company-btn" data-company="${company}" style="white-space:nowrap">View All</button></td>
                 </tr>`).join('')}
           </tbody>
         </table>
@@ -185,6 +194,77 @@ export async function renderAdminDashboard(container) {
   bind('#view-leaves', () => renderLeaveRequests(container));
   bind('#view-payments', () => renderPaymentsTab(container));
   bind('#view-pricing', () => renderPricingTab(container));
+
+  // Services by Company: search filter
+  const companySearch = container.querySelector('#company-search');
+  if (companySearch) {
+    companySearch.oninput = () => {
+      const q = companySearch.value.toLowerCase();
+      container.querySelectorAll('#company-svc-table tbody tr[data-company]').forEach(row => {
+        row.style.display = row.dataset.company.toLowerCase().includes(q) ? '' : 'none';
+      });
+    };
+  }
+
+  // Build phone set per company for modal lookup
+  const companyPhones = new Map();
+  p.forEach(pr => { if (pr.phone && pr.company) { if (!companyPhones.has(pr.company)) companyPhones.set(pr.company, new Set()); companyPhones.get(pr.company).add(pr.phone); } });
+
+  // Services by Company: "View All" opens a modal with that company's inquiries
+  container.querySelectorAll('.view-company-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const company = btn.dataset.company;
+      const phones = company === 'Walk-in / Unregistered' ? null : [...(companyPhones.get(company) || [])];
+      let companyInquiries;
+      if (!phones) {
+        // Walk-ins: inquiries whose phone doesn't match any profile
+        const allPhones = [...phoneToCompany.keys()];
+        const { data } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
+        companyInquiries = (data || []).filter(x => !allPhones.includes(x.phone));
+      } else if (phones.length > 0) {
+        const { data } = await supabase.from('inquiries').select('*').in('phone', phones).order('created_at', { ascending: false });
+        companyInquiries = data || [];
+      } else {
+        companyInquiries = [];
+      }
+
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:700px">
+          <div class="modal-header">
+            <span class="modal-title">${ICONS.building}<span style="margin-left:8px">${company}</span></span>
+            <button class="modal-close" id="cm-co">✕</button>
+          </div>
+          <div class="modal-body" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Ticket</th><th>Customer</th><th>Service</th><th>Status</th><th>Bill</th><th></th></tr></thead>
+                <tbody>
+                  ${companyInquiries.length === 0
+                    ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No inquiries found</td></tr>'
+                    : companyInquiries.map(x => `<tr>
+                        <td><code style="font-size:0.75rem;color:var(--primary)">${x.ticket_no || '—'}</code></td>
+                        <td><b>${x.full_name}</b><br/><small>${x.phone}</small></td>
+                        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || '—'}</td>
+                        <td>${statusBadge(x.status)}</td>
+                        <td>${x.bill_amount ? '₹' + Number(x.bill_amount).toLocaleString('en-IN') : '—'}</td>
+                        <td><button class="btn btn-primary btn-sm co-inq-btn" data-id="${x.id}">Manage</button></td>
+                      </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer"><button class="btn btn-secondary" id="cm-co2">Close</button></div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#cm-co').onclick = overlay.querySelector('#cm-co2').onclick = () => overlay.remove();
+      overlay.querySelectorAll('.co-inq-btn').forEach(b => {
+        b.onclick = () => { overlay.remove(); openInquiryDetail(b.dataset.id, () => renderAdminDashboard(container)); };
+      });
+    };
+  });
+
   
   container.querySelectorAll('.inq-btn').forEach(btn => {
     btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAdminDashboard(container));
@@ -265,6 +345,7 @@ async function openInquiryDetail(id, onDone) {
             <option value="in_progress" ${i.status==='in_progress'?'selected':''}>In Progress</option>
             <option value="resolved" ${i.status==='resolved'?'selected':''}>Resolved</option>
             <option value="closed" ${i.status==='closed'?'selected':''}>Closed</option>
+            <option value="issue_not_resolved" ${i.status==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
           </select>
         </div>
 
@@ -983,50 +1064,114 @@ export async function renderUsers(container) {
 export async function renderPaymentsTab(container) {
   const { data: payments } = await supabase.from('inquiries').select('*').not('bill_amount', 'is', null).order('created_at', { ascending: false });
   const list = payments || [];
-  
+
+  const totalPaid = list.filter(x=>x.payment_status==='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0);
+  const totalPending = list.filter(x=>x.payment_status!=='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0);
+
+  const rowHtml = (items) => items.length === 0
+    ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No payment records yet</td></tr>'
+    : items.map(x => `
+      <tr>
+        <td><code style="font-size:0.75rem;">${x.ticket_no || x.id.slice(0,8)}</code></td>
+        <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.phone}</small></td>
+        <td>₹${Number(x.bill_amount).toLocaleString('en-IN')}</td>
+        <td><span class="badge badge-${x.payment_status === 'paid' ? 'resolved' : 'medium'}">${x.payment_status === 'paid' ? 'Paid' : 'Unpaid'}</span></td>
+        <td>${x.payment_link
+          ? `<a href="${x.payment_link}" target="_blank" style="color:var(--primary);font-size:0.8rem;">View Link</a>`
+          : '<span style="color:var(--text-dim);font-size:0.8rem;">No link</span>'}</td>
+        <td>${x.payment_status !== 'paid'
+          ? `<button class="btn btn-secondary btn-sm mark-paid-btn" data-id="${x.id}" style="white-space:nowrap">✓ Mark Paid</button>`
+          : '<span style="color:var(--success);font-size:0.8rem;font-weight:700;">✓ Done</span>'}</td>
+        <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Details</button></td>
+      </tr>`).join('');
+
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Payment Tracker</h1>
-      <p>Monitor revenue and billing status</p>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1>Payment Tracker</h1>
+        <p>Monitor revenue and billing status</p>
+      </div>
+      <button class="btn btn-secondary" id="pay-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
+
     <div class="stats-grid" style="margin-bottom:24px;">
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--success)">₹${list.filter(x=>x.payment_status==='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0).toLocaleString('en-IN')}</div>
+        <div class="stat-value" style="color:var(--success)">₹${totalPaid.toLocaleString('en-IN')}</div>
         <div class="stat-label">Total Received</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--warning)">₹${list.filter(x=>x.payment_status!=='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0).toLocaleString('en-IN')}</div>
+        <div class="stat-value" style="color:var(--warning)">₹${totalPending.toLocaleString('en-IN')}</div>
         <div class="stat-label">Pending Payments</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--primary)">${list.filter(x=>x.payment_status==='paid').length} / ${list.length}</div>
+        <div class="stat-label">Paid / Total Bills</div>
+      </div>
     </div>
+
+    <div class="filter-bar" style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap;">
+      <div class="search-input-wrap" style="flex:1; min-width:200px;">
+        <span>🔍</span>
+        <input class="search-input" id="pay-search" placeholder="Search by name or ticket…"/>
+      </div>
+      <div class="sr-filter-bar" id="pay-status-tabs">
+        <button class="sr-filter active" data-status="all">All <span class="sr-filter-count">${list.length}</span></button>
+        <button class="sr-filter" data-status="unpaid">Unpaid <span class="sr-filter-count">${list.filter(x=>x.payment_status!=='paid').length}</span></button>
+        <button class="sr-filter" data-status="paid">Paid <span class="sr-filter-count">${list.filter(x=>x.payment_status==='paid').length}</span></button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="table-wrap">
         <table>
           <thead>
-            <tr>
-              <th>Ticket</th><th>Customer</th><th>Total Bill</th><th>Status</th><th>Link</th><th>Actions</th>
-            </tr>
+            <tr><th>Ticket</th><th>Customer</th><th>Bill</th><th>Status</th><th>Link</th><th></th><th></th></tr>
           </thead>
-          <tbody>
-            ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No payment records yet</td></tr>' : 
-              list.map(x => `
-              <tr>
-                <td><code style="font-size:0.75rem;">${x.ticket_no || x.id.slice(0,8)}</code></td>
-                <td><b>${x.full_name}</b></td>
-                <td>₹${Number(x.bill_amount).toLocaleString('en-IN')}</td>
-                <td><span class="badge badge-${x.payment_status === 'paid' ? 'resolved' : 'medium'}">${x.payment_status || 'unpaid'}</span></td>
-                <td>${x.payment_link ? `<a href="${x.payment_link}" target="_blank" style="color:var(--primary); font-size:0.8rem;">View Link</a>` : '—'}</td>
-                <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Details</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
+          <tbody>${rowHtml(list)}</tbody>
         </table>
       </div>
     </div>
   `;
-  container.querySelectorAll('.inq-btn').forEach(btn => {
-    btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderPaymentsTab(container));
+
+  let activeStatus = 'all';
+  let searchQ = '';
+
+  const filterAndRender = () => {
+    const filtered = list.filter(x => {
+      const matchStatus = activeStatus === 'all' ? true : activeStatus === 'paid' ? x.payment_status === 'paid' : x.payment_status !== 'paid';
+      const matchSearch = !searchQ || x.full_name.toLowerCase().includes(searchQ) || (x.ticket_no || '').toLowerCase().includes(searchQ);
+      return matchStatus && matchSearch;
+    });
+    container.querySelector('tbody').innerHTML = rowHtml(filtered);
+    bindRowActions();
+  };
+
+  const bindRowActions = () => {
+    container.querySelectorAll('.inq-btn').forEach(btn => {
+      btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderPaymentsTab(container));
+    });
+    container.querySelectorAll('.mark-paid-btn').forEach(btn => {
+      btn.onclick = async () => {
+        btn.disabled = true; btn.textContent = '…';
+        const { error } = await supabase.from('inquiries').update({ payment_status: 'paid' }).eq('id', btn.dataset.id);
+        if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = '✓ Mark Paid'; }
+        else { toast('Marked as paid', 'success'); renderPaymentsTab(container); }
+      };
+    });
+  };
+
+  container.querySelector('#pay-refresh').onclick = () => renderPaymentsTab(container);
+  container.querySelector('#pay-search').oninput = (e) => { searchQ = e.target.value.toLowerCase(); filterAndRender(); };
+  container.querySelectorAll('#pay-status-tabs .sr-filter').forEach(btn => {
+    btn.onclick = () => {
+      container.querySelectorAll('#pay-status-tabs .sr-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeStatus = btn.dataset.status;
+      filterAndRender();
+    };
   });
+
+  bindRowActions();
 }
 
 export async function renderPricingTab(container) {

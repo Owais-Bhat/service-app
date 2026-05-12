@@ -446,6 +446,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <option value="in_progress" ${currentStatus==='in_progress'?'selected':''}>In Progress</option>
               <option value="resolved" ${currentStatus==='resolved'?'selected':''}>Resolved</option>
               <option value="closed" ${currentStatus==='closed'?'selected':''}>Closed</option>
+              <option value="issue_not_resolved" ${currentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
             </select>
           </div>
 
@@ -467,15 +468,43 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <input type="text" id="extra-reason" placeholder="Reason for extra charge..."/>
             </div>
 
-            <div style="padding:12px; background:var(--primary-soft); border-radius:10px; text-align:right;">
+            <div style="padding:12px; background:var(--primary-soft); border-radius:10px; text-align:right; margin-bottom:16px;">
               <span style="font-size:0.85rem; color:var(--text-dim);">Total Estimated Bill:</span>
               <div style="font-size:1.4rem; font-weight:800; color:var(--primary);" id="total-bill-display">₹0</div>
+            </div>
+
+            <!-- Payment Link + QR -->
+            <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
+              <div style="font-weight:700; font-size:0.85rem; margin-bottom:10px; color:var(--text)">💳 Payment Link & QR</div>
+              <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <input id="emp-pay-link" type="url" placeholder="Payment link will appear here…" style="flex:1; font-size:0.82rem;" readonly/>
+                <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap">✨ Generate</button>
+              </div>
+              <div id="emp-qr-wrap" style="display:none; text-align:center; margin-bottom:10px;">
+                <img id="emp-qr-img" src="" alt="QR Code" style="width:160px; height:160px; border-radius:12px; border:2px solid var(--primary);"/>
+                <div style="font-size:0.75rem; color:var(--text-dim); margin-top:6px;">Client can scan to pay</div>
+              </div>
+              <button class="btn btn-primary btn-sm" id="emp-share-wa" style="width:100%; display:none; gap:8px; justify-content:center;">
+                ${ICONS.whatsapp}<span>Share via WhatsApp</span>
+              </button>
             </div>
           </div>
 
           <div class="form-group" style="margin-top:16px;">
             <label>Work Details / Progress Update <span style="color:var(--danger)">*</span></label>
             <textarea id="progress-detail" rows="4" placeholder="Describe what you did... (Mandatory)"></textarea>
+          </div>
+
+          <!-- Feedback link (shown after saving) -->
+          <div id="feedback-link-box" style="display:none; margin-top:12px; padding:12px; border-radius:12px; background:rgba(16,185,129,0.07); border:1px solid var(--primary);">
+            <div style="font-size:0.78rem; font-weight:700; color:var(--primary); margin-bottom:6px;">📋 Feedback Link for Client</div>
+            <div style="display:flex; gap:8px;">
+              <input id="feedback-url" type="text" readonly style="flex:1; font-size:0.78rem; background:var(--bg);"/>
+              <button class="btn btn-secondary btn-sm" id="copy-feedback-url">Copy</button>
+            </div>
+            <button class="btn btn-primary btn-sm" id="share-feedback-wa" style="width:100%; margin-top:8px; justify-content:center; gap:8px;">
+              ${ICONS.whatsapp}<span>Share Feedback Link via WhatsApp</span>
+            </button>
           </div>
         </div>
         <div class="modal-footer">
@@ -502,6 +531,63 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
     extraInput.oninput = calcTotal;
     checkboxes.forEach(chk => chk.onchange = calcTotal);
+
+    // Payment link generation + QR
+    let _payLink = '';
+    const genBtn = overlay.querySelector('#emp-gen-link');
+    const payLinkInput = overlay.querySelector('#emp-pay-link');
+    const qrWrap = overlay.querySelector('#emp-qr-wrap');
+    const qrImg = overlay.querySelector('#emp-qr-img');
+    const shareWaBtn = overlay.querySelector('#emp-share-wa');
+
+    const showQR = (url) => {
+      _payLink = url;
+      payLinkInput.value = url;
+      qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+      qrWrap.style.display = 'block';
+      shareWaBtn.style.display = 'flex';
+    };
+
+    if (genBtn) {
+      genBtn.onclick = async () => {
+        const total = Number(overlay.querySelector('#total-bill-display').textContent.replace(/[^\d]/g,''));
+        if (!total) { toast('Select services or enter a bill amount first', 'warning'); return; }
+
+        const { data: inqData } = await supabase.from('inquiries').select('full_name,phone,service_item,ticket_no').eq('id', inqId).single();
+        if (!inqData) { toast('Could not load inquiry details', 'error'); return; }
+
+        genBtn.disabled = true; genBtn.textContent = '…';
+        try {
+          const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
+          const res = await fetch('/api/payments/create-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              amount: total,
+              description: `Service: ${inqData.service_item}`,
+              ticket_no: inqData.ticket_no,
+              customer: { name: inqData.full_name, phone: inqData.phone }
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed');
+          showQR(data.short_url);
+          // Save payment link back to the inquiry
+          await supabase.from('inquiries').update({ payment_link: data.short_url, bill_amount: total }).eq('id', inqId);
+          toast('Payment link generated!', 'success');
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally {
+          genBtn.disabled = false; genBtn.textContent = '✨ Generate';
+        }
+      };
+    }
+
+    if (shareWaBtn) {
+      shareWaBtn.onclick = () => {
+        if (_payLink) window.open(`https://wa.me/?text=${encodeURIComponent('Please use this link to pay for your service: ' + _payLink)}`, '_blank');
+      };
+    }
 
     overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = () => overlay.remove();
     overlay.querySelector('#save-update').onclick = async () => {
@@ -557,6 +643,30 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
       await Promise.all(ops);
       toast('Task updated!', 'success');
+
+      if (newStatus === 'resolved' || newStatus === 'closed') {
+        // Show feedback link for the client to use
+        const { data: inqRow } = inqId
+          ? await supabase.from('inquiries').select('ticket_no,phone').eq('id', inqId).single()
+          : await supabase.from('inquiries').select('ticket_no,phone').eq('ticket_id', taskId).single();
+
+        if (inqRow?.ticket_no) {
+          const feedbackUrl = `${window.location.origin}/?tab=track&ticket=${inqRow.ticket_no}&phone=${inqRow.phone || ''}`;
+          const fbBox = overlay.querySelector('#feedback-link-box');
+          const fbInput = overlay.querySelector('#feedback-url');
+          const copyBtn = overlay.querySelector('#copy-feedback-url');
+          const waBtn = overlay.querySelector('#share-feedback-wa');
+          if (fbBox && fbInput) {
+            fbInput.value = feedbackUrl;
+            fbBox.style.display = 'block';
+            copyBtn.onclick = () => { navigator.clipboard.writeText(feedbackUrl); toast('Copied!', 'success'); };
+            waBtn.onclick = () => window.open(`https://wa.me/${(inqRow.phone || '').replace(/\D/g,'')}?text=${encodeURIComponent('Thank you for choosing our service! Please share your feedback here: ' + feedbackUrl)}`, '_blank');
+            btn.disabled = false; btn.textContent = 'Done';
+            return;
+          }
+        }
+      }
+
       overlay.remove();
       onDone();
     };
