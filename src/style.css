@@ -2588,9 +2588,8 @@ tr:hover td {
    All rules below OVERRIDE earlier declarations intentionally.
    ══════════════════════════════════════════════════════════ */
 
-/* ── Base: prevent horizontal overflow everywhere ── */
-* { max-width: 100%; box-sizing: border-box; }
-img, svg { max-width: 100%; height: auto; }
+/* ── Base: prevent horizontal overflow ── */
+img { max-width: 100%; height: auto; }
 input, select, textarea { max-width: 100%; }
 
 /* ── Tables: revert card-view, use horizontal scroll instead ──

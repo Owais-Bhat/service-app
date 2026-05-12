@@ -81,21 +81,26 @@ const ISSUE_OPTIONS = [
 // State + flow
 // ────────────────────────────────────────────────────────────────────
 export function renderLandingPage(container, onPortalClick) {
+  // Read URL params — support ?tab=track&ticket=NE-...&phone=...
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTab    = urlParams.get('tab');
+  const urlTicket = urlParams.get('ticket') || '';
+  const urlPhone  = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
+
   const state = {
-    mode: 'new', // 'new' | 'track'
-    step: 1, // 1=phone+captcha, 2=otp, 3=form, 4=success
+    mode: urlTab === 'track' ? 'track' : 'new',
+    step: 1,
     phone: '',
     otp: '',
     expectedOTP: '',
     captcha: makeCaptcha(),
-    locationMode: 'gps', // 'gps' | 'manual'
+    locationMode: 'gps',
     locationValue: '',
     coords: null,
-    ticketNo: '',         // generated on submit, shown on success
-    // tracker state
-    trackTicketNo: '',
-    trackPhone: '',
-    trackResult: null,    // inquiry row or null
+    ticketNo: '',
+    trackTicketNo: urlTicket,
+    trackPhone: urlPhone,
+    trackResult: null,
     trackLoading: false,
   };
 
@@ -835,6 +840,22 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   render();
+
+  // Auto-fetch inquiry when URL has ?tab=track&ticket=...&phone=...
+  if (urlTab === 'track' && urlTicket && urlPhone && urlPhone.length === 10) {
+    (async () => {
+      state.trackLoading = true;
+      render();
+      const { data } = await supabase.from('inquiries')
+        .select('*')
+        .eq('ticket_no', urlTicket)
+        .eq('phone', '+91' + urlPhone)
+        .maybeSingle();
+      state.trackLoading = false;
+      if (data) { state.trackResult = data; }
+      render();
+    })();
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────
