@@ -107,7 +107,7 @@ function navigate(page) {
 }
 
 function goToLanding() {
-  goToLanding();
+  renderLandingPage(app, showAuth);
   showPWAInstallBtn();
 }
 
