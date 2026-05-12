@@ -13,33 +13,34 @@ import { registerSW } from 'virtual:pwa-register';
 // Register Service Worker for PWA
 registerSW({ immediate: true });
 
-// PWA Install Prompt Logic
+// PWA Install Prompt Logic — button only shown on the landing page
 let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => {
-  // Prevent Chrome 67 and earlier from automatically showing the prompt
-  e.preventDefault();
-  // Stash the event so it can be triggered later.
-  deferredPrompt = e;
-  
-  // Show a custom install button/toast
-  const installBtn = document.createElement('button');
-  installBtn.className = 'pwa-install-btn';
-  installBtn.innerHTML = `${ICONS.download || '📥'} Install App`;
-  document.body.appendChild(installBtn);
+let pwaInstallBtn = null;
 
-  installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    // Show the prompt
-    deferredPrompt.prompt();
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt');
-    }
-    deferredPrompt = null;
-    installBtn.remove();
-  });
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Don't show the button here — landing page calls showPWAInstallBtn()
 });
+
+export function showPWAInstallBtn() {
+  if (!deferredPrompt || pwaInstallBtn) return;
+  pwaInstallBtn = document.createElement('button');
+  pwaInstallBtn.className = 'pwa-install-btn';
+  pwaInstallBtn.innerHTML = `${ICONS.download || '📥'} Install App`;
+  document.body.appendChild(pwaInstallBtn);
+  pwaInstallBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') deferredPrompt = null;
+    hidePWAInstallBtn();
+  });
+}
+
+export function hidePWAInstallBtn() {
+  if (pwaInstallBtn) { pwaInstallBtn.remove(); pwaInstallBtn = null; }
+}
 
 initTheme();
 
@@ -95,6 +96,7 @@ function getPageRenderer(role, page) {
 }
 
 function navigate(page) {
+  hidePWAInstallBtn();
   activePage = page;
   const navItems = getNavItems(currentRole);
   const renderer = getPageRenderer(currentRole, page);
@@ -104,6 +106,11 @@ function navigate(page) {
   });
 }
 
+function goToLanding() {
+  goToLanding();
+  showPWAInstallBtn();
+}
+
 function showAuth() {
   renderAuth(
     async (user, role) => {
@@ -111,14 +118,14 @@ function showAuth() {
         // Clients should not reach the dashboard — push them back to the public form.
         await signOut();
         toast('Client accounts cannot log in here. Please use the public service request form.', 'error');
-        renderLandingPage(app, showAuth);
+        goToLanding();
         return;
       }
       currentUser = user;
       currentRole = role;
       navigate('dashboard');
     },
-    () => renderLandingPage(app, showAuth)
+    () => goToLanding()
   );
 }
 
@@ -136,21 +143,21 @@ async function boot() {
       await signOut();
       currentUser = null;
       currentRole = null;
-      renderLandingPage(app, showAuth);
+      goToLanding();
       return;
     }
 
     navigate('dashboard');
   } else {
     // Show Landing Page if not logged in
-    renderLandingPage(app, showAuth);
+    goToLanding();
   }
 }
 
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'SIGNED_OUT') {
     currentUser = null; currentRole = null;
-    renderLandingPage(app, showAuth);
+    goToLanding();
   }
 });
 

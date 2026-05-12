@@ -15,7 +15,7 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']),
-      supabase.from('profiles').select('phone,company'),
+      supabase.from('profiles').select('*'),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     const allInquiries = res[3].data || [];
