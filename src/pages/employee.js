@@ -14,12 +14,21 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('attendance').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
-      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted'])
+      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']),
+      supabase.from('profiles').select('phone,company').not('company', 'is', null),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     const allInquiries = res[3].data || [];
+    const profilesData = res[4].data || [];
+
+    // Build phone → company map for labelling service jobs
+    const phoneToCompany = new Map();
+    profilesData.forEach(pr => { if (pr.phone) phoneToCompany.set(pr.phone, pr.company); });
+
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending');
-    acceptedInquiries = allInquiries.filter(x => x.assignment_status === 'accepted');
+    acceptedInquiries = allInquiries
+      .filter(x => x.assignment_status === 'accepted')
+      .map(x => ({ ...x, _company: phoneToCompany.get(x.phone) || null }));
   } catch (err) {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
     return;
@@ -147,19 +156,35 @@ export async function renderEmployeeDashboard(container) {
       <div class="card-header">
         <span class="card-title sr-icon-title" style="color:var(--primary)">${ICONS.users}<span>Active Service Jobs (Accepted)</span></span>
       </div>
-      <div class="card-body">
-        ${acceptedInquiries.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No active jobs accepted yet.</div>' : 
+      ${acceptedInquiries.length > 0 ? (() => {
+        const companies = [...new Set(acceptedInquiries.map(x => x._company).filter(Boolean))];
+        return companies.length > 0 ? `
+          <div class="sr-filter-bar" style="padding:0 20px 12px" id="emp-company-tabs">
+            <button class="sr-filter active" data-company="all">
+              <span>All</span><span class="sr-filter-count">${acceptedInquiries.length}</span>
+            </button>
+            ${companies.map(c => `
+              <button class="sr-filter" data-company="${c}">
+                <span>${c}</span>
+                <span class="sr-filter-count">${acceptedInquiries.filter(x => x._company === c).length}</span>
+              </button>
+            `).join('')}
+          </div>` : '';
+      })() : ''}
+      <div class="card-body" id="emp-jobs-list">
+        ${acceptedInquiries.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No active jobs accepted yet.</div>' :
           acceptedInquiries.map(inq => `
-            <div style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-in); margin-bottom:20px; border:1px solid var(--border);">
+            <div class="emp-job-card" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-in); margin-bottom:20px; border:1px solid var(--border);">
                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
                  <div>
                    <div style="font-weight:800; font-size:1.2rem; color:var(--primary)">${inq.full_name}</div>
+                   ${inq._company ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px">${inq._company}</div>` : ''}
                    <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
                    <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
                  </div>
                  <span class="badge badge-assigned" style="font-size:0.75rem">${inq.status.replace('_',' ')}</span>
                </div>
-               
+
                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid rgba(16,185,129,0.1);">
                  <div>
                    <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Contact Info</div>
@@ -187,7 +212,7 @@ export async function renderEmployeeDashboard(container) {
                    <div style="font-size:0.95rem; font-weight:700; margin-top:8px; color:var(--primary)">${inq.preferred_time || 'Flexible'}</div>
                  </div>
                </div>
-               
+
                <div style="margin-top:24px; display:flex; gap:12px;">
                  <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
                    <span style="width:18px;height:18px;display:flex;">${ICONS.edit}</span> Update Status
@@ -271,6 +296,21 @@ export async function renderEmployeeDashboard(container) {
   const clockEl = container.querySelector('#live-clock');
   const tick = () => { if (clockEl) clockEl.textContent = new Date().toLocaleTimeString(); };
   tick(); setInterval(tick, 1000);
+
+  // Company filter tabs for service jobs
+  const tabBar = container.querySelector('#emp-company-tabs');
+  if (tabBar) {
+    tabBar.querySelectorAll('.sr-filter').forEach(btn => {
+      btn.onclick = () => {
+        tabBar.querySelectorAll('.sr-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const company = btn.dataset.company;
+        container.querySelectorAll('.emp-job-card').forEach(card => {
+          card.style.display = (company === 'all' || card.dataset.company === company) ? '' : 'none';
+        });
+      };
+    });
+  }
 
   const bind = (sel, cb) => {
     const el = container.querySelector(sel);

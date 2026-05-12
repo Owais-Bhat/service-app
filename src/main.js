@@ -2,7 +2,7 @@ import './style.css';
 import { supabase, getUserRole, signOut } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderLeaveRequests, renderEODReports, renderPricingTab } from './pages/admin.js';
 import { renderEmployeeDashboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -71,6 +71,11 @@ function getNavItems(role) {
     { id: 'clients', icon: ICONS.building, label: 'Clients' },
     { id: 'contacts', icon: ICONS.phone, label: 'Contacts' },
     { id: 'users', icon: ICONS.users, label: 'Users' },
+    { type: 'section', label: 'Reports' },
+    { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
+    { id: 'leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
+    { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
+    { id: 'pricing', icon: ICONS.receipt, label: 'Service Pricing' },
     { type: 'section', label: 'Account' },
     { id: 'profile', icon: ICONS.user, label: 'Profile' },
   ];
@@ -82,7 +87,8 @@ function getPageRenderer(role, page) {
     employee: { dashboard: renderEmployeeDashboard, 'all-tickets': renderAllTickets, profile: renderProfile },
     admin: {
       dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
-      inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile
+      inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
+      payments: renderPaymentsTab, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
     }
   };
   return (map[role] || map.admin)[page];

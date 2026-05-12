@@ -1,5 +1,13 @@
 import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining } from '../utils.js';
+
+function hoursWorked(clockIn, clockOut) {
+  if (!clockIn || !clockOut) return null;
+  const diff = new Date(clockOut) - new Date(clockIn);
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
 import { ICONS } from '../icons.js';
 
 const STATUS_LABEL = {
@@ -43,6 +51,25 @@ export async function renderAdminDashboard(container) {
   const t = tickets || [], i = inquiries || [], all_a = attendance || [], s = stocks || [], p = profiles || [];
   const a = all_a.filter(x => x.date === today);
   const lowStock = s.filter(x => x.quantity <= x.min_stock).length;
+
+  // Build phone → company map from profiles
+  const phoneToCompany = new Map();
+  p.forEach(pr => { if (pr.phone && pr.company) phoneToCompany.set(pr.phone, pr.company); });
+
+  // Aggregate all inquiries by company
+  const { data: allInquiries } = await supabase.from('inquiries').select('phone,status').order('created_at', { ascending: false });
+  const companyMap = new Map();
+  (allInquiries || []).forEach(inq => {
+    const company = phoneToCompany.get(inq.phone) || 'Walk-in / Unregistered';
+    if (!companyMap.has(company)) companyMap.set(company, { total: 0, active: 0, resolved: 0 });
+    const entry = companyMap.get(company);
+    entry.total++;
+    if (['resolved', 'closed'].includes(inq.status)) entry.resolved++;
+    else entry.active++;
+  });
+  const companyRows = [...companyMap.entries()]
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 10);
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -108,6 +135,25 @@ export async function renderAdminDashboard(container) {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="card-header"><span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Company</th><th>Total</th><th>Active</th><th>Resolved</th></tr></thead>
+          <tbody>
+            ${companyRows.length === 0
+              ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No service data yet</td></tr>'
+              : companyRows.map(([company, counts]) => `<tr>
+                  <td><b>${company}</b></td>
+                  <td><span class="badge badge-open">${counts.total}</span></td>
+                  <td style="color:var(--warning)">${counts.active}</td>
+                  <td style="color:var(--success)">${counts.resolved}</td>
+                </tr>`).join('')}
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -379,74 +425,101 @@ async function openInquiryDetail(id, onDone) {
 export async function renderAttendance(container) {
   const { data: logs } = await supabase.from('attendance').select('*, profiles(full_name)').order('date', { ascending: false });
   const list = logs || [];
-  
-  const render = (items) => {
-    container.innerHTML = `
-      <div class="page-header">
+  const today = new Date().toLocaleDateString('en-CA');
+
+  const todayLogs = list.filter(x => x.date === today);
+  const activeLogs = list.filter(x => x.clock_in && !x.clock_out);
+  const completedToday = todayLogs.filter(x => x.clock_in && x.clock_out);
+  const avgMins = completedToday.length
+    ? completedToday.reduce((sum, x) => sum + (new Date(x.clock_out) - new Date(x.clock_in)), 0) / completedToday.length / 60000
+    : 0;
+  const avgHours = avgMins ? `${Math.floor(avgMins / 60)}h ${Math.round(avgMins % 60)}m` : '—';
+
+  const rowHtml = (items) => items.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>'
+    : items.map(x => {
+        const hw = hoursWorked(x.clock_in, x.clock_out);
+        return `<tr>
+          <td>${formatDate(x.date)}</td>
+          <td><b>${x.profiles?.full_name || '—'}</b></td>
+          <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
+          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
+          <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
+          <td><small>${x.location || '—'}</small></td>
+        </tr>`;
+      }).join('');
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
         <h1>Attendance Logs</h1>
         <p>Track employee check-ins and locations</p>
       </div>
-      
-      <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">
-        <div class="search-input-wrap" style="flex:1; min-width:200px;">
-          <span>🔍</span>
-          <input class="search-input" id="att-search" placeholder="Filter by employee name..."/>
-        </div>
-        <input type="date" id="att-date" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--bg3); color:var(--text);"/>
-        <button class="btn btn-secondary" id="att-clear">Clear</button>
+      <button class="btn btn-secondary" id="att-export">${ICONS.clipboard}<span>Export CSV</span></button>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:24px">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--primary)">${todayLogs.length}</div>
+        <div class="stat-label">Today's Attendance</div>
       </div>
-
-      <div class="card">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Location</th></tr></thead>
-            <tbody>
-              ${items.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>' : 
-                items.map(x => `<tr>
-                <td>${formatDate(x.date)}</td>
-                <td><b>${x.profiles?.full_name || '—'}</b></td>
-                <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
-                <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
-                <td><small>${x.location || '—'}</small></td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>
+        <div class="stat-label">Currently Active</div>
       </div>
-    `;
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>
+        <div class="stat-label">Avg Hours Today</div>
+      </div>
+    </div>
 
-    const search = container.querySelector('#att-search');
-    const date = container.querySelector('#att-date');
-    
-    const doFilter = () => {
-      const q = search.value.toLowerCase();
-      const d = date.value;
-      const filtered = list.filter(x => {
-        const matchesName = (x.profiles?.full_name || '').toLowerCase().includes(q);
-        const matchesDate = !d || x.date === d;
-        return matchesName && matchesDate;
-      });
-      renderItems(filtered);
-    };
+    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">
+      <div class="search-input-wrap" style="flex:1; min-width:200px;">
+        <span>🔍</span>
+        <input class="search-input" id="att-search" placeholder="Filter by employee name..."/>
+      </div>
+      <input type="date" id="att-date" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--bg3); color:var(--text);"/>
+      <button class="btn btn-secondary" id="att-clear">Clear</button>
+    </div>
 
-    search.oninput = doFilter;
-    date.onchange = doFilter;
-    container.querySelector('#att-clear').onclick = () => renderAttendance(container);
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th></tr></thead>
+          <tbody>${rowHtml(list)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const search = container.querySelector('#att-search');
+  const date = container.querySelector('#att-date');
+
+  const doFilter = () => {
+    const q = search.value.toLowerCase();
+    const d = date.value;
+    const filtered = list.filter(x => {
+      const matchesName = (x.profiles?.full_name || '').toLowerCase().includes(q);
+      const matchesDate = !d || x.date === d;
+      return matchesName && matchesDate;
+    });
+    container.querySelector('tbody').innerHTML = rowHtml(filtered);
   };
 
-  const renderItems = (items) => {
-    const tbody = container.querySelector('tbody');
-    tbody.innerHTML = items.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>' : 
-      items.map(x => `<tr>
-      <td>${formatDate(x.date)}</td>
-      <td><b>${x.profiles?.full_name || '—'}</b></td>
-      <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
-      <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
-      <td><small>${x.location || '—'}</small></td>
-    </tr>`).join('');
+  search.oninput = doFilter;
+  date.onchange = doFilter;
+  container.querySelector('#att-clear').onclick = () => renderAttendance(container);
+  container.querySelector('#att-export').onclick = () => {
+    const csvData = list.map(x => ({
+      date: x.date,
+      employee: x.profiles?.full_name || '',
+      clock_in: formatTime(x.clock_in),
+      clock_out: x.clock_out ? formatTime(x.clock_out) : 'Active',
+      hours_worked: hoursWorked(x.clock_in, x.clock_out) || '',
+      location: x.location || '',
+    }));
+    exportToCSV('attendance.csv', csvData);
   };
-
-  render(list);
 }
 
 export async function renderInquiries(container) {
