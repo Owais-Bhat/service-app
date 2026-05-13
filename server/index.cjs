@@ -38,6 +38,60 @@ const dbConfig = {
     database: process.env.DB_NAME
 };
 
+const requiredColumns = {
+    profiles: [
+        { name: 'salary', definition: 'DECIMAL(10, 2) DEFAULT 0' },
+        { name: 'address', definition: 'TEXT' },
+        { name: 'phone', definition: 'VARCHAR(20)' },
+        { name: 'company', definition: 'VARCHAR(100)' },
+    ],
+    inquiries: [
+        { name: 'bill_no', definition: 'VARCHAR(50)' },
+        { name: 'ticket_no', definition: 'VARCHAR(50) UNIQUE' },
+        { name: 'bill_amount', definition: 'DECIMAL(10, 2)' },
+        { name: 'payment_link', definition: 'TEXT' },
+        { name: 'payment_status', definition: "VARCHAR(20) DEFAULT 'unpaid'" },
+        { name: 'payment_method', definition: 'VARCHAR(20) DEFAULT NULL' },
+        { name: 'feedback_rating', definition: 'INT' },
+        { name: 'feedback_comment', definition: 'TEXT' },
+        { name: 'feedback_at', definition: 'TIMESTAMP NULL' },
+        { name: 'preferred_time', definition: 'TEXT' },
+        { name: 'assignment_status', definition: "VARCHAR(20) DEFAULT 'pending'" },
+        { name: 'decline_reason', definition: 'TEXT' },
+        { name: 'assigned_employee_id', definition: 'VARCHAR(36)' },
+        { name: 'ticket_id', definition: 'VARCHAR(36)' },
+        { name: 'extra_cost', definition: 'DECIMAL(10, 2) DEFAULT 0' },
+        { name: 'extra_cost_reason', definition: 'TEXT' },
+    ],
+    tickets: [
+        { name: 'assigned_to', definition: 'VARCHAR(36)' },
+        { name: 'updated_at', definition: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
+    ],
+};
+
+async function ensureRequiredColumns(connection) {
+    for (const [table, columns] of Object.entries(requiredColumns)) {
+        for (const column of columns) {
+            const [rows] = await connection.execute(
+                `SELECT COLUMN_NAME
+                 FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = ?
+                   AND COLUMN_NAME = ?`,
+                [table, column.name]
+            );
+
+            if (rows.length > 0) continue;
+
+            console.log(`[Schema] Adding missing column ${table}.${column.name}`);
+            await connection.query(
+                `ALTER TABLE ?? ADD COLUMN ?? ${column.definition}`,
+                [table, column.name]
+            );
+        }
+    }
+}
+
 // Middleware to verify JWT
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -512,6 +566,7 @@ async function startServer() {
         console.log('Testing database connection...');
         const connection = await mysql.createConnection(dbConfig);
         console.log('✅ Database connected successfully!');
+        await ensureRequiredColumns(connection);
         await connection.end();
 
         app.listen(PORT, () => {
