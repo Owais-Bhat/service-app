@@ -69,7 +69,30 @@ const requiredColumns = {
     ],
 };
 
+const requiredTables = [
+    `CREATE TABLE IF NOT EXISTS leave_requests (
+        id VARCHAR(36) PRIMARY KEY,
+        employee_id VARCHAR(36) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS eod_reports (
+        id VARCHAR(36) PRIMARY KEY,
+        employee_id VARCHAR(36) NOT NULL,
+        content TEXT NOT NULL,
+        date DATE DEFAULT (CURRENT_DATE),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+];
+
 async function ensureRequiredColumns(connection) {
+    for (const query of requiredTables) {
+        await connection.query(query);
+    }
+
     for (const [table, columns] of Object.entries(requiredColumns)) {
         for (const column of columns) {
             const [rows] = await connection.execute(
@@ -373,6 +396,7 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
                 else if (table === 'tickets' && relTable === 'profiles') fkInTable = 'assigned_to';
                 else if (table === 'inquiries' && relTable === 'profiles') fkInTable = 'assigned_employee_id';
                 else if (table === 'eod_reports' && relTable === 'profiles') fkInTable = 'employee_id';
+                else if (table === 'leave_requests' && relTable === 'profiles') fkInTable = 'employee_id';
                 else if (table === 'ticket_comments' && relTable === 'profiles') fkInTable = 'user_id';
                 
                 if (fkInTable) {

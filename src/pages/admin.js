@@ -8,6 +8,16 @@ function hoursWorked(clockIn, clockOut) {
   const m = Math.floor((diff % 3600000) / 60000);
   return `${h}h ${m}m`;
 }
+function daysBetweenInclusive(start, end) {
+  if (!start || !end) return 0;
+  const a = new Date(`${start}T00:00:00`);
+  const b = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return 0;
+  return Math.floor((b - a) / 86400000) + 1;
+}
+function money(value) {
+  return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
+}
 import { ICONS } from '../icons.js';
 
 const STATUS_LABEL = {
@@ -970,6 +980,60 @@ export async function renderLeaveRequests(container) {
 }
 
 // ── CONTACTS (from Service Requests) ────────────────────
+export async function renderSalaryOverview(container) {
+  const monthKey = new Date().toLocaleDateString('en-CA').slice(0, 7);
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const [{ data: profiles }, { data: attendance }, { data: leaves }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('role', 'employee').order('full_name', { ascending: true }),
+    supabase.from('attendance').select('*').order('date', { ascending: false }),
+    supabase.from('leave_requests').select('*').order('created_at', { ascending: false }),
+  ]);
+
+  const rows = (profiles || []).map(emp => {
+    const monthAttendance = (attendance || []).filter(x => x.user_id === emp.id && String(x.date || '').startsWith(monthKey));
+    const presentDays = new Set(monthAttendance.map(x => x.date)).size;
+    const approvedLeaveDays = (leaves || [])
+      .filter(x => x.employee_id === emp.id && x.status === 'approved' && String(x.start_date || '').startsWith(monthKey))
+      .reduce((sum, x) => sum + daysBetweenInclusive(x.start_date, x.end_date), 0);
+    const monthlySalary = Number(emp.salary) || 0;
+    const payableDays = presentDays + approvedLeaveDays;
+    return { ...emp, presentDays, approvedLeaveDays, payableDays, monthlySalary, estimated: (monthlySalary / daysInMonth) * payableDays };
+  });
+
+  const totalEstimated = rows.reduce((sum, x) => sum + x.estimated, 0);
+  const totalMonthly = rows.reduce((sum, x) => sum + x.monthlySalary, 0);
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Salary Overview</h1>
+      <p>Attendance-based salary estimate for ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${rows.length}</div><div class="stat-label">Employees</div></div>
+      <div class="stat-card"><div class="stat-value" style="font-size:1.8rem">${money(totalMonthly)}</div><div class="stat-label">Monthly Payroll</div></div>
+      <div class="stat-card"><div class="stat-value" style="font-size:1.8rem;color:var(--warning)">${money(totalEstimated)}</div><div class="stat-label">Estimated Earned</div></div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Employee</th><th>Monthly Salary</th><th>Present</th><th>Approved Leave</th><th>Payable Days</th><th>Estimated Earned</th></tr></thead>
+          <tbody>
+            ${rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No employees found</td></tr>' :
+              rows.map(x => `<tr>
+                <td><b>${x.full_name || '—'}</b></td>
+                <td>${money(x.monthlySalary)}</td>
+                <td><span class="badge badge-open">${x.presentDays}</span></td>
+                <td><span class="badge badge-resolved">${x.approvedLeaveDays}</span></td>
+                <td>${x.payableDays} / ${daysInMonth}</td>
+                <td><b style="color:var(--primary)">${money(x.estimated)}</b></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 export async function renderContacts(container) {
   const filterKey = container.dataset.contactFilter || 'all';
 

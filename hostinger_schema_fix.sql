@@ -22,3 +22,21 @@ ALTER TABLE inquiries ADD COLUMN feedback_comment TEXT;
 ALTER TABLE inquiries ADD COLUMN feedback_at TIMESTAMP NULL;
 ALTER TABLE inquiries ADD COLUMN extra_cost DECIMAL(10, 2) DEFAULT 0;
 ALTER TABLE inquiries ADD COLUMN extra_cost_reason TEXT;
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id VARCHAR(36) PRIMARY KEY,
+  employee_id VARCHAR(36) NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason TEXT NOT NULL,
+  status VARCHAR(20) DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS eod_reports (
+  id VARCHAR(36) PRIMARY KEY,
+  employee_id VARCHAR(36) NOT NULL,
+  content TEXT NOT NULL,
+  date DATE DEFAULT (CURRENT_DATE),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

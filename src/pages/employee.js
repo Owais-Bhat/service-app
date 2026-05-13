@@ -2,6 +2,43 @@ import { supabase } from '../supabase.js';
 import { toast, formatDate, formatTime } from '../utils.js';
 import { ICONS } from '../icons.js';
 
+function getMonthKey(date = new Date()) {
+  return date.toLocaleDateString('en-CA').slice(0, 7);
+}
+
+function daysBetweenInclusive(start, end) {
+  if (!start || !end) return 0;
+  const a = new Date(`${start}T00:00:00`);
+  const b = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return 0;
+  return Math.floor((b - a) / 86400000) + 1;
+}
+
+function hoursWorked(clockIn, clockOut) {
+  if (!clockIn || !clockOut) return null;
+  const diff = new Date(clockOut) - new Date(clockIn);
+  if (!Number.isFinite(diff) || diff < 0) return null;
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+
+function money(value) {
+  return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
+}
+
+async function getEmployeeContext() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { user: null };
+  const [{ data: profile }, { data: attendance }, { data: leaves }, { data: reports }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+    supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
+    supabase.from('leave_requests').select('*').eq('employee_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
+  ]);
+  return { user, profile: profile || user, attendance: attendance || [], leaves: leaves || [], reports: reports || [] };
+}
+
 export async function renderEmployeeDashboard(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
@@ -92,12 +129,12 @@ export async function renderEmployeeDashboard(container) {
       </div>
     </div>
 
-    <div class="grid-2">
+    <div class="employee-work-grid">
       <!-- Attendance Card -->
       <div class="card">
         <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clock}<span>Attendance</span></span></div>
-        <div class="card-body" style="text-align:center;padding:32px">
-          <div id="live-clock" style="font-size:2.8rem;font-weight:800;color:var(--primary);letter-spacing:-2px;margin-bottom:24px;font-variant-numeric:tabular-nums;">--:--:--</div>
+        <div class="card-body attendance-card-body">
+          <div id="live-clock" class="live-clock">--:--:--</div>
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
             <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn ? 'disabled' : ''}>
               ${ICONS.play}<span>Clock In</span>
@@ -106,7 +143,7 @@ export async function renderEmployeeDashboard(container) {
               ${ICONS.pause}<span>Clock Out</span>
             </button>
           </div>
-          ${attendance?.location ? `<p style="margin-top:16px;font-size:0.8rem;color:var(--text-dim);display:inline-flex;align-items:center;gap:6px;">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
+          ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
           ${isClockedOut ? `<div style="margin-top:20px;padding:14px;border-radius:14px;box-shadow:var(--neu-in);background:var(--bg);font-size:.88rem;color:var(--success);font-weight:600;display:inline-flex;align-items:center;gap:8px;">
             ${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span>
           </div>` : ''}
@@ -424,6 +461,185 @@ export async function renderEmployeeDashboard(container) {
       clearInterval(checkRemoval);
     }
   }, 5000);
+}
+
+export async function renderEmployeeAttendanceRecords(container) {
+  const { user, attendance } = await getEmployeeContext();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  const monthKey = getMonthKey();
+  const monthRows = attendance.filter(x => String(x.date || '').startsWith(monthKey));
+  const presentDays = new Set(monthRows.map(x => x.date)).size;
+  const completed = monthRows.filter(x => x.clock_in && x.clock_out);
+  const totalMins = completed.reduce((sum, x) => sum + Math.max(0, new Date(x.clock_out) - new Date(x.clock_in)) / 60000, 0);
+  const totalHours = `${Math.floor(totalMins / 60)}h ${Math.round(totalMins % 60)}m`;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Attendance Records</h1>
+      <p>Your check-ins, locations, and monthly attendance count</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${presentDays}</div><div class="stat-label">Days Present This Month</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${monthRows.filter(x => x.clock_in && !x.clock_out).length}</div><div class="stat-label">Active Sessions</div></div>
+      <div class="stat-card"><div class="stat-value" style="font-size:1.7rem;color:var(--warning)">${totalHours}</div><div class="stat-label">Logged Hours This Month</div></div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Hours</th><th>Location</th></tr></thead>
+          <tbody>
+            ${attendance.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No attendance records yet</td></tr>' :
+              attendance.map(x => `<tr>
+                <td>${formatDate(x.date)}</td>
+                <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
+                <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
+                <td>${hoursWorked(x.clock_in, x.clock_out) || '—'}</td>
+                <td><small>${x.location || '—'}</small></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+export async function renderEmployeeLeaveRequests(container) {
+  const { user, leaves } = await getEmployeeContext();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  const pending = leaves.filter(x => x.status === 'pending').length;
+  const approved = leaves.filter(x => x.status === 'approved').reduce((sum, x) => sum + daysBetweenInclusive(x.start_date, x.end_date), 0);
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1>Leave Requests</h1>
+        <p>Submit leave and track approval from admin</p>
+      </div>
+      <button class="btn btn-primary" id="leave-new">${ICONS.plus}<span>New Request</span></button>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${pending}</div><div class="stat-label">Pending Requests</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${approved}</div><div class="stat-label">Approved Leave Days</div></div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th></tr></thead>
+          <tbody>
+            ${leaves.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No leave requests yet</td></tr>' :
+              leaves.map(x => `<tr>
+                <td><small>${formatDate(x.start_date)} to ${formatDate(x.end_date)}</small></td>
+                <td>${daysBetweenInclusive(x.start_date, x.end_date)}</td>
+                <td style="max-width:360px;white-space:normal">${x.reason}</td>
+                <td><span class="badge badge-${x.status}">${x.status}</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#leave-new').onclick = () => openLeaveModal(user.id, () => renderEmployeeLeaveRequests(container));
+}
+
+export async function renderEmployeeEODReports(container) {
+  const { user, reports } = await getEmployeeContext();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+  const today = new Date().toLocaleDateString('en-CA');
+  const todayReport = reports.find(x => x.date === today);
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>EOD Reports</h1>
+      <p>View every daily summary you have submitted</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clipboard}<span>Today's Summary</span></span></div>
+      <div class="card-body">
+        ${todayReport ? `
+          <div class="eod-done">
+            <div class="eod-done-ring">${ICONS.check}</div>
+            <h3 class="eod-done-title">Submitted today</h3>
+            <p class="eod-done-sub">${todayReport.content}</p>
+          </div>
+        ` : `
+          <div class="form-group">
+            <label class="sr-icon-label">${ICONS.edit}<span>Today's progress</span></label>
+            <textarea id="employee-eod-content" rows="5" placeholder="What did you complete today?"></textarea>
+          </div>
+          <button class="btn btn-primary btn-wide" id="employee-eod-submit">Submit Daily Report</button>
+        `}
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Submitted</th><th>Summary</th></tr></thead>
+          <tbody>
+            ${reports.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No reports yet</td></tr>' :
+              reports.map(x => `<tr>
+                <td>${formatDate(x.date)}</td>
+                <td>${formatTime(x.created_at)}</td>
+                <td style="max-width:560px;white-space:normal;line-height:1.5">${x.content}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const btn = container.querySelector('#employee-eod-submit');
+  if (btn) {
+    btn.onclick = async () => {
+      const content = container.querySelector('#employee-eod-content').value.trim();
+      if (!content) { toast('Please write your report', 'warning'); return; }
+      btn.disabled = true; btn.textContent = 'Submitting...';
+      const { error } = await supabase.from('eod_reports').insert({ employee_id: user.id, content, date: today });
+      if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = 'Submit Daily Report'; }
+      else { toast('EOD Report submitted!', 'success'); renderEmployeeEODReports(container); }
+    };
+  }
+}
+
+export async function renderEmployeeSalary(container) {
+  const { user, profile, attendance, leaves } = await getEmployeeContext();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  const monthKey = getMonthKey();
+  const monthRows = attendance.filter(x => String(x.date || '').startsWith(monthKey));
+  const presentDays = new Set(monthRows.map(x => x.date)).size;
+  const approvedLeaveDays = leaves
+    .filter(x => x.status === 'approved' && String(x.start_date || '').startsWith(monthKey))
+    .reduce((sum, x) => sum + daysBetweenInclusive(x.start_date, x.end_date), 0);
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const monthlySalary = Number(profile?.salary) || 0;
+  const perDay = monthlySalary / daysInMonth;
+  const payableDays = presentDays + approvedLeaveDays;
+  const estimated = perDay * payableDays;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Salary</h1>
+      <p>Month-to-date salary estimate based on attendance and approved leave</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value" style="font-size:1.8rem">${money(monthlySalary)}</div><div class="stat-label">Monthly Salary</div></div>
+      <div class="stat-card"><div class="stat-value">${presentDays}</div><div class="stat-label">Days Present</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${approvedLeaveDays}</div><div class="stat-label">Approved Leave Days</div></div>
+      <div class="stat-card"><div class="stat-value" style="font-size:1.8rem;color:var(--warning)">${money(estimated)}</div><div class="stat-label">Estimated Earned</div></div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="salary-breakdown">
+          <div><span>Payable days</span><b>${payableDays} / ${daysInMonth}</b></div>
+          <div><span>Per day value</span><b>${money(perDay)}</b></div>
+          <div><span>Formula</span><b>Present + approved leave</b></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
