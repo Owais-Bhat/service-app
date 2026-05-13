@@ -88,6 +88,13 @@ const requiredTables = [
     )`,
 ];
 
+function fieldsWithRequired(relFields, requiredField) {
+    if (!relFields || relFields === '*') return '*';
+    const fields = relFields.split(',').map(f => f.trim()).filter(Boolean);
+    if (!fields.includes(requiredField)) fields.push(requiredField);
+    return fields.map(() => '??').join(', ');
+}
+
 async function ensureRequiredColumns(connection) {
     for (const query of requiredTables) {
         await connection.query(query);
@@ -379,9 +386,13 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
                 
                 if (fkInRel) {
                     const ids = rows.map(r => r.id);
+                    const relSelect = fieldsWithRequired(relFields, fkInRel);
+                    const relSelectParams = relSelect === '*' ? [] : relFields.split(',').map(f => f.trim()).filter(Boolean).concat(
+                        relFields.split(',').map(f => f.trim()).filter(Boolean).includes(fkInRel) ? [] : [fkInRel]
+                    );
                     const [relRows] = await connection.query(
-                        `SELECT ${relFields || '*'} FROM ?? WHERE ?? IN (${ids.map(() => '?').join(', ')})`,
-                        [relTable, fkInRel, ...ids]
+                        `SELECT ${relSelect} FROM ?? WHERE ?? IN (${ids.map(() => '?').join(', ')})`,
+                        [...relSelectParams, relTable, fkInRel, ...ids]
                     );
                     rows.forEach(row => {
                         row[relTable] = relRows.filter(r => r[fkInRel] === row.id);
@@ -405,9 +416,13 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
                         rows.forEach(row => row[relTable] = null);
                         continue;
                     }
+                    const relSelect = fieldsWithRequired(relFields, 'id');
+                    const relSelectParams = relSelect === '*' ? [] : relFields.split(',').map(f => f.trim()).filter(Boolean).concat(
+                        relFields.split(',').map(f => f.trim()).filter(Boolean).includes('id') ? [] : ['id']
+                    );
                     const [relRows] = await connection.query(
-                        `SELECT ${relFields || '*'} FROM ?? WHERE id IN (${ids.map(() => '?').join(', ')})`,
-                        [relTable, ...ids]
+                        `SELECT ${relSelect} FROM ?? WHERE id IN (${ids.map(() => '?').join(', ')})`,
+                        [...relSelectParams, relTable, ...ids]
                     );
                     rows.forEach(row => {
                         row[relTable] = relRows.find(r => r.id === row[fkInTable]) || null;
