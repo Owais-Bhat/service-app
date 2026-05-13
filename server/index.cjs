@@ -172,36 +172,53 @@ async function ensureRequiredColumns(connection) {
     }
 }
 
-// --- SSE EVENT BROADCASTER ---
+// --- REALTIME EVENT BROADCASTER (SSE + polling fallback) ---
 // Active SSE clients. Each entry: { res, userId, role }
 const sseClients = new Set();
 
+// In-memory ring buffer so the polling endpoint can replay missed events.
+// Each entry: { id, audience, event }
+const eventBuffer = [];
+const EVENT_BUFFER_LIMIT = 500;
+let _eventSeq = 0;
+
+function audienceAllows(audience, client) {
+    if (!audience || audience === 'all') return true;
+    if (audience.role && client.role !== audience.role) return false;
+    if (audience.userId && client.userId !== audience.userId) return false;
+    return true;
+}
+
+function pushEvent(audience, event) {
+    const id = ++_eventSeq;
+    eventBuffer.push({ id, audience: audience || 'all', event: { ...event, _id: id } });
+    if (eventBuffer.length > EVENT_BUFFER_LIMIT) eventBuffer.splice(0, eventBuffer.length - EVENT_BUFFER_LIMIT);
+    return id;
+}
+
 function sseSend(client, event) {
     try {
-        client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+        client.res.write(`id: ${event._id}\ndata: ${JSON.stringify(event)}\n\n`);
     } catch {
         sseClients.delete(client);
     }
 }
 
 // Broadcast a DB change event to every connected client.
-// event shape: { type: 'INSERT'|'UPDATE'|'DELETE', table, row, ts }
 function broadcastChange(type, table, row) {
     const event = { kind: 'db', type, table, row: row || null, ts: Date.now() };
+    pushEvent('all', event);
     sseClients.forEach(c => sseSend(c, event));
 }
 
 // Broadcast a domain-specific notification (payment received, new assignment, etc.)
-// event shape: { kind: 'notify', subject, title, body, audience, ts, data }
 // audience: 'all' | { role?: 'admin'|'employee', userId?: '...' }
 function broadcastNotify(payload) {
+    const audience = payload.audience || 'all';
     const event = { kind: 'notify', ts: Date.now(), ...payload };
-    const aud = payload.audience || 'all';
+    pushEvent(audience, event);
     sseClients.forEach(c => {
-        if (aud === 'all') return sseSend(c, event);
-        if (aud.role && c.role !== aud.role) return;
-        if (aud.userId && c.userId !== aud.userId) return;
-        sseSend(c, event);
+        if (audienceAllows(audience, c)) sseSend(c, event);
     });
 }
 
@@ -215,26 +232,50 @@ app.get('/api/events', (req, res) => {
     catch { return res.status(403).end(); }
 
     res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, no-transform',
         Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
+        'X-Accel-Buffering': 'no',                  // nginx: don't buffer
+        'Content-Encoding': 'identity',             // refuse gzip — buffers responses
+        'Alt-Svc': 'clear',                          // discourage HTTP/3 / QUIC on this endpoint
     });
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
     res.write('retry: 3000\n\n');
+    // 2 KB padding helps some proxies start streaming immediately.
+    res.write(`: ${' '.repeat(2048)}\n\n`);
 
     const client = { res, userId: payload.id, role: payload.role };
     sseClients.add(client);
-    sseSend(client, { kind: 'hello', ts: Date.now() });
+    sseSend(client, { _id: 0, kind: 'hello', ts: Date.now() });
 
     // Heartbeat keeps proxies from closing the connection.
     const heartbeat = setInterval(() => {
         try { res.write(': hb\n\n'); } catch {}
-    }, 25000);
+    }, 15000);
 
     req.on('close', () => {
         clearInterval(heartbeat);
         sseClients.delete(client);
     });
+});
+
+// Polling fallback for hosts/proxies that drop long-lived SSE connections.
+// Returns events with id > since that this client is authorised to see.
+app.get('/api/events/poll', (req, res) => {
+    const token = req.query.token || (req.headers.authorization || '').split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'token required' });
+
+    let payload;
+    try { payload = jwt.verify(token, process.env.JWT_SECRET); }
+    catch { return res.status(403).json({ error: 'invalid token' }); }
+
+    const since = Number(req.query.since) || 0;
+    const client = { userId: payload.id, role: payload.role };
+    const events = eventBuffer
+        .filter(e => e.id > since && audienceAllows(e.audience, client))
+        .map(e => e.event);
+    const cursor = eventBuffer.length ? eventBuffer[eventBuffer.length - 1].id : since;
+    res.json({ cursor, events });
 });
 
 // Middleware to verify JWT

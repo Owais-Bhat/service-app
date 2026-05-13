@@ -1290,8 +1290,8 @@ export async function renderUsers(container) {
 }
 
 export async function renderPaymentsTab(container) {
-  const { data: payments } = await supabase.from('inquiries').select('*').not('bill_amount', 'is', null).order('created_at', { ascending: false });
-  const list = payments || [];
+  const { data: payments } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
+  const list = (payments || []).filter(x => x.bill_amount != null && Number(x.bill_amount) > 0);
 
   const totalPaid = list.filter(x=>x.payment_status==='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0);
   const totalPending = list.filter(x=>x.payment_status!=='paid').reduce((acc,x)=>acc+(Number(x.bill_amount)||0), 0);

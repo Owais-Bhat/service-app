@@ -106,13 +106,22 @@ class QueryBuilder {
   }
 }
 
-// --- SSE REALTIME LAYER ---
-// Singleton EventSource shared by all channels. Channels register handlers
-// that filter on { event, schema, table, filter } à la Supabase.
+// --- REALTIME LAYER (SSE primary, polling fallback) ---
+// Singleton transport shared by all channels. Channels register handlers
+// that filter on { event, schema, table, filter } à la Supabase. If SSE fails
+// (proxy drops long connections, HTTP/3 issues, etc.) we fall back to polling.
+const POLL_INTERVAL_MS = 3000;
+const SSE_FAILURE_LIMIT = 2;     // after this many failed connects, switch to polling for the session
+const POLL_FALLBACK_KEY = 'realtime_force_poll';
+
 const realtime = (() => {
   let es = null;
-  const subscribers = new Set();      // { events:Set, table, filter, cb }
-  const notifySubs = new Set();       // { subjects:Set|null, cb }
+  let pollTimer = null;
+  let pollCursor = 0;
+  let sseFailureCount = 0;
+  let mode = 'idle';   // 'idle' | 'sse' | 'poll'
+  const subscribers = new Set();
+  const notifySubs = new Set();
 
   // Filter strings look like "assigned_employee_id=eq.<uuid>".
   const parseFilter = (f) => {
@@ -131,48 +140,101 @@ const realtime = (() => {
     return true;
   };
 
-  const connect = () => {
-    if (es) return;
+  const dispatch = (msg) => {
+    if (msg.kind === 'db') {
+      const payload = { eventType: msg.type, schema: 'public', table: msg.table, new: msg.row, old: null };
+      subscribers.forEach(sub => {
+        if (matches(sub, msg)) {
+          try { sub.cb(payload); } catch (err) { console.error('[realtime] handler error', err); }
+        }
+      });
+    } else if (msg.kind === 'notify') {
+      notifySubs.forEach(sub => {
+        if (sub.subjects && !sub.subjects.has(msg.subject)) return;
+        try { sub.cb(msg); } catch (err) { console.error('[realtime] notify handler error', err); }
+      });
+    }
+  };
+
+  const stopSSE = () => { if (es) { try { es.close(); } catch {} es = null; } };
+  const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+
+  const startPolling = () => {
+    if (mode === 'poll') return;
+    stopSSE();
+    mode = 'poll';
+    console.warn('[realtime] using polling fallback (interval ' + POLL_INTERVAL_MS + 'ms)');
+
+    const tick = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_URL}/events/poll?since=${pollCursor}&token=${encodeURIComponent(token)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (typeof data.cursor === 'number') pollCursor = Math.max(pollCursor, data.cursor);
+        (data.events || []).forEach(dispatch);
+      } catch { /* swallow — retry next tick */ }
+    };
+    tick();
+    pollTimer = setInterval(tick, POLL_INTERVAL_MS);
+  };
+
+  const startSSE = () => {
+    if (mode === 'sse') return;
     const token = localStorage.getItem('auth_token');
     if (!token) return;
+
+    if (typeof EventSource === 'undefined') return startPolling();
+    if (localStorage.getItem(POLL_FALLBACK_KEY) === '1') return startPolling();
+
+    mode = 'sse';
     const url = `${API_URL}/events?token=${encodeURIComponent(token)}`;
     es = new EventSource(url);
+    let openedOk = false;
+
+    es.onopen = () => {
+      openedOk = true;
+      sseFailureCount = 0;
+    };
 
     es.onmessage = (e) => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
-
-      if (msg.kind === 'db') {
-        // Build a Supabase-compatible payload: { eventType, new, old, table, schema }.
-        const payload = { eventType: msg.type, schema: 'public', table: msg.table, new: msg.row, old: null };
-        subscribers.forEach(sub => {
-          if (matches(sub, msg)) {
-            try { sub.cb(payload); } catch (err) { console.error('[realtime] handler error', err); }
-          }
-        });
-      } else if (msg.kind === 'notify') {
-        notifySubs.forEach(sub => {
-          if (sub.subjects && !sub.subjects.has(msg.subject)) return;
-          try { sub.cb(msg); } catch (err) { console.error('[realtime] notify handler error', err); }
-        });
-      }
+      if (typeof msg._id === 'number') pollCursor = Math.max(pollCursor, msg._id);
+      dispatch(msg);
     };
 
     es.onerror = () => {
-      // EventSource auto-reconnects; nothing to do.
+      // EventSource auto-reconnects, but if we never opened — or fail repeatedly —
+      // assume the proxy is hostile and switch to polling for this session.
+      if (!openedOk) sseFailureCount += 1;
+      if (sseFailureCount >= SSE_FAILURE_LIMIT) {
+        try { localStorage.setItem(POLL_FALLBACK_KEY, '1'); } catch {}
+        startPolling();
+      }
     };
   };
 
+  const connect = () => {
+    if (mode !== 'idle') return;
+    startSSE();
+  };
+
   const disconnectIfIdle = () => {
-    if (subscribers.size === 0 && notifySubs.size === 0 && es) {
-      es.close(); es = null;
+    if (subscribers.size === 0 && notifySubs.size === 0) {
+      stopSSE(); stopPolling(); mode = 'idle';
     }
   };
 
   return {
     addSub(sub) { subscribers.add(sub); connect(); return () => { subscribers.delete(sub); disconnectIfIdle(); }; },
     addNotifySub(sub) { notifySubs.add(sub); connect(); return () => { notifySubs.delete(sub); disconnectIfIdle(); }; },
-    reset() { if (es) { es.close(); es = null; } subscribers.clear(); notifySubs.clear(); },
+    reset() {
+      stopSSE(); stopPolling();
+      subscribers.clear(); notifySubs.clear();
+      pollCursor = 0; sseFailureCount = 0; mode = 'idle';
+    },
   };
 })();
 
@@ -336,6 +398,7 @@ export async function signUp(email, password, fullName, regKey) {
 
 export async function signOut() {
   localStorage.removeItem('auth_token');
+  localStorage.removeItem('realtime_force_poll');
   resetRealtime();
   return { error: null };
 }
