@@ -1,12 +1,12 @@
 import './style.css';
-import { supabase, getUserRole, signOut } from './supabase.js';
+import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab } from './pages/admin.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
-import { initTheme, toast } from './utils.js';
+import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
 import { ICONS } from './icons.js';
 import { registerSW } from 'virtual:pwa-register';
 
@@ -83,6 +83,7 @@ function getNavItems(role) {
     { id: 'leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
     { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
     { id: 'pricing', icon: ICONS.receipt, label: 'Service Pricing' },
+    { id: 'feedback', icon: ICONS.star, label: 'Feedback' },
     { type: 'section', label: 'Account' },
     { id: 'profile', icon: ICONS.user, label: 'Profile' },
   ];
@@ -104,9 +105,27 @@ function getPageRenderer(role, page) {
       dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
       inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
       payments: renderPaymentsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
+      feedback: renderFeedbackTab,
     }
   };
   return (map[role] || map.admin)[page];
+}
+
+let _notifyUnsub = null;
+function startGlobalNotifications() {
+  if (_notifyUnsub) return;
+  ensureNotifyPermission();
+  _notifyUnsub = onNotification(null, (msg) => {
+    // Don't double-toast if the active page already handles its own UI feedback.
+    showNotification({
+      title: msg.title || 'Update',
+      body: msg.body || '',
+      tag: msg.subject || 'app-notify',
+      type: msg.subject === 'payment_received' ? 'payment'
+          : msg.subject === 'new_assignment' ? 'alert'
+          : 'info',
+    });
+  });
 }
 
 function navigate(page) {
@@ -118,6 +137,7 @@ function navigate(page) {
     user: currentUser, role: currentRole, activePage, navItems,
     onNav: navigate, pageContent: renderer || (() => {})
   });
+  startGlobalNotifications();
 }
 
 function goToLanding() {

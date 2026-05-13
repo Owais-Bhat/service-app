@@ -143,6 +143,88 @@ export function calculateSLA(createdAt, slaHours = 12) {
   return date;
 }
 
+// --- NOTIFICATIONS: sound + browser push ---
+let _audioCtx = null;
+function getAudioCtx() {
+  if (_audioCtx) return _audioCtx;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  _audioCtx = new Ctx();
+  return _audioCtx;
+}
+
+// Browsers block AudioContext until a user gesture. Unlock on first interaction.
+let _audioUnlocked = false;
+function unlockAudio() {
+  if (_audioUnlocked) return;
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === 'suspended') { ctx.resume().catch(() => {}); }
+  _audioUnlocked = true;
+  window.removeEventListener('click', unlockAudio);
+  window.removeEventListener('keydown', unlockAudio);
+  window.removeEventListener('touchstart', unlockAudio);
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', unlockAudio, { once: true });
+  window.addEventListener('keydown', unlockAudio, { once: true });
+  window.addEventListener('touchstart', unlockAudio, { once: true });
+}
+
+// Play a short two-tone chime via Web Audio. type tweaks the pitch.
+export function playBeep(type = 'info') {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') { ctx.resume().catch(() => {}); }
+
+  const toneMap = {
+    payment: [880, 1320],
+    success: [660, 990],
+    info: [540, 720],
+    alert: [440, 660],
+  };
+  const [f1, f2] = toneMap[type] || toneMap.info;
+  const now = ctx.currentTime;
+  [f1, f2].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(gain).connect(ctx.destination);
+    const start = now + i * 0.16;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+    osc.start(start);
+    osc.stop(start + 0.24);
+  });
+}
+
+// Request browser Notification permission. Safe to call repeatedly.
+let _permRequested = false;
+export async function ensureNotifyPermission() {
+  if (typeof Notification === 'undefined') return 'unsupported';
+  if (Notification.permission === 'granted') return 'granted';
+  if (Notification.permission === 'denied') return 'denied';
+  if (_permRequested) return Notification.permission;
+  _permRequested = true;
+  try { return await Notification.requestPermission(); }
+  catch { return Notification.permission; }
+}
+
+// Show OS-level notification (also fires when the tab is in the background).
+// Falls back to in-app toast if unsupported/denied.
+export function showNotification({ title, body, tag, onclick, type = 'info' }) {
+  playBeep(type);
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    try {
+      const n = new Notification(title, { body, tag, renotify: true, silent: false });
+      if (onclick) n.onclick = () => { window.focus(); onclick(); n.close(); };
+      return n;
+    } catch { /* fall through to toast */ }
+  }
+  toast(`${title}${body ? ' — ' + body : ''}`, type === 'payment' ? 'success' : type, 6000);
+}
+
 export function formatTimeRemaining(deadline) {
   const now = new Date();
   const diff = deadline.getTime() - now.getTime();

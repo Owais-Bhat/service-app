@@ -771,18 +771,26 @@ export function renderLandingPage(container, onPortalClick) {
           const btn = container.querySelector('#srf-fb-submit');
           btn.disabled = true;
           btn.innerHTML = `<span class="srf-spin"></span><span>Submitting…</span>`;
-          const { error } = await supabase.from('inquiries').update({
+          const fbPayload = {
             feedback_rating: chosenOverall,
             feedback_comment: fullComment || null,
             feedback_at: new Date().toISOString(),
-          }).eq('id', state.trackResult.id);
+          };
+          // Capture the explicit employee rating so admins can rank technicians.
+          if (techRating) {
+            fbPayload.employee_rating = techRating;
+            if (state.trackResult.assigned_employee_id) {
+              fbPayload.feedback_employee_id = state.trackResult.assigned_employee_id;
+            }
+          }
+          const { error } = await supabase.from('inquiries').update(fbPayload).eq('id', state.trackResult.id);
           if (error) {
             toast('Could not submit feedback', 'error');
             btn.disabled = false;
             btn.innerHTML = `<span>Submit Feedback</span> ${ICONS.arrowRight}`;
             return;
           }
-          state.trackResult = { ...state.trackResult, feedback_rating: chosenOverall, feedback_comment: fullComment || null };
+          state.trackResult = { ...state.trackResult, ...fbPayload };
           toast('Thanks for your feedback! 🙏', 'success');
           render();
         });

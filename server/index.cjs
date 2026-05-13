@@ -63,6 +63,9 @@ const requiredColumns = {
         { name: 'ticket_id', definition: 'VARCHAR(36)' },
         { name: 'extra_cost', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'extra_cost_reason', definition: 'TEXT' },
+        { name: 'payment_received_at', definition: 'TIMESTAMP NULL' },
+        { name: 'employee_rating', definition: 'INT' },
+        { name: 'feedback_employee_id', definition: 'VARCHAR(36)' },
     ],
     tickets: [
         { name: 'assigned_to', definition: 'VARCHAR(36)' },
@@ -169,6 +172,71 @@ async function ensureRequiredColumns(connection) {
     }
 }
 
+// --- SSE EVENT BROADCASTER ---
+// Active SSE clients. Each entry: { res, userId, role }
+const sseClients = new Set();
+
+function sseSend(client, event) {
+    try {
+        client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {
+        sseClients.delete(client);
+    }
+}
+
+// Broadcast a DB change event to every connected client.
+// event shape: { type: 'INSERT'|'UPDATE'|'DELETE', table, row, ts }
+function broadcastChange(type, table, row) {
+    const event = { kind: 'db', type, table, row: row || null, ts: Date.now() };
+    sseClients.forEach(c => sseSend(c, event));
+}
+
+// Broadcast a domain-specific notification (payment received, new assignment, etc.)
+// event shape: { kind: 'notify', subject, title, body, audience, ts, data }
+// audience: 'all' | { role?: 'admin'|'employee', userId?: '...' }
+function broadcastNotify(payload) {
+    const event = { kind: 'notify', ts: Date.now(), ...payload };
+    const aud = payload.audience || 'all';
+    sseClients.forEach(c => {
+        if (aud === 'all') return sseSend(c, event);
+        if (aud.role && c.role !== aud.role) return;
+        if (aud.userId && c.userId !== aud.userId) return;
+        sseSend(c, event);
+    });
+}
+
+// SSE endpoint. Token passed as ?token=... since EventSource can't set headers.
+app.get('/api/events', (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.status(401).end();
+
+    let payload;
+    try { payload = jwt.verify(token, process.env.JWT_SECRET); }
+    catch { return res.status(403).end(); }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 3000\n\n');
+
+    const client = { res, userId: payload.id, role: payload.role };
+    sseClients.add(client);
+    sseSend(client, { kind: 'hello', ts: Date.now() });
+
+    // Heartbeat keeps proxies from closing the connection.
+    const heartbeat = setInterval(() => {
+        try { res.write(': hb\n\n'); } catch {}
+    }, 25000);
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        sseClients.delete(client);
+    });
+});
+
 // Middleware to verify JWT
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -189,7 +257,7 @@ const authenticateToken = (req, res, next) => {
 //   - GET:  must filter by ticket_no (so callers can't dump the whole table)
 //   - PATCH: only feedback fields may be updated, and only by id
 // Anything else falls through to the normal JWT check.
-const PUBLIC_INQUIRY_FEEDBACK_FIELDS = new Set(['feedback_rating', 'feedback_comment', 'feedback_at']);
+const PUBLIC_INQUIRY_FEEDBACK_FIELDS = new Set(['feedback_rating', 'feedback_comment', 'feedback_at', 'employee_rating', 'feedback_employee_id']);
 const dataAuth = (req, res, next) => {
     if (req.params.table === 'inquiries') {
         const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
@@ -518,7 +586,21 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         params.push(...whereParams);
 
         await connection.query(query, params);
+
+        // Fetch the updated rows so subscribers can update their cached view.
+        let updatedRows = [];
+        try {
+            const selectWhere = whereClauses.join(' AND ');
+            const [rows] = await connection.query(
+                `SELECT * FROM ?? WHERE ${selectWhere}`,
+                [table, ...whereParams]
+            );
+            updatedRows = rows;
+        } catch { /* fall through, broadcast at least the patch */ }
+
         await connection.end();
+        updatedRows.forEach(row => broadcastChange('UPDATE', table, row));
+        if (updatedRows.length === 0) broadcastChange('UPDATE', table, { ...data, _filter: eqs });
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating data:', error);
@@ -536,7 +618,7 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
         const keys = Object.keys(data);
         const values = Object.values(data);
         const placeholders = keys.map(() => '?').join(', ');
-        
+
         // Build ON DUPLICATE KEY UPDATE clause
         const updateClause = keys.map(k => `?? = VALUES(??)`).join(', ');
         const updateParams = keys.flatMap(k => [k, k]);
@@ -546,6 +628,7 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
 
         await connection.query(query, params);
         await connection.end();
+        broadcastChange('INSERT', table, data);
         res.status(201).json(data);
     } catch (error) {
         console.error('Error inserting/upserting data:', error);
@@ -619,6 +702,8 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
     if (event.event === 'payment_link.paid') {
         const notes = event.payload?.payment_link?.entity?.notes || {};
         const ticket_no = notes.ticket_no;
+        const amountPaise = event.payload?.payment_link?.entity?.amount_paid
+            || event.payload?.payment?.entity?.amount;
         console.log(`[Webhook] Payment received for ticket: ${ticket_no}`);
 
         if (ticket_no) {
@@ -631,6 +716,7 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
                 await connection.execute(
                     `UPDATE inquiries
                         SET payment_status = 'paid',
+                            payment_received_at = COALESCE(payment_received_at, NOW()),
                             status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
                       WHERE ticket_no = ?`,
                     [ticket_no]
@@ -638,10 +724,11 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
 
                 // Cascade resolve to the linked ticket so the employee dashboard reflects it.
                 const [inqRows] = await connection.execute(
-                    'SELECT ticket_id FROM inquiries WHERE ticket_no = ? LIMIT 1',
+                    'SELECT id, ticket_id, assigned_employee_id, full_name, bill_amount FROM inquiries WHERE ticket_no = ? LIMIT 1',
                     [ticket_no]
                 );
-                const ticketId = inqRows[0]?.ticket_id;
+                const inqRow = inqRows[0];
+                const ticketId = inqRow?.ticket_id;
                 if (ticketId) {
                     await connection.execute(
                         `UPDATE tickets
@@ -651,8 +738,35 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
                     );
                 }
 
+                // Re-fetch the full row to broadcast a clean payload.
+                const [freshRows] = await connection.execute(
+                    'SELECT * FROM inquiries WHERE ticket_no = ? LIMIT 1',
+                    [ticket_no]
+                );
                 await connection.commit();
                 console.log(`[Webhook] Marked paid + resolved: ${ticket_no}`);
+
+                // Broadcast DB change + targeted notifications.
+                if (freshRows[0]) broadcastChange('UPDATE', 'inquiries', freshRows[0]);
+                if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
+
+                const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
+                broadcastNotify({
+                    subject: 'payment_received',
+                    title: '💰 Payment Received',
+                    body: `${inqRow?.full_name || 'Client'} paid ₹${amount} for ticket ${ticket_no}`,
+                    audience: { role: 'admin' },
+                    data: { ticket_no, inquiry_id: inqRow?.id, amount },
+                });
+                if (inqRow?.assigned_employee_id) {
+                    broadcastNotify({
+                        subject: 'payment_received',
+                        title: '💰 Payment Received',
+                        body: `Your ticket ${ticket_no} just got paid! Task auto-resolved.`,
+                        audience: { userId: inqRow.assigned_employee_id },
+                        data: { ticket_no, inquiry_id: inqRow.id, amount },
+                    });
+                }
             } catch (err) {
                 if (connection) { try { await connection.rollback(); } catch {} }
                 console.error('[Webhook] DB update failed:', err.message);

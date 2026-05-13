@@ -106,15 +106,103 @@ class QueryBuilder {
   }
 }
 
+// --- SSE REALTIME LAYER ---
+// Singleton EventSource shared by all channels. Channels register handlers
+// that filter on { event, schema, table, filter } à la Supabase.
+const realtime = (() => {
+  let es = null;
+  const subscribers = new Set();      // { events:Set, table, filter, cb }
+  const notifySubs = new Set();       // { subjects:Set|null, cb }
+
+  // Filter strings look like "assigned_employee_id=eq.<uuid>".
+  const parseFilter = (f) => {
+    if (!f) return null;
+    const m = /^(\w+)=eq\.(.+)$/.exec(f);
+    return m ? { col: m[1], val: m[2] } : null;
+  };
+
+  const matches = (sub, msg) => {
+    if (sub.table && sub.table !== msg.table) return false;
+    if (sub.events && !sub.events.has('*') && !sub.events.has(msg.type)) return false;
+    if (sub.filter) {
+      const p = parseFilter(sub.filter);
+      if (p && msg.row && String(msg.row[p.col]) !== String(p.val)) return false;
+    }
+    return true;
+  };
+
+  const connect = () => {
+    if (es) return;
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const url = `${API_URL}/events?token=${encodeURIComponent(token)}`;
+    es = new EventSource(url);
+
+    es.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      if (msg.kind === 'db') {
+        // Build a Supabase-compatible payload: { eventType, new, old, table, schema }.
+        const payload = { eventType: msg.type, schema: 'public', table: msg.table, new: msg.row, old: null };
+        subscribers.forEach(sub => {
+          if (matches(sub, msg)) {
+            try { sub.cb(payload); } catch (err) { console.error('[realtime] handler error', err); }
+          }
+        });
+      } else if (msg.kind === 'notify') {
+        notifySubs.forEach(sub => {
+          if (sub.subjects && !sub.subjects.has(msg.subject)) return;
+          try { sub.cb(msg); } catch (err) { console.error('[realtime] notify handler error', err); }
+        });
+      }
+    };
+
+    es.onerror = () => {
+      // EventSource auto-reconnects; nothing to do.
+    };
+  };
+
+  const disconnectIfIdle = () => {
+    if (subscribers.size === 0 && notifySubs.size === 0 && es) {
+      es.close(); es = null;
+    }
+  };
+
+  return {
+    addSub(sub) { subscribers.add(sub); connect(); return () => { subscribers.delete(sub); disconnectIfIdle(); }; },
+    addNotifySub(sub) { notifySubs.add(sub); connect(); return () => { notifySubs.delete(sub); disconnectIfIdle(); }; },
+    reset() { if (es) { es.close(); es = null; } subscribers.clear(); notifySubs.clear(); },
+  };
+})();
+
+// Subscribe to server notifications (payment_received, new_assignment, etc.).
+// subjects: array of subject strings, or null for all.
+export function onNotification(subjects, cb) {
+  return realtime.addNotifySub({ subjects: subjects ? new Set(subjects) : null, cb });
+}
+
+// Reset realtime on logout — the next signed-in user gets their own stream.
+export function resetRealtime() { realtime.reset(); }
+
+class RealtimeChannel {
+  constructor(name) { this.name = name; this._handlers = []; this._unsubs = []; }
+  on(_eventKind, cfg, cb) {
+    const events = new Set([cfg.event || '*']);
+    this._handlers.push({ events, table: cfg.table || null, filter: cfg.filter || null, cb });
+    return this;
+  }
+  subscribe() {
+    this._handlers.forEach(h => this._unsubs.push(realtime.addSub(h)));
+    return this;
+  }
+  unsubscribe() { this._unsubs.forEach(u => u()); this._unsubs = []; }
+}
+
 export const supabase = {
   from: (table) => new QueryBuilder(table),
-  
-  // Mock channel for real-time (can be implemented later with WebSockets)
-  channel: () => ({
-    on: function() { return this; },
-    subscribe: () => ({ unsubscribe: () => {} })
-  }),
-  removeChannel: () => {},
+  channel: (name) => new RealtimeChannel(name),
+  removeChannel: (ch) => { try { ch?.unsubscribe?.(); } catch {} },
 
   auth: {
     getSession: async () => {
@@ -248,5 +336,6 @@ export async function signUp(email, password, fullName, regKey) {
 
 export async function signOut() {
   localStorage.removeItem('auth_token');
+  resetRealtime();
   return { error: null };
 }

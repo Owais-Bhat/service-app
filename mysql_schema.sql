@@ -36,9 +36,12 @@ CREATE TABLE IF NOT EXISTS inquiries (
     payment_link TEXT,
     payment_status VARCHAR(20) DEFAULT 'unpaid',
     payment_method VARCHAR(20) DEFAULT NULL, -- cash, upi, online, bank
+    payment_received_at TIMESTAMP NULL,
     feedback_rating INT CHECK (feedback_rating >= 1 AND feedback_rating <= 5),
     feedback_comment TEXT,
     feedback_at TIMESTAMP NULL,
+    employee_rating INT CHECK (employee_rating >= 1 AND employee_rating <= 5),
+    feedback_employee_id VARCHAR(36),
     preferred_time TEXT,
     assignment_status VARCHAR(20) DEFAULT 'pending',
     decline_reason TEXT,

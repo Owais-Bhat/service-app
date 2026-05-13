@@ -23,6 +23,9 @@ ALTER TABLE inquiries ADD COLUMN feedback_comment TEXT;
 ALTER TABLE inquiries ADD COLUMN feedback_at TIMESTAMP NULL;
 ALTER TABLE inquiries ADD COLUMN extra_cost DECIMAL(10, 2) DEFAULT 0;
 ALTER TABLE inquiries ADD COLUMN extra_cost_reason TEXT;
+ALTER TABLE inquiries ADD COLUMN payment_received_at TIMESTAMP NULL;
+ALTER TABLE inquiries ADD COLUMN employee_rating INT;
+ALTER TABLE inquiries ADD COLUMN feedback_employee_id VARCHAR(36);
 
 CREATE TABLE IF NOT EXISTS leave_requests (
   id VARCHAR(36) PRIMARY KEY,

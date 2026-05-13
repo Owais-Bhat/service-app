@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatTime } from '../utils.js';
+import { toast, formatDate, formatTime, showNotification } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 function getMonthKey(date = new Date()) {
@@ -438,21 +438,31 @@ export async function renderEmployeeDashboard(container) {
     };
   });
 
-  // Real-time listener for new assignments
+  // Real-time listener for new assignments + payments — fires sound + browser notification.
   const channel = supabase.channel(`employee-jobs-${user.id}`)
-    .on('postgres_changes', { 
-      event: '*', 
-      schema: 'public', 
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
       table: 'inquiries',
       filter: `assigned_employee_id=eq.${user.id}`
     }, payload => {
-      if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new.assignment_status === 'pending')) {
-        toast('New Job Assigned!', 'info');
-        renderEmployeeDashboard(container);
-      } else if (payload.eventType === 'UPDATE') {
-        // Just refresh to update statuses etc.
-        renderEmployeeDashboard(container);
+      const row = payload.new;
+      if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && row?.assignment_status === 'pending')) {
+        showNotification({
+          title: '🔔 New Job Assigned',
+          body: `${row?.full_name || 'A client'} — ${row?.service_item || 'new service'}`,
+          type: 'alert',
+          tag: `assign-${row?.id || ''}`,
+        });
+      } else if (payload.eventType === 'UPDATE' && row?.payment_status === 'paid') {
+        showNotification({
+          title: '💰 Payment Received',
+          body: `${row?.full_name || 'Client'} paid for ticket ${row?.ticket_no || ''}`,
+          type: 'payment',
+          tag: `pay-${row?.id || ''}`,
+        });
       }
+      renderEmployeeDashboard(container);
     })
     .subscribe();
 
@@ -647,6 +657,12 @@ export async function renderEmployeeSalary(container) {
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
+    // Snapshot current payment state so we can gate the Save button.
+    let paymentState = { status: 'unpaid', received_at: null };
+    if (inqId) {
+      const { data: inqSnap } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
+      if (inqSnap) paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
+    }
     const pricingListHtml = (pricing || []).map(p => `
                 <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
                   <input type="checkbox" class="service-chk" data-id="${p.id}" data-cost="${p.cost}" />
@@ -717,6 +733,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <button class="btn btn-primary btn-sm" id="emp-share-wa" style="width:100%; display:none; gap:8px; justify-content:center;">
                 ${ICONS.whatsapp}<span>Share via WhatsApp</span>
               </button>
+
+              <!-- Live payment status (updates from Razorpay webhook in real time) -->
+              <div id="emp-pay-status" style="margin-top:12px; padding:12px; border-radius:12px; background:var(--bg); border:2px solid var(--border); display:flex; align-items:center; gap:10px;">
+                <div id="emp-pay-status-icon" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:var(--text-dim);">${ICONS.clock}</div>
+                <div style="flex:1">
+                  <div id="emp-pay-status-title" style="font-weight:800; font-size:0.9rem; color:var(--text)">Payment: Unpaid</div>
+                  <div id="emp-pay-status-sub" style="font-size:0.75rem; color:var(--text-dim);">Generate a link, then wait for the client to pay.</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="emp-pay-check" title="Re-check payment" style="white-space:nowrap">↻</button>
+              </div>
             </div>
           </div>
 
@@ -749,6 +775,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const totalDisplay = overlay.querySelector('#total-bill-display');
     const extraInput = overlay.querySelector('#extra-cost');
     const checkboxes = overlay.querySelectorAll('.service-chk');
+    const saveBtn = overlay.querySelector('#save-update');
 
     const calcTotal = () => {
       let total = Number(extraInput.value) || 0;
@@ -756,11 +783,115 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       totalDisplay.textContent = `₹${total.toLocaleString('en-IN')}`;
     };
 
+    // --- Live payment status panel + Save-button gating ---
+    const payStatusBox = overlay.querySelector('#emp-pay-status');
+    const payStatusIcon = overlay.querySelector('#emp-pay-status-icon');
+    const payStatusTitle = overlay.querySelector('#emp-pay-status-title');
+    const payStatusSub = overlay.querySelector('#emp-pay-status-sub');
+    let _hasLinkBeenGenerated = false;
+    let _paymentJustReceived = false;
+
+    const renderPayStatus = () => {
+      const resolving = statusSel.value === 'resolved' || statusSel.value === 'closed';
+      const total = Number(totalDisplay.textContent.replace(/[^\d]/g, '')) || 0;
+      const requiresPayment = resolving && total > 0;
+      const paid = paymentState.status === 'paid';
+
+      if (paid) {
+        payStatusBox.style.borderColor = 'var(--success)';
+        payStatusBox.style.background = 'rgba(16,185,129,0.08)';
+        payStatusIcon.innerHTML = ICONS.check;
+        payStatusIcon.style.color = 'var(--success)';
+        payStatusTitle.textContent = '✓ Payment Received';
+        payStatusTitle.style.color = 'var(--success)';
+        payStatusSub.textContent = paymentState.received_at
+          ? `Received at ${formatTime(paymentState.received_at)} — you can now submit.`
+          : 'You can now submit the resolution.';
+      } else if (_hasLinkBeenGenerated) {
+        payStatusBox.style.borderColor = 'var(--warning)';
+        payStatusBox.style.background = 'rgba(245,158,11,0.06)';
+        payStatusIcon.innerHTML = ICONS.clock;
+        payStatusIcon.style.color = 'var(--warning)';
+        payStatusTitle.textContent = '⏳ Waiting for Payment';
+        payStatusTitle.style.color = 'var(--warning)';
+        payStatusSub.textContent = 'Link sent. Razorpay will notify us live when the client pays.';
+      } else {
+        payStatusBox.style.borderColor = 'var(--border)';
+        payStatusBox.style.background = 'var(--bg)';
+        payStatusIcon.innerHTML = ICONS.clock;
+        payStatusIcon.style.color = 'var(--text-dim)';
+        payStatusTitle.textContent = `Payment: ${paymentState.status === 'paid' ? 'Paid' : 'Unpaid'}`;
+        payStatusTitle.style.color = 'var(--text)';
+        payStatusSub.textContent = requiresPayment
+          ? 'Generate a link, then wait for the client to pay before submitting.'
+          : 'Generate a link, then wait for the client to pay.';
+      }
+
+      // Gate: when resolving with a bill, require paid status. Cash flow is handled by employee marking paid manually elsewhere.
+      if (requiresPayment && !paid) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Awaiting Payment…';
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.title = 'Client must pay the generated link before you can submit a resolution.';
+      } else {
+        saveBtn.disabled = false;
+        saveBtn.textContent = _paymentJustReceived ? '💰 Save & Resolve' : 'Save Changes';
+        saveBtn.style.opacity = '1';
+        saveBtn.style.cursor = 'pointer';
+        saveBtn.title = '';
+      }
+    };
+
     statusSel.onchange = () => {
       pricingSec.style.display = (statusSel.value === 'resolved' || statusSel.value === 'closed') ? 'block' : 'none';
+      renderPayStatus();
     };
-    extraInput.oninput = calcTotal;
-    checkboxes.forEach(chk => chk.onchange = calcTotal);
+    extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
+    checkboxes.forEach(chk => chk.onchange = () => { calcTotal(); renderPayStatus(); });
+
+    // Manual re-check button: refetches the inquiry payment_status from DB.
+    overlay.querySelector('#emp-pay-check').onclick = async () => {
+      if (!inqId) return;
+      const { data } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
+      if (data) {
+        const wasPaid = paymentState.status === 'paid';
+        paymentState = { status: data.payment_status || 'unpaid', received_at: data.payment_received_at || null };
+        if (!wasPaid && paymentState.status === 'paid') {
+          _paymentJustReceived = true;
+          showNotification({ title: '💰 Payment Received', body: 'You can now submit the resolution.', type: 'payment', tag: `pay-${inqId}` });
+        }
+        renderPayStatus();
+      }
+    };
+
+    // Live subscription: react instantly when Razorpay webhook fires.
+    const channel = supabase.channel(`task-modal-${inqId || taskId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'inquiries',
+        filter: inqId ? `id=eq.${inqId}` : '',
+      }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        if (inqId && row.id !== inqId) return;
+        const wasPaid = paymentState.status === 'paid';
+        if (row.payment_status) paymentState.status = row.payment_status;
+        if (row.payment_received_at) paymentState.received_at = row.payment_received_at;
+        if (!wasPaid && paymentState.status === 'paid') {
+          _paymentJustReceived = true;
+          showNotification({
+            title: '💰 Payment Received!',
+            body: 'Client just paid. You can submit the resolution now.',
+            type: 'payment',
+            tag: `pay-${inqId}`,
+          });
+        }
+        renderPayStatus();
+      })
+      .subscribe();
+
+    // Initial paint.
+    renderPayStatus();
 
     // Payment link generation + QR
     let _payLink = '';
@@ -804,7 +935,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           showQR(data.short_url);
           // Save payment link back to the inquiry
           await supabase.from('inquiries').update({ payment_link: data.short_url, bill_amount: total }).eq('id', inqId);
-          toast('Payment link generated!', 'success');
+          _hasLinkBeenGenerated = true;
+          renderPayStatus();
+          toast('Payment link generated! Waiting for client to pay…', 'success');
         } catch (err) {
           toast(err.message, 'error');
         } finally {
@@ -819,7 +952,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       };
     }
 
-    overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = () => overlay.remove();
+    const closeOverlay = () => { try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
+    overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = closeOverlay;
     overlay.querySelector('#save-update').onclick = async () => {
       const newStatus = statusSel.value;
       const detail = overlay.querySelector('#progress-detail').value.trim();
@@ -899,7 +1033,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         }
       }
 
-      overlay.remove();
+      closeOverlay();
       onDone();
     };
   })();

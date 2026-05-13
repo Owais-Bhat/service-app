@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining, showNotification } from '../utils.js';
 
 function hoursWorked(clockIn, clockOut) {
   if (!clockIn || !clockOut) return null;
@@ -176,18 +176,6 @@ export async function renderAdminDashboard(container) {
       </div>
     </div>
 
-    <div class="card" style="margin-top:24px">
-      <div class="card-header"><span class="card-title">Quick Actions & Reports</span></div>
-      <div class="card-body" style="display:flex;gap:16px;flex-wrap:wrap">
-        <button class="btn btn-secondary" id="exp-attendance">Attendance CSV</button>
-        <button class="btn btn-secondary" id="exp-clients">Client List CSV</button>
-        <button class="btn btn-secondary" id="exp-stocks">Inventory CSV</button>
-        <button class="btn btn-primary" id="view-eod">EOD Summaries</button>
-        <button class="btn btn-primary" id="view-leaves" style="background:var(--warning); color:var(--text); border:none;">Leave Requests</button>
-        <button class="btn btn-primary" id="view-payments" style="background:var(--primary); color:white;">💰 Payments</button>
-        <button class="btn btn-secondary" id="view-pricing">⚙️ Service Pricing</button>
-      </div>
-    </div>
   `;
 
   // Bindings
@@ -197,13 +185,6 @@ export async function renderAdminDashboard(container) {
   };
 
   bind('#admin-refresh', () => renderAdminDashboard(container));
-  bind('#exp-attendance', () => exportToCSV('attendance.csv', a));
-  bind('#exp-clients', () => exportToCSV('clients.csv', p.filter(x=>x.role==='client')));
-  bind('#exp-stocks', () => exportToCSV('stocks.csv', s));
-  bind('#view-eod', () => renderEODReports(container));
-  bind('#view-leaves', () => renderLeaveRequests(container));
-  bind('#view-payments', () => renderPaymentsTab(container));
-  bind('#view-pricing', () => renderPricingTab(container));
 
   // Services by Company: search filter
   const companySearch = container.querySelector('#company-search');
@@ -283,8 +264,32 @@ export async function renderAdminDashboard(container) {
   // Real-time listener for new inquiries
   const channel = supabase.channel('admin-inquiries')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inquiries' }, payload => {
-      toast(`New Request: ${payload.new.full_name}`, 'info');
-      // If the current container is still the dashboard, refresh counts
+      const row = payload.new || {};
+      showNotification({
+        title: '📥 New Service Request',
+        body: `${row.full_name || 'Client'} — ${row.service_item || 'new request'}`,
+        type: 'alert',
+        tag: `req-${row.id || ''}`,
+      });
+      if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inquiries' }, payload => {
+      const row = payload.new || {};
+      if (row.payment_status === 'paid') {
+        showNotification({
+          title: '💰 Payment Received',
+          body: `${row.full_name || 'Client'} paid ₹${row.bill_amount || ''} for ${row.ticket_no || ''}`,
+          type: 'payment',
+          tag: `pay-${row.id || ''}`,
+        });
+      } else if (row.feedback_rating != null) {
+        showNotification({
+          title: '⭐ New Feedback',
+          body: `${row.full_name || 'Client'} rated ${row.feedback_rating}/5`,
+          type: 'info',
+          tag: `fb-${row.id || ''}`,
+        });
+      }
       if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
     })
     .subscribe();
@@ -843,14 +848,18 @@ export async function renderInquiries(container) {
 
 export async function renderStocks(container) {
   const { data: stocks } = await supabase.from('stocks').select('*').order('item_name');
+  const list = stocks || [];
   container.innerHTML = `
-    <div class="page-header"><h1>Inventory</h1></div>
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+      <h1>Inventory</h1>
+      <button class="btn btn-secondary" id="stocks-export">Export CSV</button>
+    </div>
     <div class="card">
       <div class="table-wrap">
         <table>
           <thead><tr><th>Item</th><th>Stock</th><th>Status</th></tr></thead>
           <tbody>
-            ${(stocks||[]).map(x => `<tr>
+            ${list.map(x => `<tr>
               <td>${x.item_name}</td>
               <td><b>${x.quantity}</b> ${x.unit||'pcs'}</td>
               <td><span class="badge badge-${x.quantity <= x.min_stock ? 'urgent' : 'resolved'}">${x.quantity <= x.min_stock ? 'Low' : 'OK'}</span></td>
@@ -860,6 +869,13 @@ export async function renderStocks(container) {
       </div>
     </div>
   `;
+  container.querySelector('#stocks-export').onclick = () => exportToCSV('inventory.csv', list.map(x => ({
+    item: x.item_name || '',
+    quantity: x.quantity ?? '',
+    unit: x.unit || '',
+    min_stock: x.min_stock ?? '',
+    status: (x.quantity <= x.min_stock) ? 'Low' : 'OK',
+  })));
 }
 
 export async function renderEODReports(container) {
@@ -1215,13 +1231,17 @@ export async function renderContacts(container) {
 
 export async function renderClients(container) {
   const { data: clients } = await supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: false });
+  const list = clients || [];
   container.innerHTML = `
-    <div class="page-header"><h1>Clients</h1></div>
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+      <h1>Clients</h1>
+      <button class="btn btn-secondary" id="clients-export">Export CSV</button>
+    </div>
     <div class="card">
       <div class="table-wrap">
         <table>
           <thead><tr><th>Name</th><th>Email</th><th>Company</th></tr></thead>
-          <tbody>${(clients||[]).map(c => `<tr>
+          <tbody>${list.map(c => `<tr>
             <td><b>${c.full_name||'—'}</b></td>
             <td>${c.email||'—'}</td>
             <td>${c.company||'—'}</td>
@@ -1229,6 +1249,14 @@ export async function renderClients(container) {
         </table>
       </div>
     </div>`;
+  container.querySelector('#clients-export').onclick = () => exportToCSV('clients.csv', list.map(c => ({
+    name: c.full_name || '',
+    email: c.email || '',
+    phone: c.phone || '',
+    company: c.company || '',
+    address: c.address || '',
+    created_at: c.created_at || '',
+  })));
 }
 
 export async function renderUsers(container) {
@@ -1430,4 +1458,127 @@ export async function renderPricingTab(container) {
       }
     };
   });
+}
+
+// ── FEEDBACK TAB ───────────────────────────────────────
+export async function renderFeedbackTab(container) {
+  const [{ data: rows }, { data: profiles }] = await Promise.all([
+    supabase.from('inquiries').select('*').order('feedback_at', { ascending: false }),
+    supabase.from('profiles').select('id,full_name,role'),
+  ]);
+  const all = (rows || []).filter(r => r.feedback_rating != null);
+  const profileById = new Map((profiles || []).map(p => [p.id, p]));
+
+  // Per-employee aggregation: averages the explicit employee_rating column (falls back to overall rating).
+  const empAgg = new Map();
+  all.forEach(r => {
+    const empId = r.feedback_employee_id || r.assigned_employee_id;
+    if (!empId) return;
+    const score = r.employee_rating || r.feedback_rating;
+    if (!score) return;
+    if (!empAgg.has(empId)) empAgg.set(empId, { total: 0, count: 0, fiveStars: 0 });
+    const a = empAgg.get(empId);
+    a.total += Number(score);
+    a.count += 1;
+    if (score >= 5) a.fiveStars += 1;
+  });
+  const empRows = [...empAgg.entries()]
+    .map(([id, a]) => ({ id, name: profileById.get(id)?.full_name || '—', avg: a.total / a.count, count: a.count, fiveStars: a.fiveStars }))
+    .sort((a, b) => b.avg - a.avg || b.count - a.count);
+
+  const overallAvg = all.length ? (all.reduce((s, r) => s + Number(r.feedback_rating || 0), 0) / all.length) : 0;
+  const fiveCount = all.filter(r => r.feedback_rating >= 5).length;
+
+  const starsHtml = (n) => {
+    const v = Math.round(Number(n) || 0);
+    return Array.from({ length: 5 }, (_, i) =>
+      `<span style="color:${i < v ? 'var(--warning)' : 'var(--border)'};display:inline-flex;width:14px;height:14px">${i < v ? ICONS.star : ICONS.starOutline}</span>`
+    ).join('');
+  };
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Client Feedback</h1>
+      <p>Ratings & comments submitted by clients after service completion</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${all.length}</div><div class="stat-label">Total Reviews</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${overallAvg.toFixed(2)} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Overall Average</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${fiveCount}</div><div class="stat-label">5-Star Reviews</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${empRows.length}</div><div class="stat-label">Employees Rated</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Employee Leaderboard</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Employee</th><th>Average</th><th>Reviews</th><th>5★</th></tr></thead>
+          <tbody>
+            ${empRows.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-dim)">No employee-specific ratings yet</td></tr>' :
+              empRows.map(e => `<tr>
+                <td><b>${e.name}</b></td>
+                <td>${starsHtml(e.avg)} <span style="margin-left:6px;font-weight:700">${e.avg.toFixed(2)}</span></td>
+                <td>${e.count}</td>
+                <td><span class="badge badge-resolved">${e.fiveStars}</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span class="card-title">All Reviews</span>
+        <div class="search-input-wrap" style="min-width:200px;max-width:320px;">
+          <span>🔍</span>
+          <input class="search-input" id="fb-search" placeholder="Filter by name or ticket…" style="padding:6px 10px;font-size:0.85rem;"/>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="fb-table">
+          <thead><tr><th>Date</th><th>Ticket</th><th>Client</th><th>Employee</th><th>Overall</th><th>Employee</th><th>Comment</th></tr></thead>
+          <tbody>
+            ${all.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No feedback received yet</td></tr>' :
+              all.map(r => {
+                const empName = profileById.get(r.feedback_employee_id || r.assigned_employee_id)?.full_name || '—';
+                const empStars = r.employee_rating ? `${starsHtml(r.employee_rating)} <b style="margin-left:4px">${r.employee_rating}</b>` : '<span style="color:var(--text-dim)">—</span>';
+                return `<tr data-search="${(r.full_name + ' ' + (r.ticket_no || '') + ' ' + empName).toLowerCase()}">
+                  <td><small>${r.feedback_at ? formatDate(r.feedback_at) : '—'}</small></td>
+                  <td><code style="font-size:0.75rem;color:var(--primary)">${r.ticket_no || '—'}</code></td>
+                  <td><b>${r.full_name}</b></td>
+                  <td>${empName}</td>
+                  <td>${starsHtml(r.feedback_rating)} <b style="margin-left:4px">${r.feedback_rating}</b></td>
+                  <td>${empStars}</td>
+                  <td style="max-width:340px;white-space:normal;font-size:.85rem;line-height:1.45;color:var(--text-soft)">${r.feedback_comment || '<span style="color:var(--text-dim)">—</span>'}</td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const search = container.querySelector('#fb-search');
+  if (search) {
+    search.oninput = () => {
+      const q = search.value.toLowerCase();
+      container.querySelectorAll('#fb-table tbody tr[data-search]').forEach(r => {
+        r.style.display = r.dataset.search.includes(q) ? '' : 'none';
+      });
+    };
+  }
+
+  // Live refresh when a new feedback row lands.
+  const channel = supabase.channel('admin-feedback')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inquiries' }, payload => {
+      if (payload.new?.feedback_rating != null) renderFeedbackTab(container);
+    })
+    .subscribe();
+  const cleanup = setInterval(() => {
+    if (!document.body.contains(container)) {
+      supabase.removeChannel(channel);
+      clearInterval(cleanup);
+    }
+  }, 5000);
 }
