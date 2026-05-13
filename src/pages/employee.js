@@ -814,7 +814,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         payStatusIcon.style.color = 'var(--warning)';
         payStatusTitle.textContent = '⏳ Waiting for Payment';
         payStatusTitle.style.color = 'var(--warning)';
-        payStatusSub.textContent = 'Link sent. Razorpay will notify us live when the client pays.';
+        payStatusSub.textContent = 'Auto-checking every 3s — Save unlocks the moment Razorpay confirms.';
       } else {
         payStatusBox.style.borderColor = 'var(--border)';
         payStatusBox.style.background = 'var(--bg)';
@@ -850,20 +850,37 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
     checkboxes.forEach(chk => chk.onchange = () => { calcTotal(); renderPayStatus(); });
 
-    // Manual re-check button: refetches the inquiry payment_status from DB.
-    overlay.querySelector('#emp-pay-check').onclick = async () => {
+    // Active auto-poller: hits the DB every 3s while the modal is open. Independent
+    // of the realtime layer so it survives SSE failure / webhook lag / admin offline.
+    const refreshPaymentFromDb = async (showToastOnChange) => {
       if (!inqId) return;
       const { data } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
-      if (data) {
-        const wasPaid = paymentState.status === 'paid';
-        paymentState = { status: data.payment_status || 'unpaid', received_at: data.payment_received_at || null };
-        if (!wasPaid && paymentState.status === 'paid') {
-          _paymentJustReceived = true;
-          showNotification({ title: '💰 Payment Received', body: 'You can now submit the resolution.', type: 'payment', tag: `pay-${inqId}` });
-        }
-        renderPayStatus();
+      if (!data) return;
+      const wasPaid = paymentState.status === 'paid';
+      paymentState = { status: data.payment_status || 'unpaid', received_at: data.payment_received_at || null };
+      if (!wasPaid && paymentState.status === 'paid') {
+        _paymentJustReceived = true;
+        showNotification({ title: '💰 Payment Received', body: 'You can now submit the resolution.', type: 'payment', tag: `pay-${inqId}` });
+      } else if (showToastOnChange) {
+        toast(paymentState.status === 'paid' ? 'Payment confirmed' : 'Still waiting for client to pay…', paymentState.status === 'paid' ? 'success' : 'info');
       }
+      renderPayStatus();
     };
+
+    // Manual re-check button (visible feedback for the employee).
+    overlay.querySelector('#emp-pay-check').onclick = () => refreshPaymentFromDb(true);
+
+    // Auto-poll every 3 seconds. Stops as soon as we see 'paid'.
+    let pollTimer = null;
+    const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+    const startPolling = () => {
+      if (pollTimer || !inqId) return;
+      pollTimer = setInterval(async () => {
+        if (paymentState.status === 'paid') return stopPolling();
+        await refreshPaymentFromDb(false);
+      }, 3000);
+    };
+    if (paymentState.status !== 'paid') startPolling();
 
     // Live subscription: react instantly when Razorpay webhook fires.
     const channel = supabase.channel(`task-modal-${inqId || taskId}`)
@@ -952,7 +969,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       };
     }
 
-    const closeOverlay = () => { try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
+    const closeOverlay = () => { stopPolling(); try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
     overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = closeOverlay;
     overlay.querySelector('#save-update').onclick = async () => {
       const newStatus = statusSel.value;
