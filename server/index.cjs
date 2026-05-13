@@ -622,16 +622,42 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
         console.log(`[Webhook] Payment received for ticket: ${ticket_no}`);
 
         if (ticket_no) {
+            let connection;
             try {
-                const connection = await mysql.createConnection(dbConfig);
+                connection = await mysql.createConnection(dbConfig);
+                await connection.beginTransaction();
+
+                // Mark inquiry paid and auto-resolve (don't downgrade an already-closed ticket).
                 await connection.execute(
-                    'UPDATE inquiries SET payment_status = ? WHERE ticket_no = ?',
-                    ['paid', ticket_no]
+                    `UPDATE inquiries
+                        SET payment_status = 'paid',
+                            status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+                      WHERE ticket_no = ?`,
+                    [ticket_no]
                 );
-                await connection.end();
-                console.log(`[Webhook] Marked paid: ${ticket_no}`);
+
+                // Cascade resolve to the linked ticket so the employee dashboard reflects it.
+                const [inqRows] = await connection.execute(
+                    'SELECT ticket_id FROM inquiries WHERE ticket_no = ? LIMIT 1',
+                    [ticket_no]
+                );
+                const ticketId = inqRows[0]?.ticket_id;
+                if (ticketId) {
+                    await connection.execute(
+                        `UPDATE tickets
+                            SET status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+                          WHERE id = ?`,
+                        [ticketId]
+                    );
+                }
+
+                await connection.commit();
+                console.log(`[Webhook] Marked paid + resolved: ${ticket_no}`);
             } catch (err) {
+                if (connection) { try { await connection.rollback(); } catch {} }
                 console.error('[Webhook] DB update failed:', err.message);
+            } finally {
+                if (connection) { try { await connection.end(); } catch {} }
             }
         }
     }
