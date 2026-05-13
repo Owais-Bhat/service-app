@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS service_pricing (
   id CHAR(36) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  category VARCHAR(120),
   cost DECIMAL(10, 2) NOT NULL,
   description TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

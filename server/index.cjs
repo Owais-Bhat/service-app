@@ -46,6 +46,7 @@ const requiredColumns = {
         { name: 'company', definition: 'VARCHAR(100)' },
     ],
     inquiries: [
+        { name: 'company_name', definition: 'VARCHAR(150)' },
         { name: 'bill_no', definition: 'VARCHAR(50)' },
         { name: 'ticket_no', definition: 'VARCHAR(50) UNIQUE' },
         { name: 'bill_amount', definition: 'DECIMAL(10, 2)' },
@@ -67,9 +68,25 @@ const requiredColumns = {
         { name: 'assigned_to', definition: 'VARCHAR(36)' },
         { name: 'updated_at', definition: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
     ],
+    service_pricing: [
+        { name: 'category', definition: 'VARCHAR(120)' },
+    ],
 };
 
 const requiredTables = [
+    `CREATE TABLE IF NOT EXISTS service_pricing (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        category VARCHAR(120),
+        cost DECIMAL(10, 2) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS inquiry_services (
+        inquiry_id VARCHAR(36) NOT NULL,
+        service_id VARCHAR(36) NOT NULL,
+        PRIMARY KEY (inquiry_id, service_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS leave_requests (
         id VARCHAR(36) PRIMARY KEY,
         employee_id VARCHAR(36) NOT NULL,
@@ -87,6 +104,23 @@ const requiredTables = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 ];
+
+const videoDoorPhoneServices = [
+    ['Power Issues', ['No power', 'Device dead', 'Power fluctuation', 'Adaptor/SMPS failure', 'Fuse burnt', 'Battery backup issue', 'Short circuit', 'Voltage drop']],
+    ['Display & Video Issues', ['Blank screen', 'Flickering display', 'No video from outdoor unit', 'Low video quality', 'Black & white image', 'Night vision failure', 'Camera blur', 'LCD damage', 'Water spots on camera']],
+    ['Audio Issues', ['No audio', 'One way audio', 'Low sound', 'Distorted voice', 'Echo/noise', 'Microphone not working', 'Speaker damaged', 'Intermittent audio']],
+    ['Calling & Ringing Issues', ['Call button not working', 'Indoor monitor not ringing', 'Delayed ringing', 'Continuous ringing', 'Wrong flat/room calling', 'Touch button issue']],
+    ['Door Lock & Access Issues', ['Door lock not opening', 'Magnetic lock failure', 'Relay issue', 'Exit switch not working', 'RFID card not detecting', 'Fingerprint failure', 'Password unlock issue', 'Door sensor problem']],
+    ['Network & Connectivity Issues', ['IP conflict', 'Offline device', 'LAN cable fault', 'PoE issue', 'Wi-Fi connectivity issue', 'Internet unavailable', 'Cloud/P2P offline', 'Switch/router issue']],
+    ['Mobile App Issues', ['App not connecting', 'QR code not scanning', 'Push notification failure', 'Remote unlock not working', 'Live view failure', 'App crash', 'Login issue', 'Device not adding']],
+    ['Wiring & Cable Issues', ['Loose connection', 'Wrong wiring polarity', 'Cable cut', 'Joint leakage', 'Connector rust', 'Long distance signal loss', 'Poor crimping', 'Shorted cable']],
+    ['Hardware Damage Issues', ['Motherboard damaged', 'Touch panel damaged', 'Camera module faulty', 'Speaker failure', 'Mic damaged', 'Relay burnt', 'Button damaged', 'Connector corrosion']],
+    ['Software & Configuration Issues', ['Firmware corruption', 'Device hanging', 'Factory reset required', 'Wrong settings', 'SIP registration issue', 'Indoor monitor pairing issue', 'Time/date reset', 'Configuration mismatch']],
+    ['Environmental Issues', ['Rain water damage', 'Moisture inside panel', 'Dust accumulation', 'Heat overheating', 'Rust/corrosion', 'Insect damage']],
+    ['Installation Issues', ['Wrong mounting', 'Improper cable routing', 'Wrong power supply selection', 'Poor earthing', 'Improper lock alignment', 'Weak signal due to distance']],
+    ['Maintenance & Service Issues', ['Preventive maintenance pending', 'Dirty camera lens', 'Loose terminals', 'Firmware not updated', 'Backup battery weak', 'Periodic testing required']],
+    ['User Operation Issues', ['User forgot password', 'Wrong app usage', 'Muted ringtone', 'Wrong card usage', 'Unauthorized access attempt', 'Incorrect settings by user']],
+].flatMap(([category, items]) => items.map(name => ({ category, name, cost: 200 })));
 
 function fieldsWithRequired(relFields, requiredField) {
     if (!relFields || relFields === '*') return '*';
@@ -119,6 +153,19 @@ async function ensureRequiredColumns(connection) {
                 [table, column.name]
             );
         }
+    }
+
+    for (const service of videoDoorPhoneServices) {
+        const [existing] = await connection.execute(
+            'SELECT id FROM service_pricing WHERE name = ? AND category = ? LIMIT 1',
+            [service.name, service.category]
+        );
+        if (existing.length > 0) continue;
+
+        await connection.execute(
+            'INSERT INTO service_pricing (id, name, category, cost, description) VALUES (?, ?, ?, ?, ?)',
+            [uuidv4(), service.name, service.category, service.cost, 'Video Door Phone']
+        );
     }
 }
 

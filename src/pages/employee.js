@@ -646,7 +646,13 @@ export async function renderEmployeeSalary(container) {
 
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   (async () => {
-    const { data: pricing } = await supabase.from('service_pricing').select('*').order('name');
+    const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
+    const pricingListHtml = (pricing || []).map(p => `
+                <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
+                  <input type="checkbox" class="service-chk" data-id="${p.id}" data-cost="${p.cost}" />
+                  <span style="font-size:0.9rem;"><b>${p.category || 'Service'}</b> - ${p.name} (₹${p.cost})</span>
+                </label>
+              `).join('');
     
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -669,9 +675,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           </div>
 
           <div id="pricing-section" style="display:${currentStatus==='resolved'||currentStatus==='closed'?'block':'none'}; margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+            <div class="form-group">
+              <label>Company Name (Optional)</label>
+              <input type="text" id="resolve-company" placeholder="Which company is this for?"/>
+            </div>
+
             <label style="font-weight:700; margin-bottom:8px; display:block;">Select Services Performed</label>
             <div style="max-height:150px; overflow-y:auto; padding:10px; background:var(--bg-soft); border-radius:10px; margin-bottom:12px;">
-              ${(pricing || []).map(p => `
+              ${pricingListHtml}
+              ${'' && (pricing || []).map(p => `
                 <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
                   <input type="checkbox" class="service-chk" data-id="${p.id}" data-cost="${p.cost}" />
                   <span style="font-size:0.9rem;">${p.name} (₹${p.cost})</span>
@@ -833,6 +845,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
       
       const inqUpdates = { status: newStatus };
+      const companyName = overlay.querySelector('#resolve-company')?.value.trim();
+      if (companyName) inqUpdates.company_name = companyName;
       if (totalBill > 0) {
         inqUpdates.bill_amount = totalBill;
         inqUpdates.extra_cost = Number(extraInput.value) || 0;

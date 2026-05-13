@@ -69,10 +69,10 @@ export async function renderAdminDashboard(container) {
   p.forEach(pr => { if (pr.phone && pr.company) phoneToCompany.set(pr.phone, pr.company); });
 
   // Aggregate all inquiries by company
-  const { data: allInquiries } = await supabase.from('inquiries').select('phone,status').order('created_at', { ascending: false });
+  const { data: allInquiries } = await supabase.from('inquiries').select('phone,status,company_name').order('created_at', { ascending: false });
   const companyMap = new Map();
   (allInquiries || []).forEach(inq => {
-    const company = phoneToCompany.get(inq.phone) || 'Walk-in / Unregistered';
+    const company = inq.company_name || phoneToCompany.get(inq.phone) || 'Walk-in / Unregistered';
     if (!companyMap.has(company)) companyMap.set(company, { total: 0, active: 0, resolved: 0 });
     const entry = companyMap.get(company);
     entry.total++;
@@ -360,6 +360,12 @@ async function openInquiryDetail(id, onDone) {
         </div>
 
         <div class="form-group">
+          <label>Company <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
+          <input id="sr-company" type="text" placeholder="Company name"
+                 value="${i.company_name ?? ''}" />
+        </div>
+
+        <div class="form-group">
           <label>Assign to Technician</label>
           <select id="assign-to" ${i.assignment_status === 'accepted' ? 'disabled' : ''}>
             <option value="">— None —</option>
@@ -538,6 +544,7 @@ async function openInquiryDetail(id, onDone) {
     const payLink = payLinkEl ? payLinkEl.value.trim() : '';
     const payStatus = overlay.querySelector('#sr-pay-status').value;
     const payMethod = overlay.querySelector('#sr-pay-method').value;
+    const companyName = overlay.querySelector('#sr-company').value.trim();
 
     const btn = overlay.querySelector('#save-sr');
     btn.disabled = true;
@@ -549,6 +556,7 @@ async function openInquiryDetail(id, onDone) {
       payment_link: payLink || null,
       payment_status: payStatus,
       payment_method: payMethod === 'none' ? null : payMethod,
+      company_name: companyName || null,
       assigned_employee_id: empId || null,
     };
 
@@ -702,6 +710,7 @@ export async function renderAttendance(container) {
 
 export async function renderInquiries(container) {
   const filterKey = container.dataset.srFilter || 'active';
+  const companyFilter = container.dataset.srCompany || '';
   const { data: list, error } = await supabase.from('inquiries')
     .select('*').order('created_at', { ascending: false });
   if (error) console.warn('[Admin] inquiries load:', error.message);
@@ -714,7 +723,7 @@ export async function renderInquiries(container) {
     paid: all.filter(x => x.payment_status === 'paid').length,
     unpaid: all.filter(x => x.bill_amount && x.payment_status !== 'paid').length,
   };
-  const filtered = all.filter(x => {
+  const statusFiltered = all.filter(x => {
     if (filterKey === 'all') return true;
     if (filterKey === 'active') return !['resolved','closed'].includes(x.status);
     if (filterKey === 'closed') return ['resolved','closed'].includes(x.status);
@@ -722,6 +731,7 @@ export async function renderInquiries(container) {
     if (filterKey === 'unpaid') return x.bill_amount && x.payment_status !== 'paid';
     return true;
   });
+  let filtered = statusFiltered.filter(x => (x.company_name || '').toLowerCase().includes(companyFilter.toLowerCase()));
 
   const tabs = [
     ['active', 'Active'],
@@ -737,7 +747,10 @@ export async function renderInquiries(container) {
         <h1>Service Requests</h1>
         <p>Manage customer service requests, billing and payments</p>
       </div>
-      <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" id="sr-export">${ICONS.clipboard}<span>Export</span></button>
+        <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>
+      </div>
     </div>
 
     <div class="sr-filter-bar">
@@ -748,21 +761,30 @@ export async function renderInquiries(container) {
       `).join('')}
     </div>
 
+    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+      <div class="search-input-wrap" style="flex:1; min-width:220px;">
+        <span>${ICONS.search}</span>
+        <input class="search-input" id="sr-company-filter" placeholder="Filter by company..." value="${companyFilter}"/>
+      </div>
+      <button class="btn btn-secondary" id="sr-company-clear">Clear Company</button>
+    </div>
+
     <div class="card">
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Ticket</th><th>Date</th><th>Customer</th><th>Service</th>
+              <th>Ticket</th><th>Date</th><th>Company</th><th>Customer</th><th>Service</th>
               <th>Status</th><th>Bill</th><th>Payment</th><th></th>
             </tr>
           </thead>
           <tbody>
             ${filtered.length === 0
-              ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>`
+              ? `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>`
               : filtered.map(x => `<tr>
                   <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0,8)}</code></td>
                   <td>${formatDate(x.created_at)}</td>
+                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>
                   <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.phone}</small></td>
                   <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || '—'}</td>
                   <td>${statusBadge(x.status)}</td>
@@ -781,6 +803,33 @@ export async function renderInquiries(container) {
   `;
 
   container.querySelector('#sr-refresh').onclick = () => renderInquiries(container);
+  container.querySelector('#sr-company-filter').oninput = (e) => {
+    container.dataset.srCompany = e.target.value.trim();
+    renderInquiries(container);
+  };
+  container.querySelector('#sr-company-clear').onclick = () => {
+    container.dataset.srCompany = '';
+    renderInquiries(container);
+  };
+  container.querySelector('#sr-export').onclick = () => {
+    exportToCSV('service-requests.csv', filtered.map(x => ({
+      ticket: x.ticket_no || x.id,
+      date: x.created_at,
+      company: x.company_name || '',
+      customer: x.full_name,
+      phone: x.phone,
+      service: x.service_item || '',
+      status: x.status,
+      bill_amount: x.bill_amount || '',
+      payment_status: x.payment_status || '',
+      location: x.location || '',
+    })));
+  };
+  if (companyFilter) {
+    const companyInput = container.querySelector('#sr-company-filter');
+    companyInput.focus();
+    companyInput.setSelectionRange(companyInput.value.length, companyInput.value.length);
+  }
   container.querySelectorAll('.sr-filter').forEach(btn => {
     btn.onclick = () => {
       container.dataset.srFilter = btn.dataset.key;
@@ -1326,7 +1375,7 @@ export async function renderPaymentsTab(container) {
 }
 
 export async function renderPricingTab(container) {
-  const { data: pricing } = await supabase.from('service_pricing').select('*').order('name');
+  const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
   const list = pricing || [];
 
   container.innerHTML = `
@@ -1341,12 +1390,13 @@ export async function renderPricingTab(container) {
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Service Name</th><th>Fixed Cost</th><th>Actions</th></tr>
+            <tr><th>Category</th><th>Sub Category</th><th>Fixed Cost</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            ${list.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' : 
+            ${list.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' : 
               list.map(x => `
               <tr>
+                <td><span class="badge badge-open">${x.category || 'Service'}</span></td>
                 <td><b>${x.name}</b></td>
                 <td>₹${Number(x.cost).toLocaleString('en-IN')}</td>
                 <td>
@@ -1361,11 +1411,12 @@ export async function renderPricingTab(container) {
   `;
 
   container.querySelector('#add-price').onclick = () => {
+    const category = prompt('Enter category:');
     const name = prompt('Enter service name:');
     const cost = prompt('Enter fixed cost (₹):');
     if (name && cost) {
       (async () => {
-        await supabase.from('service_pricing').insert({ id: crypto.randomUUID(), name, cost: Number(cost) });
+        await supabase.from('service_pricing').insert({ id: crypto.randomUUID(), category: category || 'Service', name, cost: Number(cost) });
         renderPricingTab(container);
       })();
     }

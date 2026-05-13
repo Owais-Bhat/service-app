@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS inquiries (
     id VARCHAR(36) PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL,
     phone VARCHAR(20) NOT NULL,
+    company_name VARCHAR(150),
     location TEXT,
     bill_no VARCHAR(50),
     service_item TEXT,
@@ -79,6 +80,21 @@ CREATE TABLE IF NOT EXISTS stocks (
     unit VARCHAR(20) DEFAULT 'pcs',
     min_stock INT DEFAULT 5,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS service_pricing (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(120),
+    cost DECIMAL(10, 2) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inquiry_services (
+    inquiry_id VARCHAR(36) NOT NULL,
+    service_id VARCHAR(36) NOT NULL,
+    PRIMARY KEY (inquiry_id, service_id)
 );
 
 CREATE TABLE IF NOT EXISTS feedback (

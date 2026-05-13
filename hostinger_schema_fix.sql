@@ -8,6 +8,7 @@ ALTER TABLE profiles ADD COLUMN salary DECIMAL(10, 2) DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN address TEXT;
 
 ALTER TABLE inquiries ADD COLUMN bill_amount DECIMAL(10, 2);
+ALTER TABLE inquiries ADD COLUMN company_name VARCHAR(150);
 ALTER TABLE inquiries ADD COLUMN payment_link TEXT;
 ALTER TABLE inquiries ADD COLUMN payment_status VARCHAR(20) DEFAULT 'unpaid';
 ALTER TABLE inquiries ADD COLUMN payment_method VARCHAR(20) DEFAULT NULL;
@@ -40,3 +41,20 @@ CREATE TABLE IF NOT EXISTS eod_reports (
   date DATE DEFAULT (CURRENT_DATE),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS service_pricing (
+  id VARCHAR(36) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  category VARCHAR(120),
+  cost DECIMAL(10, 2) NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inquiry_services (
+  inquiry_id VARCHAR(36) NOT NULL,
+  service_id VARCHAR(36) NOT NULL,
+  PRIMARY KEY (inquiry_id, service_id)
+);
+
+ALTER TABLE service_pricing ADD COLUMN category VARCHAR(120);
