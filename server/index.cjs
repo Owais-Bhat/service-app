@@ -10,7 +10,11 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        if (req.originalUrl === '/api/webhook/razorpay') req.rawBody = Buffer.from(buf);
+    },
+}));
 
 let razorpay = null;
 try {
@@ -727,10 +731,11 @@ app.post('/api/payments/create-link', authenticateToken, async (req, res) => {
 app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
     const signature = req.headers['x-razorpay-signature'];
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {})));
 
     if (webhookSecret) {
         const crypto = require('crypto');
-        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(req.body).digest('hex');
+        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
         if (signature !== expectedSig) {
             console.warn('[Webhook] Invalid Razorpay signature');
             return res.status(400).json({ error: 'Invalid signature' });
@@ -738,7 +743,8 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
     }
 
     let event;
-    try { event = JSON.parse(req.body); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+    try { event = Buffer.isBuffer(req.body) ? JSON.parse(req.body) : req.body; }
+    catch { return res.status(400).json({ error: 'Invalid JSON' }); }
 
     if (event.event === 'payment_link.paid') {
         const notes = event.payload?.payment_link?.entity?.notes || {};

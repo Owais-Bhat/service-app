@@ -39,6 +39,26 @@ function statusBadge(status) {
   return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
 }
 
+function buildPaidUpdates(row, extra = {}) {
+  const updates = {
+    payment_status: 'paid',
+    payment_received_at: row?.payment_received_at || new Date().toISOString().slice(0, 19).replace('T', ' '),
+    ...extra,
+  };
+  if (!['resolved', 'closed'].includes(row?.status)) updates.status = 'resolved';
+  return updates;
+}
+
+async function markInquiryPaid(row, extra = {}) {
+  const updates = buildPaidUpdates(row, extra);
+  const ops = [supabase.from('inquiries').update(updates).eq('id', row.id)];
+  if (row.ticket_id && updates.status === 'resolved') {
+    ops.push(supabase.from('tickets').update({ status: 'resolved' }).eq('id', row.ticket_id));
+  }
+  const results = await Promise.all(ops);
+  return results.find(r => r.error)?.error || null;
+}
+
 // ── ADMIN HUB ───────────────────────────────────────────
 export async function renderAdminDashboard(container) {
   const today = new Date().toLocaleDateString('en-CA');
@@ -468,12 +488,13 @@ async function openInquiryDetail(id, onDone) {
   if (cashPaidBtn) {
     cashPaidBtn.onclick = async () => {
       cashPaidBtn.disabled = true; cashPaidBtn.textContent = '…';
-      const { error } = await supabase.from('inquiries').update({ payment_status: 'paid', payment_method: overlay.querySelector('#sr-pay-method').value }).eq('id', i.id);
+      const error = await markInquiryPaid(i, { payment_method: overlay.querySelector('#sr-pay-method').value });
       if (error) { toast(error.message, 'error'); cashPaidBtn.disabled = false; cashPaidBtn.textContent = '✓ Mark Paid'; }
       else {
         overlay.querySelector('#sr-pay-status').value = 'paid';
+        overlay.querySelector('#sr-status').value = ['resolved', 'closed'].includes(i.status) ? i.status : 'resolved';
         cashPaidBtn.textContent = '✓ Paid';
-        toast('Payment marked as received!', 'success');
+        toast('Payment marked as received and status updated!', 'success');
       }
     };
   }
@@ -598,12 +619,22 @@ async function openInquiryDetail(id, onDone) {
       await supabase.from('tickets').update({ assigned_to: empId }).eq('id', i.ticket_id);
     }
 
+    const shouldResolveOnPaid = payStatus === 'paid' && !['resolved', 'closed'].includes(updates.status);
+    if (shouldResolveOnPaid) {
+      updates.status = 'resolved';
+      updates.payment_received_at = i.payment_received_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    }
+
     const { error } = await supabase.from('inquiries').update(updates).eq('id', i.id);
     if (error) {
       toast(error.message, 'error');
       btn.disabled = false;
       btn.innerHTML = `${ICONS.check}<span>Save changes</span>`;
       return;
+    }
+
+    if (shouldResolveOnPaid && (updates.ticket_id || i.ticket_id)) {
+      await supabase.from('tickets').update({ status: 'resolved' }).eq('id', updates.ticket_id || i.ticket_id);
     }
 
     toast('Service request updated', 'success');
@@ -1381,9 +1412,10 @@ export async function renderPaymentsTab(container) {
     container.querySelectorAll('.mark-paid-btn').forEach(btn => {
       btn.onclick = async () => {
         btn.disabled = true; btn.textContent = '…';
-        const { error } = await supabase.from('inquiries').update({ payment_status: 'paid' }).eq('id', btn.dataset.id);
+        const row = list.find(x => String(x.id) === String(btn.dataset.id));
+        const error = row ? await markInquiryPaid(row) : { message: 'Payment row not found' };
         if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = '✓ Mark Paid'; }
-        else { toast('Marked as paid', 'success'); renderPaymentsTab(container); }
+        else { toast('Marked as paid and status updated', 'success'); renderPaymentsTab(container); }
       };
     });
   };

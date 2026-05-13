@@ -657,7 +657,7 @@ export async function renderEmployeeSalary(container) {
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
-    // Snapshot current payment state so we can gate the Save button.
+    // Snapshot current payment state so we can gate the resolved/closed submit button.
     let paymentState = { status: 'unpaid', received_at: null };
     if (inqId) {
       const { data: inqSnap } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
@@ -827,13 +827,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           : 'Generate a link, then wait for the client to pay.';
       }
 
-      // Gate: when resolving with a bill, require paid status. Cash flow is handled by employee marking paid manually elsewhere.
       if (requiresPayment && !paid) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Awaiting Payment…';
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
-        saveBtn.title = 'Client must pay the generated link before you can submit a resolution.';
+        saveBtn.title = 'Payment must be detected automatically, or marked paid by admin, before you can submit a resolution.';
       } else {
         saveBtn.disabled = false;
         saveBtn.textContent = _paymentJustReceived ? '💰 Save & Resolve' : 'Save Changes';
