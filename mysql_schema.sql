@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS inquiries (
     ticket_no VARCHAR(50) UNIQUE,
     bill_amount DECIMAL(10, 2),
     payment_link TEXT,
+    payment_link_id VARCHAR(100),
     payment_status VARCHAR(20) DEFAULT 'unpaid',
     payment_method VARCHAR(20) DEFAULT NULL, -- cash, upi, online, bank
     payment_received_at TIMESTAMP NULL,

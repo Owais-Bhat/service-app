@@ -55,6 +55,7 @@ const requiredColumns = {
         { name: 'ticket_no', definition: 'VARCHAR(50) UNIQUE' },
         { name: 'bill_amount', definition: 'DECIMAL(10, 2)' },
         { name: 'payment_link', definition: 'TEXT' },
+        { name: 'payment_link_id', definition: 'VARCHAR(100)' },
         { name: 'payment_status', definition: "VARCHAR(20) DEFAULT 'unpaid'" },
         { name: 'payment_method', definition: 'VARCHAR(20) DEFAULT NULL' },
         { name: 'feedback_rating', definition: 'INT' },
@@ -226,6 +227,55 @@ function broadcastNotify(payload) {
     });
 }
 
+async function markTicketPaid(connection, ticket_no, amountPaise = null) {
+    await connection.execute(
+        `UPDATE inquiries
+            SET payment_status = 'paid',
+                payment_received_at = COALESCE(payment_received_at, NOW()),
+                status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+          WHERE ticket_no = ?`,
+        [ticket_no]
+    );
+
+    const [inqRows] = await connection.execute(
+        'SELECT * FROM inquiries WHERE ticket_no = ? LIMIT 1',
+        [ticket_no]
+    );
+    const inqRow = inqRows[0];
+    const ticketId = inqRow?.ticket_id;
+    if (ticketId) {
+        await connection.execute(
+            `UPDATE tickets
+                SET status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+              WHERE id = ?`,
+            [ticketId]
+        );
+    }
+
+    if (inqRow) broadcastChange('UPDATE', 'inquiries', inqRow);
+    if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
+
+    const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
+    broadcastNotify({
+        subject: 'payment_received',
+        title: 'ðŸ’° Payment Received',
+        body: `${inqRow?.full_name || 'Client'} paid â‚¹${amount} for ticket ${ticket_no}`,
+        audience: { role: 'admin' },
+        data: { ticket_no, inquiry_id: inqRow?.id, amount },
+    });
+    if (inqRow?.assigned_employee_id) {
+        broadcastNotify({
+            subject: 'payment_received',
+            title: 'ðŸ’° Payment Received',
+            body: `Your ticket ${ticket_no} just got paid! Task auto-resolved.`,
+            audience: { userId: inqRow.assigned_employee_id },
+            data: { ticket_no, inquiry_id: inqRow.id, amount },
+        });
+    }
+
+    return inqRow;
+}
+
 // SSE endpoint. Token passed as ?token=... since EventSource can't set headers.
 app.get('/api/events', (req, res) => {
     const token = req.query.token;
@@ -275,6 +325,10 @@ app.get('/api/events/poll', (req, res) => {
 
     const since = Number(req.query.since) || 0;
     const client = { userId: payload.id, role: payload.role };
+    if (since <= 0) {
+        const cursor = eventBuffer.length ? eventBuffer[eventBuffer.length - 1].id : 0;
+        return res.json({ cursor, events: [] });
+    }
     const events = eventBuffer
         .filter(e => e.id > since && audienceAllows(e.audience, client))
         .map(e => e.event);
@@ -674,6 +728,15 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
         await connection.query(query, params);
         await connection.end();
         broadcastChange('INSERT', table, data);
+        if (table === 'inquiries') {
+            broadcastNotify({
+                subject: 'new_service_request',
+                title: 'New Service Request',
+                body: `${data.full_name || 'Client'}${data.service_item ? ' - ' + data.service_item : ''}`,
+                audience: { role: 'admin' },
+                data: { inquiry_id: data.id, ticket_no: data.ticket_no || null },
+            });
+        }
         res.status(201).json(data);
     } catch (error) {
         console.error('Error inserting/upserting data:', error);
@@ -716,10 +779,55 @@ app.post('/api/payments/create-link', authenticateToken, async (req, res) => {
         };
 
         const paymentLink = await razorpay.paymentLink.create(options);
-        res.json({ short_url: paymentLink.short_url });
+        res.json({ id: paymentLink.id, short_url: paymentLink.short_url });
     } catch (error) {
         console.error('Razorpay Error:', error);
         res.status(500).json({ error: error.description || error.message || 'Failed to create payment link' });
+    }
+});
+
+app.post('/api/payments/check-status', authenticateToken, async (req, res) => {
+    const { inquiry_id } = req.body || {};
+    if (!inquiry_id) return res.status(400).json({ error: 'inquiry_id is required' });
+    if (!razorpay) return res.status(503).json({ error: 'Payment gateway not configured.' });
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [rows] = await connection.execute(
+            'SELECT id, ticket_no, ticket_id, payment_status, payment_received_at, payment_link_id FROM inquiries WHERE id = ? LIMIT 1',
+            [inquiry_id]
+        );
+        const inquiry = rows[0];
+        if (!inquiry) return res.status(404).json({ error: 'Inquiry not found' });
+        if (inquiry.payment_status === 'paid') {
+            return res.json({ payment_status: 'paid', payment_received_at: inquiry.payment_received_at });
+        }
+        if (!inquiry.payment_link_id) {
+            return res.json({ payment_status: inquiry.payment_status || 'unpaid', payment_received_at: inquiry.payment_received_at || null });
+        }
+
+        const paymentLink = await razorpay.paymentLink.fetch(inquiry.payment_link_id);
+        const isPaid = paymentLink?.status === 'paid' || Number(paymentLink?.amount_paid || 0) > 0;
+        if (!isPaid) {
+            return res.json({
+                payment_status: inquiry.payment_status || 'unpaid',
+                payment_received_at: inquiry.payment_received_at || null,
+                gateway_status: paymentLink?.status || 'unknown',
+            });
+        }
+
+        await markTicketPaid(connection, inquiry.ticket_no, paymentLink?.amount_paid);
+        const [freshRows] = await connection.execute(
+            'SELECT payment_status, payment_received_at FROM inquiries WHERE id = ? LIMIT 1',
+            [inquiry_id]
+        );
+        res.json(freshRows[0] || { payment_status: 'paid' });
+    } catch (error) {
+        console.error('Razorpay status check failed:', error);
+        res.status(500).json({ error: error.description || error.message || 'Failed to check payment status' });
+    } finally {
+        if (connection) { try { await connection.end(); } catch {} }
     }
 });
 

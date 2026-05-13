@@ -78,6 +78,7 @@ ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS ticket_no TEXT UNIQUE;
 -- Billing fields populated by admin when service is closed.
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS bill_amount NUMERIC;
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS payment_link TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS payment_link_id TEXT;
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'unpaid'; -- unpaid | paid
 
 -- Feedback captured from the public tracker once status='closed'.

@@ -123,6 +123,7 @@ function startGlobalNotifications() {
       tag: msg.subject || 'app-notify',
       type: msg.subject === 'payment_received' ? 'payment'
           : msg.subject === 'new_assignment' ? 'alert'
+          : msg.subject === 'new_service_request' ? 'alert'
           : 'info',
     });
   });

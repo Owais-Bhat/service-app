@@ -10,6 +10,7 @@ ALTER TABLE profiles ADD COLUMN address TEXT;
 ALTER TABLE inquiries ADD COLUMN bill_amount DECIMAL(10, 2);
 ALTER TABLE inquiries ADD COLUMN company_name VARCHAR(150);
 ALTER TABLE inquiries ADD COLUMN payment_link TEXT;
+ALTER TABLE inquiries ADD COLUMN payment_link_id VARCHAR(100);
 ALTER TABLE inquiries ADD COLUMN payment_status VARCHAR(20) DEFAULT 'unpaid';
 ALTER TABLE inquiries ADD COLUMN payment_method VARCHAR(20) DEFAULT NULL;
 ALTER TABLE inquiries ADD COLUMN ticket_no VARCHAR(50) UNIQUE;

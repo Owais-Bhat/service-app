@@ -311,6 +311,8 @@ export const supabase = {
         const data = await response.json();
         if (!response.ok) return { data: null, error: { message: data.error } };
         
+        resetRealtime();
+        localStorage.removeItem(POLL_FALLBACK_KEY);
         localStorage.setItem('auth_token', data.token);
         return { data: { user: data.user }, error: null };
       } catch (err) {
@@ -371,6 +373,8 @@ export async function signIn(email, password) {
   });
   const result = await response.json();
   if (response.ok && result.token) {
+    resetRealtime();
+    localStorage.removeItem(POLL_FALLBACK_KEY);
     localStorage.setItem('auth_token', result.token);
     return { data: { user: result.user }, error: null };
   }

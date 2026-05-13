@@ -849,11 +849,24 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
     checkboxes.forEach(chk => chk.onchange = () => { calcTotal(); renderPayStatus(); });
 
-    // Active auto-poller: hits the DB every 3s while the modal is open. Independent
-    // of the realtime layer so it survives SSE failure / webhook lag / admin offline.
+    // Active auto-poller: asks the backend to verify Razorpay directly, then falls
+    // back to the saved DB state if the gateway cannot be reached.
     const refreshPaymentFromDb = async (showToastOnChange) => {
       if (!inqId) return;
-      const { data } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
+      let data = null;
+      try {
+        const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch('/api/payments/check-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ inquiry_id: inqId })
+        });
+        if (res.ok) data = await res.json();
+      } catch {}
+      if (!data) {
+        const snap = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
+        data = snap.data;
+      }
       if (!data) return;
       const wasPaid = paymentState.status === 'paid';
       paymentState = { status: data.payment_status || 'unpaid', received_at: data.payment_received_at || null };
@@ -950,7 +963,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           if (!res.ok) throw new Error(data.error || 'Failed');
           showQR(data.short_url);
           // Save payment link back to the inquiry
-          await supabase.from('inquiries').update({ payment_link: data.short_url, bill_amount: total }).eq('id', inqId);
+          await supabase.from('inquiries').update({ payment_link: data.short_url, payment_link_id: data.id || null, bill_amount: total }).eq('id', inqId);
           _hasLinkBeenGenerated = true;
           renderPayStatus();
           toast('Payment link generated! Waiting for client to pay…', 'success');

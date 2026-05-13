@@ -284,13 +284,6 @@ export async function renderAdminDashboard(container) {
   // Real-time listener for new inquiries
   const channel = supabase.channel('admin-inquiries')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inquiries' }, payload => {
-      const row = payload.new || {};
-      showNotification({
-        title: '📥 New Service Request',
-        body: `${row.full_name || 'Client'} — ${row.service_item || 'new request'}`,
-        type: 'alert',
-        tag: `req-${row.id || ''}`,
-      });
       if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inquiries' }, payload => {
@@ -422,6 +415,7 @@ async function openInquiryDetail(id, onDone) {
             <div style="display:flex; gap:8px;">
               <input id="sr-pay-link" type="url" placeholder="https://rzp.io/l/..."
                      value="${i.payment_link ?? ''}" style="flex:1" />
+              <input id="sr-pay-link-id" type="hidden" value="${i.payment_link_id ?? ''}" />
               <button class="btn btn-secondary" id="gen-pay-link" style="width:auto; white-space:nowrap; padding:0 12px;" title="Generate link via Razorpay">✨ Generate</button>
             </div>
           </div>
@@ -552,6 +546,7 @@ async function openInquiryDetail(id, onDone) {
       if (!res.ok) throw new Error(data.error || 'Failed to generate link');
 
       overlay.querySelector('#sr-pay-link').value = data.short_url;
+      overlay.querySelector('#sr-pay-link-id').value = data.id || '';
       toast('Payment link generated!', 'success');
     } catch (err) {
       console.error(err);
@@ -568,6 +563,7 @@ async function openInquiryDetail(id, onDone) {
     const billRaw = overlay.querySelector('#sr-bill').value.trim();
     const payLinkEl = overlay.querySelector('#sr-pay-link');
     const payLink = payLinkEl ? payLinkEl.value.trim() : '';
+    const payLinkId = overlay.querySelector('#sr-pay-link-id')?.value.trim() || '';
     const payStatus = overlay.querySelector('#sr-pay-status').value;
     const payMethod = overlay.querySelector('#sr-pay-method').value;
     const companyName = overlay.querySelector('#sr-company').value.trim();
@@ -580,6 +576,7 @@ async function openInquiryDetail(id, onDone) {
       status: newStatus,
       bill_amount: billRaw === '' ? null : Number(billRaw),
       payment_link: payLink || null,
+      payment_link_id: payLinkId || null,
       payment_status: payStatus,
       payment_method: payMethod === 'none' ? null : payMethod,
       company_name: companyName || null,
