@@ -75,6 +75,7 @@ export async function renderEmployeeDashboard(container) {
   const activeTasks = t.filter(x => x.status !== 'closed' && x.status !== 'resolved');
   const isClockedIn = !!attendance?.clock_in;
   const isClockedOut = !!attendance?.clock_out;
+  const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
 
   container.innerHTML = `
     <div class="page-header">
@@ -139,10 +140,11 @@ export async function renderEmployeeDashboard(container) {
             <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn ? 'disabled' : ''}>
               ${ICONS.play}<span>Clock In</span>
             </button>
-            <button class="btn btn-secondary" id="btn-clock-out" ${(!isClockedIn || isClockedOut) ? 'disabled' : ''}>
+            <button class="btn btn-secondary" id="btn-clock-out" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
               ${ICONS.pause}<span>Clock Out</span>
             </button>
           </div>
+          ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Submit today's EOD report to enable Clock Out.</span></p>` : ''}
           ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
           ${isClockedOut ? `<div style="margin-top:20px;padding:14px;border-radius:14px;box-shadow:var(--neu-in);background:var(--bg);font-size:.88rem;color:var(--success);font-weight:600;display:inline-flex;align-items:center;gap:8px;">
             ${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span>

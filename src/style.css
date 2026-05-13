@@ -311,6 +311,27 @@ body {
   color: var(--text-dim);
 }
 
+.attendance-lock-note {
+  margin: 14px auto 0;
+  max-width: 340px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.attendance-lock-note svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
 .salary-breakdown {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
