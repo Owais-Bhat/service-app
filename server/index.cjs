@@ -78,6 +78,8 @@ const requiredColumns = {
     ],
     service_pricing: [
         { name: 'category', definition: 'VARCHAR(120)' },
+        { name: 'sub_category', definition: 'VARCHAR(180)' },
+        { name: 'sub_sub_category', definition: 'VARCHAR(255)' },
     ],
 };
 
@@ -86,6 +88,8 @@ const requiredTables = [
         id VARCHAR(36) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         category VARCHAR(120),
+        sub_category VARCHAR(180),
+        sub_sub_category VARCHAR(255),
         cost DECIMAL(10, 2) NOT NULL,
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

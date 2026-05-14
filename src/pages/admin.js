@@ -1431,30 +1431,146 @@ export async function renderPaymentsTab(container) {
   bindRowActions();
 }
 
+// Lazy-load SheetJS from CDN only when an .xlsx upload happens.
+let _xlsxLoader = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (_xlsxLoader) return _xlsxLoader;
+  _xlsxLoader = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('xlsx failed to load'));
+    s.onerror = () => reject(new Error('Could not fetch xlsx parser. Check your internet connection.'));
+    document.head.appendChild(s);
+  });
+  return _xlsxLoader;
+}
+
+// Minimal CSV parser — handles quoted fields, escaped quotes ("") and CRLF.
+function parseCSV(text) {
+  const rows = [];
+  let cur = '', row = [], inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"' && text[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { cur += c; }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n') { row.push(cur); rows.push(row); cur = ''; row = []; }
+      else if (c === '\r') { /* skip */ }
+      else cur += c;
+    }
+  }
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(cell => String(cell ?? '').trim() !== ''));
+}
+
+async function readSheetAsRows(file) {
+  const isCSV = /\.csv$/i.test(file.name) || file.type === 'text/csv';
+  if (isCSV) {
+    const text = await file.text();
+    return parseCSV(text);
+  }
+  const XLSX = await loadXLSX();
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
+}
+
+// Detect & skip a header row like "Main Category | Sub Category | Sub-Sub Category | Price".
+function looksLikeHeader(row) {
+  const joined = row.map(c => String(c ?? '').toLowerCase()).join(' ');
+  return /main|category|sub|price|cost/.test(joined) && !/^\s*\d/.test(String(row[3] ?? ''));
+}
+
+function parsePrice(v) {
+  if (v == null) return NaN;
+  const cleaned = String(v).replace(/[₹,\s]/g, '');
+  return Number(cleaned);
+}
+
+async function importServiceRows(rows) {
+  let inserted = 0, skipped = 0;
+  const errors = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (i === 0 && looksLikeHeader(r)) continue;
+
+    const category = String(r[0] ?? '').trim();
+    const sub_category = String(r[1] ?? '').trim();
+    const sub_sub_category = String(r[2] ?? '').trim();
+    const cost = parsePrice(r[3]);
+
+    if (!category && !sub_category && !sub_sub_category) { skipped++; continue; }
+    if (!sub_sub_category) { errors.push(`Row ${i + 1}: missing Sub-Sub Category`); skipped++; continue; }
+    if (!Number.isFinite(cost) || cost < 0) { errors.push(`Row ${i + 1}: invalid price`); skipped++; continue; }
+
+    const { error } = await supabase.from('service_pricing').insert({
+      id: crypto.randomUUID(),
+      category: category || 'Uncategorized',
+      sub_category: sub_category || null,
+      sub_sub_category,
+      name: sub_sub_category, // keep legacy `name` column populated
+      cost,
+    });
+    if (error) { errors.push(`Row ${i + 1}: ${error.message}`); skipped++; }
+    else inserted++;
+  }
+  return { inserted, skipped, errors };
+}
+
+function downloadTemplateCSV() {
+  const csv = [
+    'Main Category,Sub Category,Sub-Sub Category,Price',
+    'Plumbing,Tap,Mixer Tap,500',
+    'Plumbing,Tap,Pillar Tap,300',
+    'Electrical,Wiring,New Line,1500',
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'service-pricing-template.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function renderPricingTab(container) {
   const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
   const list = pricing || [];
 
   container.innerHTML = `
-    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
         <h1>Service Pricing</h1>
         <p>Define standard costs for common services to prevent billing errors</p>
       </div>
-      <button class="btn btn-primary" id="add-price">${ICONS.plus}<span>Add New Service</span></button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary" id="dl-template">${ICONS.download || ''}<span>Download Template</span></button>
+        <button class="btn btn-secondary" id="upload-price">${ICONS.upload || ''}<span>Upload Excel/CSV</span></button>
+        <button class="btn btn-primary" id="add-price">${ICONS.plus}<span>Add New Service</span></button>
+        <input type="file" id="upload-price-file" accept=".xlsx,.xls,.csv" style="display:none">
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px; padding:12px 16px; font-size:13px; color:var(--text-dim)">
+      Excel/CSV columns (in order): <b>Main Category</b>, <b>Sub Category</b>, <b>Sub-Sub Category</b>, <b>Price</b>. First row may be headers.
     </div>
     <div class="card">
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Category</th><th>Sub Category</th><th>Fixed Cost</th><th>Actions</th></tr>
+            <tr><th>Main Category</th><th>Sub Category</th><th>Sub-Sub Category</th><th>Price</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            ${list.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' : 
+            ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' :
               list.map(x => `
               <tr>
                 <td><span class="badge badge-open">${x.category || 'Service'}</span></td>
-                <td><b>${x.name}</b></td>
+                <td>${x.sub_category || '<span style="color:var(--text-dim)">—</span>'}</td>
+                <td><b>${x.sub_sub_category || x.name || ''}</b></td>
                 <td>₹${Number(x.cost).toLocaleString('en-IN')}</td>
                 <td>
                   <button class="btn btn-danger btn-sm del-price" data-id="${x.id}">${ICONS.close}</button>
@@ -1468,14 +1584,49 @@ export async function renderPricingTab(container) {
   `;
 
   container.querySelector('#add-price').onclick = () => {
-    const category = prompt('Enter category:');
-    const name = prompt('Enter service name:');
-    const cost = prompt('Enter fixed cost (₹):');
-    if (name && cost) {
-      (async () => {
-        await supabase.from('service_pricing').insert({ id: crypto.randomUUID(), category: category || 'Service', name, cost: Number(cost) });
-        renderPricingTab(container);
-      })();
+    const category = prompt('Enter Main Category:');
+    if (category === null) return;
+    const sub_category = prompt('Enter Sub Category:');
+    if (sub_category === null) return;
+    const sub_sub_category = prompt('Enter Sub-Sub Category (service name):');
+    if (!sub_sub_category) return;
+    const costStr = prompt('Enter Price (₹):');
+    const cost = parsePrice(costStr);
+    if (!Number.isFinite(cost) || cost < 0) { toast('Invalid price', 'error'); return; }
+    (async () => {
+      await supabase.from('service_pricing').insert({
+        id: crypto.randomUUID(),
+        category: category || 'Uncategorized',
+        sub_category: sub_category || null,
+        sub_sub_category,
+        name: sub_sub_category,
+        cost,
+      });
+      toast('Service added', 'success');
+      renderPricingTab(container);
+    })();
+  };
+
+  container.querySelector('#dl-template').onclick = downloadTemplateCSV;
+
+  const fileInput = container.querySelector('#upload-price-file');
+  container.querySelector('#upload-price').onclick = () => fileInput.click();
+  fileInput.onchange = async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    fileInput.value = '';
+    toast(`Reading ${file.name}…`, 'info');
+    try {
+      const rows = await readSheetAsRows(file);
+      if (!rows.length) { toast('File is empty', 'warning'); return; }
+      const { inserted, skipped, errors } = await importServiceRows(rows);
+      if (inserted) toast(`Imported ${inserted} service${inserted === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+      else toast(`No rows imported${skipped ? ` — ${skipped} skipped` : ''}`, 'warning');
+      if (errors.length) console.warn('[pricing import] errors:', errors);
+      renderPricingTab(container);
+    } catch (err) {
+      console.error('[pricing import] failed', err);
+      toast(err.message || 'Failed to read file', 'error');
     }
   };
 

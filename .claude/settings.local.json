@@ -26,7 +26,10 @@
       "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.4\\\\bin\\\\mysql.exe\" -u root -h 127.0.0.1 -P 3306 -e \"SHOW DATABASES;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.4\\\\bin\\\\mysql.exe\" -u root -h 127.0.0.1 -P 3306 u664178120_nedata -e \"SHOW TABLES;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.4\\\\bin\\\\mysql.exe\" -u root -h 127.0.0.1 -P 3306 u664178120_nedata -e \"DESCRIBE inquiries; SELECT id, ticket_no, full_name, phone, status, assignment_status FROM inquiries ORDER BY created_at DESC LIMIT 5;\" 2>&1)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(node -e \"require\\('./server/index.cjs'\\)\")",
+      "Bash(kill %1)",
+      "Bash(wait)"
     ]
   }
 }
