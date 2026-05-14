@@ -1481,38 +1481,80 @@ async function readSheetAsRows(file) {
   return XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
 }
 
-// Detect & skip a header row like "Main Category | Sub Category | Sub-Sub Category | Price".
-function looksLikeHeader(row) {
-  const joined = row.map(c => String(c ?? '').toLowerCase()).join(' ');
-  return /main|category|sub|price|cost/.test(joined) && !/^\s*\d/.test(String(row[3] ?? ''));
-}
-
 function parsePrice(v) {
   if (v == null) return NaN;
-  const cleaned = String(v).replace(/[₹,\s]/g, '');
+  const cleaned = String(v).replace(/[₹$,\s]/g, '');
   return Number(cleaned);
+}
+
+// Map header cells to canonical column names so files with 2, 3, or 4 columns
+// (in any order) all import correctly. Returns { mainIdx, subIdx, subSubIdx, priceIdx }
+// or null when the row doesn't look like a header.
+function detectHeader(row) {
+  const labels = row.map(c => String(c ?? '').trim().toLowerCase());
+  const map = { mainIdx: -1, subIdx: -1, subSubIdx: -1, priceIdx: -1 };
+  let matched = 0;
+  labels.forEach((label, i) => {
+    if (!label) return;
+    if (/(price|rate|cost|amount|charge)/.test(label)) { map.priceIdx = i; matched++; }
+    else if (/sub[\s\-_]*sub/.test(label) || /level\s*3/.test(label)) { map.subSubIdx = i; matched++; }
+    else if (/sub/.test(label) || /level\s*2/.test(label)) { map.subIdx = i; matched++; }
+    else if (/(main|category|type|service|group)/.test(label)) { map.mainIdx = i; matched++; }
+  });
+  return matched >= 2 ? map : null;
+}
+
+// When there's no recognisable header, infer the column layout from the first
+// data row's shape: how many non-empty leading cells are followed by a number.
+function inferLayout(row) {
+  const cells = row.map(c => String(c ?? '').trim());
+  let priceIdx = -1;
+  for (let i = cells.length - 1; i >= 0; i--) {
+    if (Number.isFinite(parsePrice(cells[i]))) { priceIdx = i; break; }
+  }
+  if (priceIdx < 1) return { mainIdx: 0, subIdx: -1, subSubIdx: 1, priceIdx: priceIdx >= 0 ? priceIdx : 1 };
+  // priceIdx is the last column with a number. Columns before it are category levels.
+  if (priceIdx === 1) return { mainIdx: -1, subIdx: -1, subSubIdx: 0, priceIdx };
+  if (priceIdx === 2) return { mainIdx: 0,  subIdx: -1, subSubIdx: 1, priceIdx };
+  return { mainIdx: 0, subIdx: 1, subSubIdx: 2, priceIdx };
 }
 
 async function importServiceRows(rows) {
   let inserted = 0, skipped = 0;
   const errors = [];
-  for (let i = 0; i < rows.length; i++) {
+  if (!rows.length) return { inserted, skipped, errors };
+
+  let layout = detectHeader(rows[0]);
+  const startIdx = layout ? 1 : 0;
+  if (!layout) layout = inferLayout(rows[0]);
+
+  const { mainIdx, subIdx, subSubIdx, priceIdx } = layout;
+
+  for (let i = startIdx; i < rows.length; i++) {
     const r = rows[i];
-    if (i === 0 && looksLikeHeader(r)) continue;
+    const get = (idx) => idx >= 0 ? String(r[idx] ?? '').trim() : '';
 
-    const category = String(r[0] ?? '').trim();
-    const sub_category = String(r[1] ?? '').trim();
-    const sub_sub_category = String(r[2] ?? '').trim();
-    const cost = parsePrice(r[3]);
+    const category        = get(mainIdx);
+    const sub_category    = get(subIdx);
+    let   sub_sub_category = get(subSubIdx);
+    const cost            = parsePrice(priceIdx >= 0 ? r[priceIdx] : null);
 
-    if (!category && !sub_category && !sub_sub_category) { skipped++; continue; }
-    if (!sub_sub_category) { errors.push(`Row ${i + 1}: missing Sub-Sub Category`); skipped++; continue; }
+    // Whole row blank? silently skip.
+    if (!category && !sub_category && !sub_sub_category && !Number.isFinite(cost)) { skipped++; continue; }
+
+    // Fall back to the deepest-available level as the service name if Sub-Sub is empty.
+    if (!sub_sub_category) sub_sub_category = sub_category || category;
+    if (!sub_sub_category) { errors.push(`Row ${i + 1}: missing service name`); skipped++; continue; }
     if (!Number.isFinite(cost) || cost < 0) { errors.push(`Row ${i + 1}: invalid price`); skipped++; continue; }
+
+    // If sub_sub came from a fallback, don't duplicate it in sub_category.
+    const finalSub = (sub_category && sub_category !== sub_sub_category) ? sub_category : null;
+    const finalMain = (category && category !== sub_sub_category) ? category : 'Uncategorized';
 
     const { error } = await supabase.from('service_pricing').insert({
       id: crypto.randomUUID(),
-      category: category || 'Uncategorized',
-      sub_category: sub_category || null,
+      category: finalMain,
+      sub_category: finalSub,
       sub_sub_category,
       name: sub_sub_category, // keep legacy `name` column populated
       cost,
@@ -1556,7 +1598,11 @@ export async function renderPricingTab(container) {
       </div>
     </div>
     <div class="card" style="margin-bottom:12px; padding:12px 16px; font-size:13px; color:var(--text-dim)">
-      Excel/CSV columns (in order): <b>Main Category</b>, <b>Sub Category</b>, <b>Sub-Sub Category</b>, <b>Price</b>. First row may be headers.
+      Excel/CSV is auto-detected. Supported layouts:
+      <b>Main, Sub, Sub-Sub, Price</b> &nbsp;·&nbsp;
+      <b>Category, Sub Category, Price</b> &nbsp;·&nbsp;
+      <b>Service Name, Price</b>.
+      Headers like "Rate", "Cost", "Amount" also work in place of "Price".
     </div>
     <div class="card">
       <div class="table-wrap">

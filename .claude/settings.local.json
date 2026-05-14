@@ -29,7 +29,8 @@
       "Bash(curl *)",
       "Bash(node -e \"require\\('./server/index.cjs'\\)\")",
       "Bash(kill %1)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(npm run *)"
     ]
   }
 }
