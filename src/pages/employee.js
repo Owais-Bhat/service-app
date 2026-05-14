@@ -708,19 +708,19 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             ${mainOptions.length === 0 ? `
               <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services defined by Admin.</p>
             ` : `
-              <div style="display:grid; grid-template-columns:1fr; gap:8px; padding:10px; background:var(--bg-soft); border-radius:10px; margin-bottom:8px;">
-                <select id="svc-main" style="width:100%;">
+              <div class="svc-picker-wrap">
+                <select id="svc-main" class="svc-picker">
                   <option value="">Select Main Category…</option>
                   ${mainOptions.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('')}
                 </select>
-                <select id="svc-sub" style="width:100%;" disabled>
+                <select id="svc-sub" class="svc-picker" disabled>
                   <option value="">Select Sub Category…</option>
                 </select>
-                <select id="svc-sub-sub" style="width:100%;" disabled>
+                <select id="svc-sub-sub" class="svc-picker" disabled>
                   <option value="">Select Specific Issue…</option>
                 </select>
-                <div style="display:flex; gap:8px; align-items:center;">
-                  <div style="flex:1; font-size:0.9rem; color:var(--text-dim);" id="svc-preview">Pick an issue to see the price.</div>
+                <div class="svc-picker-actions">
+                  <div class="svc-preview-text" id="svc-preview">Pick an issue to see the price.</div>
                   <button type="button" class="btn btn-primary btn-sm" id="svc-add" disabled style="white-space:nowrap;">+ Add</button>
                 </div>
               </div>
