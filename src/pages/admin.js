@@ -366,228 +366,38 @@ async function openInquiryDetail(id, onDone) {
         </div>
 
         <div class="form-group">
-          <label>Status</label>
-          <select id="sr-status">
-            <option value="open" ${i.status==='open'||i.status==='pending'?'selected':''}>Open</option>
-            <option value="assigned" ${i.status==='assigned'?'selected':''}>Assigned</option>
-            <option value="in_progress" ${i.status==='in_progress'?'selected':''}>In Progress</option>
-            <option value="resolved" ${i.status==='resolved'?'selected':''}>Resolved</option>
-            <option value="closed" ${i.status==='closed'?'selected':''}>Closed</option>
-            <option value="issue_not_resolved" ${i.status==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>Company <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
-          <input id="sr-company" type="text" placeholder="Company name"
-                 value="${i.company_name ?? ''}" />
-        </div>
-
-        <div class="form-group">
           <label>Assign to Technician</label>
-          <select id="assign-to" ${i.assignment_status === 'accepted' ? 'disabled' : ''}>
+          <select id="assign-to">
             <option value="">— None —</option>
             ${(employees||[]).map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''}>${e.full_name}</option>`).join('')}
           </select>
-          ${i.assignment_status === 'accepted' ? '<small style="color:var(--success); font-weight:700;">✅ Job already accepted by technician.</small>' : ''}
-        </div>
-
-        <div class="form-group">
-          <label>Bill amount (₹) <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
-          <input id="sr-bill" type="number" min="0" step="1" placeholder="0"
-                 value="${i.bill_amount ?? ''}" />
-        </div>
-
-        <div class="form-group">
-          <label>Payment method</label>
-          <select id="sr-pay-method">
-            <option value="none" ${!i.payment_method?'selected':''}>— No payment yet —</option>
-            <option value="cash" ${i.payment_method==='cash'?'selected':''}>Cash</option>
-            <option value="upi"  ${i.payment_method==='upi'?'selected':''}>UPI / QR</option>
-            <option value="online" ${i.payment_method==='online'?'selected':''}>Online (Razorpay)</option>
-            <option value="bank" ${i.payment_method==='bank'?'selected':''}>Bank Transfer</option>
-          </select>
-        </div>
-
-        <div id="sr-pay-link-wrap" style="display:${i.payment_method==='online'||i.payment_link?'block':'none'}">
-          <div class="form-group">
-            <label>Razorpay Payment Link <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
-            <div style="display:flex; gap:8px;">
-              <input id="sr-pay-link" type="url" placeholder="https://rzp.io/l/..."
-                     value="${i.payment_link ?? ''}" style="flex:1" />
-              <input id="sr-pay-link-id" type="hidden" value="${i.payment_link_id ?? ''}" />
-              <button class="btn btn-secondary" id="gen-pay-link" style="width:auto; white-space:nowrap; padding:0 12px;" title="Generate link via Razorpay">✨ Generate</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="sr-cash-wrap" style="display:${i.payment_method==='cash'||i.payment_method==='upi'||i.payment_method==='bank'?'flex':'none'}; align-items:center; gap:12px; margin-bottom:18px; padding:14px; border-radius:14px; background:rgba(16,185,129,0.06); border:1px solid var(--primary);">
-          <div style="flex:1; font-size:0.9rem; color:var(--text)">
-            <b>Mark payment as received?</b><br/>
-            <small style="color:var(--text-dim)">Payment collected offline — mark it as paid now.</small>
-          </div>
-          <button class="btn btn-primary btn-sm" id="mark-cash-paid" ${i.payment_status==='paid'?'disabled':''}>
-            ${i.payment_status==='paid'?'✓ Already Paid':'✓ Mark Paid'}
-          </button>
-        </div>
-
-        <div class="form-group">
-          <label>Payment status</label>
-          <select id="sr-pay-status">
-            <option value="unpaid" ${i.payment_status!=='paid'?'selected':''}>Unpaid</option>
-            <option value="paid"   ${i.payment_status==='paid'?'selected':''}>Paid ✓</option>
-          </select>
-        </div>
-
-        ${i.feedback_rating ? `
-        <div style="padding:14px; border-radius:14px; background:rgba(245,158,11,0.06); border:1px solid var(--warning); margin-bottom:16px;">
-          <div style="font-size:0.75rem; font-weight:800; color:var(--warning); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Customer Feedback</div>
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <span style="font-size:1.3rem; font-weight:800; color:var(--warning)">${'★'.repeat(i.feedback_rating)}${'☆'.repeat(5-i.feedback_rating)}</span>
-            <span style="font-weight:700; color:var(--text)">${i.feedback_rating}/5</span>
-          </div>
-          ${i.feedback_comment ? `<div style="font-size:0.88rem; color:var(--text-soft); font-style:italic">"${i.feedback_comment}"</div>` : ''}
-          <button class="btn btn-secondary btn-sm" id="wa-feedback-reply" style="margin-top:10px; width:100%; justify-content:center; gap:8px; background:#25D366; color:white; border:none;">
-            ${ICONS.whatsapp}<span>Reply via WhatsApp</span>
-          </button>
-        </div>` : ''}
-
-        <div style="padding:14px; border-radius:14px; background:var(--bg-soft); border:1px solid var(--border); margin-bottom:4px;">
-          <div style="font-size:0.75rem; font-weight:800; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px;">📱 WhatsApp Templates</div>
-          <div style="display:flex; flex-wrap:wrap; gap:8px;">
-            <button class="btn btn-secondary btn-sm wa-tpl" data-tpl="status" style="background:#25D366;color:white;border:none;">${ICONS.whatsapp}<span>Status Update</span></button>
-            <button class="btn btn-secondary btn-sm wa-tpl" data-tpl="payment" style="background:#25D366;color:white;border:none;">${ICONS.whatsapp}<span>Payment Request</span></button>
-            <button class="btn btn-secondary btn-sm wa-tpl" data-tpl="feedback" style="background:#25D366;color:white;border:none;">${ICONS.whatsapp}<span>Request Feedback</span></button>
-            <button class="btn btn-secondary btn-sm wa-tpl" data-tpl="resolve" style="background:#25D366;color:white;border:none;">${ICONS.whatsapp}<span>Resolved ✓</span></button>
-          </div>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="ci2">Close</button>
-        <button class="btn btn-primary" id="save-sr">${ICONS.check}<span>Save changes</span></button>
+        <button class="btn btn-primary" id="save-sr">${ICONS.check}<span>Save assignment</span></button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#ci').onclick = overlay.querySelector('#ci2').onclick = () => overlay.remove();
 
-  // Payment method toggle: show/hide Razorpay link and cash sections
-  overlay.querySelector('#sr-pay-method').onchange = (e) => {
-    const method = e.target.value;
-    overlay.querySelector('#sr-pay-link-wrap').style.display = method === 'online' ? 'block' : 'none';
-    overlay.querySelector('#sr-cash-wrap').style.display = ['cash','upi','bank'].includes(method) ? 'flex' : 'none';
-  };
-
-  // Mark cash paid button
-  const cashPaidBtn = overlay.querySelector('#mark-cash-paid');
-  if (cashPaidBtn) {
-    cashPaidBtn.onclick = async () => {
-      cashPaidBtn.disabled = true; cashPaidBtn.textContent = '…';
-      const error = await markInquiryPaid(i, { payment_method: overlay.querySelector('#sr-pay-method').value });
-      if (error) { toast(error.message, 'error'); cashPaidBtn.disabled = false; cashPaidBtn.textContent = '✓ Mark Paid'; }
-      else {
-        overlay.querySelector('#sr-pay-status').value = 'paid';
-        overlay.querySelector('#sr-status').value = ['resolved', 'closed'].includes(i.status) ? i.status : 'resolved';
-        cashPaidBtn.textContent = '✓ Paid';
-        toast('Payment marked as received and status updated!', 'success');
-      }
-    };
-  }
-
-  // WhatsApp template buttons
-  const wa = (phone, text) => window.open(`https://wa.me/91${phone.replace(/\D/g,'')}?text=${encodeURIComponent(text)}`, '_blank');
-  const feedbackUrl = `${window.location.origin}/?tab=track&ticket=${i.ticket_no}&phone=${i.phone}`;
-  const templates = {
-    status: `Hi ${i.full_name}! 👋 This is an update regarding your service request *${i.ticket_no || ''}*.\n\nCurrent Status: *${STATUS_LABEL[i.status] || i.status}*\nService: ${i.service_item || ''}\n\nFor any queries, feel free to reply here. Thank you! 🙏\n— Networking Experts`,
-    payment: `Hi ${i.full_name}! 👋 Your service request *${i.ticket_no || ''}* has been completed.\n\n💰 Bill Amount: *₹${i.bill_amount || '0'}*${i.payment_link ? `\n🔗 Pay here: ${i.payment_link}` : ''}\n\nPlease make the payment at your earliest convenience. Thank you! 🙏\n— Networking Experts`,
-    feedback: `Hi ${i.full_name}! 😊 Hope your service is complete and working well!\n\nWe'd love to hear your experience. Please take a moment to rate us:\n👉 ${feedbackUrl}\n\nYour feedback helps us serve you better. Thank you! 🙏\n— Networking Experts`,
-    resolve: `Hi ${i.full_name}! ✅ Great news! Your service request *${i.ticket_no || ''}* has been successfully resolved.\n\nService: ${i.service_item || ''}\nStatus: *Resolved*\n\nThank you for choosing Networking Experts! 🙏`,
-  };
-  if (i.feedback_rating) {
-    const fbReplyBtn = overlay.querySelector('#wa-feedback-reply');
-    if (fbReplyBtn) fbReplyBtn.onclick = () => wa(i.phone, `Hi ${i.full_name}! 🙏 Thank you so much for your *${i.feedback_rating}/5 star* rating! We really appreciate your feedback${i.feedback_comment ? `: "${i.feedback_comment}"` : ''}. We look forward to serving you again! — Networking Experts`);
-  }
-  overlay.querySelectorAll('.wa-tpl').forEach(btn => {
-    btn.onclick = () => wa(i.phone, templates[btn.dataset.tpl] || '');
-  });
-
-  // Razorpay Link Generation
-  overlay.querySelector('#gen-pay-link').onclick = async () => {
-    const amount = Number(overlay.querySelector('#sr-bill').value);
-    if (!amount || amount <= 0) {
-      toast('Please enter a valid bill amount first', 'warning');
-      return;
-    }
-
-    const btn = overlay.querySelector('#gen-pay-link');
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="srf-spin"></span>`;
-
-    try {
-      const token = localStorage.getItem('auth_token');
-      const res = await fetch('/api/payments/create-link', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          amount,
-          description: `Service Request: ${i.service_item}`,
-          ticket_no: i.ticket_no,
-          customer: {
-            name: i.full_name,
-            phone: i.phone
-          }
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate link');
-
-      overlay.querySelector('#sr-pay-link').value = data.short_url;
-      overlay.querySelector('#sr-pay-link-id').value = data.id || '';
-      toast('Payment link generated!', 'success');
-    } catch (err) {
-      console.error(err);
-      toast(err.message, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = originalText;
-    }
-  };
-
   overlay.querySelector('#save-sr').onclick = async () => {
-    const newStatus = overlay.querySelector('#sr-status').value;
     const empId = overlay.querySelector('#assign-to').value;
-    const billRaw = overlay.querySelector('#sr-bill').value.trim();
-    const payLinkEl = overlay.querySelector('#sr-pay-link');
-    const payLink = payLinkEl ? payLinkEl.value.trim() : '';
-    const payLinkId = overlay.querySelector('#sr-pay-link-id')?.value.trim() || '';
-    const payStatus = overlay.querySelector('#sr-pay-status').value;
-    const payMethod = overlay.querySelector('#sr-pay-method').value;
-    const companyName = overlay.querySelector('#sr-company').value.trim();
 
     const btn = overlay.querySelector('#save-sr');
     btn.disabled = true;
     btn.innerHTML = `<span>Saving…</span>`;
 
     const updates = {
-      status: newStatus,
-      bill_amount: billRaw === '' ? null : Number(billRaw),
-      payment_link: payLink || null,
-      payment_link_id: payLinkId || null,
-      payment_status: payStatus,
-      payment_method: payMethod === 'none' ? null : payMethod,
-      company_name: companyName || null,
       assigned_employee_id: empId || null,
     };
 
-    // If assigned to an employee (even if same), ensure it stays or returns to 'pending' 
-    // UNLESS it was already accepted and we are just changing other details.
-    if (empId && i.assignment_status !== 'accepted') {
+    // Reassigning (or assigning fresh) resets the acceptance handshake.
+    if (empId && i.assigned_employee_id !== empId) {
       updates.assignment_status = 'pending';
       updates.decline_reason = null;
+    } else if (!empId) {
+      updates.assignment_status = null;
     }
 
     // If newly assigned and no ticket exists yet, create a ticket and link it.
@@ -607,34 +417,25 @@ async function openInquiryDetail(id, onDone) {
       if (tErr) {
         toast(tErr.message, 'error');
         btn.disabled = false;
-        btn.innerHTML = `${ICONS.check}<span>Save changes</span>`;
+        btn.innerHTML = `${ICONS.check}<span>Save assignment</span>`;
         return;
       }
       updates.ticket_id = ticket.id;
-      if (newStatus === 'open') updates.status = 'assigned';
+      if (i.status === 'open' || i.status === 'pending') updates.status = 'assigned';
     } else if (empId && i.ticket_id) {
       await supabase.from('tickets').update({ assigned_to: empId }).eq('id', i.ticket_id);
-    }
-
-    const shouldResolveOnPaid = payStatus === 'paid' && !['resolved', 'closed'].includes(updates.status);
-    if (shouldResolveOnPaid) {
-      updates.status = 'resolved';
-      updates.payment_received_at = i.payment_received_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+      if (i.status === 'open' || i.status === 'pending') updates.status = 'assigned';
     }
 
     const { error } = await supabase.from('inquiries').update(updates).eq('id', i.id);
     if (error) {
       toast(error.message, 'error');
       btn.disabled = false;
-      btn.innerHTML = `${ICONS.check}<span>Save changes</span>`;
+      btn.innerHTML = `${ICONS.check}<span>Save assignment</span>`;
       return;
     }
 
-    if (shouldResolveOnPaid && (updates.ticket_id || i.ticket_id)) {
-      await supabase.from('tickets').update({ status: 'resolved' }).eq('id', updates.ticket_id || i.ticket_id);
-    }
-
-    toast('Service request updated', 'success');
+    toast('Technician assigned', 'success');
     overlay.remove();
     onDone();
   };
