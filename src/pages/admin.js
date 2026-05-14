@@ -1450,6 +1450,299 @@ export async function renderBillsTab(container) {
   bindRowActions();
 }
 
+// ── DEVICE TYPES (admin master list) ─────────────────────
+// Simple CRUD. Employees see this list as a datalist on the Manage Service
+// modal so they pick standard device types instead of typing free-form.
+export async function renderDeviceTypesTab(container) {
+  const { data: rows } = await supabase.from('device_types').select('*').order('name');
+  const list = Array.isArray(rows) ? rows : [];
+
+  const rowHtml = (items) => items.length === 0
+    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No device types yet — add one above.</td></tr>'
+    : items.map(x => `
+      <tr data-id="${x.id}">
+        <td><b>${x.name}</b></td>
+        <td><small style="color:var(--text-dim)">${x.description || '—'}</small></td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button class="btn btn-secondary btn-sm dt-edit-btn" data-id="${x.id}">Edit</button>
+          <button class="btn btn-danger btn-sm dt-del-btn" data-id="${x.id}">Delete</button>
+        </td>
+      </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1>Device Types</h1>
+        <p>Master list of devices that technicians can pick on the Manage Service screen.</p>
+      </div>
+      <button class="btn btn-secondary" id="dt-refresh">${ICONS.refresh}<span>Refresh</span></button>
+    </div>
+
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-body" style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Device Name</label>
+          <input id="dt-name" placeholder="e.g. Video Door Phone"/>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Description (optional)</label>
+          <input id="dt-desc" placeholder="Short note about this device"/>
+        </div>
+        <button class="btn btn-primary" id="dt-add">${ICONS.plus}<span>Add Device</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Description</th><th></th></tr></thead>
+          <tbody>${rowHtml(list)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#dt-refresh').onclick = () => renderDeviceTypesTab(container);
+  container.querySelector('#dt-add').onclick = async () => {
+    const name = container.querySelector('#dt-name').value.trim();
+    const description = container.querySelector('#dt-desc').value.trim();
+    if (!name) { toast('Enter a device name', 'warning'); return; }
+    if (list.some(x => x.name.toLowerCase() === name.toLowerCase())) {
+      toast('That device type already exists', 'warning');
+      return;
+    }
+    const id = (window.crypto?.randomUUID && window.crypto.randomUUID()) || `dt-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const { error } = await supabase.from('device_types').insert({ id, name, description: description || null });
+    if (error) { toast(error.message, 'error'); return; }
+    toast('Device type added', 'success');
+    renderDeviceTypesTab(container);
+  };
+
+  container.querySelectorAll('.dt-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const row = list.find(x => String(x.id) === btn.dataset.id);
+      if (!row) return;
+      if (!confirm(`Delete device type "${row.name}"?`)) return;
+      const { error } = await supabase.from('device_types').delete().eq('id', row.id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Deleted', 'success');
+      renderDeviceTypesTab(container);
+    };
+  });
+
+  container.querySelectorAll('.dt-edit-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const row = list.find(x => String(x.id) === btn.dataset.id);
+      if (!row) return;
+      const newName = prompt('Device name:', row.name);
+      if (newName == null) return;
+      const newDesc = prompt('Description (optional):', row.description || '');
+      if (newDesc == null) return;
+      const { error } = await supabase.from('device_types').update({
+        name: newName.trim() || row.name,
+        description: newDesc.trim() || null,
+      }).eq('id', row.id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Updated', 'success');
+      renderDeviceTypesTab(container);
+    };
+  });
+}
+
+// ── CASH COLLECTIONS (admin) ────────────────────────────
+// One container per employee with pending cash. Admin checks the records
+// they're receiving cash for, presses "Record Submission" → those rows
+// get cash_submitted_at=NOW so the employee's pending balance clears.
+export async function renderCashCollectionsTab(container) {
+  const { data: rows } = await supabase.from('inquiries')
+    .select('*')
+    .eq('payment_method', 'cash')
+    .eq('payment_status', 'paid')
+    .order('cash_collected_at', { ascending: false });
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name, phone').eq('role', 'employee');
+
+  const employees = profiles || [];
+  const byEmp = new Map();
+  (rows || []).forEach(r => {
+    if (!r.assigned_employee_id || !r.cash_collected_at) return;
+    if (!byEmp.has(r.assigned_employee_id)) byEmp.set(r.assigned_employee_id, []);
+    byEmp.get(r.assigned_employee_id).push(r);
+  });
+
+  // Stats across all employees.
+  const allPending = (rows || []).filter(r => r.cash_collected_at && !r.cash_submitted_at);
+  const allSubmitted = (rows || []).filter(r => r.cash_submitted_at);
+  const totalPending = allPending.reduce((a, r) => a + (Number(r.bill_total) || 0), 0);
+  const totalSubmitted = allSubmitted.reduce((a, r) => a + (Number(r.bill_total) || 0), 0);
+
+  const dateOf = (d) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(String(d).replace(' ', 'T'));
+      return Number.isNaN(dt.getTime()) ? d : dt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch { return d; }
+  };
+
+  const empCardHtml = (emp) => {
+    const records = byEmp.get(emp.id) || [];
+    const pending = records.filter(r => !r.cash_submitted_at);
+    const submitted = records.filter(r => r.cash_submitted_at);
+    const pendingTotal = pending.reduce((a, r) => a + (Number(r.bill_total) || 0), 0);
+    const submittedTotal = submitted.reduce((a, r) => a + (Number(r.bill_total) || 0), 0);
+
+    return `
+      <div class="emp-cash-card" data-emp-id="${emp.id}">
+        <div class="emp-cash-head">
+          <div>
+            <div class="emp-cash-name">${emp.full_name}</div>
+            <div class="emp-cash-sub">${emp.phone || ''}</div>
+          </div>
+          <div class="emp-cash-totals">
+            <div><span>Pending</span><b style="color:var(--warning)">₹${Math.round(pendingTotal).toLocaleString('en-IN')}</b></div>
+            <div><span>Submitted</span><b style="color:var(--success)">₹${Math.round(submittedTotal).toLocaleString('en-IN')}</b></div>
+          </div>
+        </div>
+
+        ${pending.length === 0
+          ? '<div class="emp-cash-empty">No pending cash from this employee.</div>'
+          : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th style="width:30px;"><input type="checkbox" class="cash-all-cb" checked title="Select all pending"/></th>
+                <th>Date</th><th>Ticket</th><th>Customer</th><th>Service</th><th>Amount</th>
+              </tr></thead>
+              <tbody>
+                ${pending.map(r => `
+                  <tr>
+                    <td><input type="checkbox" class="cash-cb" data-id="${r.id}" checked/></td>
+                    <td><small style="color:var(--text-dim)">${dateOf(r.cash_collected_at)}</small></td>
+                    <td><code style="font-size:0.75rem;">${r.ticket_no || (r.id || '').slice(0,8)}</code></td>
+                    <td><b>${r.full_name || '—'}</b><br/><small style="color:var(--text-dim)">${r.phone || ''}</small></td>
+                    <td><small>${r.service_item || '—'}</small></td>
+                    <td><b>₹${Math.round(Number(r.bill_total) || 0).toLocaleString('en-IN')}</b></td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="emp-cash-actions">
+            <span class="emp-cash-selected">Selected: <b id="sel-total-${emp.id}">₹${Math.round(pendingTotal).toLocaleString('en-IN')}</b></span>
+            <button class="btn btn-primary record-submit-btn" data-emp-id="${emp.id}">${ICONS.check}<span>Record Submission</span></button>
+          </div>`}
+
+        ${submitted.length > 0 ? `
+          <details class="emp-cash-history">
+            <summary>Past submissions (${submitted.length}) · ₹${Math.round(submittedTotal).toLocaleString('en-IN')}</summary>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Submitted</th><th>Ticket</th><th>Customer</th><th>Amount</th></tr></thead>
+                <tbody>
+                  ${submitted.map(r => `
+                    <tr>
+                      <td><small style="color:var(--text-dim)">${dateOf(r.cash_submitted_at)}</small></td>
+                      <td><code style="font-size:0.75rem;">${r.ticket_no || (r.id || '').slice(0,8)}</code></td>
+                      <td><b>${r.full_name || '—'}</b></td>
+                      <td><b>₹${Math.round(Number(r.bill_total) || 0).toLocaleString('en-IN')}</b></td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </details>` : ''}
+      </div>`;
+  };
+
+  const empsWithCash = employees.filter(e => (byEmp.get(e.id) || []).length > 0);
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1>Cash Collections</h1>
+        <p>Cash collected by technicians, grouped per employee. Tick the records you're receiving cash for, then press <b>Record Submission</b>.</p>
+      </div>
+      <button class="btn btn-secondary" id="cash-refresh">${ICONS.refresh}<span>Refresh</span></button>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--warning); font-size:1.9rem;">₹${Math.round(totalPending).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Total Pending</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--success); font-size:1.9rem;">₹${Math.round(totalSubmitted).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Total Submitted (All Time)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${empsWithCash.length}</div>
+        <div class="stat-label">Employees With Records</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${allPending.length}</div>
+        <div class="stat-label">Pending Records</div>
+      </div>
+    </div>
+
+    ${empsWithCash.length === 0
+      ? '<div class="card"><div class="card-body" style="text-align:center; padding:48px; color:var(--text-dim);">No cash collections recorded yet.</div></div>'
+      : empsWithCash.map(empCardHtml).join('')}
+  `;
+
+  container.querySelector('#cash-refresh').onclick = () => renderCashCollectionsTab(container);
+
+  const refreshSelectedTotal = (empId) => {
+    const card = container.querySelector(`.emp-cash-card[data-emp-id="${empId}"]`);
+    if (!card) return;
+    const checked = Array.from(card.querySelectorAll('.cash-cb:checked')).map(c => c.dataset.id);
+    const records = byEmp.get(empId) || [];
+    const total = records.filter(r => checked.includes(String(r.id))).reduce((a, r) => a + (Number(r.bill_total) || 0), 0);
+    const target = card.querySelector(`#sel-total-${empId}`);
+    if (target) target.textContent = `₹${Math.round(total).toLocaleString('en-IN')}`;
+  };
+
+  // Per-card master-checkbox + row checkboxes
+  container.querySelectorAll('.emp-cash-card').forEach(card => {
+    const empId = card.dataset.empId;
+    const allCb = card.querySelector('.cash-all-cb');
+    const rowCbs = card.querySelectorAll('.cash-cb');
+    if (allCb) {
+      allCb.onclick = () => {
+        rowCbs.forEach(cb => { cb.checked = allCb.checked; });
+        refreshSelectedTotal(empId);
+      };
+    }
+    rowCbs.forEach(cb => { cb.onchange = () => refreshSelectedTotal(empId); });
+  });
+
+  container.querySelectorAll('.record-submit-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const empId = btn.dataset.empId;
+      const card = container.querySelector(`.emp-cash-card[data-emp-id="${empId}"]`);
+      const ids = Array.from(card.querySelectorAll('.cash-cb:checked')).map(c => c.dataset.id);
+      if (ids.length === 0) { toast('Select at least one record', 'warning'); return; }
+
+      btn.disabled = true; btn.innerHTML = '<span>Saving…</span>';
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const nowIso = new Date().toISOString().slice(0,19).replace('T',' ');
+        // Update each selected inquiry — wrapper has no batch, so loop.
+        for (const id of ids) {
+          await supabase.from('inquiries').update({
+            cash_submitted_at: nowIso,
+            cash_submitted_by: user?.id || null,
+          }).eq('id', id);
+        }
+        const total = (byEmp.get(empId) || [])
+          .filter(r => ids.includes(String(r.id)))
+          .reduce((a, r) => a + (Number(r.bill_total) || 0), 0);
+        toast(`✓ Recorded ₹${Math.round(total).toLocaleString('en-IN')} from technician`, 'success');
+        renderCashCollectionsTab(container);
+      } catch (err) {
+        toast(err.message || 'Could not record submission', 'error');
+        btn.disabled = false; btn.innerHTML = `${ICONS.check}<span>Record Submission</span>`;
+      }
+    };
+  });
+}
+
 // Lazy-load SheetJS from CDN only when an .xlsx upload happens.
 let _xlsxLoader = null;
 function loadXLSX() {

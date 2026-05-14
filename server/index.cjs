@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -8,9 +9,15 @@ const path = require('path');
 const Razorpay = require('razorpay');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+// Bills folder — stores generated invoice PDFs that we serve back as
+// public URLs so they can be sent via wa.me/<phone>?text=<bill-url>.
+const BILLS_DIR = path.join(__dirname, '..', 'bills');
+if (!fs.existsSync(BILLS_DIR)) fs.mkdirSync(BILLS_DIR, { recursive: true });
+
 const app = express();
 app.use(cors());
 app.use(express.json({
+    limit: '20mb', // bill PDFs are uploaded as base64
     verify: (req, res, buf) => {
         if (req.originalUrl === '/api/webhook/razorpay') req.rawBody = Buffer.from(buf);
     },
@@ -34,6 +41,14 @@ try {
 // Serve static files from the frontend build directory
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
+
+// Serve generated bill PDFs publicly so wa.me links can point clients here.
+app.use('/bills', express.static(BILLS_DIR, {
+    setHeaders: (res) => {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+    },
+}));
 
 const dbConfig = {
     host: process.env.DB_HOST,
@@ -82,6 +97,10 @@ const requiredColumns = {
         { name: 'gst_amount', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'bill_total', definition: 'DECIMAL(10, 2)' },
         { name: 'bill_generated_at', definition: 'TIMESTAMP NULL' },
+        { name: 'bill_pdf_url', definition: 'TEXT' },
+        { name: 'cash_collected_at', definition: 'TIMESTAMP NULL' },
+        { name: 'cash_submitted_at', definition: 'TIMESTAMP NULL' },
+        { name: 'cash_submitted_by', definition: 'VARCHAR(36)' },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -128,6 +147,12 @@ const requiredTables = [
         employee_id VARCHAR(36) NOT NULL,
         content TEXT NOT NULL,
         date DATE DEFAULT (CURRENT_DATE),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS device_types (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(150) NOT NULL UNIQUE,
+        description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 ];
@@ -1015,6 +1040,55 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
     }
 
     res.json({ status: 'ok' });
+});
+
+// --- BILL PDF UPLOAD ---
+// Stores a generated bill PDF on disk and returns a public URL the client
+// can open from WhatsApp. Body: { dataBase64, filename, inquiry_id? }
+app.post('/api/bills/upload', authenticateToken, async (req, res) => {
+    try {
+        const { dataBase64, filename, inquiry_id } = req.body || {};
+        if (!dataBase64) return res.status(400).json({ error: 'dataBase64 is required' });
+
+        // Strip data URL prefix if present (e.g. "data:application/pdf;base64,...").
+        const cleaned = String(dataBase64).replace(/^data:application\/pdf;base64,/, '');
+        const buf = Buffer.from(cleaned, 'base64');
+        if (!buf.length) return res.status(400).json({ error: 'Empty PDF' });
+
+        // Pick a safe filename — token avoids enumeration, original name kept as a label.
+        const token = uuidv4();
+        const safeName = (filename || 'invoice.pdf').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+        const storedName = `${token}-${safeName.endsWith('.pdf') ? safeName : safeName + '.pdf'}`;
+        const filePath = path.join(BILLS_DIR, storedName);
+        fs.writeFileSync(filePath, buf);
+
+        // Absolute URL — WhatsApp recipients open this from another device,
+        // so a relative path would 404 for them. Honour reverse-proxy headers.
+        const proto = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        const url = `${proto}://${host}/bills/${storedName}`;
+
+        // Persist on the inquiry if provided, so admin can re-fetch the PDF later.
+        if (inquiry_id) {
+            let connection;
+            try {
+                connection = await mysql.createConnection(dbConfig);
+                await connection.execute(
+                    'UPDATE inquiries SET bill_pdf_url = ? WHERE id = ?',
+                    [url, inquiry_id]
+                );
+            } catch (err) {
+                console.error('[bills/upload] failed to persist URL:', err.message);
+            } finally {
+                if (connection) { try { await connection.end(); } catch {} }
+            }
+        }
+
+        res.json({ url });
+    } catch (err) {
+        console.error('[bills/upload]', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)

@@ -2,8 +2,8 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab } from './pages/admin.js';
-import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary } from './pages/employee.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab } from './pages/admin.js';
+import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
@@ -62,6 +62,7 @@ function getNavItems(role) {
       { id: 'my-attendance', icon: ICONS.clock, label: 'Attendance Records' },
       { id: 'my-leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
       { id: 'my-eod', icon: ICONS.clipboard, label: 'EOD Reports' },
+      { id: 'my-cash', icon: ICONS.rupee, label: 'My Cash' },
       { id: 'my-salary', icon: ICONS.rupee, label: 'Salary' },
       { type: 'section', label: 'Account' },
       { id: 'profile', icon: ICONS.user, label: 'Profile' },
@@ -80,10 +81,12 @@ function getNavItems(role) {
     { type: 'section', label: 'Reports' },
     { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
     { id: 'bills', icon: ICONS.receipt, label: 'Bills' },
+    { id: 'cash', icon: ICONS.rupee, label: 'Cash Collections' },
     { id: 'salary', icon: ICONS.rupee, label: 'Salary' },
     { id: 'leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
     { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
     { id: 'pricing', icon: ICONS.receipt, label: 'Service Pricing' },
+    { id: 'device-types', icon: ICONS.box, label: 'Device Types' },
     { id: 'feedback', icon: ICONS.star, label: 'Feedback' },
     { type: 'section', label: 'Account' },
     { id: 'profile', icon: ICONS.user, label: 'Profile' },
@@ -99,14 +102,15 @@ function getPageRenderer(role, page) {
       'my-attendance': renderEmployeeAttendanceRecords,
       'my-leaves': renderEmployeeLeaveRequests,
       'my-eod': renderEmployeeEODReports,
+      'my-cash': renderEmployeeCash,
       'my-salary': renderEmployeeSalary,
       profile: renderProfile
     },
     admin: {
       dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
       inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
-      payments: renderPaymentsTab, bills: renderBillsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
-      feedback: renderFeedbackTab,
+      payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
+      'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab,
     }
   };
   return (map[role] || map.admin)[page];

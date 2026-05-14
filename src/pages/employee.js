@@ -127,18 +127,82 @@ export function renderPremiumBillHTML(data) {
   </div>`;
 }
 
-// Render the bill node to a PDF Blob via html2pdf. Returns { blob, file }.
-async function renderBillToPdfBlob(node, filename) {
-  const html2pdf = await loadHtml2Pdf();
-  const blob = await html2pdf().set({
-    margin: 8,
-    filename,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-  }).from(node).outputPdf('blob');
-  const file = new File([blob], filename, { type: 'application/pdf' });
-  return { blob, file };
+// Render the bill HTML to a PDF Blob. We clone the HTML into a fresh,
+// fixed-position off-screen container with an explicit width — capturing
+// directly from inside the modal-overlay tree was producing blank pages
+// on some mobile browsers (html2canvas couldn't resolve dimensions for a
+// scaled / scrolled / flex-wrapped subtree).
+async function renderBillToPdfBlob(billHTML, filename) {
+  const sandbox = document.createElement('div');
+  sandbox.setAttribute('aria-hidden', 'true');
+  sandbox.style.cssText = [
+    'position:fixed',
+    'left:0',
+    'top:0',
+    'width:794px',           // ~A4 width at 96dpi
+    'background:#ffffff',
+    'z-index:-1',
+    'pointer-events:none',
+    'opacity:0',             // visually hidden but still laid out
+    'transform:translateX(-200vw)',
+  ].join(';');
+  sandbox.innerHTML = billHTML;
+  document.body.appendChild(sandbox);
+
+  // Wait two animation frames so layout + fonts settle before capturing.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  try {
+    const html2pdf = await loadHtml2Pdf();
+    const node = sandbox.firstElementChild;
+    const blob = await html2pdf().set({
+      margin: [10, 10, 10, 10],
+      filename,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 794,
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+    }).from(node).outputPdf('blob');
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    return { blob, file };
+  } finally {
+    sandbox.remove();
+  }
+}
+
+// Convert a Blob to a base64 string (no data: prefix).
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const r = String(fr.result || '');
+      resolve(r.includes(',') ? r.slice(r.indexOf(',') + 1) : r);
+    };
+    fr.onerror = () => reject(fr.error || new Error('Could not read PDF blob'));
+    fr.readAsDataURL(blob);
+  });
+}
+
+// Upload PDF to server, get back a public URL we can put in WhatsApp text.
+async function uploadBillPdf(blob, filename, inquiry_id) {
+  const dataBase64 = await blobToBase64(blob);
+  const token = localStorage.getItem('auth_token');
+  const res = await fetch('/api/bills/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ dataBase64, filename, inquiry_id: inquiry_id || null }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Upload failed');
+  }
+  const { url } = await res.json();
+  return url; // server returns an absolute URL
 }
 
 // Trigger a download of the given blob.
@@ -152,26 +216,33 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Short message that goes alongside the PDF on WhatsApp.
-function billShortCaption(data) {
+// Short message that goes alongside the PDF on WhatsApp. The PDF is hosted
+// on our server and linked here, so the client opens it directly from their
+// chat without the technician needing to attach a file.
+function billShortCaption(data, pdfUrl) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const lines = [
     `Hi ${data.customer?.name || ''}! 👋`,
-    `Your service invoice from *${BUSINESS.name}* is attached.`,
+    `Your service invoice from *${BUSINESS.name}* is ready.`,
     `Ticket: *${data.customer?.ticket_no || '—'}* · Total: *${inr(data.total)}*`,
   ];
+  if (pdfUrl) lines.push('', `📄 View / download bill PDF:`, pdfUrl);
   if (data.paymentLink) lines.push('', `💳 Pay here: ${data.paymentLink}`);
+  lines.push('', `— ${BUSINESS.name}`);
   return lines.join('\n');
 }
 
 // Opens the premium bill modal. Accepts an options object:
 //   onSent       — fires after the share is initiated (used by employee
-//                  to persist the breakdown).
+//                  to persist the breakdown + bill_pdf_url).
 //   allowShare   — when false, hides the "Send via WhatsApp" button (admin
 //                  view should not re-share).
 //   title        — overrides the modal title.
+//   inquiryId    — if set, server persists the uploaded bill_pdf_url on the
+//                  inquiry so admin can re-open the exact PDF later.
 export function openPremiumBillModal(data, opts = {}) {
-  const { onSent, allowShare = true, title = '📄 Service Invoice Preview' } = opts;
+  const { onSent, allowShare = true, title = '📄 Service Invoice Preview', inquiryId = null } = opts;
+  const billHTML = renderPremiumBillHTML(data);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -182,7 +253,7 @@ export function openPremiumBillModal(data, opts = {}) {
       </div>
       <div class="modal-body" style="padding:0;">
         <div id="pb-render-wrap" style="padding:18px; background:#f3f4f6;">
-          ${renderPremiumBillHTML(data)}
+          ${billHTML}
         </div>
       </div>
       <div class="modal-footer" style="flex-wrap:wrap; gap:8px;">
@@ -190,7 +261,7 @@ export function openPremiumBillModal(data, opts = {}) {
         <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
         ${allowShare ? `
           <button class="btn btn-primary" id="pb-whatsapp" style="background:#25D366; box-shadow:0 8px 24px rgba(37,211,102,0.32);">
-            ${ICONS.whatsapp || ''}<span>Send PDF via WhatsApp</span>
+            ${ICONS.whatsapp || ''}<span>Send PDF to Client on WhatsApp</span>
           </button>` : ''}
       </div>
     </div>`;
@@ -200,13 +271,12 @@ export function openPremiumBillModal(data, opts = {}) {
   overlay.querySelector('#pb-cancel').onclick = close;
 
   const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
-  const getNode = () => overlay.querySelector('#premium-bill-print');
 
   overlay.querySelector('#pb-download').onclick = async () => {
     const btn = overlay.querySelector('#pb-download');
     btn.disabled = true; btn.textContent = '… preparing PDF';
     try {
-      const { blob } = await renderBillToPdfBlob(getNode(), filename);
+      const { blob } = await renderBillToPdfBlob(billHTML, filename);
       downloadBlob(blob, filename);
       toast('Bill PDF downloaded', 'success');
     } catch (err) {
@@ -222,56 +292,27 @@ export function openPremiumBillModal(data, opts = {}) {
       const btn = overlay.querySelector('#pb-whatsapp');
       btn.disabled = true;
       const originalHTML = btn.innerHTML;
-      btn.innerHTML = `<span>… preparing PDF</span>`;
-      let shared = false;
+      const phone = (data.customer?.phone || '').replace(/\D/g, '');
+      if (!phone) { toast('Client phone number is missing on this inquiry', 'error'); btn.disabled = false; btn.innerHTML = originalHTML; return; }
+
       try {
-        const { blob, file } = await renderBillToPdfBlob(getNode(), filename);
-        const caption = billShortCaption(data);
+        btn.innerHTML = `<span>… preparing PDF</span>`;
+        const { blob } = await renderBillToPdfBlob(billHTML, filename);
 
-        // Primary path: native share sheet with the PDF attached. On mobile
-        // this lets the user pick WhatsApp and the file goes as an actual
-        // document attachment, not a text link.
-        const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
-        if (canShareFile) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: `Invoice ${data.customer?.ticket_no || ''}`.trim(),
-              text: caption,
-            });
-            shared = true;
-            toast('PDF shared via WhatsApp', 'success');
-          } catch (err) {
-            // User cancelled the share sheet — treat as a no-op, don't fall back.
-            if (err && err.name === 'AbortError') {
-              btn.disabled = false; btn.innerHTML = originalHTML;
-              return;
-            }
-            // Otherwise fall through to the desktop fallback.
-            console.warn('navigator.share failed, falling back', err);
-          }
-        }
+        btn.innerHTML = `<span>… uploading bill</span>`;
+        const pdfUrl = await uploadBillPdf(blob, filename, inquiryId);
 
-        if (!shared) {
-          // Desktop / unsupported browsers: download the PDF, then open
-          // WhatsApp Web with the caption. The technician drags the
-          // just-downloaded file into the chat to attach it.
-          downloadBlob(blob, filename);
-          const phone = (data.customer?.phone || '').replace(/\D/g, '');
-          const url = phone
-            ? `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`
-            : `https://wa.me/?text=${encodeURIComponent(caption)}`;
-          window.open(url, '_blank');
-          toast(`PDF downloaded as "${filename}" — drag it into the WhatsApp chat that just opened.`, 'success');
-          shared = true;
-        }
+        const caption = billShortCaption(data, pdfUrl);
+        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
+        window.open(waUrl, '_blank');
 
-        if (shared && typeof onSent === 'function') {
-          try { await onSent(); } catch {}
+        toast('WhatsApp opened with PDF link — send the message to the client.', 'success');
+        if (typeof onSent === 'function') {
+          try { await onSent(pdfUrl); } catch {}
         }
       } catch (err) {
         console.error(err);
-        toast(err.message || 'Could not generate PDF', 'error');
+        toast(err.message || 'Could not send bill', 'error');
       } finally {
         btn.disabled = false; btn.innerHTML = originalHTML;
       }
@@ -895,6 +936,116 @@ export async function renderEmployeeEODReports(container) {
   }
 }
 
+// ── EMPLOYEE: MY CASH ────────────────────────────────────
+// Lists every cash payment this technician has collected. Pending balance
+// = cash that hasn't yet been submitted to admin. Once admin records the
+// submission in their Cash Collections tab, the row moves to "Submitted"
+// and the pending total drops.
+export async function renderEmployeeCash(container) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  const { data: rows } = await supabase.from('inquiries')
+    .select('*')
+    .eq('assigned_employee_id', user.id)
+    .eq('payment_method', 'cash')
+    .eq('payment_status', 'paid')
+    .order('cash_collected_at', { ascending: false });
+
+  const list = (Array.isArray(rows) ? rows : []).filter(x => x.cash_collected_at);
+  const pending = list.filter(x => !x.cash_submitted_at);
+  const submitted = list.filter(x => x.cash_submitted_at);
+
+  const totalPending = pending.reduce((acc, x) => acc + (Number(x.bill_total) || 0), 0);
+  const totalSubmitted = submitted.reduce((acc, x) => acc + (Number(x.bill_total) || 0), 0);
+  const totalEver = totalPending + totalSubmitted;
+
+  const dateOf = (d) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(String(d).replace(' ', 'T'));
+      return Number.isNaN(dt.getTime()) ? d : dt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch { return d; }
+  };
+
+  const rowHtml = (items) => items.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No cash collections yet</td></tr>'
+    : items.map(x => `
+      <tr>
+        <td><small style="color:var(--text-dim)">${dateOf(x.cash_collected_at)}</small></td>
+        <td><code style="font-size:0.75rem;">${x.ticket_no || (x.id || '').slice(0,8)}</code></td>
+        <td><b>${x.full_name || '—'}</b><br/><small style="color:var(--text-dim)">${x.phone || ''}</small></td>
+        <td><small>${x.service_item || '—'}</small></td>
+        <td><b>₹${Math.round(Number(x.bill_total) || 0).toLocaleString('en-IN')}</b></td>
+        <td>${x.cash_submitted_at
+          ? `<span class="badge badge-resolved">Submitted</span><br/><small style="color:var(--text-dim)">${dateOf(x.cash_submitted_at)}</small>`
+          : '<span class="badge badge-medium">Pending</span>'}</td>
+      </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1>My Cash</h1>
+        <p>Cash you've collected from clients. Hand it to admin to clear the pending balance.</p>
+      </div>
+      <button class="btn btn-secondary" id="cash-refresh">${ICONS.refresh}<span>Refresh</span></button>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--warning); font-size:1.9rem;">₹${Math.round(totalPending).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Pending Submission</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--success); font-size:1.9rem;">₹${Math.round(totalSubmitted).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Already Submitted</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${list.length}</div>
+        <div class="stat-label">Total Cash Jobs</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size:1.7rem;">₹${Math.round(totalEver).toLocaleString('en-IN')}</div>
+        <div class="stat-label">Total Collected (All Time)</div>
+      </div>
+    </div>
+
+    ${totalPending > 0 ? `
+      <div style="padding:14px 16px; border-radius:14px; background:rgba(245,158,11,0.08); border:1px dashed var(--warning); margin-bottom:18px; font-size:0.88rem; color:var(--text);">
+        💵 You have <b>₹${Math.round(totalPending).toLocaleString('en-IN')}</b> in cash to hand over to admin. Once admin records the submission in their Cash Collections tab, these entries will move to <b>Submitted</b>.
+      </div>` : ''}
+
+    <div class="filter-bar" style="margin-bottom:16px;">
+      <div class="sr-filter-bar" id="cash-tabs">
+        <button class="sr-filter active" data-tab="pending">Pending <span class="sr-filter-count">${pending.length}</span></button>
+        <button class="sr-filter" data-tab="submitted">Submitted <span class="sr-filter-count">${submitted.length}</span></button>
+        <button class="sr-filter" data-tab="all">All <span class="sr-filter-count">${list.length}</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Ticket</th><th>Customer</th><th>Service</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>${rowHtml(pending)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#cash-refresh').onclick = () => renderEmployeeCash(container);
+
+  const tabs = { pending, submitted, all: list };
+  container.querySelectorAll('#cash-tabs .sr-filter').forEach(btn => {
+    btn.onclick = () => {
+      container.querySelectorAll('#cash-tabs .sr-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const items = tabs[btn.dataset.tab] || list;
+      container.querySelector('tbody').innerHTML = rowHtml(items);
+    };
+  });
+}
+
 export async function renderEmployeeSalary(container) {
   const { user, profile, attendance, leaves } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
@@ -937,6 +1088,8 @@ export async function renderEmployeeSalary(container) {
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
+    const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
+    const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];
     // Snapshot current payment state so we can gate the resolved/closed submit button.
     let paymentState = { status: 'unpaid', received_at: null };
     let inquiryRow = null;
@@ -1031,7 +1184,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
             <div class="form-group">
               <label>Device Type</label>
-              <input type="text" id="device-type" placeholder="e.g. Video Door Phone" value="${(inquiryRow?.device_type ?? '').replace(/"/g,'&quot;')}"/>
+              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick…' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type ?? '').replace(/"/g,'&quot;')}"/>
+              <datalist id="emp-device-types">
+                ${deviceTypeList.map(d => `<option value="${(d.name || '').replace(/"/g,'&quot;')}"></option>`).join('')}
+              </datalist>
+              ${deviceTypeList.length === 0 ? '<small style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">Tip: ask admin to add device types so this becomes a quick-pick list.</small>' : ''}
             </div>
             <div class="form-group">
               <label>Device Serial No</label>
@@ -1096,6 +1253,29 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               </div>
 
               <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">📄 Generate &amp; Send Premium Bill</button>
+
+              <!-- Payment Method choice -->
+              <div class="form-group" style="margin-bottom:14px;">
+                <label>How will the client pay?</label>
+                <div class="pay-method-toggle" id="pay-method-toggle">
+                  <button type="button" class="pay-method-btn active" data-method="online">💳 Online (Razorpay)</button>
+                  <button type="button" class="pay-method-btn" data-method="cash">💵 Cash on Service</button>
+                </div>
+              </div>
+
+              <!-- Cash collection section (hidden until method=cash) -->
+              <div id="cash-section" style="display:none; padding:14px; background:rgba(245,158,11,0.06); border-radius:14px; border:1px solid var(--warning); margin-bottom:14px;">
+                <div style="font-weight:700; font-size:0.9rem; color:var(--text); margin-bottom:8px;">💵 Cash Collection</div>
+                <div style="font-size:0.82rem; color:var(--text-soft); margin-bottom:12px;">
+                  Mark this once you have <b>physically received</b> the cash from the client. The amount will appear in your <b>My Cash</b> tab as <i>pending submission</i> until you hand it to admin.
+                </div>
+                <button type="button" class="btn btn-primary btn-wide" id="mark-cash-btn" style="background:var(--warning); box-shadow:0 8px 24px rgba(245,158,11,0.32);">
+                  ✓ Mark Cash Collected — <span id="cash-amount-display">₹0</span>
+                </button>
+                <div id="cash-collected-banner" style="display:none; margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(16,185,129,0.08); border:1px solid var(--success); font-size:0.85rem; color:var(--success); font-weight:700;">
+                  ✓ Cash collected — appears in your My Cash tab.
+                </div>
+              </div>
 
               <!-- Payment Link + QR -->
               <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
@@ -1188,6 +1368,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       overlay.querySelector('#br-gst').textContent = inr(bill.gst);
       overlay.querySelector('#br-total').textContent = inr(bill.total);
       totalDisplay.value = String(bill.total);
+      const cashDisplay = overlay.querySelector('#cash-amount-display');
+      if (cashDisplay) cashDisplay.textContent = inr(bill.total);
     };
 
     // Haversine distance in km between two lat/lng pairs.
@@ -1573,10 +1755,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           paymentLink: _payLink || customer.payment_link || '',
         };
         openPremiumBillModal(billData, {
-          onSent: async () => {
-            // After "Send via WhatsApp" — persist breakdown so admin sees it too.
+          inquiryId: inqId || null,
+          onSent: async (pdfUrl) => {
+            // After share — persist breakdown so admin sees it too.
             if (!inqId) return;
-            await supabase.from('inquiries').update({
+            const updates = {
               bill_amount: bill.servicesSubtotal + bill.extra,
               transport_km: bill.km,
               transport_fee: bill.transport,
@@ -1588,7 +1771,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               device_type: billData.customer.device_type || null,
               device_serial_no: billData.customer.device_serial || null,
               company_name: billData.customer.company || null,
-            }).eq('id', inqId);
+            };
+            if (pdfUrl) updates.bill_pdf_url = pdfUrl;
+            await supabase.from('inquiries').update(updates).eq('id', inqId);
           },
         });
       };
@@ -1597,6 +1782,82 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     if (shareWaBtn) {
       shareWaBtn.onclick = () => {
         if (_payLink) window.open(`https://wa.me/?text=${encodeURIComponent('Please use this link to pay for your service: ' + _payLink)}`, '_blank');
+      };
+    }
+
+    // ── Payment method toggle (Online ↔ Cash) ─────────────────────────────
+    const payMethodToggle = overlay.querySelector('#pay-method-toggle');
+    const cashSection = overlay.querySelector('#cash-section');
+    const payLinkSection = overlay.querySelector('#emp-pay-link')?.closest('div[style*="background:var(--bg-soft)"]');
+    const cashAmountDisplay = overlay.querySelector('#cash-amount-display');
+    const cashBanner = overlay.querySelector('#cash-collected-banner');
+    const markCashBtn = overlay.querySelector('#mark-cash-btn');
+    let payMethod = inquiryRow?.payment_method === 'cash' ? 'cash' : 'online';
+
+    const renderPayMethod = () => {
+      payMethodToggle.querySelectorAll('.pay-method-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.method === payMethod);
+      });
+      cashSection.style.display = payMethod === 'cash' ? 'block' : 'none';
+      if (payLinkSection) payLinkSection.style.display = payMethod === 'cash' ? 'none' : 'block';
+      if (cashAmountDisplay) cashAmountDisplay.textContent = `₹${Math.round(bill.total).toLocaleString('en-IN')}`;
+      // If cash was already marked paid, show the banner + disable button.
+      const alreadyCash = inquiryRow?.payment_method === 'cash' && inquiryRow?.payment_status === 'paid';
+      if (alreadyCash && cashBanner) {
+        cashBanner.style.display = 'block';
+        if (markCashBtn) { markCashBtn.disabled = true; markCashBtn.style.opacity = '0.55'; }
+      }
+    };
+    payMethodToggle.querySelectorAll('.pay-method-btn').forEach(btn => {
+      btn.onclick = () => { payMethod = btn.dataset.method; renderPayMethod(); };
+    });
+    renderPayMethod();
+
+    // Mark Cash Collected — sets payment_status=paid + payment_method=cash +
+    // cash_collected_at=NOW so it shows up in the employee's My Cash tab as
+    // pending submission. Also persists the full bill breakdown.
+    if (markCashBtn) {
+      markCashBtn.onclick = async () => {
+        if (!inqId) { toast('Cannot mark cash on a task without an inquiry record', 'error'); return; }
+        if (bill.total <= 0) { toast('Add services or charges first', 'warning'); return; }
+        markCashBtn.disabled = true;
+        const orig = markCashBtn.innerHTML;
+        markCashBtn.innerHTML = '<span>Saving…</span>';
+        try {
+          const nowIso = new Date().toISOString().slice(0,19).replace('T',' ');
+          const updates = {
+            payment_method: 'cash',
+            payment_status: 'paid',
+            payment_received_at: nowIso,
+            cash_collected_at: nowIso,
+            bill_amount: bill.servicesSubtotal + bill.extra,
+            extra_cost: bill.extra,
+            extra_cost_reason: overlay.querySelector('#extra-reason')?.value.trim() || null,
+            transport_km: bill.km,
+            transport_fee: bill.transport,
+            platform_fee: bill.platform,
+            discount_amount: bill.discount,
+            gst_amount: bill.gst,
+            bill_total: bill.total,
+            bill_generated_at: nowIso,
+            device_type: overlay.querySelector('#device-type')?.value.trim() || null,
+            device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
+            company_name: overlay.querySelector('#resolve-company')?.value.trim() || null,
+          };
+          const { error } = await supabase.from('inquiries').update(updates).eq('id', inqId);
+          if (error) throw new Error(error.message);
+          // Refresh local payment state so the save button unlocks.
+          paymentState = { status: 'paid', received_at: nowIso };
+          inquiryRow = { ...(inquiryRow || {}), ...updates };
+          _paymentJustReceived = true;
+          renderPayStatus();
+          renderPayMethod();
+          toast('✓ Cash recorded — visible in My Cash as pending submission', 'success');
+        } catch (err) {
+          toast(err.message || 'Could not mark cash', 'error');
+          markCashBtn.disabled = false;
+          markCashBtn.innerHTML = orig;
+        }
       };
     }
 

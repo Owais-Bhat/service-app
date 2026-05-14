@@ -3048,6 +3048,74 @@ input, select, textarea { max-width: 100%; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Admin Cash Collections — per-employee container */
+.emp-cash-card {
+  background: var(--bg-soft);
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+}
+.emp-cash-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+.emp-cash-name { font-size: 1.1rem; font-weight: 800; color: var(--text); }
+.emp-cash-sub { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+.emp-cash-totals { display: flex; gap: 18px; }
+.emp-cash-totals > div { text-align: right; font-size: 0.78rem; color: var(--text-dim); }
+.emp-cash-totals > div b { display: block; font-size: 1.05rem; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.emp-cash-empty { padding: 18px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+.emp-cash-actions {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed var(--border); flex-wrap: wrap;
+}
+.emp-cash-selected { font-size: 0.88rem; color: var(--text-soft); }
+.emp-cash-selected b { color: var(--primary); font-weight: 800; font-size: 1.05rem; }
+.emp-cash-history { margin-top: 14px; }
+.emp-cash-history summary {
+  cursor: pointer; font-size: 0.85rem; color: var(--text-soft);
+  font-weight: 700; padding: 8px 0;
+}
+.emp-cash-history summary:hover { color: var(--primary); }
+
+/* Payment method toggle (Online ↔ Cash) — Manage Service > Bill */
+.pay-method-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: var(--bg);
+  border-radius: 14px;
+  box-shadow: var(--neu-in);
+}
+.pay-method-btn {
+  flex: 1;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.pay-method-btn:hover:not(.active) { color: var(--primary); }
+.pay-method-btn.active {
+  background: var(--bg-soft);
+  color: var(--primary);
+  box-shadow: var(--neu-sm);
+}
+
 /* ══════════════════════════════════════════════════════════
    Bill breakdown card (Employee Manage Service modal)
    ══════════════════════════════════════════════════════════ */
