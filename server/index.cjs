@@ -132,7 +132,13 @@ const videoDoorPhoneServices = [
     ['Installation Issues', ['Wrong mounting', 'Improper cable routing', 'Wrong power supply selection', 'Poor earthing', 'Improper lock alignment', 'Weak signal due to distance']],
     ['Maintenance & Service Issues', ['Preventive maintenance pending', 'Dirty camera lens', 'Loose terminals', 'Firmware not updated', 'Backup battery weak', 'Periodic testing required']],
     ['User Operation Issues', ['User forgot password', 'Wrong app usage', 'Muted ringtone', 'Wrong card usage', 'Unauthorized access attempt', 'Incorrect settings by user']],
-].flatMap(([category, items]) => items.map(name => ({ category, name, cost: 200 })));
+].flatMap(([sub_category, items]) => items.map(leaf => ({
+    category: 'Video Door Phone',
+    sub_category,
+    sub_sub_category: leaf,
+    name: leaf,
+    cost: 200,
+})));
 
 function fieldsWithRequired(relFields, requiredField) {
     if (!relFields || relFields === '*') return '*';
@@ -167,16 +173,34 @@ async function ensureRequiredColumns(connection) {
         }
     }
 
+    // One-time migration: earlier versions stored the sub-group name in
+    // `category` and the leaf in `name`, with description='Video Door Phone'.
+    // Re-shape any such rows into the new (Main → Sub → Sub-Sub) structure
+    // so the cascading picker can find them and the seed loop below dedupes.
+    await connection.query(
+        `UPDATE service_pricing
+            SET sub_category = category,
+                sub_sub_category = name,
+                category = 'Video Door Phone'
+          WHERE description = 'Video Door Phone'
+            AND (sub_sub_category IS NULL OR sub_sub_category = '')
+            AND category <> 'Video Door Phone'`
+    );
+
     for (const service of videoDoorPhoneServices) {
         const [existing] = await connection.execute(
-            'SELECT id FROM service_pricing WHERE name = ? AND category = ? LIMIT 1',
-            [service.name, service.category]
+            `SELECT id FROM service_pricing
+              WHERE category = ?
+                AND COALESCE(sub_category, '') = ?
+                AND COALESCE(sub_sub_category, name) = ?
+              LIMIT 1`,
+            [service.category, service.sub_category, service.sub_sub_category]
         );
         if (existing.length > 0) continue;
 
         await connection.execute(
-            'INSERT INTO service_pricing (id, name, category, cost, description) VALUES (?, ?, ?, ?, ?)',
-            [uuidv4(), service.name, service.category, service.cost, 'Video Door Phone']
+            'INSERT INTO service_pricing (id, name, category, sub_category, sub_sub_category, cost, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [uuidv4(), service.name, service.category, service.sub_category, service.sub_sub_category, service.cost, 'Video Door Phone']
         );
     }
 }

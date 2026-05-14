@@ -663,12 +663,20 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const { data: inqSnap } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
       if (inqSnap) paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
     }
-    const pricingListHtml = (pricing || []).map(p => `
-                <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
-                  <input type="checkbox" class="service-chk" data-id="${p.id}" data-cost="${p.cost}" />
-                  <span style="font-size:0.9rem;"><b>${p.category || 'Service'}</b> - ${p.name} (₹${p.cost})</span>
-                </label>
-              `).join('');
+    // Build a tree: Main → Sub → leaves (each leaf = priced row). When a row
+    // has no sub_category we group it under a synthetic '' key, surfaced as
+    // "—" in the picker so the cascade still works for 2-level catalogs.
+    const tree = {};
+    (pricing || []).forEach(p => {
+      const main = p.category || 'Uncategorized';
+      const sub = (p.sub_category && p.sub_category.trim()) || '';
+      const leaf = p.sub_sub_category || p.name || '';
+      if (!leaf) return;
+      tree[main] ??= {};
+      tree[main][sub] ??= [];
+      tree[main][sub].push({ id: p.id, leaf, cost: Number(p.cost) || 0 });
+    });
+    const mainOptions = Object.keys(tree).sort();
     
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -696,17 +704,28 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <input type="text" id="resolve-company" placeholder="Which company is this for?"/>
             </div>
 
-            <label style="font-weight:700; margin-bottom:8px; display:block;">Select Services Performed</label>
-            <div style="max-height:150px; overflow-y:auto; padding:10px; background:var(--bg-soft); border-radius:10px; margin-bottom:12px;">
-              ${pricingListHtml}
-              ${'' && (pricing || []).map(p => `
-                <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
-                  <input type="checkbox" class="service-chk" data-id="${p.id}" data-cost="${p.cost}" />
-                  <span style="font-size:0.9rem;">${p.name} (₹${p.cost})</span>
-                </label>
-              `).join('')}
-              ${(!pricing || pricing.length === 0) ? '<p style="font-size:0.8rem; color:var(--text-dim);">No standard services defined by Admin.</p>' : ''}
-            </div>
+            <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
+            ${mainOptions.length === 0 ? `
+              <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services defined by Admin.</p>
+            ` : `
+              <div style="display:grid; grid-template-columns:1fr; gap:8px; padding:10px; background:var(--bg-soft); border-radius:10px; margin-bottom:8px;">
+                <select id="svc-main" style="width:100%;">
+                  <option value="">Select Main Category…</option>
+                  ${mainOptions.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('')}
+                </select>
+                <select id="svc-sub" style="width:100%;" disabled>
+                  <option value="">Select Sub Category…</option>
+                </select>
+                <select id="svc-sub-sub" style="width:100%;" disabled>
+                  <option value="">Select Specific Issue…</option>
+                </select>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <div style="flex:1; font-size:0.9rem; color:var(--text-dim);" id="svc-preview">Pick an issue to see the price.</div>
+                  <button type="button" class="btn btn-primary btn-sm" id="svc-add" disabled style="white-space:nowrap;">+ Add</button>
+                </div>
+              </div>
+              <div id="svc-selected" style="display:none; margin-bottom:12px;"></div>
+            `}
 
             <div class="form-group">
               <label>Additional Charges (Optional)</label>
@@ -774,14 +793,123 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const pricingSec = overlay.querySelector('#pricing-section');
     const totalDisplay = overlay.querySelector('#total-bill-display');
     const extraInput = overlay.querySelector('#extra-cost');
-    const checkboxes = overlay.querySelectorAll('.service-chk');
     const saveBtn = overlay.querySelector('#save-update');
+
+    // Selected services chosen via the cascading picker. Each entry:
+    // { id, main, sub, leaf, cost }.
+    const selectedServices = [];
 
     const calcTotal = () => {
       let total = Number(extraInput.value) || 0;
-      checkboxes.forEach(chk => { if (chk.checked) total += Number(chk.dataset.cost); });
+      selectedServices.forEach(s => { total += Number(s.cost) || 0; });
       totalDisplay.textContent = `₹${total.toLocaleString('en-IN')}`;
     };
+
+    // ── Cascading picker wiring ───────────────────────────────────────────
+    const mainSel = overlay.querySelector('#svc-main');
+    const subSel = overlay.querySelector('#svc-sub');
+    const subSubSel = overlay.querySelector('#svc-sub-sub');
+    const svcPreview = overlay.querySelector('#svc-preview');
+    const svcAddBtn = overlay.querySelector('#svc-add');
+    const svcSelectedBox = overlay.querySelector('#svc-selected');
+
+    const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    const renderSelectedList = () => {
+      if (!svcSelectedBox) return;
+      if (selectedServices.length === 0) { svcSelectedBox.style.display = 'none'; svcSelectedBox.innerHTML = ''; return; }
+      svcSelectedBox.style.display = 'block';
+      svcSelectedBox.innerHTML = `
+        <div style="font-size:0.78rem; font-weight:700; color:var(--text-dim); margin-bottom:6px;">Services performed (${selectedServices.length})</div>
+        ${selectedServices.map((s, i) => `
+          <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--bg); border:1px solid var(--border); border-radius:10px; margin-bottom:6px;">
+            <div style="flex:1; font-size:0.85rem;">
+              <b>${escHtml(s.main)}</b>${s.sub ? ` › ${escHtml(s.sub)}` : ''} › ${escHtml(s.leaf)}
+            </div>
+            <span style="font-weight:700; color:var(--primary);">₹${Number(s.cost).toLocaleString('en-IN')}</span>
+            <button type="button" class="btn btn-danger btn-sm svc-remove" data-idx="${i}" title="Remove">✕</button>
+          </div>
+        `).join('')}
+      `;
+      svcSelectedBox.querySelectorAll('.svc-remove').forEach(btn => {
+        btn.onclick = () => {
+          selectedServices.splice(Number(btn.dataset.idx), 1);
+          renderSelectedList(); calcTotal(); renderPayStatus();
+        };
+      });
+    };
+
+    const fillSubs = () => {
+      if (!subSel) return;
+      const main = mainSel.value;
+      subSel.innerHTML = '<option value="">Select Sub Category…</option>';
+      subSubSel.innerHTML = '<option value="">Select Specific Issue…</option>';
+      subSubSel.disabled = true;
+      svcPreview.textContent = 'Pick an issue to see the price.';
+      svcAddBtn.disabled = true;
+      if (!main || !tree[main]) { subSel.disabled = true; return; }
+      const subs = Object.keys(tree[main]).sort();
+      subs.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s || '— (no sub-group)';
+        subSel.appendChild(opt);
+      });
+      subSel.disabled = false;
+      // If only one sub group, auto-select it.
+      if (subs.length === 1) { subSel.value = subs[0]; fillSubSubs(); }
+    };
+
+    const fillSubSubs = () => {
+      if (!subSubSel) return;
+      const main = mainSel.value;
+      const sub = subSel.value;
+      subSubSel.innerHTML = '<option value="">Select Specific Issue…</option>';
+      svcPreview.textContent = 'Pick an issue to see the price.';
+      svcAddBtn.disabled = true;
+      if (!main || !tree[main] || tree[main][sub] === undefined) { subSubSel.disabled = true; return; }
+      tree[main][sub].forEach((leaf, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = `${leaf.leaf} (₹${leaf.cost.toLocaleString('en-IN')})`;
+        opt.dataset.id = leaf.id;
+        opt.dataset.cost = leaf.cost;
+        subSubSel.appendChild(opt);
+      });
+      subSubSel.disabled = false;
+    };
+
+    const onLeafChange = () => {
+      const main = mainSel.value;
+      const sub = subSel.value;
+      const idx = subSubSel.value;
+      if (idx === '' || !tree[main]?.[sub]?.[Number(idx)]) {
+        svcPreview.textContent = 'Pick an issue to see the price.';
+        svcAddBtn.disabled = true; return;
+      }
+      const leaf = tree[main][sub][Number(idx)];
+      svcPreview.innerHTML = `Price: <b style="color:var(--primary)">₹${leaf.cost.toLocaleString('en-IN')}</b>`;
+      svcAddBtn.disabled = false;
+    };
+
+    if (mainSel) {
+      mainSel.onchange = fillSubs;
+      subSel.onchange = fillSubSubs;
+      subSubSel.onchange = onLeafChange;
+      svcAddBtn.onclick = () => {
+        const main = mainSel.value, sub = subSel.value, idx = subSubSel.value;
+        const leaf = tree[main]?.[sub]?.[Number(idx)];
+        if (!leaf) return;
+        if (selectedServices.some(s => s.id === leaf.id)) {
+          toast('Already added', 'warning');
+          return;
+        }
+        selectedServices.push({ id: leaf.id, main, sub, leaf: leaf.leaf, cost: leaf.cost });
+        renderSelectedList(); calcTotal(); renderPayStatus();
+        // Reset leaf so the employee can add another quickly.
+        subSubSel.value = ''; svcPreview.textContent = 'Pick an issue to see the price.'; svcAddBtn.disabled = true;
+      };
+    }
 
     // --- Live payment status panel + Save-button gating ---
     const payStatusBox = overlay.querySelector('#emp-pay-status');
@@ -847,7 +975,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       renderPayStatus();
     };
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
-    checkboxes.forEach(chk => chk.onchange = () => { calcTotal(); renderPayStatus(); });
 
     // Active auto-poller: asks the backend to verify Razorpay directly, then falls
     // back to the saved DB state if the gateway cannot be reached.
@@ -996,11 +1123,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const selectedServiceIds = [];
       if (newStatus === 'resolved' || newStatus === 'closed') {
         totalBill = Number(extraInput.value) || 0;
-        checkboxes.forEach(chk => {
-          if (chk.checked) {
-            totalBill += Number(chk.dataset.cost);
-            selectedServiceIds.push(chk.dataset.id);
-          }
+        selectedServices.forEach(s => {
+          totalBill += Number(s.cost) || 0;
+          selectedServiceIds.push(s.id);
         });
       }
 
