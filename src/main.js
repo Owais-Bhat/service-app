@@ -2,7 +2,7 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab } from './pages/admin.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -79,6 +79,7 @@ function getNavItems(role) {
     { id: 'users', icon: ICONS.users, label: 'Users' },
     { type: 'section', label: 'Reports' },
     { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
+    { id: 'bills', icon: ICONS.receipt, label: 'Bills' },
     { id: 'salary', icon: ICONS.rupee, label: 'Salary' },
     { id: 'leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
     { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
@@ -104,7 +105,7 @@ function getPageRenderer(role, page) {
     admin: {
       dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
       inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
-      payments: renderPaymentsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
+      payments: renderPaymentsTab, bills: renderBillsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
       feedback: renderFeedbackTab,
     }
   };

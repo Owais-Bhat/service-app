@@ -907,9 +907,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         .select('latitude,longitude,location,clock_in')
         .eq('user_id', authUser.id)
         .eq('date', todayKey)
-        .order('clock_in', { ascending: false })
-        .limit(1);
-      if (att && att[0]) {
+        .order('clock_in', { ascending: false });
+      if (Array.isArray(att) && att[0]) {
         employeeCoords = { lat: att[0].latitude, lng: att[0].longitude, location: att[0].location };
       }
     }
@@ -928,136 +927,151 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     });
     const mainOptions = Object.keys(tree).sort();
     
+    const isResolving = currentStatus === 'resolved' || currentStatus === 'closed';
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal" style="max-width:450px">
+      <div class="modal" style="max-width:480px">
         <div class="modal-header">
-          <span class="modal-title">Update Task Status</span>
+          <span class="modal-title">Manage Service</span>
           <button class="modal-close" id="cm">✕</button>
         </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>New Status</label>
-            <select id="new-status">
-              <option value="open" ${currentStatus==='open'?'selected':''}>Open</option>
-              <option value="in_progress" ${currentStatus==='in_progress'?'selected':''}>In Progress</option>
-              <option value="resolved" ${currentStatus==='resolved'?'selected':''}>Resolved</option>
-              <option value="closed" ${currentStatus==='closed'?'selected':''}>Closed</option>
-              <option value="issue_not_resolved" ${currentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
-            </select>
+        <div class="modal-body" style="padding-top:14px;">
+          <div class="mst-tabs" role="tablist">
+            <button type="button" class="mst-tab active" data-tab="status">📌 Status</button>
+            <button type="button" class="mst-tab" data-tab="device">🔧 Device Info</button>
+            <button type="button" class="mst-tab" data-tab="bill">📄 Bill</button>
           </div>
 
-          <div id="pricing-section" style="display:${currentStatus==='resolved'||currentStatus==='closed'?'block':'none'}; margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+          <!-- TAB 1: STATUS -->
+          <div class="mst-pane active" data-pane="status">
+            <div class="form-group">
+              <label>New Status</label>
+              <select id="new-status">
+                <option value="open" ${currentStatus==='open'?'selected':''}>Open</option>
+                <option value="in_progress" ${currentStatus==='in_progress'?'selected':''}>In Progress</option>
+                <option value="resolved" ${currentStatus==='resolved'?'selected':''}>Resolved</option>
+                <option value="closed" ${currentStatus==='closed'?'selected':''}>Closed</option>
+                <option value="issue_not_resolved" ${currentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Work Details / Progress Update <span style="color:var(--danger)">*</span></label>
+              <textarea id="progress-detail" rows="5" placeholder="Describe what you did... (Mandatory)"></textarea>
+            </div>
+
+            <div id="feedback-link-box" style="display:none; padding:12px; border-radius:12px; background:rgba(16,185,129,0.07); border:1px solid var(--primary);">
+              <div style="font-size:0.78rem; font-weight:700; color:var(--primary); margin-bottom:6px;">📋 Feedback Link for Client</div>
+              <div style="display:flex; gap:8px;">
+                <input id="feedback-url" type="text" readonly style="flex:1; font-size:0.78rem; background:var(--bg);"/>
+                <button class="btn btn-secondary btn-sm" id="copy-feedback-url">Copy</button>
+              </div>
+              <button class="btn btn-primary btn-sm" id="share-feedback-wa" style="width:100%; margin-top:8px; justify-content:center; gap:8px;">
+                ${ICONS.whatsapp}<span>Share Feedback Link via WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 2: DEVICE INFO -->
+          <div class="mst-pane" data-pane="device">
             <div class="form-group">
               <label>Company Name (Optional)</label>
               <input type="text" id="resolve-company" placeholder="Which company is this for?" value="${(inquiryRow?.company_name ?? '').replace(/"/g,'&quot;')}"/>
             </div>
-
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="form-group">
-                <label>Device Type</label>
-                <input type="text" id="device-type" placeholder="e.g. Video Door Phone" value="${(inquiryRow?.device_type ?? '').replace(/"/g,'&quot;')}"/>
-              </div>
-              <div class="form-group">
-                <label>Device Serial No</label>
-                <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no ?? '').replace(/"/g,'&quot;')}"/>
-              </div>
-            </div>
-
-            <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
-            ${mainOptions.length === 0 ? `
-              <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services defined by Admin.</p>
-            ` : `
-              <div class="svc-picker-wrap">
-                <select id="svc-main" class="svc-picker">
-                  <option value="">Select Main Category…</option>
-                  ${mainOptions.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('')}
-                </select>
-                <select id="svc-sub" class="svc-picker" disabled>
-                  <option value="">Select Sub Category…</option>
-                </select>
-                <select id="svc-sub-sub" class="svc-picker" disabled>
-                  <option value="">Select Specific Issue…</option>
-                </select>
-                <div class="svc-picker-actions">
-                  <div class="svc-preview-text" id="svc-preview">Pick an issue to see the price.</div>
-                  <button type="button" class="btn btn-primary btn-sm" id="svc-add" disabled style="white-space:nowrap;">+ Add</button>
-                </div>
-              </div>
-              <div id="svc-selected" style="display:none; margin-bottom:12px;"></div>
-            `}
-
             <div class="form-group">
-              <label>Additional Charges (Optional)</label>
-              <input type="number" id="extra-cost" placeholder="₹0" style="margin-bottom:8px;"/>
-              <input type="text" id="extra-reason" placeholder="Reason for extra charge..."/>
+              <label>Device Type</label>
+              <input type="text" id="device-type" placeholder="e.g. Video Door Phone" value="${(inquiryRow?.device_type ?? '').replace(/"/g,'&quot;')}"/>
             </div>
-
             <div class="form-group">
-              <label>Transport Distance (km)</label>
-              <div style="display:flex; gap:8px;">
-                <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1"/>
-                <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate from your clock-in location to the customer location">📍 Auto</button>
-              </div>
-              <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km · click 📍 Auto to compute from your clock-in GPS.</small>
+              <label>Device Serial No</label>
+              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no ?? '').replace(/"/g,'&quot;')}"/>
             </div>
-
-            <div class="bill-breakdown" id="bill-breakdown">
-              <div class="bill-row"><span>Services subtotal</span><b id="br-services">₹0</b></div>
-              <div class="bill-row"><span>Additional charges</span><b id="br-extra">₹0</b></div>
-              <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
-              <div class="bill-row"><span>Transport (<span id="br-km">0</span> km × ₹5)</span><b id="br-transport">₹0</b></div>
-              <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">−₹30</b></div>
-              <div class="bill-row"><span>GST (18%)</span><b id="br-gst">₹0</b></div>
-              <div class="bill-row bill-row-total"><span>Final total</span><b id="br-total">₹0</b></div>
-              <input type="hidden" id="total-bill-display" value="0"/>
-            </div>
-
-            <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">📄 Generate &amp; Send Premium Bill</button>
-
-            <!-- Payment Link + QR -->
-            <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
-              <div style="font-weight:700; font-size:0.85rem; margin-bottom:10px; color:var(--text)">💳 Payment Link & QR</div>
-              <div style="display:flex; gap:8px; margin-bottom:10px;">
-                <input id="emp-pay-link" type="url" placeholder="Payment link will appear here…" style="flex:1; font-size:0.82rem;" readonly/>
-                <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap">✨ Generate</button>
-              </div>
-              <div id="emp-qr-wrap" style="display:none; text-align:center; margin-bottom:10px;">
-                <img id="emp-qr-img" src="" alt="QR Code" style="width:160px; height:160px; border-radius:12px; border:2px solid var(--primary);"/>
-                <div style="font-size:0.75rem; color:var(--text-dim); margin-top:6px;">Client can scan to pay</div>
-              </div>
-              <button class="btn btn-primary btn-sm" id="emp-share-wa" style="width:100%; display:none; gap:8px; justify-content:center;">
-                ${ICONS.whatsapp}<span>Share via WhatsApp</span>
-              </button>
-
-              <!-- Live payment status (updates from Razorpay webhook in real time) -->
-              <div id="emp-pay-status" style="margin-top:12px; padding:12px; border-radius:12px; background:var(--bg); border:2px solid var(--border); display:flex; align-items:center; gap:10px;">
-                <div id="emp-pay-status-icon" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:var(--text-dim);">${ICONS.clock}</div>
-                <div style="flex:1">
-                  <div id="emp-pay-status-title" style="font-weight:800; font-size:0.9rem; color:var(--text)">Payment: Unpaid</div>
-                  <div id="emp-pay-status-sub" style="font-size:0.75rem; color:var(--text-dim);">Generate a link, then wait for the client to pay.</div>
-                </div>
-                <button class="btn btn-secondary btn-sm" id="emp-pay-check" title="Re-check payment" style="white-space:nowrap">↻</button>
-              </div>
-            </div>
+            <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes — and they appear on the bill template.</small>
           </div>
 
-          <div class="form-group" style="margin-top:16px;">
-            <label>Work Details / Progress Update <span style="color:var(--danger)">*</span></label>
-            <textarea id="progress-detail" rows="4" placeholder="Describe what you did... (Mandatory)"></textarea>
-          </div>
-
-          <!-- Feedback link (shown after saving) -->
-          <div id="feedback-link-box" style="display:none; margin-top:12px; padding:12px; border-radius:12px; background:rgba(16,185,129,0.07); border:1px solid var(--primary);">
-            <div style="font-size:0.78rem; font-weight:700; color:var(--primary); margin-bottom:6px;">📋 Feedback Link for Client</div>
-            <div style="display:flex; gap:8px;">
-              <input id="feedback-url" type="text" readonly style="flex:1; font-size:0.78rem; background:var(--bg);"/>
-              <button class="btn btn-secondary btn-sm" id="copy-feedback-url">Copy</button>
+          <!-- TAB 3: BILL -->
+          <div class="mst-pane" data-pane="bill">
+            <div id="bill-locked-hint" style="display:${isResolving ? 'none' : 'block'}; padding:14px; border-radius:12px; background:var(--bg-soft); border:1px dashed var(--border); margin-bottom:14px; font-size:0.85rem; color:var(--text-soft);">
+              ℹ️ Set status to <b>Resolved</b> or <b>Closed</b> on the Status tab to enable billing.
             </div>
-            <button class="btn btn-primary btn-sm" id="share-feedback-wa" style="width:100%; margin-top:8px; justify-content:center; gap:8px;">
-              ${ICONS.whatsapp}<span>Share Feedback Link via WhatsApp</span>
-            </button>
+            <div id="pricing-section" style="display:${isResolving ? 'block' : 'none'};">
+              <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
+              ${mainOptions.length === 0 ? `
+                <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services defined by Admin.</p>
+              ` : `
+                <div class="svc-picker-wrap">
+                  <select id="svc-main" class="svc-picker">
+                    <option value="">Select Main Category…</option>
+                    ${mainOptions.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('')}
+                  </select>
+                  <select id="svc-sub" class="svc-picker" disabled>
+                    <option value="">Select Sub Category…</option>
+                  </select>
+                  <select id="svc-sub-sub" class="svc-picker" disabled>
+                    <option value="">Select Specific Issue…</option>
+                  </select>
+                  <div class="svc-picker-actions">
+                    <div class="svc-preview-text" id="svc-preview">Pick an issue to see the price.</div>
+                    <button type="button" class="btn btn-primary btn-sm" id="svc-add" disabled style="white-space:nowrap;">+ Add</button>
+                  </div>
+                </div>
+                <div id="svc-selected" style="display:none; margin-bottom:12px;"></div>
+              `}
+
+              <div class="form-group">
+                <label>Additional Charges (Optional)</label>
+                <input type="number" id="extra-cost" placeholder="₹0" style="margin-bottom:8px;"/>
+                <input type="text" id="extra-reason" placeholder="Reason for extra charge..."/>
+              </div>
+
+              <div class="form-group">
+                <label>Transport Distance (km)</label>
+                <div style="display:flex; gap:8px;">
+                  <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1"/>
+                  <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate from your clock-in location to the customer location">📍 Auto</button>
+                </div>
+                <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km · click 📍 Auto to compute from your clock-in GPS.</small>
+              </div>
+
+              <div class="bill-breakdown" id="bill-breakdown">
+                <div class="bill-row"><span>Services subtotal</span><b id="br-services">₹0</b></div>
+                <div class="bill-row"><span>Additional charges</span><b id="br-extra">₹0</b></div>
+                <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
+                <div class="bill-row"><span>Transport (<span id="br-km">0</span> km × ₹5)</span><b id="br-transport">₹0</b></div>
+                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">−₹30</b></div>
+                <div class="bill-row"><span>GST (18%)</span><b id="br-gst">₹0</b></div>
+                <div class="bill-row bill-row-total"><span>Final total</span><b id="br-total">₹0</b></div>
+                <input type="hidden" id="total-bill-display" value="0"/>
+              </div>
+
+              <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">📄 Generate &amp; Send Premium Bill</button>
+
+              <!-- Payment Link + QR -->
+              <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
+                <div style="font-weight:700; font-size:0.85rem; margin-bottom:10px; color:var(--text)">💳 Payment Link & QR</div>
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                  <input id="emp-pay-link" type="url" placeholder="Payment link will appear here…" style="flex:1; font-size:0.82rem;" readonly/>
+                  <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap">✨ Generate</button>
+                </div>
+                <div id="emp-qr-wrap" style="display:none; text-align:center; margin-bottom:10px;">
+                  <img id="emp-qr-img" src="" alt="QR Code" style="width:160px; height:160px; border-radius:12px; border:2px solid var(--primary);"/>
+                  <div style="font-size:0.75rem; color:var(--text-dim); margin-top:6px;">Client can scan to pay</div>
+                </div>
+                <button class="btn btn-primary btn-sm" id="emp-share-wa" style="width:100%; display:none; gap:8px; justify-content:center;">
+                  ${ICONS.whatsapp}<span>Share via WhatsApp</span>
+                </button>
+
+                <div id="emp-pay-status" style="margin-top:12px; padding:12px; border-radius:12px; background:var(--bg); border:2px solid var(--border); display:flex; align-items:center; gap:10px;">
+                  <div id="emp-pay-status-icon" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:var(--text-dim);">${ICONS.clock}</div>
+                  <div style="flex:1">
+                    <div id="emp-pay-status-title" style="font-weight:800; font-size:0.9rem; color:var(--text)">Payment: Unpaid</div>
+                    <div id="emp-pay-status-sub" style="font-size:0.75rem; color:var(--text-dim);">Generate a link, then wait for the client to pay.</div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" id="emp-pay-check" title="Re-check payment" style="white-space:nowrap">↻</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -1066,6 +1080,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+
+    // Tab switcher
+    overlay.querySelectorAll('.mst-tab').forEach(tabBtn => {
+      tabBtn.onclick = () => {
+        const target = tabBtn.dataset.tab;
+        overlay.querySelectorAll('.mst-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
+        overlay.querySelectorAll('.mst-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
+      };
+    });
 
     const statusSel = overlay.querySelector('#new-status');
     const pricingSec = overlay.querySelector('#pricing-section');
@@ -1323,7 +1346,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
 
     statusSel.onchange = () => {
-      pricingSec.style.display = (statusSel.value === 'resolved' || statusSel.value === 'closed') ? 'block' : 'none';
+      const resolving = statusSel.value === 'resolved' || statusSel.value === 'closed';
+      pricingSec.style.display = resolving ? 'block' : 'none';
+      const lockHint = overlay.querySelector('#bill-locked-hint');
+      if (lockHint) lockHint.style.display = resolving ? 'none' : 'block';
       renderPayStatus();
     };
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };

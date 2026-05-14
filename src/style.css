@@ -3006,6 +3006,49 @@ input, select, textarea { max-width: 100%; }
 }
 
 /* ══════════════════════════════════════════════════════════
+   Tabbed modal (Employee Manage Service)
+   ══════════════════════════════════════════════════════════ */
+.mst-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 18px;
+  background: var(--bg-soft);
+  border-radius: 14px;
+  box-shadow: var(--neu-in);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mst-tabs::-webkit-scrollbar { display: none; }
+.mst-tab {
+  flex: 1;
+  min-width: max-content;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.mst-tab:hover:not(.active) { color: var(--primary); }
+.mst-tab.active {
+  background: var(--bg);
+  color: var(--primary);
+  box-shadow: var(--neu-sm);
+}
+.mst-pane { display: none; animation: mstFade 0.2s ease-out; }
+.mst-pane.active { display: block; }
+@keyframes mstFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════
    Bill breakdown card (Employee Manage Service modal)
    ══════════════════════════════════════════════════════════ */
 .bill-breakdown {
