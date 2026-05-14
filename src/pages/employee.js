@@ -127,36 +127,45 @@ export function renderPremiumBillHTML(data) {
   </div>`;
 }
 
-// Plain-text version of the bill for WhatsApp (wa.me/ accepts text only).
-function billAsWhatsAppText(data) {
+// Render the bill node to a PDF Blob via html2pdf. Returns { blob, file }.
+async function renderBillToPdfBlob(node, filename) {
+  const html2pdf = await loadHtml2Pdf();
+  const blob = await html2pdf().set({
+    margin: 8,
+    filename,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+  }).from(node).outputPdf('blob');
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  return { blob, file };
+}
+
+// Trigger a download of the given blob.
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Short message that goes alongside the PDF on WhatsApp.
+function billShortCaption(data) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const lines = [
-    `*${BUSINESS.name}* 🧾`,
-    `Bill for *${data.customer?.name || ''}*`,
-    `Ticket: *${data.customer?.ticket_no || '—'}*`,
-    '',
-    '*Items:*',
-    ...(data.services || []).map(s => `• ${s.name} — ${inr(s.cost)}`),
+    `Hi ${data.customer?.name || ''}! 👋`,
+    `Your service invoice from *${BUSINESS.name}* is attached.`,
+    `Ticket: *${data.customer?.ticket_no || '—'}* · Total: *${inr(data.total)}*`,
   ];
-  if (Number(data.extra) > 0) lines.push(`• Additional charges — ${inr(data.extra)}`);
-  lines.push(
-    '',
-    `Services subtotal: ${inr(data.servicesSubtotal)}`,
-    `Platform fee: ${inr(data.platform)}`,
-    `Transport (${Number(data.km || 0).toFixed(1)} km × ₹5): ${inr(data.transport)}`,
-  );
-  if (Number(data.discount) > 0) lines.push(`Discount: −${inr(data.discount)}`);
-  lines.push(
-    `GST (18%): ${inr(data.gst)}`,
-    `*Total: ${inr(data.total)}*`,
-  );
   if (data.paymentLink) lines.push('', `💳 Pay here: ${data.paymentLink}`);
-  lines.push('', `— ${BUSINESS.name}`);
   return lines.join('\n');
 }
 
 // Opens the premium bill modal. Accepts an options object:
-//   onSent       — fires after the WhatsApp share is opened (used by employee
+//   onSent       — fires after the share is initiated (used by employee
 //                  to persist the breakdown).
 //   allowShare   — when false, hides the "Send via WhatsApp" button (admin
 //                  view should not re-share).
@@ -181,7 +190,7 @@ export function openPremiumBillModal(data, opts = {}) {
         <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
         ${allowShare ? `
           <button class="btn btn-primary" id="pb-whatsapp" style="background:#25D366; box-shadow:0 8px 24px rgba(37,211,102,0.32);">
-            ${ICONS.whatsapp || ''}<span>Send via WhatsApp</span>
+            ${ICONS.whatsapp || ''}<span>Send PDF via WhatsApp</span>
           </button>` : ''}
       </div>
     </div>`;
@@ -190,20 +199,15 @@ export function openPremiumBillModal(data, opts = {}) {
   overlay.querySelector('#pb-close').onclick = close;
   overlay.querySelector('#pb-cancel').onclick = close;
 
+  const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
+  const getNode = () => overlay.querySelector('#premium-bill-print');
+
   overlay.querySelector('#pb-download').onclick = async () => {
     const btn = overlay.querySelector('#pb-download');
     btn.disabled = true; btn.textContent = '… preparing PDF';
     try {
-      const html2pdf = await loadHtml2Pdf();
-      const node = overlay.querySelector('#premium-bill-print');
-      const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
-      await html2pdf().set({
-        margin: 8,
-        filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      }).from(node).save();
+      const { blob } = await renderBillToPdfBlob(getNode(), filename);
+      downloadBlob(blob, filename);
       toast('Bill PDF downloaded', 'success');
     } catch (err) {
       console.error(err);
@@ -215,16 +219,62 @@ export function openPremiumBillModal(data, opts = {}) {
 
   if (allowShare) {
     overlay.querySelector('#pb-whatsapp').onclick = async () => {
-      const phone = (data.customer?.phone || '').replace(/\D/g, '');
-      const text = billAsWhatsAppText(data);
-      const url = phone
-        ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
-        : `https://wa.me/?text=${encodeURIComponent(text)}`;
-      window.open(url, '_blank');
-      if (typeof onSent === 'function') {
-        try { await onSent(); } catch {}
+      const btn = overlay.querySelector('#pb-whatsapp');
+      btn.disabled = true;
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = `<span>… preparing PDF</span>`;
+      let shared = false;
+      try {
+        const { blob, file } = await renderBillToPdfBlob(getNode(), filename);
+        const caption = billShortCaption(data);
+
+        // Primary path: native share sheet with the PDF attached. On mobile
+        // this lets the user pick WhatsApp and the file goes as an actual
+        // document attachment, not a text link.
+        const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
+        if (canShareFile) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `Invoice ${data.customer?.ticket_no || ''}`.trim(),
+              text: caption,
+            });
+            shared = true;
+            toast('PDF shared via WhatsApp', 'success');
+          } catch (err) {
+            // User cancelled the share sheet — treat as a no-op, don't fall back.
+            if (err && err.name === 'AbortError') {
+              btn.disabled = false; btn.innerHTML = originalHTML;
+              return;
+            }
+            // Otherwise fall through to the desktop fallback.
+            console.warn('navigator.share failed, falling back', err);
+          }
+        }
+
+        if (!shared) {
+          // Desktop / unsupported browsers: download the PDF, then open
+          // WhatsApp Web with the caption. The technician drags the
+          // just-downloaded file into the chat to attach it.
+          downloadBlob(blob, filename);
+          const phone = (data.customer?.phone || '').replace(/\D/g, '');
+          const url = phone
+            ? `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`
+            : `https://wa.me/?text=${encodeURIComponent(caption)}`;
+          window.open(url, '_blank');
+          toast(`PDF downloaded as "${filename}" — drag it into the WhatsApp chat that just opened.`, 'success');
+          shared = true;
+        }
+
+        if (shared && typeof onSent === 'function') {
+          try { await onSent(); } catch {}
+        }
+      } catch (err) {
+        console.error(err);
+        toast(err.message || 'Could not generate PDF', 'error');
+      } finally {
+        btn.disabled = false; btn.innerHTML = originalHTML;
       }
-      toast('Opened WhatsApp — also remember to attach the PDF (Download PDF).', 'success');
     };
   }
 }
