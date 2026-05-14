@@ -711,6 +711,46 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
     }
 });
 
+app.delete('/api/data/:table', dataAuth, async (req, res) => {
+    const { table } = req.params;
+    const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
+
+    if (eqs.length === 0) return res.status(400).json({ error: 'Filter required for delete' });
+
+    try {
+        const connection = await mysql.createConnection(dbConfig);
+
+        const whereClauses = [];
+        const whereParams = [];
+        eqs.forEach(filter => {
+            const idx = filter.indexOf(':');
+            if (idx === -1) return;
+            whereClauses.push('?? = ?');
+            whereParams.push(filter.slice(0, idx), filter.slice(idx + 1));
+        });
+
+        // Capture rows being deleted so we can broadcast their ids to subscribers.
+        let deletedRows = [];
+        try {
+            const [rows] = await connection.query(
+                `SELECT * FROM ?? WHERE ${whereClauses.join(' AND ')}`,
+                [table, ...whereParams]
+            );
+            deletedRows = rows;
+        } catch { /* ignore — proceed with delete */ }
+
+        const query = `DELETE FROM ?? WHERE ${whereClauses.join(' AND ')}`;
+        const [result] = await connection.query(query, [table, ...whereParams]);
+        await connection.end();
+
+        deletedRows.forEach(row => broadcastChange('DELETE', table, row));
+        res.json({ success: true, affectedRows: result.affectedRows || 0 });
+    } catch (error) {
+        console.error('Error deleting data:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
     const data = req.body;

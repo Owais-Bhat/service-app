@@ -1572,8 +1572,9 @@ export async function renderPricingTab(container) {
                 <td>${x.sub_category || '<span style="color:var(--text-dim)">—</span>'}</td>
                 <td><b>${x.sub_sub_category || x.name || ''}</b></td>
                 <td>₹${Number(x.cost).toLocaleString('en-IN')}</td>
-                <td>
-                  <button class="btn btn-danger btn-sm del-price" data-id="${x.id}">${ICONS.close}</button>
+                <td style="display:flex; gap:6px;">
+                  <button class="btn btn-secondary btn-sm edit-price" data-id="${x.id}" title="Edit">${ICONS.edit || 'Edit'}</button>
+                  <button class="btn btn-danger btn-sm del-price" data-id="${x.id}" title="Delete">${ICONS.close}</button>
                 </td>
               </tr>
             `).join('')}
@@ -1632,10 +1633,40 @@ export async function renderPricingTab(container) {
 
   container.querySelectorAll('.del-price').forEach(btn => {
     btn.onclick = async () => {
-      if (confirm('Delete this service?')) {
-        await supabase.from('service_pricing').delete().eq('id', btn.dataset.id);
-        renderPricingTab(container);
-      }
+      if (!confirm('Delete this service?')) return;
+      const { error } = await supabase.from('service_pricing').delete().eq('id', btn.dataset.id);
+      if (error) { toast(error.message || 'Delete failed', 'error'); return; }
+      toast('Service deleted', 'success');
+      renderPricingTab(container);
+    };
+  });
+
+  container.querySelectorAll('.edit-price').forEach(btn => {
+    btn.onclick = async () => {
+      const row = list.find(r => r.id === btn.dataset.id);
+      if (!row) return;
+      const category = prompt('Main Category:', row.category || '');
+      if (category === null) return;
+      const sub_category = prompt('Sub Category:', row.sub_category || '');
+      if (sub_category === null) return;
+      const sub_sub_category = prompt('Sub-Sub Category (service name):', row.sub_sub_category || row.name || '');
+      if (sub_sub_category === null) return;
+      if (!sub_sub_category.trim()) { toast('Sub-Sub Category is required', 'error'); return; }
+      const costStr = prompt('Price (₹):', String(row.cost ?? ''));
+      if (costStr === null) return;
+      const cost = parsePrice(costStr);
+      if (!Number.isFinite(cost) || cost < 0) { toast('Invalid price', 'error'); return; }
+
+      const { error } = await supabase.from('service_pricing').update({
+        category: category.trim() || 'Uncategorized',
+        sub_category: sub_category.trim() || null,
+        sub_sub_category: sub_sub_category.trim(),
+        name: sub_sub_category.trim(),
+        cost,
+      }).eq('id', row.id);
+      if (error) { toast(error.message || 'Update failed', 'error'); return; }
+      toast('Service updated', 'success');
+      renderPricingTab(container);
     };
   });
 }

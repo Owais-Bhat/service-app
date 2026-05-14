@@ -82,11 +82,16 @@ class QueryBuilder {
     return this;
   }
 
+  delete() {
+    this.method = 'DELETE';
+    return this;
+  }
+
   async then(resolve, reject) {
     try {
       const isPost = this.method === 'POST';
       const queryString = !isPost ? `?${this._buildQuery()}` : '';
-      
+
       const options = {
         method: this.method,
         headers: getHeaders()
