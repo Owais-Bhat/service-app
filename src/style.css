@@ -3004,3 +3004,193 @@ input, select, textarea { max-width: 100%; }
   font-weight: 500;
   padding-left: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Bill breakdown card (Employee Manage Service modal)
+   ══════════════════════════════════════════════════════════ */
+.bill-breakdown {
+  padding: 14px 16px;
+  background: var(--bg-soft);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: var(--neu-sm);
+  margin-bottom: 14px;
+}
+
+.bill-breakdown .bill-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+  padding: 6px 0;
+}
+
+.bill-breakdown .bill-row b {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bill-breakdown .bill-row-discount b { color: var(--success); }
+
+.bill-breakdown .bill-row-total {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: 1rem;
+}
+
+.bill-breakdown .bill-row-total span {
+  font-weight: 800;
+  color: var(--text);
+}
+
+.bill-breakdown .bill-row-total b {
+  font-size: 1.25rem;
+  color: var(--primary);
+  font-weight: 800;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Premium Bill template (printable / shareable invoice)
+   Self-contained colors — should look identical in light/dark
+   themes and survive html-to-PDF rendering.
+   ══════════════════════════════════════════════════════════ */
+.premium-bill-modal .modal-body { background: #f3f4f6; }
+
+.premium-bill {
+  background: #ffffff;
+  color: #0F172A;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 640px;
+  margin: 0 auto;
+  border-radius: 16px;
+  padding: 28px 32px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+  border-top: 6px solid #10B981;
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-bill::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, rgba(16,185,129,0.12), transparent 65%);
+  pointer-events: none;
+}
+
+.pb-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px dashed #E5E7EB;
+  position: relative;
+}
+
+.pb-brand { display: flex; align-items: center; gap: 12px; }
+.pb-logo { width: 52px; height: 52px; object-fit: contain; border-radius: 10px; }
+.pb-biz-name { font-size: 18px; font-weight: 800; color: #064E3B; letter-spacing: 0.01em; }
+.pb-biz-sub { font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+
+.pb-meta { text-align: right; font-size: 12px; color: #374151; }
+.pb-stamp {
+  display: inline-block;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.16em;
+  background: #10B981; color: #fff;
+  padding: 4px 10px; border-radius: 999px; margin-bottom: 8px;
+}
+.pb-bill-no, .pb-bill-date { font-size: 12px; color: #4B5563; margin-top: 2px; }
+.pb-bill-no b, .pb-bill-date b { color: #0F172A; }
+
+.pb-parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px dashed #E5E7EB;
+}
+.pb-section-title { font-size: 10px; font-weight: 800; color: #10B981; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.pb-party-name { font-size: 15px; font-weight: 800; color: #0F172A; }
+.pb-party-line { font-size: 12px; color: #4B5563; margin-top: 2px; line-height: 1.5; }
+.pb-party-line b { color: #0F172A; font-weight: 700; }
+.pb-party-loc { font-style: italic; color: #6B7280; }
+
+.pb-items {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 13px;
+}
+.pb-items thead th {
+  background: #ECFDF5;
+  color: #064E3B;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 2px solid #10B981;
+}
+.pb-items tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F3F4F6;
+  color: #1F2937;
+}
+.pb-items .pb-idx { width: 36px; color: #9CA3AF; }
+.pb-items .pb-right, .pb-items th.pb-right { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.pb-totals {
+  margin-left: auto;
+  width: 60%;
+  padding: 12px 14px;
+  background: #F9FAFB;
+  border-radius: 10px;
+  margin-top: 4px;
+}
+.pb-totals-row {
+  display: flex; justify-content: space-between;
+  font-size: 12px; color: #374151;
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+.pb-totals-row b { color: #0F172A; font-weight: 700; }
+.pb-totals-row.pb-discount b { color: #059669; }
+.pb-totals-row.pb-total {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 2px solid #10B981;
+  font-size: 15px;
+}
+.pb-totals-row.pb-total span { font-weight: 800; color: #064E3B; }
+.pb-totals-row.pb-total b { font-size: 18px; color: #10B981; font-weight: 800; }
+
+.pb-pay {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px dashed #10B981;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(16,185,129,0.05), rgba(16,185,129,0.02));
+  text-align: center;
+}
+.pb-pay-title { font-weight: 800; font-size: 12px; color: #064E3B; letter-spacing: 0.06em; text-transform: uppercase; }
+.pb-pay-link { word-break: break-all; font-size: 11px; color: #2563EB; margin-top: 6px; }
+.pb-pay-qr { width: 130px; height: 130px; margin: 10px auto 6px; display: block; border-radius: 8px; }
+.pb-pay-hint { font-size: 11px; color: #6B7280; }
+
+.pb-footer { margin-top: 20px; padding-top: 16px; border-top: 1px dashed #E5E7EB; text-align: center; }
+.pb-thanks { font-weight: 800; color: #10B981; font-size: 14px; }
+.pb-foot-meta { font-size: 11px; color: #6B7280; margin-top: 4px; }
+
+@media (max-width: 540px) {
+  .premium-bill { padding: 20px; }
+  .pb-header { flex-direction: column; align-items: flex-start; }
+  .pb-meta { text-align: left; }
+  .pb-parties { grid-template-columns: 1fr; gap: 14px; }
+  .pb-totals { width: 100%; }
+}

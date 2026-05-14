@@ -643,6 +643,8 @@ export function renderLandingPage(container, onPortalClick) {
         full_name: name,
         phone: '+91' + state.phone,
         location: state.locationValue,
+        customer_lat: state.coords?.lat ?? null,
+        customer_lng: state.coords?.lng ?? null,
         bill_no: bill || null,
         service_item,
         status: 'open',

@@ -2,6 +2,233 @@ import { supabase } from '../supabase.js';
 import { toast, formatDate, formatTime, showNotification } from '../utils.js';
 import { ICONS } from '../icons.js';
 
+const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
+
+// Business info shown on every premium bill.
+const BUSINESS = {
+  name: 'Networking Experts',
+  tagline: 'Service · Installation · Support',
+  address: 'Srinagar, J&K, India',
+  phone: '+91 90000 00000',
+  email: 'support@networkingexperts.in',
+  gstin: '—',
+};
+
+// Lazily inject html2pdf.js (used to generate a downloadable PDF from the
+// bill template). The CDN bundle includes both html2canvas and jsPDF.
+let _html2pdfPromise = null;
+function loadHtml2Pdf() {
+  if (window.html2pdf) return Promise.resolve(window.html2pdf);
+  if (_html2pdfPromise) return _html2pdfPromise;
+  _html2pdfPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload = () => resolve(window.html2pdf);
+    s.onerror = () => { _html2pdfPromise = null; reject(new Error('Could not load PDF library')); };
+    document.head.appendChild(s);
+  });
+  return _html2pdfPromise;
+}
+
+// Premium printable bill template, used by employee + admin.
+// `data` shape:
+//   { customer:{name,phone,location,company,device_type,device_serial,service_item,ticket_no},
+//     technician, services:[{name,cost}], extra, extraReason,
+//     servicesSubtotal, platform, km, transport, discount, taxable, gst, total,
+//     paymentLink }
+export function renderPremiumBillHTML(data) {
+  const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const today = new Date();
+  const issued = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
+  const billNo = `NX-${(data.customer?.ticket_no || Date.now()).toString().slice(-8)}`;
+  const services = Array.isArray(data.services) ? data.services : [];
+  const itemRows = services.map((s, i) => `
+    <tr>
+      <td class="pb-idx">${i + 1}</td>
+      <td>${esc(s.name)}</td>
+      <td class="pb-right">${inr(s.cost)}</td>
+    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:18px;">No itemised services</td></tr>`;
+  const extraRow = Number(data.extra) > 0 ? `
+    <tr>
+      <td class="pb-idx">${services.length + 1}</td>
+      <td>Additional charges${data.extraReason ? ` <span style="color:#6B7280;font-size:11px">(${esc(data.extraReason)})</span>` : ''}</td>
+      <td class="pb-right">${inr(data.extra)}</td>
+    </tr>` : '';
+
+  return `
+  <div class="premium-bill" id="premium-bill-print">
+    <div class="pb-header">
+      <div class="pb-brand">
+        <img src="${LOGO_URL}" alt="${BUSINESS.name}" class="pb-logo" onerror="this.style.display='none'"/>
+        <div>
+          <div class="pb-biz-name">${BUSINESS.name}</div>
+          <div class="pb-biz-sub">${BUSINESS.tagline}</div>
+        </div>
+      </div>
+      <div class="pb-meta">
+        <div class="pb-stamp">TAX INVOICE</div>
+        <div class="pb-bill-no">Bill # <b>${esc(billNo)}</b></div>
+        <div class="pb-bill-date">Date: <b>${issued}</b></div>
+      </div>
+    </div>
+
+    <div class="pb-parties">
+      <div>
+        <div class="pb-section-title">Billed To</div>
+        <div class="pb-party-name">${esc(data.customer?.name || '—')}</div>
+        <div class="pb-party-line">${esc(data.customer?.phone || '')}</div>
+        ${data.customer?.company ? `<div class="pb-party-line">${esc(data.customer.company)}</div>` : ''}
+        <div class="pb-party-line pb-party-loc">${esc(data.customer?.location || '')}</div>
+      </div>
+      <div>
+        <div class="pb-section-title">Service Details</div>
+        <div class="pb-party-line"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '—')}</div>
+        <div class="pb-party-line"><b>Service:</b> ${esc(data.customer?.service_item || '—')}</div>
+        ${data.customer?.device_type ? `<div class="pb-party-line"><b>Device:</b> ${esc(data.customer.device_type)}</div>` : ''}
+        ${data.customer?.device_serial ? `<div class="pb-party-line"><b>Serial:</b> ${esc(data.customer.device_serial)}</div>` : ''}
+        ${data.technician ? `<div class="pb-party-line"><b>Technician:</b> ${esc(data.technician)}</div>` : ''}
+      </div>
+    </div>
+
+    <table class="pb-items">
+      <thead>
+        <tr><th class="pb-idx">#</th><th>Description</th><th class="pb-right">Amount</th></tr>
+      </thead>
+      <tbody>${itemRows}${extraRow}</tbody>
+    </table>
+
+    <div class="pb-totals">
+      <div class="pb-totals-row"><span>Services subtotal</span><b>${inr(data.servicesSubtotal)}</b></div>
+      ${Number(data.extra) > 0 ? `<div class="pb-totals-row"><span>Additional charges</span><b>${inr(data.extra)}</b></div>` : ''}
+      <div class="pb-totals-row"><span>Platform fee</span><b>${inr(data.platform)}</b></div>
+      <div class="pb-totals-row"><span>Transport (${Number(data.km || 0).toFixed(1)} km × ₹5)</span><b>${inr(data.transport)}</b></div>
+      ${Number(data.discount) > 0 ? `<div class="pb-totals-row pb-discount"><span>Loyalty discount</span><b>−${inr(data.discount)}</b></div>` : ''}
+      <div class="pb-totals-row"><span>Taxable amount</span><b>${inr(data.taxable)}</b></div>
+      <div class="pb-totals-row"><span>GST @ 18%</span><b>${inr(data.gst)}</b></div>
+      <div class="pb-totals-row pb-total"><span>Total Payable</span><b>${inr(data.total)}</b></div>
+    </div>
+
+    ${data.paymentLink ? `
+      <div class="pb-pay">
+        <div class="pb-pay-title">💳 Quick Pay</div>
+        <div class="pb-pay-link">${esc(data.paymentLink)}</div>
+        <img class="pb-pay-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.paymentLink)}" alt="Payment QR"/>
+        <div class="pb-pay-hint">Scan or tap the link to pay securely via Razorpay.</div>
+      </div>` : ''}
+
+    <div class="pb-footer">
+      <div class="pb-thanks">Thank you for choosing ${BUSINESS.name}!</div>
+      <div class="pb-foot-meta">
+        ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}
+      </div>
+      <div class="pb-foot-meta">GSTIN: ${BUSINESS.gstin} · This is a computer-generated invoice.</div>
+    </div>
+  </div>`;
+}
+
+// Plain-text version of the bill for WhatsApp (wa.me/ accepts text only).
+function billAsWhatsAppText(data) {
+  const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+  const lines = [
+    `*${BUSINESS.name}* 🧾`,
+    `Bill for *${data.customer?.name || ''}*`,
+    `Ticket: *${data.customer?.ticket_no || '—'}*`,
+    '',
+    '*Items:*',
+    ...(data.services || []).map(s => `• ${s.name} — ${inr(s.cost)}`),
+  ];
+  if (Number(data.extra) > 0) lines.push(`• Additional charges — ${inr(data.extra)}`);
+  lines.push(
+    '',
+    `Services subtotal: ${inr(data.servicesSubtotal)}`,
+    `Platform fee: ${inr(data.platform)}`,
+    `Transport (${Number(data.km || 0).toFixed(1)} km × ₹5): ${inr(data.transport)}`,
+  );
+  if (Number(data.discount) > 0) lines.push(`Discount: −${inr(data.discount)}`);
+  lines.push(
+    `GST (18%): ${inr(data.gst)}`,
+    `*Total: ${inr(data.total)}*`,
+  );
+  if (data.paymentLink) lines.push('', `💳 Pay here: ${data.paymentLink}`);
+  lines.push('', `— ${BUSINESS.name}`);
+  return lines.join('\n');
+}
+
+// Opens the premium bill modal. Accepts an options object:
+//   onSent       — fires after the WhatsApp share is opened (used by employee
+//                  to persist the breakdown).
+//   allowShare   — when false, hides the "Send via WhatsApp" button (admin
+//                  view should not re-share).
+//   title        — overrides the modal title.
+export function openPremiumBillModal(data, opts = {}) {
+  const { onSent, allowShare = true, title = '📄 Service Invoice Preview' } = opts;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal premium-bill-modal" style="max-width:720px">
+      <div class="modal-header">
+        <span class="modal-title">${title}</span>
+        <button class="modal-close" id="pb-close">✕</button>
+      </div>
+      <div class="modal-body" style="padding:0;">
+        <div id="pb-render-wrap" style="padding:18px; background:#f3f4f6;">
+          ${renderPremiumBillHTML(data)}
+        </div>
+      </div>
+      <div class="modal-footer" style="flex-wrap:wrap; gap:8px;">
+        <button class="btn btn-secondary" id="pb-cancel">Close</button>
+        <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
+        ${allowShare ? `
+          <button class="btn btn-primary" id="pb-whatsapp" style="background:#25D366; box-shadow:0 8px 24px rgba(37,211,102,0.32);">
+            ${ICONS.whatsapp || ''}<span>Send via WhatsApp</span>
+          </button>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#pb-close').onclick = close;
+  overlay.querySelector('#pb-cancel').onclick = close;
+
+  overlay.querySelector('#pb-download').onclick = async () => {
+    const btn = overlay.querySelector('#pb-download');
+    btn.disabled = true; btn.textContent = '… preparing PDF';
+    try {
+      const html2pdf = await loadHtml2Pdf();
+      const node = overlay.querySelector('#premium-bill-print');
+      const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
+      await html2pdf().set({
+        margin: 8,
+        filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      }).from(node).save();
+      toast('Bill PDF downloaded', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Could not generate PDF', 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = '📥 Download PDF';
+    }
+  };
+
+  if (allowShare) {
+    overlay.querySelector('#pb-whatsapp').onclick = async () => {
+      const phone = (data.customer?.phone || '').replace(/\D/g, '');
+      const text = billAsWhatsAppText(data);
+      const url = phone
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
+        : `https://wa.me/?text=${encodeURIComponent(text)}`;
+      window.open(url, '_blank');
+      if (typeof onSent === 'function') {
+        try { await onSent(); } catch {}
+      }
+      toast('Opened WhatsApp — also remember to attach the PDF (Download PDF).', 'success');
+    };
+  }
+}
+
 function getMonthKey(date = new Date()) {
   return date.toLocaleDateString('en-CA').slice(0, 7);
 }
@@ -361,9 +588,11 @@ export async function renderEmployeeDashboard(container) {
     const btn = container.querySelector('#btn-clock-in');
     btn.disabled = true; btn.textContent = 'Getting location…';
     let locationStr = 'Unknown';
+    let coords = { lat: null, lng: null };
     try {
       const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
       const { latitude: lat, longitude: lng } = pos.coords;
+      coords = { lat, lng };
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
         const data = await res.json();
@@ -374,7 +603,8 @@ export async function renderEmployeeDashboard(container) {
     } catch (_) {}
 
     const { error } = await supabase.from('attendance').insert({
-      user_id: user.id, clock_in: new Date().toISOString(), date: today, location: locationStr, status: 'present'
+      user_id: user.id, clock_in: new Date().toISOString(), date: today, location: locationStr,
+      latitude: coords.lat, longitude: coords.lng, status: 'present'
     });
     if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = '✅ Clock In'; }
     else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
@@ -659,9 +889,29 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
     // Snapshot current payment state so we can gate the resolved/closed submit button.
     let paymentState = { status: 'unpaid', received_at: null };
+    let inquiryRow = null;
     if (inqId) {
-      const { data: inqSnap } = await supabase.from('inquiries').select('payment_status,payment_received_at').eq('id', inqId).single();
-      if (inqSnap) paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
+      const { data: inqSnap } = await supabase.from('inquiries').select('*').eq('id', inqId).single();
+      if (inqSnap) {
+        inquiryRow = inqSnap;
+        paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
+      }
+    }
+    // Employee profile + most recent attendance (for technician name and clock-in coords).
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const empProfile = authUser ? (await supabase.from('profiles').select('*').eq('id', authUser.id).single()).data : null;
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    let employeeCoords = { lat: null, lng: null, location: null };
+    if (authUser) {
+      const { data: att } = await supabase.from('attendance')
+        .select('latitude,longitude,location,clock_in')
+        .eq('user_id', authUser.id)
+        .eq('date', todayKey)
+        .order('clock_in', { ascending: false })
+        .limit(1);
+      if (att && att[0]) {
+        employeeCoords = { lat: att[0].latitude, lng: att[0].longitude, location: att[0].location };
+      }
     }
     // Build a tree: Main → Sub → leaves (each leaf = priced row). When a row
     // has no sub_category we group it under a synthetic '' key, surfaced as
@@ -701,7 +951,18 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <div id="pricing-section" style="display:${currentStatus==='resolved'||currentStatus==='closed'?'block':'none'}; margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
             <div class="form-group">
               <label>Company Name (Optional)</label>
-              <input type="text" id="resolve-company" placeholder="Which company is this for?"/>
+              <input type="text" id="resolve-company" placeholder="Which company is this for?" value="${(inquiryRow?.company_name ?? '').replace(/"/g,'&quot;')}"/>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label>Device Type</label>
+                <input type="text" id="device-type" placeholder="e.g. Video Door Phone" value="${(inquiryRow?.device_type ?? '').replace(/"/g,'&quot;')}"/>
+              </div>
+              <div class="form-group">
+                <label>Device Serial No</label>
+                <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no ?? '').replace(/"/g,'&quot;')}"/>
+              </div>
             </div>
 
             <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
@@ -733,10 +994,27 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <input type="text" id="extra-reason" placeholder="Reason for extra charge..."/>
             </div>
 
-            <div style="padding:12px; background:var(--primary-soft); border-radius:10px; text-align:right; margin-bottom:16px;">
-              <span style="font-size:0.85rem; color:var(--text-dim);">Total Estimated Bill:</span>
-              <div style="font-size:1.4rem; font-weight:800; color:var(--primary);" id="total-bill-display">₹0</div>
+            <div class="form-group">
+              <label>Transport Distance (km)</label>
+              <div style="display:flex; gap:8px;">
+                <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1"/>
+                <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate from your clock-in location to the customer location">📍 Auto</button>
+              </div>
+              <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km · click 📍 Auto to compute from your clock-in GPS.</small>
             </div>
+
+            <div class="bill-breakdown" id="bill-breakdown">
+              <div class="bill-row"><span>Services subtotal</span><b id="br-services">₹0</b></div>
+              <div class="bill-row"><span>Additional charges</span><b id="br-extra">₹0</b></div>
+              <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
+              <div class="bill-row"><span>Transport (<span id="br-km">0</span> km × ₹5)</span><b id="br-transport">₹0</b></div>
+              <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">−₹30</b></div>
+              <div class="bill-row"><span>GST (18%)</span><b id="br-gst">₹0</b></div>
+              <div class="bill-row bill-row-total"><span>Final total</span><b id="br-total">₹0</b></div>
+              <input type="hidden" id="total-bill-display" value="0"/>
+            </div>
+
+            <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">📄 Generate &amp; Send Premium Bill</button>
 
             <!-- Payment Link + QR -->
             <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
@@ -793,17 +1071,91 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const pricingSec = overlay.querySelector('#pricing-section');
     const totalDisplay = overlay.querySelector('#total-bill-display');
     const extraInput = overlay.querySelector('#extra-cost');
+    const kmInput = overlay.querySelector('#transport-km');
     const saveBtn = overlay.querySelector('#save-update');
+
+    // Bill constants
+    const PLATFORM_FEE = 50;
+    const TRANSPORT_PER_KM = 5;
+    const DISCOUNT_THRESHOLD = 250;
+    const DISCOUNT_AMOUNT = 30;
+    const GST_RATE = 0.18;
+    const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
     // Selected services chosen via the cascading picker. Each entry:
     // { id, main, sub, leaf, cost }.
     const selectedServices = [];
 
-    const calcTotal = () => {
-      let total = Number(extraInput.value) || 0;
-      selectedServices.forEach(s => { total += Number(s.cost) || 0; });
-      totalDisplay.textContent = `₹${total.toLocaleString('en-IN')}`;
+    // Live breakdown — also stored on a closure object so the bill modal can read it.
+    const bill = {
+      servicesSubtotal: 0, extra: 0, platform: PLATFORM_FEE,
+      km: 0, transport: 0, discount: 0, taxable: 0, gst: 0, total: 0,
     };
+
+    const calcTotal = () => {
+      bill.servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
+      bill.extra = Number(extraInput.value) || 0;
+      bill.km = Math.max(0, Number(kmInput.value) || 0);
+      bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
+      bill.platform = PLATFORM_FEE;
+      const preDiscount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+      bill.discount = preDiscount > DISCOUNT_THRESHOLD ? DISCOUNT_AMOUNT : 0;
+      bill.taxable = preDiscount - bill.discount;
+      bill.gst = Math.round(bill.taxable * GST_RATE);
+      bill.total = bill.taxable + bill.gst;
+
+      overlay.querySelector('#br-services').textContent = inr(bill.servicesSubtotal);
+      overlay.querySelector('#br-extra').textContent = inr(bill.extra);
+      overlay.querySelector('#br-platform').textContent = inr(bill.platform);
+      overlay.querySelector('#br-km').textContent = bill.km.toString();
+      overlay.querySelector('#br-transport').textContent = inr(bill.transport);
+      const discRow = overlay.querySelector('#br-discount-row');
+      discRow.style.display = bill.discount > 0 ? 'flex' : 'none';
+      overlay.querySelector('#br-discount').textContent = `−${inr(bill.discount)}`;
+      overlay.querySelector('#br-gst').textContent = inr(bill.gst);
+      overlay.querySelector('#br-total').textContent = inr(bill.total);
+      totalDisplay.value = String(bill.total);
+    };
+
+    // Haversine distance in km between two lat/lng pairs.
+    const haversineKm = (lat1, lng1, lat2, lng2) => {
+      const toRad = (d) => d * Math.PI / 180;
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    };
+
+    // Auto-fill km from clock-in coords → customer coords.
+    const autoKmBtn = overlay.querySelector('#auto-km');
+    const kmHint = overlay.querySelector('#transport-km-hint');
+    const tryAutoKm = () => {
+      const eLat = employeeCoords.lat, eLng = employeeCoords.lng;
+      const cLat = inquiryRow?.customer_lat, cLng = inquiryRow?.customer_lng;
+      if (eLat == null || eLng == null) {
+        kmHint.textContent = '₹5 per km · enter manually (no clock-in GPS on record for today).';
+        autoKmBtn.disabled = true; autoKmBtn.style.opacity = '0.5';
+        return;
+      }
+      if (cLat == null || cLng == null) {
+        kmHint.textContent = '₹5 per km · enter manually (customer location has no GPS coords).';
+        autoKmBtn.disabled = true; autoKmBtn.style.opacity = '0.5';
+        return;
+      }
+      kmHint.textContent = `₹5 per km · 📍 Auto uses your clock-in GPS → customer GPS.`;
+    };
+    tryAutoKm();
+    autoKmBtn.onclick = () => {
+      const eLat = employeeCoords.lat, eLng = employeeCoords.lng;
+      const cLat = inquiryRow?.customer_lat, cLng = inquiryRow?.customer_lng;
+      if (eLat == null || cLat == null) return;
+      const km = haversineKm(Number(eLat), Number(eLng), Number(cLat), Number(cLng));
+      kmInput.value = km.toFixed(1);
+      calcTotal(); renderPayStatus();
+      toast(`Distance: ${km.toFixed(1)} km`, 'success');
+    };
+    kmInput.oninput = () => { calcTotal(); renderPayStatus(); };
 
     // ── Cascading picker wiring ───────────────────────────────────────────
     const mainSel = overlay.querySelector('#svc-main');
@@ -921,7 +1273,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     const renderPayStatus = () => {
       const resolving = statusSel.value === 'resolved' || statusSel.value === 'closed';
-      const total = Number(totalDisplay.textContent.replace(/[^\d]/g, '')) || 0;
+      const total = Number(totalDisplay.value) || 0;
       const requiresPayment = resolving && total > 0;
       const paid = paymentState.status === 'paid';
 
@@ -1047,6 +1399,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       .subscribe();
 
     // Initial paint.
+    calcTotal();
     renderPayStatus();
 
     // Payment link generation + QR
@@ -1067,7 +1420,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     if (genBtn) {
       genBtn.onclick = async () => {
-        const total = Number(overlay.querySelector('#total-bill-display').textContent.replace(/[^\d]/g,''));
+        const total = Number(totalDisplay.value) || 0;
         if (!total) { toast('Select services or enter a bill amount first', 'warning'); return; }
 
         const { data: inqData } = await supabase.from('inquiries').select('full_name,phone,service_item,ticket_no').eq('id', inqId).single();
@@ -1089,8 +1442,22 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Failed');
           showQR(data.short_url);
-          // Save payment link back to the inquiry
-          await supabase.from('inquiries').update({ payment_link: data.short_url, payment_link_id: data.id || null, bill_amount: total }).eq('id', inqId);
+          // Persist full bill breakdown so admin can render the same template.
+          await supabase.from('inquiries').update({
+            payment_link: data.short_url,
+            payment_link_id: data.id || null,
+            bill_amount: bill.servicesSubtotal + bill.extra,
+            transport_km: bill.km,
+            transport_fee: bill.transport,
+            platform_fee: bill.platform,
+            discount_amount: bill.discount,
+            gst_amount: bill.gst,
+            bill_total: bill.total,
+            bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
+            device_type: overlay.querySelector('#device-type')?.value.trim() || null,
+            device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
+            company_name: overlay.querySelector('#resolve-company')?.value.trim() || null,
+          }).eq('id', inqId);
           _hasLinkBeenGenerated = true;
           renderPayStatus();
           toast('Payment link generated! Waiting for client to pay…', 'success');
@@ -1099,6 +1466,55 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         } finally {
           genBtn.disabled = false; genBtn.textContent = '✨ Generate';
         }
+      };
+    }
+
+    // ── Premium Bill modal (PDF + WhatsApp share) ─────────────────────────
+    const openBillBtn = overlay.querySelector('#open-bill-modal');
+    if (openBillBtn) {
+      openBillBtn.onclick = async () => {
+        if (bill.total <= 0) { toast('Add services or charges first to generate a bill', 'warning'); return; }
+        // Snapshot inquiry first so we send fresh data to the bill template.
+        const { data: latestInq } = inqId
+          ? await supabase.from('inquiries').select('*').eq('id', inqId).single()
+          : { data: inquiryRow };
+        const customer = latestInq || inquiryRow || {};
+        const billData = {
+          ...bill,
+          customer: {
+            name: customer.full_name || '',
+            phone: customer.phone || '',
+            location: customer.location || '',
+            company: overlay.querySelector('#resolve-company')?.value.trim() || customer.company_name || '',
+            device_type: overlay.querySelector('#device-type')?.value.trim() || customer.device_type || '',
+            device_serial: overlay.querySelector('#device-serial')?.value.trim() || customer.device_serial_no || '',
+            service_item: customer.service_item || '',
+            ticket_no: customer.ticket_no || '',
+          },
+          technician: empProfile?.full_name || 'Technician',
+          services: selectedServices.map(s => ({ name: `${s.main}${s.sub ? ' › '+s.sub : ''} › ${s.leaf}`, cost: s.cost })),
+          extraReason: overlay.querySelector('#extra-reason')?.value.trim() || '',
+          paymentLink: _payLink || customer.payment_link || '',
+        };
+        openPremiumBillModal(billData, {
+          onSent: async () => {
+            // After "Send via WhatsApp" — persist breakdown so admin sees it too.
+            if (!inqId) return;
+            await supabase.from('inquiries').update({
+              bill_amount: bill.servicesSubtotal + bill.extra,
+              transport_km: bill.km,
+              transport_fee: bill.transport,
+              platform_fee: bill.platform,
+              discount_amount: bill.discount,
+              gst_amount: bill.gst,
+              bill_total: bill.total,
+              bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
+              device_type: billData.customer.device_type || null,
+              device_serial_no: billData.customer.device_serial || null,
+              company_name: billData.customer.company || null,
+            }).eq('id', inqId);
+          },
+        });
       };
     }
 
@@ -1119,26 +1535,32 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const btn = overlay.querySelector('#save-update');
       btn.disabled = true; btn.textContent = 'Saving...';
 
-      let totalBill = 0;
       const selectedServiceIds = [];
-      if (newStatus === 'resolved' || newStatus === 'closed') {
-        totalBill = Number(extraInput.value) || 0;
-        selectedServices.forEach(s => {
-          totalBill += Number(s.cost) || 0;
-          selectedServiceIds.push(s.id);
-        });
+      const resolving = newStatus === 'resolved' || newStatus === 'closed';
+      if (resolving) {
+        selectedServices.forEach(s => { selectedServiceIds.push(s.id); });
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
-      
+
       const inqUpdates = { status: newStatus };
       const companyName = overlay.querySelector('#resolve-company')?.value.trim();
+      const deviceType = overlay.querySelector('#device-type')?.value.trim();
+      const deviceSerial = overlay.querySelector('#device-serial')?.value.trim();
       if (companyName) inqUpdates.company_name = companyName;
-      if (totalBill > 0) {
-        inqUpdates.bill_amount = totalBill;
-        inqUpdates.extra_cost = Number(extraInput.value) || 0;
+      if (deviceType) inqUpdates.device_type = deviceType;
+      if (deviceSerial) inqUpdates.device_serial_no = deviceSerial;
+      if (resolving && bill.total > 0) {
+        inqUpdates.bill_amount = bill.servicesSubtotal + bill.extra;
+        inqUpdates.extra_cost = bill.extra;
         inqUpdates.extra_cost_reason = overlay.querySelector('#extra-reason').value.trim() || null;
+        inqUpdates.transport_km = bill.km;
+        inqUpdates.transport_fee = bill.transport;
+        inqUpdates.platform_fee = bill.platform;
+        inqUpdates.discount_amount = bill.discount;
+        inqUpdates.gst_amount = bill.gst;
+        inqUpdates.bill_total = bill.total;
       }
 
       if (inqId) {
@@ -1158,7 +1580,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       ops.push(supabase.from('ticket_comments').insert({
         ticket_id: taskId,
         user_id: user.id,
-        content: `[Status: ${newStatus.replace('_', ' ')}] ${detail}${totalBill > 0 ? ` (Bill: ₹${totalBill})` : ''}`
+        content: `[Status: ${newStatus.replace('_', ' ')}] ${detail}${resolving && bill.total > 0 ? ` (Bill: ₹${bill.total})` : ''}`
       }));
 
       await Promise.all(ops);

@@ -1,5 +1,6 @@
 import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining, showNotification } from '../utils.js';
+import { openPremiumBillModal } from './employee.js';
 
 function hoursWorked(clockIn, clockOut) {
   if (!clockIn || !clockOut) return null;
@@ -320,6 +321,21 @@ export async function renderAdminDashboard(container) {
 async function openInquiryDetail(id, onDone) {
   const { data: i } = await supabase.from('inquiries').select('*').eq('id', id).single();
   const { data: employees } = await supabase.from('profiles').select('*').eq('role', 'employee');
+  // Resolve technician name for the bill view, if assigned.
+  const technicianName = (employees || []).find(e => e.id === i.assigned_employee_id)?.full_name || '';
+  // Items used on the bill — fetched only if a bill has been generated.
+  let billServices = [];
+  if (i.bill_total) {
+    const { data: links } = await supabase.from('inquiry_services')
+      .select('service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)')
+      .eq('inquiry_id', i.id);
+    billServices = (links || []).map(row => {
+      const p = row.service_pricing || {};
+      const parts = [p.category, p.sub_category, p.sub_sub_category || p.name].filter(Boolean);
+      return { name: parts.join(' › '), cost: Number(p.cost) || 0 };
+    });
+  }
+  const hasBill = Number(i.bill_total) > 0;
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -341,6 +357,12 @@ async function openInquiryDetail(id, onDone) {
           </div>
           <div><div class="sr-meta-label">Service item</div><div class="sr-meta-value">${i.service_item || '—'}</div></div>
           <div><div class="sr-meta-label">Location</div><div class="sr-meta-value">${i.location || '—'}</div></div>
+          ${i.company_name ? `<div><div class="sr-meta-label">Company</div><div class="sr-meta-value">${i.company_name}</div></div>` : ''}
+          ${(i.device_type || i.device_serial_no) ? `
+            <div class="sr-meta-row">
+              <div><div class="sr-meta-label">Device Type</div><div class="sr-meta-value">${i.device_type || '—'}</div></div>
+              <div><div class="sr-meta-label">Serial No</div><div class="sr-meta-value sr-mono">${i.device_serial_no || '—'}</div></div>
+            </div>` : ''}
           <div class="sr-meta-row">
             <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value" style="color:var(--primary)">${i.preferred_time || 'Flexible'}</div></div>
             <div><div class="sr-meta-label">SLA Timer</div><div class="sr-meta-value">${formatTimeRemaining(calculateSLA(i.created_at))}</div></div>
@@ -365,6 +387,18 @@ async function openInquiryDetail(id, onDone) {
             </div>` : ''}
         </div>
 
+        ${hasBill ? `
+          <div class="bill-breakdown" style="margin-bottom:16px;">
+            <div style="font-size:0.78rem; font-weight:800; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">Generated Bill</div>
+            <div class="bill-row"><span>Services subtotal</span><b>₹${Math.round(Number(i.bill_amount) || 0).toLocaleString('en-IN')}</b></div>
+            <div class="bill-row"><span>Platform fee</span><b>₹${Math.round(Number(i.platform_fee) || 0).toLocaleString('en-IN')}</b></div>
+            <div class="bill-row"><span>Transport (${Number(i.transport_km || 0).toFixed(1)} km × ₹5)</span><b>₹${Math.round(Number(i.transport_fee) || 0).toLocaleString('en-IN')}</b></div>
+            ${Number(i.discount_amount) > 0 ? `<div class="bill-row bill-row-discount"><span>Loyalty discount</span><b>−₹${Math.round(Number(i.discount_amount)).toLocaleString('en-IN')}</b></div>` : ''}
+            <div class="bill-row"><span>GST (18%)</span><b>₹${Math.round(Number(i.gst_amount) || 0).toLocaleString('en-IN')}</b></div>
+            <div class="bill-row bill-row-total"><span>Total billed</span><b>₹${Math.round(Number(i.bill_total)).toLocaleString('en-IN')}</b></div>
+            <button type="button" class="btn btn-secondary btn-wide" id="view-bill-btn" style="margin-top:10px;">📄 View Premium Bill</button>
+          </div>` : ''}
+
         <div class="form-group">
           <label>Assign to Technician</label>
           <select id="assign-to">
@@ -380,6 +414,33 @@ async function openInquiryDetail(id, onDone) {
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#ci').onclick = overlay.querySelector('#ci2').onclick = () => overlay.remove();
+
+  if (hasBill) {
+    overlay.querySelector('#view-bill-btn').onclick = () => {
+      const servicesSubtotal = Math.max(0, Number(i.bill_amount || 0) - Number(i.extra_cost || 0));
+      openPremiumBillModal({
+        customer: {
+          name: i.full_name, phone: i.phone, location: i.location,
+          company: i.company_name, device_type: i.device_type,
+          device_serial: i.device_serial_no, service_item: i.service_item,
+          ticket_no: i.ticket_no,
+        },
+        technician: technicianName,
+        services: billServices,
+        servicesSubtotal,
+        extra: Number(i.extra_cost) || 0,
+        extraReason: i.extra_cost_reason || '',
+        platform: Number(i.platform_fee) || 0,
+        km: Number(i.transport_km) || 0,
+        transport: Number(i.transport_fee) || 0,
+        discount: Number(i.discount_amount) || 0,
+        taxable: (servicesSubtotal + Number(i.extra_cost || 0) + Number(i.platform_fee || 0) + Number(i.transport_fee || 0)) - Number(i.discount_amount || 0),
+        gst: Number(i.gst_amount) || 0,
+        total: Number(i.bill_total) || 0,
+        paymentLink: i.payment_link || '',
+      }, { allowShare: false, title: '📄 Bill (Sent to Client)' });
+    };
+  }
 
   overlay.querySelector('#save-sr').onclick = async () => {
     const empId = overlay.querySelector('#assign-to').value;
