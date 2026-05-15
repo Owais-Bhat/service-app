@@ -423,26 +423,6 @@ export async function renderEmployeeDashboard(container) {
       <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
     </div>
 
-    ${pendingInquiries.length > 0 ? `
-      <div class="card" style="border: 2px solid var(--primary); background: rgba(16, 185, 129, 0.05);">
-        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.alert}<span>New Assignments Pending</span></span></div>
-        <div class="card-body">
-          ${pendingInquiries.map(pi => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--bg-soft); border-radius:12px; margin-bottom:10px; box-shadow:var(--neu-sm);">
-              <div>
-                <div style="font-weight:700">${pi.full_name} - ${pi.service_item}</div>
-                <div style="font-size:0.8rem; color:var(--text-soft)">Preferred: ${pi.preferred_time || 'Flexible'}</div>
-              </div>
-              <div style="display:flex; gap:8px;">
-                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}" data-ticket-id="${pi.ticket_id || ''}">${ICONS.check} Accept</button>
-                <button class="btn btn-danger btn-sm decline-btn" data-id="${pi.id}">${ICONS.close} Decline</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
-
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:${isClockedIn ? 'var(--success)' : 'var(--text-dim)'};">
@@ -524,81 +504,6 @@ export async function renderEmployeeDashboard(container) {
             ${ICONS.plus}<span>Submit Leave Request</span>
           </button>
         </div>
-      </div>
-    </div>
-    
-    <!-- Active Service Jobs -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title sr-icon-title" style="color:var(--primary)">${ICONS.users}<span>Active Service Jobs (Accepted)</span></span>
-      </div>
-      ${acceptedInquiries.length > 0 ? (() => {
-        const companies = [...new Set(acceptedInquiries.map(x => x._company).filter(Boolean))];
-        return companies.length > 0 ? `
-          <div class="sr-filter-bar" style="padding:0 20px 12px" id="emp-company-tabs">
-            <button class="sr-filter active" data-company="all">
-              <span>All</span><span class="sr-filter-count">${acceptedInquiries.length}</span>
-            </button>
-            ${companies.map(c => `
-              <button class="sr-filter" data-company="${c}">
-                <span>${c}</span>
-                <span class="sr-filter-count">${acceptedInquiries.filter(x => x._company === c).length}</span>
-              </button>
-            `).join('')}
-          </div>` : '';
-      })() : ''}
-      <div class="card-body" id="emp-jobs-list">
-        ${acceptedInquiries.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No active jobs accepted yet.</div>' :
-          acceptedInquiries.map(inq => `
-            <div class="emp-job-card" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-in); margin-bottom:20px; border:1px solid var(--border);">
-               <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
-                 <div>
-                   <div style="font-weight:800; font-size:1.2rem; color:var(--primary)">${inq.full_name}</div>
-                   ${inq._company ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px">${inq._company}</div>` : ''}
-                   <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
-                   <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
-                 </div>
-                 <span class="badge badge-${displayStatus(inq.status)}" style="font-size:0.75rem">${statusText(inq.status)}</span>
-               </div>
-
-               <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid rgba(16,185,129,0.1);">
-                 <div>
-                   <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Contact Info</div>
-                   <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
-                     <span style="font-weight:700; font-size:1rem">${inq.phone}</span>
-                     <div style="display:flex; gap:8px;">
-                       <a href="tel:${inq.phone}" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:var(--primary); color:white; box-shadow:0 4px 10px rgba(16,185,129,0.2);">
-                         <span style="width:18px;height:18px;display:flex;">${ICONS.phone}</span>
-                       </a>
-                       <a href="https://wa.me/${inq.phone.replace(/\D/g,'')}" target="_blank" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#25D366; color:white; box-shadow:0 4px 10px rgba(37,211,102,0.2);">
-                         <span style="width:18px;height:18px;display:flex;">${ICONS.whatsapp}</span>
-                       </a>
-                     </div>
-                   </div>
-                 </div>
-                 <div>
-                   <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service Location</div>
-                   <div style="font-size:0.95rem; font-weight:600; margin-top:8px; display:flex; align-items:flex-start; gap:8px;">
-                     <span style="width:20px;height:20px;display:flex;flex-shrink:0;color:var(--primary)">${ICONS.pin}</span>
-                     <span style="line-height:1.4">${inq.location || '—'}</span>
-                   </div>
-                 </div>
-                 <div>
-                   <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Preferred Time</div>
-                   <div style="font-size:0.95rem; font-weight:700; margin-top:8px; color:var(--primary)">${inq.preferred_time || 'Flexible'}</div>
-                 </div>
-               </div>
-
-               <div style="margin-top:24px; display:flex; gap:12px;">
-                 <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
-                   <span style="width:18px;height:18px;display:flex;">${ICONS.edit}</span> Update Status
-                 </button>
-                 <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:44px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
-                   <span style="width:18px;height:18px;display:flex;">${ICONS.pin}</span> Open Maps
-                 </button>
-               </div>
-            </div>
-          `).join('')}
       </div>
     </div>
   `;
@@ -1084,17 +989,68 @@ export async function renderEmployeeTasks(container) {
   const issueTasks = tasks.filter(x => displayStatus(x.status) === 'issue_not_resolved');
 
   const filterCounts = {
-    all: tasks.length,
-    active: activeTasks.length,
+    all: tasks.length + acceptedInquiries.length,
+    active: activeTasks.length + acceptedInquiries.length,
     completed: completedTasks.length,
     issues: issueTasks.length,
   };
+
+  const jobCard = (inq) => `
+    <div class="emp-job-card" data-status="${displayStatus(inq.status)}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
+       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+         <div>
+           <div style="font-weight:800; font-size:1.15rem; color:var(--primary)">${inq.full_name}</div>
+           ${inq._company ? `<div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px">${inq._company}</div>` : ''}
+           <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
+           <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
+         </div>
+         <span class="badge badge-${displayStatus(inq.status)}" style="font-size:0.75rem">${statusText(inq.status)}</span>
+       </div>
+
+       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid rgba(16,185,129,0.1);">
+         <div>
+           <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Contact Info</div>
+           <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+             <span style="font-weight:700; font-size:0.95rem">${inq.phone}</span>
+             <div style="display:flex; gap:6px;">
+               <a href="tel:${inq.phone}" style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:var(--primary); color:white;">
+                 <span style="width:16px;height:16px;display:flex;">${ICONS.phone}</span>
+               </a>
+               <a href="https://wa.me/${inq.phone.replace(/\D/g,'')}" target="_blank" style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:#25D366; color:white;">
+                 <span style="width:16px;height:16px;display:flex;">${ICONS.whatsapp}</span>
+               </a>
+             </div>
+           </div>
+         </div>
+         <div>
+           <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service Location</div>
+           <div style="font-size:0.88rem; font-weight:600; margin-top:8px; display:flex; align-items:flex-start; gap:6px;">
+             <span style="width:18px;height:18px;display:flex;flex-shrink:0;color:var(--primary)">${ICONS.pin}</span>
+             <span style="line-height:1.4">${inq.location || '—'}</span>
+           </div>
+         </div>
+         <div>
+           <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Preferred Time</div>
+           <div style="font-size:0.88rem; font-weight:700; margin-top:8px; color:var(--primary)">${inq.preferred_time || 'Flexible'}</div>
+         </div>
+       </div>
+
+       <div style="margin-top:20px; display:flex; gap:10px;">
+         <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+           <span style="width:16px;height:16px;display:flex;">${ICONS.edit}</span> Update Status
+         </button>
+         <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+           <span style="width:16px;height:16px;display:flex;">${ICONS.pin}</span> Open Maps
+         </button>
+       </div>
+    </div>
+  `;
 
   const taskCard = (task) => {
     const inq = task.inquiries?.[0];
     const shownStatus = displayStatus(task.status);
     return `
-      <div class="emp-task-card" data-status="${shownStatus}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border); transition:transform 0.15s ease, box-shadow 0.15s ease;">
+      <div class="emp-task-card" data-status="${shownStatus}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="flex:1">
             <div style="font-weight:800; font-size:1.1rem; color:var(--text)">${task.title}</div>
@@ -1169,11 +1125,11 @@ export async function renderEmployeeTasks(container) {
 
     <div class="stats-grid" style="margin-bottom:24px;">
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--primary)">${tasks.length}</div>
-        <div class="stat-label">Total Tasks</div>
+        <div class="stat-value" style="color:var(--primary)">${tasks.length + acceptedInquiries.length}</div>
+        <div class="stat-label">Total Jobs</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--warning)">${activeTasks.length}</div>
+        <div class="stat-value" style="color:var(--warning)">${activeTasks.length + acceptedInquiries.length}</div>
         <div class="stat-label">Active</div>
       </div>
       <div class="stat-card">
@@ -1220,9 +1176,12 @@ export async function renderEmployeeTasks(container) {
     </div>
 
     <div id="task-list">
-      ${tasks.length === 0
+      ${(tasks.length === 0 && acceptedInquiries.length === 0)
         ? '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:2rem;margin-bottom:12px;">📋</div><p style="font-weight:600;">No tasks assigned yet</p><p style="font-size:0.85rem;">Tasks will appear here once admin assigns service requests to you.</p></div></div>'
-        : tasks.map(task => taskCard(task)).join('')}
+        : [
+            ...acceptedInquiries.map(inq => jobCard(inq)),
+            ...tasks.map(task => taskCard(task))
+          ].join('')}
     </div>
   `;
 
@@ -1234,7 +1193,7 @@ export async function renderEmployeeTasks(container) {
   let searchQuery = '';
 
   const applyFilters = () => {
-    const cards = container.querySelectorAll('.emp-task-card');
+    const cards = container.querySelectorAll('.emp-task-card, .emp-job-card');
     const q = searchQuery.toLowerCase();
     cards.forEach(card => {
       const status = card.dataset.status;

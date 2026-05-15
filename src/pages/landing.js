@@ -203,6 +203,12 @@ export function renderLandingPage(container, onPortalClick) {
         <button type="button" class="srf-input-action" id="srf-refresh-captcha" title="New question">${ICONS.refresh}</button>
       </div>
 
+      ${DEV_OTP_MODE ? `
+        <button class="srf-btn srf-btn-secondary" id="srf-demo-fill" style="margin-top:12px; background:rgba(16,185,129,0.1); border:1px dashed var(--primary); color:var(--primary);">
+          ${ICONS.shield} <span>Fill Demo Data</span>
+        </button>
+      ` : ''}
+
       <button class="srf-btn srf-btn-primary" id="srf-send-otp">
         <span>Send OTP on WhatsApp</span> ${ICONS.arrowRight}
       </button>
@@ -295,6 +301,12 @@ export function renderLandingPage(container, onPortalClick) {
         <span class="srf-input-icon">${ICONS.edit}</span>
         <input id="srf-other" type="text" placeholder="Describe your issue briefly" class="srf-input" />
       </div>
+
+      ${DEV_OTP_MODE ? `
+        <button class="srf-btn srf-btn-secondary" id="srf-demo-fill-form" style="margin-top:12px; background:rgba(16,185,129,0.1); border:1px dashed var(--primary); color:var(--primary);">
+          ${ICONS.shield} <span>Fill Demo Details</span>
+        </button>
+      ` : ''}
 
       <button class="srf-btn srf-btn-primary" id="srf-submit">
         <span>Submit request</span> ${ICONS.arrowRight}
@@ -513,6 +525,13 @@ export function renderLandingPage(container, onPortalClick) {
       render();
     });
 
+    bind('#srf-demo-fill', () => {
+      state.phone = '9876543210';
+      state.captcha = { a: 1, b: 1 };
+      render();
+      container.querySelector('#srf-captcha').value = '2';
+    });
+
     if (sendBtn) sendBtn.onclick = async () => {
       if (!/^\d{10}$/.test(state.phone)) return toast('Enter a valid 10-digit number', 'error');
       const ans = parseInt(capEl.value, 10);
@@ -580,6 +599,15 @@ export function renderLandingPage(container, onPortalClick) {
     issueEl.onchange = () => {
       otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
     };
+
+    bind('#srf-demo-fill-form', () => {
+      container.querySelector('#srf-name').value = 'John Doe (Demo)';
+      state.locationMode = 'manual';
+      state.locationValue = '123 Tech Park, Silicon Valley';
+      container.querySelector('#srf-location').value = state.locationValue;
+      container.querySelector('#srf-issue').value = 'internet-down';
+      container.querySelector('#srf-time').value = 'Morning (10 AM - 1 PM)';
+    });
 
     container.querySelectorAll('.srf-seg').forEach(seg => {
       seg.onclick = () => {
