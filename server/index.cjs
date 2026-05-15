@@ -12,7 +12,7 @@ const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Fail fast if required env is missing — better than 500s at request time.
-const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME', 'STAFF_REG_KEY', 'ADMIN_REG_KEY'];
+const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME'];
 const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missingEnv.length) {
     console.error(`❌ Missing required env vars: ${missingEnv.join(', ')}`);
@@ -716,6 +716,9 @@ app.post('/api/auth/signup', rateLimit({ windowMs: 60_000, max: 5, key: 'signup'
 
     // Role is derived server-side from the access key — never trust a `role` from the client.
     // Keys live in env so leaking the bundle (which used to embed them) can't grant admin.
+    if (!process.env.ADMIN_REG_KEY || !process.env.STAFF_REG_KEY) {
+        return res.status(503).json({ error: 'Staff registration is not configured on this server.' });
+    }
     let role;
     if (accessKey === process.env.ADMIN_REG_KEY) role = 'admin';
     else if (accessKey === process.env.STAFF_REG_KEY) role = 'employee';
