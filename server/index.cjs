@@ -501,7 +501,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 // Middleware to verify JWT
-const authenticateToken = (req, res, next) => {
+function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -512,7 +512,7 @@ const authenticateToken = (req, res, next) => {
         req.user = user;
         next();
     });
-};
+}
 
 // --- DATA ACCESS POLICY ---
 // `auth_users` is intentionally absent — credentials are touched only by the auth routes.
