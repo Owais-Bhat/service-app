@@ -23,21 +23,26 @@ import { ICONS } from '../icons.js';
 
 const STATUS_LABEL = {
   pending: 'Received',
-  open: 'Open',
+  open: 'Received',
   assigned: 'Assigned',
   in_progress: 'In Progress',
   resolved: 'Resolved',
-  closed: 'Closed',
+  closed: 'Resolved',
   issue_not_resolved: 'Issue Not Resolved',
 };
 
+function displayStatus(status) {
+  return status === 'closed' ? 'resolved' : (status || 'open');
+}
+
 function statusBadge(status) {
-  const cls = ['resolved', 'closed'].includes(status) ? 'badge-resolved'
-    : status === 'in_progress' ? 'badge-in_progress'
-    : status === 'assigned' ? 'badge-assigned'
-    : status === 'issue_not_resolved' ? 'badge-danger'
+  const shown = displayStatus(status);
+  const cls = shown === 'resolved' ? 'badge-resolved'
+    : shown === 'in_progress' ? 'badge-in_progress'
+    : shown === 'assigned' ? 'badge-assigned'
+    : shown === 'issue_not_resolved' ? 'badge-danger'
     : 'badge-open';
-  return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
+  return `<span class="badge ${cls}">${STATUS_LABEL[shown] || shown}</span>`;
 }
 
 function buildPaidUpdates(row, extra = {}) {
@@ -143,7 +148,7 @@ export async function renderAdminDashboard(container) {
               ${t.filter(x => x.status !== 'resolved' && x.status !== 'closed').length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">No active tickets</td></tr>' : 
                 t.filter(x => x.status !== 'resolved' && x.status !== 'closed').slice(0,5).map(x => `<tr>
                   <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${x.title}</b></td>
-                  <td><span class="badge badge-${x.status}">${x.status.replace('_', ' ')}</span></td>
+                  <td>${statusBadge(x.status)}</td>
                   <td><span class="badge badge-${x.priority || 'medium'}">${x.priority || 'medium'}</span></td>
                 </tr>`).join('')}
             </tbody>
@@ -321,6 +326,17 @@ export async function renderAdminDashboard(container) {
 async function openInquiryDetail(id, onDone) {
   const { data: i } = await supabase.from('inquiries').select('*').eq('id', id).single();
   const { data: employees } = await supabase.from('profiles').select('*').eq('role', 'employee');
+  const today = new Date().toLocaleDateString('en-CA');
+  const { data: activeAttendance } = await supabase.from('attendance')
+    .select('user_id,clock_in,clock_out')
+    .eq('date', today);
+  const activeEmployeeIds = new Set((activeAttendance || [])
+    .filter(row => row.clock_in && !row.clock_out)
+    .map(row => row.user_id));
+  const availableEmployees = (employees || []).map(e => ({
+    ...e,
+    _clockedIn: activeEmployeeIds.has(e.id),
+  }));
   // Resolve technician name for the bill view, if assigned.
   const technicianName = (employees || []).find(e => e.id === i.assigned_employee_id)?.full_name || '';
   // Items used on the bill — fetched only if a bill has been generated.
@@ -403,8 +419,9 @@ async function openInquiryDetail(id, onDone) {
           <label>Assign to Technician</label>
           <select id="assign-to">
             <option value="">— None —</option>
-            ${(employees||[]).map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''}>${e.full_name}</option>`).join('')}
+            ${availableEmployees.map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''} ${e._clockedIn ? '' : 'disabled'}>${e._clockedIn ? 'Online' : 'Offline'} - ${e.full_name}</option>`).join('')}
           </select>
+          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">Only currently clocked-in employees can receive new assignments.</small>
         </div>
       </div>
       <div class="modal-footer">
@@ -444,6 +461,10 @@ async function openInquiryDetail(id, onDone) {
 
   overlay.querySelector('#save-sr').onclick = async () => {
     const empId = overlay.querySelector('#assign-to').value;
+    if (empId && !activeEmployeeIds.has(empId)) {
+      toast('This employee is not clocked in. Please choose an active technician.', 'warning');
+      return;
+    }
 
     const btn = overlay.querySelector('#save-sr');
     btn.disabled = true;
@@ -471,7 +492,7 @@ async function openInquiryDetail(id, onDone) {
         description: `Ticket ${i.ticket_no || ''} from ${i.full_name} (${i.phone}). ${i.service_item || ''}`,
         assigned_to: empId,
         client_id: existingClient ? existingClient.id : null,
-        status: 'open',
+        status: 'assigned',
         category: 'service_request',
       }).select().single();
 
@@ -482,10 +503,10 @@ async function openInquiryDetail(id, onDone) {
         return;
       }
       updates.ticket_id = ticket.id;
-      if (i.status === 'open' || i.status === 'pending') updates.status = 'assigned';
+      updates.status = 'assigned';
     } else if (empId && i.ticket_id) {
-      await supabase.from('tickets').update({ assigned_to: empId }).eq('id', i.ticket_id);
-      if (i.status === 'open' || i.status === 'pending') updates.status = 'assigned';
+      await supabase.from('tickets').update({ assigned_to: empId, status: 'assigned' }).eq('id', i.ticket_id);
+      updates.status = 'assigned';
     }
 
     const { error } = await supabase.from('inquiries').update(updates).eq('id', i.id);
@@ -604,7 +625,7 @@ export async function renderAttendance(container) {
 }
 
 export async function renderInquiries(container) {
-  const filterKey = container.dataset.srFilter || 'active';
+  const filterKey = container.dataset.srFilter === 'closed' ? 'resolved' : (container.dataset.srFilter || 'active');
   const companyFilter = container.dataset.srCompany || '';
   const { data: list, error } = await supabase.from('inquiries')
     .select('*').order('created_at', { ascending: false });
@@ -614,14 +635,14 @@ export async function renderInquiries(container) {
   const counts = {
     all: all.length,
     active: all.filter(x => !['resolved','closed'].includes(x.status)).length,
-    closed: all.filter(x => ['resolved','closed'].includes(x.status)).length,
+    resolved: all.filter(x => ['resolved','closed'].includes(x.status)).length,
     paid: all.filter(x => x.payment_status === 'paid').length,
     unpaid: all.filter(x => x.bill_amount && x.payment_status !== 'paid').length,
   };
   const statusFiltered = all.filter(x => {
     if (filterKey === 'all') return true;
     if (filterKey === 'active') return !['resolved','closed'].includes(x.status);
-    if (filterKey === 'closed') return ['resolved','closed'].includes(x.status);
+    if (filterKey === 'resolved') return ['resolved','closed'].includes(x.status);
     if (filterKey === 'paid') return x.payment_status === 'paid';
     if (filterKey === 'unpaid') return x.bill_amount && x.payment_status !== 'paid';
     return true;
@@ -630,7 +651,7 @@ export async function renderInquiries(container) {
 
   const tabs = [
     ['active', 'Active'],
-    ['closed', 'Closed'],
+    ['resolved', 'Resolved'],
     ['unpaid', 'Awaiting Payment'],
     ['paid', 'Paid'],
     ['all', 'All'],
@@ -868,7 +889,7 @@ export async function renderAllTickets(container) {
                 <td><b>${inq ? inq.full_name : 'Guest'}</b></td>
                 <td>${inq ? `<small>${inq.phone}<br/>${inq.location.slice(0,20)}...</small>` : '—'}</td>
                 <td>${t.assigned_to ? profileMap[t.assigned_to] || 'Staff' : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>
-                <td><span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span></td>
+                <td>${statusBadge(t.status)}</td>
                 <td><small>${formatDate(t.created_at)}</small></td>
               </tr>`;
             }).join('')}

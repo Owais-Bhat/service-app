@@ -1,6 +1,21 @@
 import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime } from '../utils.js';
 
+function displayStatus(status) {
+  return status === 'closed' ? 'resolved' : (status || 'open');
+}
+
+function statusText(status) {
+  const shown = displayStatus(status);
+  const labels = {
+    open: 'received',
+    assigned: 'assigned',
+    in_progress: 'in progress',
+    resolved: 'resolved',
+  };
+  return labels[shown] || shown.replace('_', ' ');
+}
+
 // ── CLIENT DASHBOARD (Inquiry First) ──────────────────
 export async function renderClientDashboard(container) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -128,8 +143,8 @@ export async function renderClientDashboard(container) {
 async function loadMiniStats(el, userId) {
   const { data: t } = await supabase.from('tickets').select('status').eq('client_id', userId);
   const tickets = t || [];
-  const open = tickets.filter(x => x.status === 'open' || x.status === 'in_progress').length;
-  const resolved = tickets.filter(x => x.status === 'resolved').length;
+  const open = tickets.filter(x => ['open', 'assigned', 'in_progress'].includes(displayStatus(x.status))).length;
+  const resolved = tickets.filter(x => displayStatus(x.status) === 'resolved').length;
 
   el.innerHTML = `
     <div style="display:flex; flex-direction:column; gap:16px;">
@@ -165,10 +180,10 @@ export async function renderClientTickets(container) {
       <div style="display:flex; gap:12px; flex:1; min-width:300px;">
         <select id="status-filter" style="flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:12px;  border-color:#000; padding:0 16px; color:#000; outline:none;">
           <option value="">All Statuses</option>
-          <option value="open">Open</option>
+          <option value="open">Received</option>
+          <option value="assigned">Assigned</option>
           <option value="in_progress">In Progress</option>
           <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
         </select>
         <button class="btn btn-primary" id="new-ticket-btn" style="width:auto; white-space:nowrap;">+ New Ticket</button>
       </div>
@@ -186,7 +201,7 @@ export async function renderClientTickets(container) {
     render();
   };
   container.querySelector('#status-filter').onchange = e => {
-    filtered = e.target.value ? list.filter(t => t.status === e.target.value) : [...list];
+    filtered = e.target.value ? list.filter(t => displayStatus(t.status) === e.target.value) : [...list];
     render();
   };
 
@@ -209,7 +224,7 @@ function renderTicketList(el, tickets, userId, refresh) {
       <div style="position:absolute; top:0; left:0; width:4px; height:100%; background:var(--primary);"></div>
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
         <span style="font-size:0.75rem; color:var(--text3); font-family:monospace;">#${t.id.slice(0, 8)}</span>
-        <span class="badge badge-${t.status}">${t.status.replace('_', ' ')}</span>
+        <span class="badge badge-${displayStatus(t.status)}">${statusText(t.status)}</span>
       </div>
       <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:12px; color:var(--text);">${t.title}</h3>
       <div style="font-size:0.85rem; color:var(--text2); display:flex; align-items:center; gap:8px; border-top:1px solid var(--border); padding-top:16px;">
@@ -283,7 +298,7 @@ async function openTicketDetail(ticketId, onClose) {
       </div>
       <div class="modal-body">
         <div style="display:flex; gap:8px; margin-bottom:20px;">
-          <span class="badge badge-${t.status}">${t.status.replace('_', ' ')}</span>
+          <span class="badge badge-${displayStatus(t.status)}">${statusText(t.status)}</span>
           <span class="badge badge-urgent">${t.priority} priority</span>
         </div>
         <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:16px; margin-bottom:32px; border:1px solid var(--border);">

@@ -14,6 +14,23 @@ const BUSINESS = {
   gstin: '—',
 };
 
+function displayStatus(status) {
+  return status === 'closed' ? 'resolved' : (status || 'open');
+}
+
+function statusText(status) {
+  const shown = displayStatus(status);
+  const labels = {
+    pending: 'received',
+    open: 'received',
+    assigned: 'assigned',
+    in_progress: 'in progress',
+    resolved: 'resolved',
+    issue_not_resolved: 'issue not resolved',
+  };
+  return labels[shown] || shown.replace('_', ' ');
+}
+
 // Lazily inject html2pdf.js (used to generate a downloadable PDF from the
 // bill template). The CDN bundle includes both html2canvas and jsPDF.
 let _html2pdfPromise = null;
@@ -370,27 +387,29 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']),
-      supabase.from('profiles').select('*'),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     const allInquiries = res[3].data || [];
-    const profilesData = res[4].data || [];
 
     // Build phone → company map for labelling service jobs
-    const phoneToCompany = new Map();
-    profilesData.forEach(pr => { if (pr.phone) phoneToCompany.set(pr.phone, pr.company); });
 
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending');
     acceptedInquiries = allInquiries
-      .filter(x => x.assignment_status === 'accepted')
-      .map(x => ({ ...x, _company: phoneToCompany.get(x.phone) || null }));
+      .filter(x => x.assignment_status === 'accepted' && !['resolved', 'closed'].includes(x.status))
+      .map(x => ({ ...x, _company: x.company_name || null }));
   } catch (err) {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
     return;
   }
 
   const t = tasks || [];
-  const activeTasks = t.filter(x => x.status !== 'closed' && x.status !== 'resolved');
+  const activeTasks = t.filter(x => {
+    const status = displayStatus(x.status);
+    if (status === 'resolved') return false;
+    const inq = x.inquiries?.[0];
+    if (!inq) return status === 'assigned' || status === 'in_progress' || status === 'open';
+    return inq.assignment_status === 'accepted' && displayStatus(inq.status) !== 'resolved';
+  });
   const isClockedIn = !!attendance?.clock_in;
   const isClockedOut = !!attendance?.clock_out;
   const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
@@ -415,7 +434,7 @@ export async function renderEmployeeDashboard(container) {
                 <div style="font-size:0.8rem; color:var(--text-soft)">Preferred: ${pi.preferred_time || 'Flexible'}</div>
               </div>
               <div style="display:flex; gap:8px;">
-                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}">${ICONS.check} Accept</button>
+                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}" data-ticket-id="${pi.ticket_id || ''}">${ICONS.check} Accept</button>
                 <button class="btn btn-danger btn-sm decline-btn" data-id="${pi.id}">${ICONS.close} Decline</button>
               </div>
             </div>
@@ -442,7 +461,7 @@ export async function renderEmployeeDashboard(container) {
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:var(--success)">
           <span style="width:24px; height:24px; display:flex;">${ICONS.check}</span>
-          <span>${t.filter(x => x.status === 'resolved').length}</span>
+          <span>${t.filter(x => displayStatus(x.status) === 'resolved').length}</span>
         </div>
         <div class="stat-label">Completed</div>
       </div>
@@ -471,7 +490,7 @@ export async function renderEmployeeDashboard(container) {
       </div>
 
       <!-- EOD Report Card -->
-      <div class="card">
+      <div class="card" style="display:none">
         <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clipboard}<span>End of Day Summary</span></span></div>
         <div class="card-body">
           ${eodReport ? `
@@ -497,7 +516,7 @@ export async function renderEmployeeDashboard(container) {
       </div>
 
       <!-- Leave Request Card -->
-      <div class="card">
+      <div class="card" style="display:none">
         <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clock}<span>Request Leave</span></span></div>
         <div class="card-body">
           <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:16px;">Need time off? Submit your request here for approval.</p>
@@ -539,7 +558,7 @@ export async function renderEmployeeDashboard(container) {
                    <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
                    <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
                  </div>
-                 <span class="badge badge-assigned" style="font-size:0.75rem">${inq.status.replace('_',' ')}</span>
+                 <span class="badge badge-${displayStatus(inq.status)}" style="font-size:0.75rem">${statusText(inq.status)}</span>
                </div>
 
                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid rgba(16,185,129,0.1);">
@@ -590,9 +609,10 @@ export async function renderEmployeeDashboard(container) {
         <span class="badge badge-open">${activeTasks.length} active</span>
       </div>
       <div class="card-body">
-        ${t.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No tasks assigned yet.</div>' : 
-          t.map(task => {
+        ${activeTasks.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No active tasks assigned yet.</div>' :
+          activeTasks.map(task => {
             const inq = task.inquiries?.[0]; // Get the linked inquiry if it exists
+            const shownStatus = displayStatus(task.status);
             return `
               <div style="padding:16px; border-radius:16px; background:var(--bg-soft); box-shadow:var(--neu-sm); margin-bottom:16px; border:1px solid var(--border);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -601,7 +621,7 @@ export async function renderEmployeeDashboard(container) {
                     <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${task.description || 'No description provided.'}</div>
                   </div>
                   <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                    <span class="badge badge-${task.status}">${task.status.replace('_',' ')}</span>
+                    <span class="badge badge-${shownStatus}">${statusText(task.status)}</span>
                     <span class="badge badge-${task.priority || 'medium'}">${task.priority || 'medium'}</span>
                   </div>
                 </div>
@@ -734,7 +754,17 @@ export async function renderEmployeeDashboard(container) {
   // Accept/Decline logic
   container.querySelectorAll('.accept-btn').forEach(btn => {
     btn.onclick = async () => {
-      const { error } = await supabase.from('inquiries').update({ assignment_status: 'accepted' }).eq('id', btn.dataset.id);
+      const ops = [
+        supabase.from('inquiries').update({
+          assignment_status: 'accepted',
+          status: 'in_progress',
+        }).eq('id', btn.dataset.id)
+      ];
+      if (btn.dataset.ticketId) {
+        ops.push(supabase.from('tickets').update({ status: 'in_progress' }).eq('id', btn.dataset.ticketId));
+      }
+      const results = await Promise.all(ops);
+      const error = results.find(r => r.error)?.error;
       if (error) toast(error.message, 'error');
       else { toast('Task accepted!', 'success'); renderEmployeeDashboard(container); }
     };
@@ -1090,7 +1120,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
     const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
     const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];
-    // Snapshot current payment state so we can gate the resolved/closed submit button.
+    // Snapshot current payment state so we can gate the resolved submit button.
     let paymentState = { status: 'unpaid', received_at: null };
     let inquiryRow = null;
     if (inqId) {
@@ -1130,7 +1160,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     });
     const mainOptions = Object.keys(tree).sort();
     
-    const isResolving = currentStatus === 'resolved' || currentStatus === 'closed';
+    const normalizedCurrentStatus = displayStatus(currentStatus);
+    const isResolvedReadOnly = normalizedCurrentStatus === 'resolved';
+    const isResolving = normalizedCurrentStatus === 'resolved';
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
@@ -1150,12 +1182,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <div class="mst-pane active" data-pane="status">
             <div class="form-group">
               <label>New Status</label>
-              <select id="new-status">
-                <option value="open" ${currentStatus==='open'?'selected':''}>Open</option>
-                <option value="in_progress" ${currentStatus==='in_progress'?'selected':''}>In Progress</option>
-                <option value="resolved" ${currentStatus==='resolved'?'selected':''}>Resolved</option>
-                <option value="closed" ${currentStatus==='closed'?'selected':''}>Closed</option>
-                <option value="issue_not_resolved" ${currentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
+              <select id="new-status" ${isResolvedReadOnly ? 'disabled' : ''}>
+                <option value="open" ${normalizedCurrentStatus==='open'?'selected':''}>Received</option>
+                <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
+                <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
               </select>
             </div>
 
@@ -1200,7 +1231,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <!-- TAB 3: BILL -->
           <div class="mst-pane" data-pane="bill">
             <div id="bill-locked-hint" style="display:${isResolving ? 'none' : 'block'}; padding:14px; border-radius:12px; background:var(--bg-soft); border:1px dashed var(--border); margin-bottom:14px; font-size:0.85rem; color:var(--text-soft);">
-              ℹ️ Set status to <b>Resolved</b> or <b>Closed</b> on the Status tab to enable billing.
+              ℹ️ Set status to <b>Resolved</b> on the Status tab to enable billing.
             </div>
             <div id="pricing-section" style="display:${isResolving ? 'block' : 'none'};">
               <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
@@ -1527,7 +1558,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     let _paymentJustReceived = false;
 
     const renderPayStatus = () => {
-      const resolving = statusSel.value === 'resolved' || statusSel.value === 'closed';
+      const resolving = statusSel.value === 'resolved';
       const total = Number(totalDisplay.value) || 0;
       const requiresPayment = resolving && total > 0;
       const paid = paymentState.status === 'paid';
@@ -1562,7 +1593,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           : 'Generate a link, then wait for the client to pay.';
       }
 
-      if (requiresPayment && !paid) {
+      if (isResolvedReadOnly) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Resolved';
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.title = 'Resolved tasks are read-only.';
+      } else if (requiresPayment && !paid) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Awaiting Payment…';
         saveBtn.style.opacity = '0.6';
@@ -1578,7 +1615,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
 
     statusSel.onchange = () => {
-      const resolving = statusSel.value === 'resolved' || statusSel.value === 'closed';
+      const resolving = statusSel.value === 'resolved';
       pricingSec.style.display = resolving ? 'block' : 'none';
       const lockHint = overlay.querySelector('#bill-locked-hint');
       if (lockHint) lockHint.style.display = resolving ? 'none' : 'block';
@@ -1659,6 +1696,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     // Initial paint.
     calcTotal();
     renderPayStatus();
+    if (isResolvedReadOnly) {
+      overlay.querySelector('#progress-detail').disabled = true;
+      overlay.querySelectorAll('#pricing-section input, #pricing-section select, #pricing-section textarea, #pricing-section button').forEach(el => {
+        el.disabled = true;
+        el.style.opacity = '0.6';
+        el.style.cursor = 'not-allowed';
+      });
+    }
 
     // Payment link generation + QR
     let _payLink = '';
@@ -1864,6 +1909,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const closeOverlay = () => { stopPolling(); try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
     overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = closeOverlay;
     overlay.querySelector('#save-update').onclick = async () => {
+      if (isResolvedReadOnly) {
+        toast('Resolved tasks are read-only', 'info');
+        return;
+      }
       const newStatus = statusSel.value;
       const detail = overlay.querySelector('#progress-detail').value.trim();
       
@@ -1873,7 +1922,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       btn.disabled = true; btn.textContent = 'Saving...';
 
       const selectedServiceIds = [];
-      const resolving = newStatus === 'resolved' || newStatus === 'closed';
+      const resolving = newStatus === 'resolved';
       if (resolving) {
         selectedServices.forEach(s => { selectedServiceIds.push(s.id); });
       }
@@ -1923,7 +1972,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       await Promise.all(ops);
       toast('Task updated!', 'success');
 
-      if (newStatus === 'resolved' || newStatus === 'closed') {
+      if (newStatus === 'resolved') {
         // Show feedback link for the client to use
         const { data: inqRow } = inqId
           ? await supabase.from('inquiries').select('ticket_no,phone').eq('id', inqId).single()

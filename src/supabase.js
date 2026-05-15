@@ -174,7 +174,9 @@ const realtime = (() => {
       const token = localStorage.getItem('auth_token');
       if (!token) return;
       try {
-        const res = await fetch(`${API_URL}/events/poll?since=${pollCursor}&token=${encodeURIComponent(token)}`);
+        const res = await fetch(`${API_URL}/events/poll?since=${pollCursor}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (typeof data.cursor === 'number') pollCursor = Math.max(pollCursor, data.cursor);
@@ -185,7 +187,7 @@ const realtime = (() => {
     pollTimer = setInterval(tick, POLL_INTERVAL_MS);
   };
 
-  const startSSE = () => {
+  const startSSE = async () => {
     if (mode === 'sse') return;
     const token = localStorage.getItem('auth_token');
     if (!token) return;
@@ -194,7 +196,20 @@ const realtime = (() => {
     if (localStorage.getItem(POLL_FALLBACK_KEY) === '1') return startPolling();
 
     mode = 'sse';
-    const url = `${API_URL}/events?token=${encodeURIComponent(token)}`;
+    let ticketRes;
+    try {
+      ticketRes = await fetch(`${API_URL}/events/ticket`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      return startPolling();
+    }
+    if (!ticketRes.ok) return startPolling();
+    const ticketData = await ticketRes.json();
+    if (!ticketData.ticket) return startPolling();
+
+    const url = `${API_URL}/events?ticket=${encodeURIComponent(ticketData.ticket)}`;
     es = new EventSource(url);
     let openedOk = false;
 
@@ -277,8 +292,12 @@ export const supabase = {
       return { data: { session: user.data.user ? { user: user.data.user } : null } };
     },
     onAuthStateChange: (callback) => {
-      // Very basic mock
-      return { data: { subscription: { unsubscribe: () => {} } } };
+      const handler = (event) => {
+        if (event.key !== 'auth_token') return;
+        callback(event.newValue ? 'SIGNED_IN' : 'SIGNED_OUT', null);
+      };
+      window.addEventListener('storage', handler);
+      return { data: { subscription: { unsubscribe: () => window.removeEventListener('storage', handler) } } };
     },
     getUser: async () => {
       const token = localStorage.getItem('auth_token');
@@ -333,7 +352,7 @@ export const supabase = {
             email,
             password,
             fullName: options.data.full_name,
-            role: options.data.role
+            access_key: options.data.access_key || options.data.regKey
           })
         });
         const data = await response.json();
@@ -387,18 +406,10 @@ export async function signIn(email, password) {
 }
 
 export async function signUp(email, password, fullName, regKey) {
-  const STAFF_KEY = 'NE_STAFF_2026';
-  const ADMIN_KEY = 'NE_ADMIN_SECRET';
-
-  let role;
-  if (regKey === STAFF_KEY) role = 'employee';
-  else if (regKey === ADMIN_KEY) role = 'admin';
-  else return { data: null, error: { message: 'Invalid access key. Use the staff or admin secret key.' } };
-
   const response = await fetch(`${API_URL}/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, fullName, role })
+    body: JSON.stringify({ email, password, fullName, access_key: regKey })
   });
   const result = await response.json();
   if (response.ok) return { data: { user: result.userId }, error: null };

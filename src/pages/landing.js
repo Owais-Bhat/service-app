@@ -26,7 +26,7 @@ const LOGO = new URL('../assets/logo.png', import.meta.url).href;
 //        })
 //      });
 // ────────────────────────────────────────────────────────────────────
-const DEV_OTP_MODE = true;
+const DEV_OTP_MODE = String(import.meta.env.VITE_DEV_OTP_MODE || '').toLowerCase() === 'true';
 
 async function sendWhatsAppOTP(phone, code) {
   if (DEV_OTP_MODE) {
@@ -55,15 +55,19 @@ function generateTicketNo() {
   return `NE-${yy}${mm}${dd}-${rnd}`;
 }
 
-const STATUS_FLOW = ['open', 'assigned', 'in_progress', 'resolved', 'closed'];
+const STATUS_FLOW = ['open', 'assigned', 'in_progress', 'resolved'];
 const STATUS_LABELS = {
   pending: 'Received',
   open: 'Received',
   assigned: 'Assigned',
   in_progress: 'In Progress',
   resolved: 'Resolved',
-  closed: 'Closed',
+  closed: 'Resolved',
 };
+
+function displayStatus(status) {
+  return status === 'closed' ? 'resolved' : (status || 'open');
+}
 
 const ISSUE_OPTIONS = [
   { value: 'internet-down', label: 'Internet down' },
@@ -356,9 +360,10 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   function renderTrackResult(r) {
-    const status = r.status || 'open';
-    const flowIdx = STATUS_FLOW.indexOf(status === 'pending' ? 'open' : status);
-    const closed = status === 'closed';
+    const status = displayStatus(r.status);
+    const flowStatus = status === 'pending' ? 'open' : status;
+    const flowIdx = Math.max(0, STATUS_FLOW.indexOf(flowStatus));
+    const resolved = status === 'resolved';
     const hasBill = r.bill_amount != null && Number(r.bill_amount) > 0;
     const paid = r.payment_status === 'paid';
     const hasFeedback = r.feedback_rating != null;
@@ -368,7 +373,7 @@ export function renderLandingPage(container, onPortalClick) {
       <h2 class="srf-card-title">Ticket ${r.ticket_no || r.id.slice(0, 8)}</h2>
       <p class="srf-card-sub">${r.full_name} · ${r.service_item}</p>
 
-      ${!closed ? `
+      ${!resolved ? `
         <div style="background:var(--bg-soft); padding:16px; border-radius:16px; margin:20px 0; border:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
           <div>
             <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service SLA</div>
@@ -785,7 +790,11 @@ export function renderLandingPage(container, onPortalClick) {
               fbPayload.feedback_employee_id = state.trackResult.assigned_employee_id;
             }
           }
-          const { error } = await supabase.from('inquiries').update(fbPayload).eq('id', state.trackResult.id);
+          const { error } = await supabase.from('inquiries')
+            .update(fbPayload)
+            .eq('id', state.trackResult.id)
+            .eq('ticket_no', state.trackResult.ticket_no)
+            .eq('phone', state.trackResult.phone);
           if (error) {
             toast('Could not submit feedback', 'error');
             btn.disabled = false;
@@ -841,7 +850,7 @@ export function renderLandingPage(container, onPortalClick) {
 
     // Live SLA Timer update for tracker
     const timerEl = container.querySelector('#live-sla-timer');
-    if (timerEl && state.trackResult && state.trackResult.status !== 'closed') {
+    if (timerEl && state.trackResult && displayStatus(state.trackResult.status) !== 'resolved') {
       const interval = setInterval(() => {
         if (!container.querySelector('#live-sla-timer')) return clearInterval(interval);
         timerEl.innerHTML = formatTimeRemaining(calculateSLA(state.trackResult.created_at));

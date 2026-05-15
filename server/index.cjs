@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const fsp = require('fs').promises;
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -7,7 +8,21 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const Razorpay = require('razorpay');
+const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Fail fast if required env is missing — better than 500s at request time.
+const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME', 'STAFF_REG_KEY', 'ADMIN_REG_KEY'];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length) {
+    console.error(`❌ Missing required env vars: ${missingEnv.join(', ')}`);
+    console.error('   Set them in server/.env before starting.');
+    process.exit(1);
+}
+if (process.env.JWT_SECRET.length < 32) {
+    console.error('❌ JWT_SECRET must be at least 32 characters.');
+    process.exit(1);
+}
 
 // Bills folder — stores generated invoice PDFs that we serve back as
 // public URLs so they can be sent via wa.me/<phone>?text=<bill-url>.
@@ -15,13 +30,37 @@ const BILLS_DIR = path.join(__dirname, '..', 'bills');
 if (!fs.existsSync(BILLS_DIR)) fs.mkdirSync(BILLS_DIR, { recursive: true });
 
 const app = express();
-app.use(cors());
-app.use(express.json({
-    limit: '20mb', // bill PDFs are uploaded as base64
-    verify: (req, res, buf) => {
-        if (req.originalUrl === '/api/webhook/razorpay') req.rawBody = Buffer.from(buf);
+
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
+    if (process.env.NODE_ENV === 'production') {
+        res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    }
+    next();
+});
+
+// Restrict CORS to known origins. CORS_ORIGINS is a comma-separated list.
+// In dev we default to localhost; in prod the env var must be set.
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5000')
+    .split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors({
+    origin(origin, cb) {
+        // Allow same-origin (no Origin header) and listed origins.
+        if (!origin || corsOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error('Origin not allowed by CORS'));
     },
+    credentials: false,
 }));
+
+// Razorpay webhook needs the raw body for signature validation.
+// We register that route's parser FIRST, then JSON for everything else with a small limit.
+app.use('/api/webhook/razorpay', express.raw({ type: 'application/json', limit: '1mb' }));
+app.use(express.json({ limit: '1mb' }));
+// Bill uploads can be large (base64 PDFs) — give them their own dedicated route limit.
+const BILL_UPLOAD_LIMIT = '20mb';
 
 let razorpay = null;
 try {
@@ -56,6 +95,16 @@ const dbConfig = {
     password: process.env.DB_PASS,
     database: process.env.DB_NAME
 };
+
+// Shared connection pool — one TCP/auth handshake amortised across many requests.
+// `getConn()` returns a leased connection; callers must `release()` it.
+const pool = mysql.createPool({
+    ...dbConfig,
+    waitForConnections: true,
+    connectionLimit: Number(process.env.DB_POOL_SIZE) || 10,
+    queueLimit: 0,
+});
+async function getConn() { return pool.getConnection(); }
 
 const requiredColumns = {
     profiles: [
@@ -326,15 +375,15 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
     broadcastNotify({
         subject: 'payment_received',
-        title: 'ðŸ’° Payment Received',
-        body: `${inqRow?.full_name || 'Client'} paid â‚¹${amount} for ticket ${ticket_no}`,
+        title: '💰 Payment Received',
+        body: `${inqRow?.full_name || 'Client'} paid ₹${amount} for ticket ${ticket_no}`,
         audience: { role: 'admin' },
         data: { ticket_no, inquiry_id: inqRow?.id, amount },
     });
     if (inqRow?.assigned_employee_id) {
         broadcastNotify({
             subject: 'payment_received',
-            title: 'ðŸ’° Payment Received',
+            title: '💰 Payment Received',
             body: `Your ticket ${ticket_no} just got paid! Task auto-resolved.`,
             audience: { userId: inqRow.assigned_employee_id },
             data: { ticket_no, inquiry_id: inqRow.id, amount },
@@ -344,14 +393,31 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     return inqRow;
 }
 
-// SSE endpoint. Token passed as ?token=... since EventSource can't set headers.
-app.get('/api/events', (req, res) => {
-    const token = req.query.token;
-    if (!token) return res.status(401).end();
+const eventTickets = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [ticket, data] of eventTickets) {
+        if (data.expiresAt <= now) eventTickets.delete(ticket);
+    }
+}, 60_000).unref();
 
-    let payload;
-    try { payload = jwt.verify(token, process.env.JWT_SECRET); }
-    catch { return res.status(403).end(); }
+app.post('/api/events/ticket', authenticateToken, (req, res) => {
+    const ticket = crypto.randomBytes(32).toString('base64url');
+    eventTickets.set(ticket, {
+        payload: { id: req.user.id, role: req.user.role },
+        expiresAt: Date.now() + 30_000,
+    });
+    res.json({ ticket });
+});
+
+// SSE endpoint. EventSource cannot set headers, so use a short-lived one-shot ticket.
+app.get('/api/events', (req, res) => {
+    const ticket = req.query.ticket;
+    if (!ticket) return res.status(401).end();
+    const entry = eventTickets.get(ticket);
+    eventTickets.delete(ticket);
+    if (!entry || entry.expiresAt <= Date.now()) return res.status(403).end();
+    const payload = entry.payload;
 
     res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -384,7 +450,7 @@ app.get('/api/events', (req, res) => {
 // Polling fallback for hosts/proxies that drop long-lived SSE connections.
 // Returns events with id > since that this client is authorised to see.
 app.get('/api/events/poll', (req, res) => {
-    const token = req.query.token || (req.headers.authorization || '').split(' ')[1];
+    const token = (req.headers.authorization || '').split(' ')[1];
     if (!token) return res.status(401).json({ error: 'token required' });
 
     let payload;
@@ -404,6 +470,36 @@ app.get('/api/events/poll', (req, res) => {
     res.json({ cursor, events });
 });
 
+// --- IN-MEMORY RATE LIMITER ---
+// Simple fixed-window counter keyed by (route, client IP).
+// Good enough to slow brute-force and spam without pulling in a new dep.
+// Behind a proxy, set app.set('trust proxy', ...) so req.ip is the client IP.
+const _rateBuckets = new Map();
+function rateLimit({ windowMs, max, key = 'default' }) {
+    return (req, res, next) => {
+        const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+        const bucketKey = `${key}:${ip}`;
+        const now = Date.now();
+        const entry = _rateBuckets.get(bucketKey);
+        if (!entry || now >= entry.resetAt) {
+            _rateBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+            return next();
+        }
+        if (entry.count >= max) {
+            const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+            res.setHeader('Retry-After', String(retryAfter));
+            return res.status(429).json({ error: 'Too many requests' });
+        }
+        entry.count += 1;
+        next();
+    };
+}
+// Periodic cleanup so the bucket map doesn't grow unbounded.
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _rateBuckets) if (now >= v.resetAt) _rateBuckets.delete(k);
+}, 60_000).unref();
+
 // Middleware to verify JWT
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -418,6 +514,162 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// --- DATA ACCESS POLICY ---
+// `auth_users` is intentionally absent — credentials are touched only by the auth routes.
+const ALLOWED_DATA_TABLES = new Set([
+    'profiles', 'inquiries', 'tickets', 'attendance', 'ticket_comments',
+    'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
+    'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
+    'payments', 'bills',
+]);
+
+// Columns that non-admins must never write through the generic data endpoint.
+// `profiles.role`/`salary` are the obvious privilege-escalation vectors;
+// `password_hash` should only ever be touched by /api/auth/update-password.
+const ADMIN_ONLY_WRITE_COLUMNS = {
+    profiles: new Set(['role', 'salary', 'password_hash']),
+    auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
+};
+
+const EMPLOYEE_READ_TABLES = new Set([
+    'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
+    'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types',
+]);
+const EMPLOYEE_WRITE_FIELDS = {
+    profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
+    attendance: new Set(['id', 'user_id', 'clock_in', 'clock_out', 'date', 'status', 'location', 'latitude', 'longitude']),
+    eod_reports: new Set(['id', 'employee_id', 'content', 'date']),
+    leave_requests: new Set(['id', 'employee_id', 'start_date', 'end_date', 'reason', 'status']),
+    inquiries: new Set([
+        'assignment_status', 'decline_reason', 'status', 'company_name', 'device_type', 'device_serial_no',
+        'payment_link', 'payment_link_id', 'payment_status', 'payment_method', 'payment_received_at',
+        'cash_collected_at', 'bill_amount', 'extra_cost', 'extra_cost_reason', 'transport_km',
+        'transport_fee', 'platform_fee', 'discount_amount', 'gst_amount', 'bill_total',
+        'bill_generated_at', 'bill_pdf_url',
+    ]),
+    tickets: new Set(['status']),
+    ticket_comments: new Set(['id', 'ticket_id', 'user_id', 'content']),
+    inquiry_services: new Set(['inquiry_id', 'service_id']),
+};
+
+// Identifier-safe regex for column/select tokens. Lets us reject anything that
+// could include parens, spaces, quotes, or SQL keywords.
+const SAFE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function parseEqFilters(eqs) {
+    return eqs.map(filter => {
+        const idx = filter.indexOf(':');
+        if (idx === -1) return null;
+        const field = filter.slice(0, idx);
+        const value = filter.slice(idx + 1);
+        if (!SAFE_IDENT_RE.test(field)) return { error: `Invalid filter column: ${field}` };
+        return { field, value };
+    }).filter(Boolean);
+}
+
+function assertSafeObjectKeys(data) {
+    const bad = Object.keys(data || {}).find(k => !SAFE_IDENT_RE.test(k));
+    return bad ? `Invalid field: ${bad}` : null;
+}
+
+function assertAllowedFields(table, data, allowed) {
+    if (!allowed) return `Not allowed to write ${table}`;
+    const blocked = Object.keys(data || {}).filter(k => !allowed.has(k));
+    return blocked.length ? `Not allowed to write: ${blocked.join(', ')}` : null;
+}
+
+function appendRoleScope({ table, user, method, whereClauses, params }) {
+    if (!user || user.role === 'admin' || user.role === 'public') return null;
+    if (user.role !== 'employee' && user.role !== 'client') {
+        return { error: 'Forbidden' };
+    }
+    const id = user.id;
+    if (method === 'GET' && !EMPLOYEE_READ_TABLES.has(table)) return { error: 'Forbidden' };
+    switch (table) {
+        case 'profiles':
+            whereClauses.push('?? = ?');
+            params.push('id', id);
+            break;
+        case 'attendance':
+            whereClauses.push('?? = ?');
+            params.push('user_id', id);
+            break;
+        case 'tickets':
+            whereClauses.push('(?? = ? OR ?? = ?)');
+            params.push('assigned_to', id, 'client_id', id);
+            break;
+        case 'inquiries':
+            whereClauses.push('?? = ?');
+            params.push('assigned_employee_id', id);
+            break;
+        case 'eod_reports':
+        case 'leave_requests':
+            whereClauses.push('?? = ?');
+            params.push('employee_id', id);
+            break;
+        case 'ticket_comments':
+            whereClauses.push('EXISTS (SELECT 1 FROM tickets t WHERE t.id = ticket_comments.ticket_id AND (t.assigned_to = ? OR t.client_id = ?))');
+            params.push(id, id);
+            break;
+        case 'inquiry_services':
+            whereClauses.push('EXISTS (SELECT 1 FROM inquiries i WHERE i.id = inquiry_services.inquiry_id AND i.assigned_employee_id = ?)');
+            params.push(id);
+            break;
+        case 'service_pricing':
+        case 'device_types':
+            if (method !== 'GET') return { error: 'Admin only' };
+            break;
+        default:
+            return { error: 'Forbidden' };
+    }
+    return null;
+}
+
+async function assertEmployeeInsertAllowed(connection, table, user, data) {
+    if (user.role === 'admin' || user.role === 'public') return null;
+    const allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
+    if (allowedErr) return allowedErr;
+    const id = user.id;
+    if (table === 'profiles' && String(data.id) !== String(id)) return 'Cannot write another user profile';
+    if (table === 'attendance' && String(data.user_id) !== String(id)) return 'Cannot write another user attendance';
+    if ((table === 'eod_reports' || table === 'leave_requests') && String(data.employee_id) !== String(id)) return 'Cannot write another employee record';
+    if (table === 'leave_requests' && data.status && data.status !== 'pending') return 'Leave requests must start pending';
+    if (table === 'ticket_comments') {
+        if (String(data.user_id) !== String(id)) return 'Cannot comment as another user';
+        const [rows] = await connection.query('SELECT id FROM tickets WHERE id = ? AND (assigned_to = ? OR client_id = ?) LIMIT 1', [data.ticket_id, id, id]);
+        if (!rows.length) return 'Cannot comment on this ticket';
+    }
+    if (table === 'inquiry_services') {
+        const [rows] = await connection.query('SELECT id FROM inquiries WHERE id = ? AND assigned_employee_id = ? LIMIT 1', [data.inquiry_id, id]);
+        if (!rows.length) return 'Cannot update services for this inquiry';
+    }
+    return null;
+}
+
+function parseSelectClause(select) {
+    if (!select || select === '*') return { columns: '*', relations: [] };
+    const relations = [];
+    // Pull out Supabase-style joins like "inquiries(*)" or "profiles(full_name)".
+    const joinRegex = /(\w+)\(([^)]*)\)/g;
+    let m;
+    while ((m = joinRegex.exec(select)) !== null) {
+        if (!ALLOWED_DATA_TABLES.has(m[1])) return { error: `Unknown relation: ${m[1]}` };
+        if (m[2] !== '*') {
+            const badRelField = m[2].split(',').map(s => s.trim()).filter(Boolean).find(f => !SAFE_IDENT_RE.test(f));
+            if (badRelField) return { error: `Invalid relation column: ${badRelField}` };
+        }
+        relations.push({ relTable: m[1], relFields: m[2] === '*' ? '*' : m[2] });
+    }
+    let bare = select.replace(/,?\s*\w+\([^)]*\)/g, '').trim();
+    bare = bare.replace(/^,|,$/g, '').trim();
+    if (!bare || bare === '*') return { columns: '*', relations };
+    const cols = bare.split(',').map(s => s.trim()).filter(Boolean);
+    for (const c of cols) {
+        if (!SAFE_IDENT_RE.test(c)) return { error: `Invalid column: ${c}` };
+    }
+    return { columns: cols, relations };
+}
+
 // The public landing page submits and tracks inquiries without logging in.
 // Allow anonymous access for those specific operations on the `inquiries` table:
 //   - POST: anyone can create a new inquiry
@@ -425,7 +677,14 @@ const authenticateToken = (req, res, next) => {
 //   - PATCH: only feedback fields may be updated, and only by id
 // Anything else falls through to the normal JWT check.
 const PUBLIC_INQUIRY_FEEDBACK_FIELDS = new Set(['feedback_rating', 'feedback_comment', 'feedback_at', 'employee_rating', 'feedback_employee_id']);
+const PUBLIC_INQUIRY_CREATE_FIELDS = new Set([
+    'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
+    'bill_no', 'service_item', 'ticket_no', 'preferred_time', 'status', 'assignment_status',
+]);
 const dataAuth = (req, res, next) => {
+    if (!ALLOWED_DATA_TABLES.has(req.params.table)) {
+        return res.status(404).json({ error: 'Unknown table' });
+    }
     if (req.params.table === 'inquiries') {
         const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
 
@@ -433,12 +692,14 @@ const dataAuth = (req, res, next) => {
             req.user = { role: 'public' };
             return next();
         }
-        if (req.method === 'GET' && eqs.some(e => e.startsWith('ticket_no:'))) {
+        if (req.method === 'GET' && eqs.some(e => e.startsWith('ticket_no:')) && eqs.some(e => e.startsWith('phone:'))) {
             req.user = { role: 'public' };
             return next();
         }
         if (req.method === 'PATCH'
             && eqs.some(e => e.startsWith('id:'))
+            && eqs.some(e => e.startsWith('ticket_no:'))
+            && eqs.some(e => e.startsWith('phone:'))
             && Object.keys(req.body || {}).every(k => PUBLIC_INQUIRY_FEEDBACK_FIELDS.has(k))) {
             req.user = { role: 'public' };
             return next();
@@ -449,22 +710,34 @@ const dataAuth = (req, res, next) => {
 
 // --- AUTH ROUTES ---
 
-app.post('/api/auth/signup', async (req, res) => {
-    const { email, password, fullName, role } = req.body;
+app.post('/api/auth/signup', rateLimit({ windowMs: 60_000, max: 5, key: 'signup' }), async (req, res) => {
+    const { email, password, fullName, access_key, regKey } = req.body;
+    const accessKey = access_key || regKey;
 
-    // Only staff/admin accounts can be created via the dashboard.
-    // Clients raise requests through the public landing page (no login).
-    if (role !== 'admin' && role !== 'employee') {
-        return res.status(400).json({ error: 'Invalid access key. Only staff and admin can register here.' });
+    // Role is derived server-side from the access key — never trust a `role` from the client.
+    // Keys live in env so leaking the bundle (which used to embed them) can't grant admin.
+    let role;
+    if (accessKey === process.env.ADMIN_REG_KEY) role = 'admin';
+    else if (accessKey === process.env.STAFF_REG_KEY) role = 'employee';
+    else return res.status(400).json({ error: 'Invalid access key. Only staff and admin can register here.' });
+
+    if (!email || typeof email !== 'string' || email.length > 254) {
+        return res.status(400).json({ error: 'Valid email is required' });
+    }
+    if (!password || typeof password !== 'string' || password.length < 8 || password.length > 200) {
+        return res.status(400).json({ error: 'Password must be 8-200 characters' });
+    }
+    if (!fullName || typeof fullName !== 'string' || fullName.length > 120) {
+        return res.status(400).json({ error: 'Valid full name is required' });
     }
 
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
 
         // Check if user exists
         const [users] = await connection.execute('SELECT * FROM auth_users WHERE email = ?', [email]);
         if (users.length > 0) {
-            await connection.end();
+            connection.release();
             return res.status(400).json({ error: 'User already exists' });
         }
 
@@ -491,7 +764,7 @@ app.post('/api/auth/signup', async (req, res) => {
             await connection.rollback();
             throw error;
         } finally {
-            await connection.end();
+            connection.release();
         }
     } catch (error) {
         console.error('Signup error:', error);
@@ -499,27 +772,27 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 });
 
-app.post('/api/auth/signin', async (req, res) => {
+app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin' }), async (req, res) => {
     const { email, password } = req.body;
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
         const [users] = await connection.execute('SELECT * FROM auth_users WHERE email = ?', [email]);
 
         if (users.length === 0) {
-            await connection.end();
+            connection.release();
             return res.status(400).json({ error: 'User not found' });
         }
 
         const user = users[0];
         const validPassword = await bcrypt.compare(password, user.password_hash);
         if (!validPassword) {
-            await connection.end();
+            connection.release();
             return res.status(400).json({ error: 'Invalid password' });
         }
 
         // Pull role + name from profile so the client can route immediately.
         const [profiles] = await connection.execute('SELECT role, full_name FROM profiles WHERE id = ?', [user.id]);
-        await connection.end();
+        connection.release();
 
         const profile = profiles[0] || { role: 'client', full_name: '' };
 
@@ -545,9 +818,9 @@ app.post('/api/auth/signin', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
         const [profiles] = await connection.execute('SELECT * FROM profiles WHERE id = ?', [req.user.id]);
-        await connection.end();
+        connection.release();
 
         if (profiles.length === 0) return res.status(404).json({ error: 'Profile not found' });
         // Profile fields take precedence so the role is the canonical DB value.
@@ -569,12 +842,12 @@ app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
 
     try {
         const passwordHash = await bcrypt.hash(password, 10);
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
         await connection.execute(
             'UPDATE auth_users SET password_hash = ? WHERE id = ?',
             [passwordHash, userId]
         );
-        await connection.end();
+        connection.release();
         res.json({ message: 'Password updated successfully' });
     } catch (error) {
         console.error('Password update error:', error);
@@ -586,9 +859,9 @@ app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
 
 app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
         const [rows] = await connection.execute('SELECT * FROM profiles WHERE id = ?', [req.params.id]);
-        await connection.end();
+        connection.release();
         res.json(rows[0]);
     } catch (error) {
         console.error('Profile error:', error);
@@ -599,36 +872,28 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
-    let { select, order, in: inFilter } = req.query;
+    const { order, in: inFilter } = req.query;
     const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
+    const parsedEqs = parseEqFilters(eqs);
+    const eqErr = parsedEqs.find(e => e.error)?.error;
+    if (eqErr) return res.status(400).json({ error: eqErr });
 
-    // Handle Supabase-style joins: select=*,inquiries(*) or select=*,profiles(full_name)
-    const relations = [];
-    if (select) {
-        // Regex to find things like "inquiries(*)" or "profiles(full_name)"
-        const joinRegex = /(\w+)\(([^)]*)\)/g;
-        let match;
-        while ((match = joinRegex.exec(select)) !== null) {
-            relations.push({ relTable: match[1], relFields: match[2] === '*' ? '*' : match[2] });
-        }
-        // Remove joins from the main SQL select clause
-        select = select.replace(/,?\s*\w+\([^)]*\)/g, '').trim();
-        if (select.endsWith(',')) select = select.slice(0, -1);
-        if (select.startsWith(',')) select = select.slice(1);
-        if (!select) select = '*';
-    }
+    // Parse + validate the select clause. Column tokens must be plain identifiers —
+    // rejects any attempt to smuggle SQL through `?select=*,(SELECT password_hash...)`.
+    const parsed = parseSelectClause(req.query.select);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { columns: selectCols, relations } = parsed;
 
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        let query = `SELECT ${select || '*'} FROM ??`;
-        let params = [table];
+        const connection = await getConn();
+        // selectCols is either the literal '*' (built into the SQL) or a list of validated
+        // identifiers; identifiers go through `??` for proper escaping.
+        const selectSql = selectCols === '*' ? '*' : selectCols.map(() => '??').join(', ');
+        let query = `SELECT ${selectSql} FROM ??`;
+        let params = selectCols === '*' ? [table] : [...selectCols, table];
 
         let whereClauses = [];
-        eqs.forEach(filter => {
-            const idx = filter.indexOf(':');
-            if (idx === -1) return;
-            const field = filter.slice(0, idx);
-            const value = filter.slice(idx + 1);
+        parsedEqs.forEach(({ field, value }) => {
             whereClauses.push('?? = ?');
             params.push(field, value);
         });
@@ -636,9 +901,15 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
             const idx = inFilter.indexOf(':');
             const field = inFilter.slice(0, idx);
             const valuesStr = inFilter.slice(idx + 1);
+            if (!SAFE_IDENT_RE.test(field)) return res.status(400).json({ error: `Invalid filter column: ${field}` });
             const values = valuesStr.split(',');
             whereClauses.push(`?? IN (${values.map(() => '?').join(', ')})`);
             params.push(field, ...values);
+        }
+        const scopeErr = appendRoleScope({ table, user: req.user, method: 'GET', whereClauses, params });
+        if (scopeErr?.error) {
+            connection.release();
+            return res.status(403).json({ error: scopeErr.error });
         }
 
         if (whereClauses.length > 0) {
@@ -647,6 +918,10 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
 
         if (order) {
             const [field, direction] = order.split(':');
+            if (!SAFE_IDENT_RE.test(field)) {
+                connection.release();
+                return res.status(400).json({ error: `Invalid order column: ${field}` });
+            }
             query += ' ORDER BY ?? ' + (direction === 'desc' ? 'DESC' : 'ASC');
             params.push(field);
         }
@@ -714,7 +989,7 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
             }
         }
 
-        await connection.end();
+        connection.release();
         res.json(rows);
     } catch (error) {
         console.error('Error fetching data:', error);
@@ -728,21 +1003,45 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
     const data = req.body;
 
     if (eqs.length === 0) return res.status(400).json({ error: 'Filter required for update' });
+    const keyErr = assertSafeObjectKeys(data);
+    if (keyErr) return res.status(400).json({ error: keyErr });
+    const parsedEqs = parseEqFilters(eqs);
+    const eqErr = parsedEqs.find(e => e.error)?.error;
+    if (eqErr) return res.status(400).json({ error: eqErr });
+
+    // Block non-admins from setting privileged columns (role, salary, password_hash).
+    if (req.user.role !== 'admin') {
+        const allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
+        if (req.user.role !== 'public' && allowedErr) return res.status(403).json({ error: allowedErr });
+        const restricted = ADMIN_ONLY_WRITE_COLUMNS[table];
+        if (restricted) {
+            const blocked = Object.keys(data || {}).filter(k => restricted.has(k) || restricted.has('*'));
+            if (blocked.length) {
+                return res.status(403).json({ error: `Not allowed to update: ${blocked.join(', ')}` });
+            }
+        }
+    }
 
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
         const keys = Object.keys(data);
         const values = Object.values(data);
         const setClause = keys.map(() => `?? = ?`).join(', ');
 
         const whereClauses = [];
         const whereParams = [];
-        eqs.forEach(filter => {
-            const idx = filter.indexOf(':');
-            if (idx === -1) return;
+        parsedEqs.forEach(({ field, value }) => {
             whereClauses.push('?? = ?');
-            whereParams.push(filter.slice(0, idx), filter.slice(idx + 1));
+            whereParams.push(field, value);
         });
+        const scopeErr = appendRoleScope({ table, user: req.user, method: 'PATCH', whereClauses, params: whereParams });
+        if (scopeErr?.error) {
+            connection.release();
+            return res.status(403).json({ error: scopeErr.error });
+        }
+        if (req.user.role === 'public' && table === 'inquiries') {
+            whereClauses.push('feedback_rating IS NULL');
+        }
 
         const query = `UPDATE ?? SET ${setClause} WHERE ${whereClauses.join(' AND ')}`;
 
@@ -765,7 +1064,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             updatedRows = rows;
         } catch { /* fall through, broadcast at least the patch */ }
 
-        await connection.end();
+        connection.release();
         updatedRows.forEach(row => broadcastChange('UPDATE', table, row));
         if (updatedRows.length === 0) broadcastChange('UPDATE', table, { ...data, _filter: eqs });
         res.json({ success: true });
@@ -780,17 +1079,21 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
     const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
 
     if (eqs.length === 0) return res.status(400).json({ error: 'Filter required for delete' });
+    const parsedEqs = parseEqFilters(eqs);
+    const eqErr = parsedEqs.find(e => e.error)?.error;
+    if (eqErr) return res.status(400).json({ error: eqErr });
+    // Only admins can delete via the generic endpoint — stops an employee from
+    // wiping rows they happen to have ids for.
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
 
         const whereClauses = [];
         const whereParams = [];
-        eqs.forEach(filter => {
-            const idx = filter.indexOf(':');
-            if (idx === -1) return;
+        parsedEqs.forEach(({ field, value }) => {
             whereClauses.push('?? = ?');
-            whereParams.push(filter.slice(0, idx), filter.slice(idx + 1));
+            whereParams.push(field, value);
         });
 
         // Capture rows being deleted so we can broadcast their ids to subscribers.
@@ -805,7 +1108,7 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
 
         const query = `DELETE FROM ?? WHERE ${whereClauses.join(' AND ')}`;
         const [result] = await connection.query(query, [table, ...whereParams]);
-        await connection.end();
+        connection.release();
 
         deletedRows.forEach(row => broadcastChange('DELETE', table, row));
         res.json({ success: true, affectedRows: result.affectedRows || 0 });
@@ -815,13 +1118,39 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
     }
 });
 
-app.post('/api/data/:table', dataAuth, async (req, res) => {
+app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-post' }), dataAuth, async (req, res) => {
     const { table } = req.params;
     const data = req.body;
     if (!data.id) data.id = uuidv4();
+    const keyErr = assertSafeObjectKeys(data);
+    if (keyErr) return res.status(400).json({ error: keyErr });
+    if (req.user?.role === 'public') {
+        if (table !== 'inquiries') return res.status(403).json({ error: 'Forbidden' });
+        const blocked = Object.keys(data || {}).filter(k => !PUBLIC_INQUIRY_CREATE_FIELDS.has(k));
+        if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
+        data.status = 'open';
+        data.assignment_status = 'none';
+    }
+
+    // Same admin-only column guard as PATCH — a non-admin upsert that includes a
+    // privileged column (role/salary) would otherwise silently elevate.
+    if (req.user.role !== 'admin') {
+        const restricted = ADMIN_ONLY_WRITE_COLUMNS[table];
+        if (restricted) {
+            const blocked = Object.keys(data || {}).filter(k => restricted.has(k) || restricted.has('*'));
+            if (blocked.length) {
+                return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
+            }
+        }
+    }
 
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
+        const authErr = await assertEmployeeInsertAllowed(connection, table, req.user, data);
+        if (authErr) {
+            connection.release();
+            return res.status(403).json({ error: authErr });
+        }
         const keys = Object.keys(data);
         const values = Object.values(data);
         const placeholders = keys.map(() => '?').join(', ');
@@ -834,7 +1163,7 @@ app.post('/api/data/:table', dataAuth, async (req, res) => {
         const params = [table, keys, ...values, ...updateParams];
 
         await connection.query(query, params);
-        await connection.end();
+        connection.release();
         broadcastChange('INSERT', table, data);
         if (table === 'inquiries') {
             broadcastNotify({
@@ -901,7 +1230,7 @@ app.post('/api/payments/check-status', authenticateToken, async (req, res) => {
 
     let connection;
     try {
-        connection = await mysql.createConnection(dbConfig);
+        connection = await getConn();
         const [rows] = await connection.execute(
             'SELECT id, ticket_no, ticket_id, payment_status, payment_received_at, payment_link_id FROM inquiries WHERE id = ? LIMIT 1',
             [inquiry_id]
@@ -935,7 +1264,7 @@ app.post('/api/payments/check-status', authenticateToken, async (req, res) => {
         console.error('Razorpay status check failed:', error);
         res.status(500).json({ error: error.description || error.message || 'Failed to check payment status' });
     } finally {
-        if (connection) { try { await connection.end(); } catch {} }
+        if (connection) { try { connection.release(); } catch {} }
     }
 });
 
@@ -943,23 +1272,33 @@ app.post('/api/payments/check-status', authenticateToken, async (req, res) => {
 // Razorpay calls this URL when a payment link is paid.
 // Configure this URL in your Razorpay dashboard under Webhooks:
 //   https://services.networkingexperts.in/api/webhook/razorpay
-// Set RAZORPAY_WEBHOOK_SECRET in .env to the webhook secret from the dashboard.
-app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
+// RAZORPAY_WEBHOOK_SECRET MUST be set — without it, any anonymous POST here
+// could forge a "payment_link.paid" event and mark a ticket paid for free.
+app.post('/api/webhook/razorpay', async (req, res) => {
     const signature = req.headers['x-razorpay-signature'];
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {})));
 
-    if (webhookSecret) {
-        const crypto = require('crypto');
-        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
-        if (signature !== expectedSig) {
-            console.warn('[Webhook] Invalid Razorpay signature');
-            return res.status(400).json({ error: 'Invalid signature' });
-        }
+    if (!webhookSecret) {
+        console.error('[Webhook] RAZORPAY_WEBHOOK_SECRET is not configured — refusing to process webhook');
+        return res.status(503).json({ error: 'Webhook not configured' });
+    }
+    if (!signature) {
+        return res.status(400).json({ error: 'Missing signature' });
+    }
+    // express.raw is registered globally for this path — req.body is a Buffer.
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+    const crypto = require('crypto');
+    const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+    // Constant-time compare to avoid signature-timing oracles.
+    const sigBuf = Buffer.from(signature, 'utf8');
+    const expBuf = Buffer.from(expectedSig, 'utf8');
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        console.warn('[Webhook] Invalid Razorpay signature');
+        return res.status(400).json({ error: 'Invalid signature' });
     }
 
     let event;
-    try { event = Buffer.isBuffer(req.body) ? JSON.parse(req.body) : req.body; }
+    try { event = JSON.parse(rawBody.toString('utf8')); }
     catch { return res.status(400).json({ error: 'Invalid JSON' }); }
 
     if (event.event === 'payment_link.paid') {
@@ -972,7 +1311,7 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
         if (ticket_no) {
             let connection;
             try {
-                connection = await mysql.createConnection(dbConfig);
+                connection = await getConn();
                 await connection.beginTransaction();
 
                 // Mark inquiry paid and auto-resolve (don't downgrade an already-closed ticket).
@@ -1034,7 +1373,7 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
                 if (connection) { try { await connection.rollback(); } catch {} }
                 console.error('[Webhook] DB update failed:', err.message);
             } finally {
-                if (connection) { try { await connection.end(); } catch {} }
+                if (connection) { try { connection.release(); } catch {} }
             }
         }
     }
@@ -1045,7 +1384,8 @@ app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), asy
 // --- BILL PDF UPLOAD ---
 // Stores a generated bill PDF on disk and returns a public URL the client
 // can open from WhatsApp. Body: { dataBase64, filename, inquiry_id? }
-app.post('/api/bills/upload', authenticateToken, async (req, res) => {
+// Body parser limit raised just for this route — the global limit is 1MB.
+app.post('/api/bills/upload', authenticateToken, express.json({ limit: BILL_UPLOAD_LIMIT }), async (req, res) => {
     try {
         const { dataBase64, filename, inquiry_id } = req.body || {};
         if (!dataBase64) return res.status(400).json({ error: 'dataBase64 is required' });
@@ -1054,13 +1394,17 @@ app.post('/api/bills/upload', authenticateToken, async (req, res) => {
         const cleaned = String(dataBase64).replace(/^data:application\/pdf;base64,/, '');
         const buf = Buffer.from(cleaned, 'base64');
         if (!buf.length) return res.status(400).json({ error: 'Empty PDF' });
+        // Sanity-check the magic bytes — %PDF — to reject non-PDF uploads.
+        if (buf.length < 5 || buf.subarray(0, 4).toString('ascii') !== '%PDF') {
+            return res.status(400).json({ error: 'File is not a valid PDF' });
+        }
 
         // Pick a safe filename — token avoids enumeration, original name kept as a label.
         const token = uuidv4();
         const safeName = (filename || 'invoice.pdf').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
         const storedName = `${token}-${safeName.endsWith('.pdf') ? safeName : safeName + '.pdf'}`;
         const filePath = path.join(BILLS_DIR, storedName);
-        fs.writeFileSync(filePath, buf);
+        await fsp.writeFile(filePath, buf);
 
         // Absolute URL — WhatsApp recipients open this from another device,
         // so a relative path would 404 for them. Honour reverse-proxy headers.
@@ -1072,7 +1416,7 @@ app.post('/api/bills/upload', authenticateToken, async (req, res) => {
         if (inquiry_id) {
             let connection;
             try {
-                connection = await mysql.createConnection(dbConfig);
+                connection = await getConn();
                 await connection.execute(
                     'UPDATE inquiries SET bill_pdf_url = ? WHERE id = ?',
                     [url, inquiry_id]
@@ -1080,7 +1424,7 @@ app.post('/api/bills/upload', authenticateToken, async (req, res) => {
             } catch (err) {
                 console.error('[bills/upload] failed to persist URL:', err.message);
             } finally {
-                if (connection) { try { await connection.end(); } catch {} }
+                if (connection) { try { connection.release(); } catch {} }
             }
         }
 
@@ -1102,10 +1446,10 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
     try {
         console.log('Testing database connection...');
-        const connection = await mysql.createConnection(dbConfig);
+        const connection = await getConn();
         console.log('✅ Database connected successfully!');
         await ensureRequiredColumns(connection);
-        await connection.end();
+        connection.release();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
