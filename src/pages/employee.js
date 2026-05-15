@@ -490,7 +490,7 @@ export async function renderEmployeeDashboard(container) {
       </div>
 
       <!-- EOD Report Card -->
-      <div class="card" style="display:none">
+      <div class="card">
         <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clipboard}<span>End of Day Summary</span></span></div>
         <div class="card-body">
           ${eodReport ? `
@@ -599,72 +599,6 @@ export async function renderEmployeeDashboard(container) {
                </div>
             </div>
           `).join('')}
-      </div>
-    </div>
-
-    <!-- Tasks Section -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title sr-icon-title">${ICONS.ticket}<span>My Tasks & Details</span></span>
-        <span class="badge badge-open">${activeTasks.length} active</span>
-      </div>
-      <div class="card-body">
-        ${activeTasks.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--text-dim)">No active tasks assigned yet.</div>' :
-          activeTasks.map(task => {
-            const inq = task.inquiries?.[0]; // Get the linked inquiry if it exists
-            const shownStatus = displayStatus(task.status);
-            return `
-              <div style="padding:16px; border-radius:16px; background:var(--bg-soft); box-shadow:var(--neu-sm); margin-bottom:16px; border:1px solid var(--border);">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                  <div style="flex:1">
-                    <div style="font-weight:800; font-size:1.05rem; color:var(--text)">${task.title}</div>
-                    <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${task.description || 'No description provided.'}</div>
-                  </div>
-                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                    <span class="badge badge-${shownStatus}">${statusText(task.status)}</span>
-                    <span class="badge badge-${task.priority || 'medium'}">${task.priority || 'medium'}</span>
-                  </div>
-                </div>
-                
-                ${inq ? `
-                  <div style="margin-top:16px; padding:12px; background:var(--bg); border-radius:12px; border:1px dashed var(--primary);">
-                    <div style="font-size:0.75rem; color:var(--primary); font-weight:800; text-transform:uppercase; margin-bottom:8px;">Linked Service Request</div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                      <div>
-                        <div style="font-size:0.7rem; color:var(--text-dim)">Client</div>
-                        <div style="font-size:0.85rem; font-weight:700">${inq.full_name}</div>
-                      </div>
-                      <div>
-                        <div style="font-size:0.7rem; color:var(--text-dim)">Contact</div>
-                        <div style="font-size:0.85rem; font-weight:700; display:flex; align-items:center; gap:6px;">
-                          ${inq.phone}
-                          <a href="tel:${inq.phone}" style="color:var(--primary); display:flex;"><span style="width:14px;height:14px;display:flex;">${ICONS.phone}</span></a>
-                        </div>
-                      </div>
-                      <div style="grid-column: span 2">
-                        <div style="font-size:0.7rem; color:var(--text-dim)">Location</div>
-                        <div style="font-size:0.85rem; font-weight:600; display:flex; align-items:flex-start; gap:6px;">
-                          <span style="width:14px;height:14px;display:flex;flex-shrink:0;color:var(--primary);margin-top:2px;">${ICONS.pin}</span>
-                          ${inq.location || '—'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ` : ''}
-                
-                <div style="margin-top:16px; display:flex; gap:8px;">
-                  <button class="btn btn-secondary btn-sm task-btn" data-id="${task.id}" data-inq-id="${inq ? inq.id : ''}" data-status="${task.status}" style="flex:1; height:38px; display:flex; align-items:center; justify-content:center; gap:6px;">
-                    <span style="width:14px;height:14px;display:flex;">${ICONS.edit}</span> Update Status
-                  </button>
-                  ${inq ? `
-                    <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:38px; display:flex; align-items:center; justify-content:center; gap:6px;">
-                      <span style="width:14px;height:14px;display:flex;">${ICONS.pin}</span> Route
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
       </div>
     </div>
   `;
@@ -1115,6 +1049,256 @@ export async function renderEmployeeSalary(container) {
   `;
 }
 
+// ── EMPLOYEE: MY TASKS (dedicated page) ──────────────────
+export async function renderEmployeeTasks(container) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;padding:60px;"><div class="spinner"></div></div>`;
+
+  let tasks, pendingInquiries, acceptedInquiries;
+  try {
+    const [ticketsRes, inquiriesRes] = await Promise.all([
+      supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
+      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']),
+    ]);
+    tasks = ticketsRes.data || [];
+    const allInquiries = inquiriesRes.data || [];
+    pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending');
+    acceptedInquiries = allInquiries
+      .filter(x => x.assignment_status === 'accepted' && !['resolved', 'closed'].includes(x.status))
+      .map(x => ({ ...x, _company: x.company_name || null }));
+  } catch (err) {
+    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
+    return;
+  }
+
+  const activeTasks = tasks.filter(x => {
+    const status = displayStatus(x.status);
+    if (status === 'resolved') return false;
+    const inq = x.inquiries?.[0];
+    if (!inq) return status === 'assigned' || status === 'in_progress' || status === 'open';
+    return inq.assignment_status === 'accepted' && displayStatus(inq.status) !== 'resolved';
+  });
+  const completedTasks = tasks.filter(x => displayStatus(x.status) === 'resolved');
+  const issueTasks = tasks.filter(x => displayStatus(x.status) === 'issue_not_resolved');
+
+  const filterCounts = {
+    all: tasks.length,
+    active: activeTasks.length,
+    completed: completedTasks.length,
+    issues: issueTasks.length,
+  };
+
+  const taskCard = (task) => {
+    const inq = task.inquiries?.[0];
+    const shownStatus = displayStatus(task.status);
+    return `
+      <div class="emp-task-card" data-status="${shownStatus}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border); transition:transform 0.15s ease, box-shadow 0.15s ease;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div style="flex:1">
+            <div style="font-weight:800; font-size:1.1rem; color:var(--text)">${task.title}</div>
+            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${task.description || 'No description provided.'}</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            <span class="badge badge-${shownStatus}">${statusText(task.status)}</span>
+            <span class="badge badge-${task.priority || 'medium'}">${task.priority || 'medium'}</span>
+          </div>
+        </div>
+        
+        ${inq ? `
+          <div style="margin-top:16px; padding:14px; background:var(--bg-soft); border-radius:14px; border:1px dashed var(--primary);">
+            <div style="font-size:0.75rem; color:var(--primary); font-weight:800; text-transform:uppercase; margin-bottom:10px;">Linked Service Request</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+              <div>
+                <div style="font-size:0.7rem; color:var(--text-dim)">Client</div>
+                <div style="font-size:0.9rem; font-weight:700">${inq.full_name}</div>
+              </div>
+              <div>
+                <div style="font-size:0.7rem; color:var(--text-dim)">Ticket</div>
+                <div style="font-size:0.9rem; font-weight:700; color:var(--primary)">${inq.ticket_no || '—'}</div>
+              </div>
+              <div>
+                <div style="font-size:0.7rem; color:var(--text-dim)">Contact</div>
+                <div style="font-size:0.9rem; font-weight:700; display:flex; align-items:center; gap:6px;">
+                  ${inq.phone}
+                  <a href="tel:${inq.phone}" style="color:var(--primary); display:flex;"><span style="width:14px;height:14px;display:flex;">${ICONS.phone}</span></a>
+                  <a href="https://wa.me/${(inq.phone || '').replace(/\\D/g, '')}" target="_blank" style="color:#25D366; display:flex;"><span style="width:14px;height:14px;display:flex;">${ICONS.whatsapp}</span></a>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:0.7rem; color:var(--text-dim)">Service</div>
+                <div style="font-size:0.9rem; font-weight:600">${inq.service_item || '—'}</div>
+              </div>
+              <div style="grid-column: span 2">
+                <div style="font-size:0.7rem; color:var(--text-dim)">Location</div>
+                <div style="font-size:0.88rem; font-weight:600; display:flex; align-items:flex-start; gap:6px;">
+                  <span style="width:14px;height:14px;display:flex;flex-shrink:0;color:var(--primary);margin-top:2px;">${ICONS.pin}</span>
+                  ${inq.location || '—'}
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+        
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm task-btn" data-id="${task.id}" data-inq-id="${inq ? inq.id : ''}" data-status="${task.status}" style="flex:1; min-width:120px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
+            <span style="width:16px;height:16px;display:flex;">${ICONS.edit}</span> Update Status
+          </button>
+          ${inq ? `
+            <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; min-width:120px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
+              <span style="width:16px;height:16px;display:flex;">${ICONS.pin}</span> Open Maps
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  };
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1 style="display:flex; align-items:center; gap:12px;">
+          <span style="width:32px; height:32px; display:flex; color:var(--primary);">${ICONS.ticket}</span>
+          <span>My Tasks</span>
+        </h1>
+        <p>All your assigned tasks, service jobs, and pending assignments</p>
+      </div>
+      <button class="btn btn-secondary" id="tasks-refresh">${ICONS.refresh}<span>Refresh</span></button>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--primary)">${tasks.length}</div>
+        <div class="stat-label">Total Tasks</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--warning)">${activeTasks.length}</div>
+        <div class="stat-label">Active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--success)">${completedTasks.length}</div>
+        <div class="stat-label">Completed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--danger)">${issueTasks.length}</div>
+        <div class="stat-label">Issues</div>
+      </div>
+    </div>
+
+    ${pendingInquiries.length > 0 ? `
+      <div class="card" style="border: 2px solid var(--primary); background: rgba(16, 185, 129, 0.05); margin-bottom:24px;">
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.alert}<span>New Assignments Pending</span></span></div>
+        <div class="card-body">
+          ${pendingInquiries.map(pi => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:14px; background:var(--bg-soft); border-radius:14px; margin-bottom:10px; box-shadow:var(--neu-sm);">
+              <div>
+                <div style="font-weight:700">${pi.full_name} — ${pi.service_item}</div>
+                <div style="font-size:0.82rem; color:var(--text-soft)">Preferred: ${pi.preferred_time || 'Flexible'}</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}" data-ticket-id="${pi.ticket_id || ''}">${ICONS.check} Accept</button>
+                <button class="btn btn-danger btn-sm decline-btn" data-id="${pi.id}">${ICONS.close} Decline</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+      <div class="sr-filter-bar" id="task-filter-tabs">
+        <button class="sr-filter active" data-filter="all"><span>All</span><span class="sr-filter-count">${filterCounts.all}</span></button>
+        <button class="sr-filter" data-filter="active"><span>Active</span><span class="sr-filter-count">${filterCounts.active}</span></button>
+        <button class="sr-filter" data-filter="completed"><span>Completed</span><span class="sr-filter-count">${filterCounts.completed}</span></button>
+        <button class="sr-filter" data-filter="issues"><span>Issues</span><span class="sr-filter-count">${filterCounts.issues}</span></button>
+      </div>
+      <div class="search-input-wrap" style="flex:1; min-width:200px;">
+        <span>${ICONS.search || '🔍'}</span>
+        <input class="search-input" id="task-search" placeholder="Search tasks by title, client, or ticket…"/>
+      </div>
+    </div>
+
+    <div id="task-list">
+      ${tasks.length === 0
+        ? '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:2rem;margin-bottom:12px;">📋</div><p style="font-weight:600;">No tasks assigned yet</p><p style="font-size:0.85rem;">Tasks will appear here once admin assigns service requests to you.</p></div></div>'
+        : tasks.map(task => taskCard(task)).join('')}
+    </div>
+  `;
+
+  // Refresh
+  container.querySelector('#tasks-refresh').onclick = () => renderEmployeeTasks(container);
+
+  // Filter tabs
+  let activeFilter = 'all';
+  let searchQuery = '';
+
+  const applyFilters = () => {
+    const cards = container.querySelectorAll('.emp-task-card');
+    const q = searchQuery.toLowerCase();
+    cards.forEach(card => {
+      const status = card.dataset.status;
+      const text = card.textContent.toLowerCase();
+      const matchFilter = activeFilter === 'all'
+        || (activeFilter === 'active' && status !== 'resolved' && status !== 'issue_not_resolved')
+        || (activeFilter === 'completed' && status === 'resolved')
+        || (activeFilter === 'issues' && status === 'issue_not_resolved');
+      const matchSearch = !q || text.includes(q);
+      card.style.display = (matchFilter && matchSearch) ? '' : 'none';
+    });
+  };
+
+  container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(btn => {
+    btn.onclick = () => {
+      container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = btn.dataset.filter;
+      applyFilters();
+    };
+  });
+
+  const searchInput = container.querySelector('#task-search');
+  if (searchInput) {
+    searchInput.oninput = (e) => { searchQuery = e.target.value; applyFilters(); };
+  }
+
+  // Task update buttons
+  container.querySelectorAll('.task-btn').forEach(btn => {
+    btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeTasks(container));
+  });
+
+  // Accept/Decline
+  container.querySelectorAll('.accept-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const ops = [
+        supabase.from('inquiries').update({ assignment_status: 'accepted', status: 'in_progress' }).eq('id', btn.dataset.id)
+      ];
+      if (btn.dataset.ticketId) {
+        ops.push(supabase.from('tickets').update({ status: 'in_progress' }).eq('id', btn.dataset.ticketId));
+      }
+      const results = await Promise.all(ops);
+      const error = results.find(r => r.error)?.error;
+      if (error) toast(error.message, 'error');
+      else { toast('Task accepted!', 'success'); renderEmployeeTasks(container); }
+    };
+  });
+
+  container.querySelectorAll('.decline-btn').forEach(btn => {
+    btn.onclick = () => {
+      const reason = prompt('Please provide a reason for declining:');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('Reason is required to decline', 'warning'); return; }
+      (async () => {
+        const { error } = await supabase.from('inquiries').update({
+          assignment_status: 'declined', decline_reason: reason.trim(), status: 'open'
+        }).eq('id', btn.dataset.id);
+        if (error) toast(error.message, 'error');
+        else { toast('Task declined', 'info'); renderEmployeeTasks(container); }
+      })();
+    };
+  });
+}
+
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
@@ -1342,13 +1526,17 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       </div>`;
     document.body.appendChild(overlay);
 
-    // Tab switcher
+    // Tab switcher — also drives the footer button label (Next → on intermediate tabs, Save on the last).
+    const TAB_ORDER = ['status', 'device', 'bill'];
+    const getActiveTab = () => overlay.querySelector('.mst-tab.active')?.dataset.tab || TAB_ORDER[0];
+    const isLastTab = () => getActiveTab() === TAB_ORDER[TAB_ORDER.length - 1];
+    const goToTab = (target) => {
+      overlay.querySelectorAll('.mst-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === target));
+      overlay.querySelectorAll('.mst-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
+      renderPayStatus();
+    };
     overlay.querySelectorAll('.mst-tab').forEach(tabBtn => {
-      tabBtn.onclick = () => {
-        const target = tabBtn.dataset.tab;
-        overlay.querySelectorAll('.mst-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
-        overlay.querySelectorAll('.mst-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
-      };
+      tabBtn.onclick = () => goToTab(tabBtn.dataset.tab);
     });
 
     const statusSel = overlay.querySelector('#new-status');
@@ -1593,7 +1781,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           : 'Generate a link, then wait for the client to pay.';
       }
 
-      if (isResolvedReadOnly) {
+      if (!isLastTab()) {
+        // On Status / Device Info tabs the primary button just advances the wizard.
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Next →';
+        saveBtn.style.opacity = '1';
+        saveBtn.style.cursor = 'pointer';
+        saveBtn.title = '';
+      } else if (isResolvedReadOnly) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Resolved';
         saveBtn.style.opacity = '0.6';
@@ -1909,6 +2104,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const closeOverlay = () => { stopPolling(); try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
     overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = closeOverlay;
     overlay.querySelector('#save-update').onclick = async () => {
+      // Wizard mode: on Status / Device Info tabs this button advances to the next tab instead of saving.
+      if (!isLastTab()) {
+        const idx = TAB_ORDER.indexOf(getActiveTab());
+        goToTab(TAB_ORDER[idx + 1]);
+        return;
+      }
       if (isResolvedReadOnly) {
         toast('Resolved tasks are read-only', 'info');
         return;

@@ -524,7 +524,7 @@ export function renderLandingPage(container, onPortalClick) {
 
       sendBtn.disabled = true;
       sendBtn.innerHTML = `<span class="srf-spin"></span><span>Sending…</span>`;
-      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const code = DEV_OTP_MODE ? '123456' : String(Math.floor(100000 + Math.random() * 900000));
       state.expectedOTP = code;
       const res = await sendWhatsAppOTP('+91' + state.phone, code);
       if (!res.ok) { toast(res.error || 'Could not send OTP', 'error'); render(); return; }
