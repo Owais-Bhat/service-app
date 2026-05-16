@@ -151,10 +151,9 @@ export function renderPremiumBillHTML(data) {
 // Hiding mechanism: the sandbox sits at (left:0, top:0) inside a 1×1 px
 // overflow-hidden wrapper. The bill keeps its full 794px layout (and positive
 // bounding-box coordinates so html2canvas captures the whole thing), while the
-// wrapper clips it to a single invisible pixel. Earlier attempts with
-// opacity:0 produced fully blank PDFs, and transform:translateX(-200vw)
-// produced PDFs that were horizontally clipped because the captured element
-// had negative x-coordinates.
+// The capture stage is kept behind the app but not clipped, so html2canvas can
+// measure and render the complete invoice area.
+// The capture wrapper must stay full-size; do not hide it by clipping.
 async function renderBillToPdfBlob(billHTML, filename) {
   const wrapper = document.createElement('div');
   wrapper.setAttribute('aria-hidden', 'true');
@@ -162,15 +161,15 @@ async function renderBillToPdfBlob(billHTML, filename) {
     'position:fixed',
     'left:0',
     'top:0',
-    'width:1px',
-    'height:1px',
-    'overflow:hidden',
+    'width:794px',
+    'min-height:1123px',
+    'background:#ffffff',
     'pointer-events:none',
-    'z-index:-1',
+    'z-index:-10000',
   ].join(';');
 
   const sandbox = document.createElement('div');
-  sandbox.style.cssText = 'width:794px;background:#ffffff;'; // ~A4 at 96dpi
+  sandbox.style.cssText = 'width:794px;min-height:1123px;background:#ffffff;padding:0;box-sizing:border-box;';
   sandbox.innerHTML = billHTML;
   wrapper.appendChild(sandbox);
   document.body.appendChild(wrapper);
