@@ -9,7 +9,7 @@ const BUSINESS = {
   name: 'Networking Experts',
   tagline: 'Service · Installation · Support',
   address: 'Srinagar, J&K, India',
-  phone: '+91 90000 00000',
+  phone: '+91 8899133144',
   email: 'support@networkingexperts.in',
   gstin: '—',
 };
@@ -198,6 +198,9 @@ async function renderBillToPdfBlob(billHTML, filename) {
     node.style.width = '794px';
     node.style.maxWidth = '794px';
     node.style.minHeight = '1123px';
+    node.style.display = 'block';
+    node.style.overflow = 'visible';
+    node.style.position = 'relative';
     const blob = await html2pdf().set({
       margin: 0,
       filename,

@@ -43,16 +43,21 @@ app.use((req, res, next) => {
 });
 
 // Restrict CORS to known origins. CORS_ORIGINS is a comma-separated list.
-// In dev we default to localhost; in prod the env var must be set.
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5000')
+// In dev we default to localhost; in prod we include the live domain.
+const corsOrigins = (process.env.CORS_ORIGINS || 'https://services.networkingexperts.in,http://localhost:5173,http://localhost:5000')
     .split(',').map(s => s.trim()).filter(Boolean);
+
 app.use(cors({
     origin(origin, cb) {
-        // Allow same-origin (no Origin header) and listed origins.
-        if (!origin || corsOrigins.includes(origin)) return cb(null, true);
+        // 1. Allow same-origin (no Origin header, e.g. server-side or same-domain fetch)
+        // 2. Allow listed origins
+        if (!origin || corsOrigins.includes(origin) || origin.endsWith('.networkingexperts.in')) {
+            return cb(null, true);
+        }
+        console.warn(`⚠️ CORS blocked request from origin: ${origin}`);
         return cb(new Error('Origin not allowed by CORS'));
     },
-    credentials: false,
+    credentials: true, // Changed to true to support session/auth if needed later
 }));
 
 // Razorpay webhook needs the raw body for signature validation.
