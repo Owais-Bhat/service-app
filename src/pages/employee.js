@@ -74,23 +74,23 @@ export function renderPremiumBillHTML(data) {
     </tr>` : '';
 
   return `
-  <div class="premium-bill" id="premium-bill-print">
-    <div class="pb-header">
-      <div class="pb-brand">
+  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important;">
+    <div class="pb-header" style="display:flex !important; flex-direction:row !important; justify-content:space-between !important; align-items:center !important;">
+      <div class="pb-brand" style="display:flex !important; align-items:center !important; gap:12px !important;">
         <img src="${LOGO_URL}" alt="${BUSINESS.name}" class="pb-logo" onerror="this.style.display='none'"/>
         <div>
           <div class="pb-biz-name">${BUSINESS.name}</div>
           <div class="pb-biz-sub">${BUSINESS.tagline}</div>
         </div>
       </div>
-      <div class="pb-meta">
+      <div class="pb-meta" style="text-align:right !important;">
         <div class="pb-stamp">TAX INVOICE</div>
         <div class="pb-bill-no">Bill # <b>${esc(billNo)}</b></div>
         <div class="pb-bill-date">Date: <b>${issued}</b></div>
       </div>
     </div>
 
-    <div class="pb-parties">
+    <div class="pb-parties" style="display:grid !important; grid-template-columns:1fr 1fr !important; gap:24px !important; border-bottom:1px dashed #eee !important; padding-bottom:15px !important; margin-bottom:15px !important;">
       <div>
         <div class="pb-section-title">Billed To</div>
         <div class="pb-party-name">${esc(data.customer?.name || '—')}</div>
@@ -117,14 +117,16 @@ export function renderPremiumBillHTML(data) {
 
     <div class="pb-totals">
       <div class="pb-stamp" style="margin-bottom:12px; background:#10B981; color:#fff;">AMOUNT</div>
-      <div class="pb-totals-row"><span>Services subtotal</span><b>${inr(data.servicesSubtotal)}</b></div>
-      ${Number(data.extra) > 0 ? `<div class="pb-totals-row"><span>Additional charges</span><b>${inr(data.extra)}</b></div>` : ''}
-      <div class="pb-totals-row"><span>Platform fee</span><b>${inr(data.platform)}</b></div>
-      <div class="pb-totals-row"><span>Transport (${Number(data.km || 0).toFixed(1)} km × ₹5)</span><b>${inr(data.transport)}</b></div>
-      ${Number(data.discount) > 0 ? `<div class="pb-totals-row pb-discount"><span>Loyalty discount</span><b>−${inr(data.discount)}</b></div>` : ''}
-      <div class="pb-totals-row"><span>Taxable amount</span><b>${inr(data.taxable)}</b></div>
-      <div class="pb-totals-row"><span>GST @ 18%</span><b>${inr(data.gst)}</b></div>
-      <div class="pb-totals-row pb-total"><span>Total Payable</span><b>${inr(data.total)}</b></div>
+      <table style="width:100%; border-collapse:collapse; font-size:12px; color:#374151;">
+        <tr><td style="padding:4px 0;">Services subtotal</td><td style="text-align:right; font-weight:800;">${inr(data.servicesSubtotal)}</td></tr>
+        ${Number(data.extra) > 0 ? `<tr><td style="padding:4px 0;">Additional charges</td><td style="text-align:right; font-weight:800;">${inr(data.extra)}</td></tr>` : ''}
+        <tr><td style="padding:4px 0;">Platform fee</td><td style="text-align:right; font-weight:800;">${inr(data.platform)}</td></tr>
+        <tr><td style="padding:4px 0;">Transport (${Number(data.km || 0).toFixed(1)} km × ₹5)</td><td style="text-align:right; font-weight:800;">${inr(data.transport)}</td></tr>
+        ${Number(data.discount) > 0 ? `<tr><td style="padding:4px 0; color:#10B981;">Loyalty discount</td><td style="text-align:right; font-weight:800; color:#10B981;">−${inr(data.discount)}</td></tr>` : ''}
+        <tr><td style="padding:4px 0; border-top:1px solid #eee;">Taxable amount</td><td style="text-align:right; font-weight:800; border-top:1px solid #eee;">${inr(data.taxable)}</td></tr>
+        <tr><td style="padding:4px 0;">GST @ 18%</td><td style="text-align:right; font-weight:800;">${inr(data.gst)}</td></tr>
+        <tr style="font-size:16px; color:#064E3B;"><td style="padding:8px 0; font-weight:800;">Total Payable</td><td style="text-align:right; font-weight:800; color:#10B981;">${inr(data.total)}</td></tr>
+      </table>
     </div>
 
     ${data.paymentLink ? `
@@ -208,12 +210,13 @@ async function renderBillToPdfBlob(billHTML, filename) {
         logging: false,
         windowWidth: 794,
         width: 794,
+        height: sandbox.offsetHeight,
         scrollX: 0,
         scrollY: 0,
       },
       jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait', hotfixes: ['px_scaling'] },
       pagebreak: { mode: ['css', 'legacy'] },
-    }).from(node).outputPdf('blob');
+    }).from(sandbox).outputPdf('blob');
     const file = new File([blob], filename, { type: 'application/pdf' });
     return { blob, file };
   } finally {

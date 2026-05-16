@@ -204,6 +204,19 @@ const requiredTables = [
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS complaints (
+        id VARCHAR(36) PRIMARY KEY,
+        ticket_no VARCHAR(50) NOT NULL,
+        inquiry_id VARCHAR(36),
+        phone VARCHAR(20) NOT NULL,
+        complaint_text TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'open',
+        admin_response TEXT,
+        resolved_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_complaint_ticket (ticket_no),
+        INDEX idx_complaint_status (status)
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -520,7 +533,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'profiles', 'inquiries', 'tickets', 'attendance', 'ticket_comments',
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
-    'payments', 'bills',
+    'payments', 'bills', 'complaints',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -681,6 +694,12 @@ const PUBLIC_INQUIRY_CREATE_FIELDS = new Set([
     'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
     'bill_no', 'service_item', 'ticket_no', 'preferred_time', 'status', 'assignment_status',
 ]);
+// Public complaint submissions: anyone with a valid ticket_no + phone (verified
+// in the POST handler) can file a complaint. Field set is intentionally minimal
+// so admins control status / admin_response / resolved_at.
+const PUBLIC_COMPLAINT_CREATE_FIELDS = new Set([
+    'id', 'ticket_no', 'phone', 'complaint_text',
+]);
 const dataAuth = (req, res, next) => {
     if (!ALLOWED_DATA_TABLES.has(req.params.table)) {
         return res.status(404).json({ error: 'Unknown table' });
@@ -704,6 +723,12 @@ const dataAuth = (req, res, next) => {
             req.user = { role: 'public' };
             return next();
         }
+    }
+    if (req.params.table === 'complaints' && req.method === 'POST') {
+        // POST handler verifies the ticket_no/phone pair against inquiries
+        // before inserting. GET/PATCH/DELETE still require staff auth.
+        req.user = { role: 'public' };
+        return next();
     }
     return authenticateToken(req, res, next);
 };
@@ -1128,11 +1153,43 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
     const keyErr = assertSafeObjectKeys(data);
     if (keyErr) return res.status(400).json({ error: keyErr });
     if (req.user?.role === 'public') {
-        if (table !== 'inquiries') return res.status(403).json({ error: 'Forbidden' });
-        const blocked = Object.keys(data || {}).filter(k => !PUBLIC_INQUIRY_CREATE_FIELDS.has(k));
-        if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
-        data.status = 'open';
-        data.assignment_status = 'none';
+        if (table === 'inquiries') {
+            const blocked = Object.keys(data || {}).filter(k => !PUBLIC_INQUIRY_CREATE_FIELDS.has(k));
+            if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
+            data.status = 'open';
+            data.assignment_status = 'none';
+        } else if (table === 'complaints') {
+            const blocked = Object.keys(data || {}).filter(k => !PUBLIC_COMPLAINT_CREATE_FIELDS.has(k));
+            if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
+            if (!data.ticket_no || !data.phone || !data.complaint_text) {
+                return res.status(400).json({ error: 'ticket_no, phone, and complaint_text are required' });
+            }
+            if (String(data.complaint_text).length > 2000) {
+                return res.status(400).json({ error: 'Complaint is too long (max 2000 chars)' });
+            }
+            // Verify the ticket belongs to this phone before letting an anonymous
+            // user attach a complaint to it.
+            try {
+                const conn = await getConn();
+                const [rows] = await conn.execute(
+                    'SELECT id FROM inquiries WHERE ticket_no = ? AND phone = ? LIMIT 1',
+                    [data.ticket_no, data.phone]
+                );
+                conn.release();
+                if (!rows.length) {
+                    return res.status(404).json({ error: 'No ticket found for that number and phone' });
+                }
+                data.inquiry_id = rows[0].id;
+            } catch (err) {
+                console.error('Complaint ownership check failed:', err);
+                return res.status(500).json({ error: 'Ticket verification failed' });
+            }
+            data.status = 'open';
+            data.admin_response = null;
+            data.resolved_at = null;
+        } else {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
     }
 
     // Same admin-only column guard as PATCH — a non-admin upsert that includes a
@@ -1175,6 +1232,15 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 body: `${data.full_name || 'Client'}${data.service_item ? ' - ' + data.service_item : ''}`,
                 audience: { role: 'admin' },
                 data: { inquiry_id: data.id, ticket_no: data.ticket_no || null },
+            });
+        }
+        if (table === 'complaints') {
+            broadcastNotify({
+                subject: 'new_complaint',
+                title: 'New Complaint Filed',
+                body: `Ticket ${data.ticket_no} — ${String(data.complaint_text || '').slice(0, 80)}`,
+                audience: { role: 'admin' },
+                data: { complaint_id: data.id, ticket_no: data.ticket_no, inquiry_id: data.inquiry_id || null },
             });
         }
         res.status(201).json(data);

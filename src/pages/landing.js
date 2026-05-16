@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toggleTheme, calculateSLA, formatTimeRemaining, toast } from '../utils.js';
+import { toggleTheme, calculateSLA, toast } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 const LOGO = new URL('../assets/logo.png', import.meta.url).href;
@@ -381,6 +381,7 @@ export function renderLandingPage(container, onPortalClick) {
     const hasBill = r.bill_amount != null && Number(r.bill_amount) > 0;
     const paid = r.payment_status === 'paid';
     const hasFeedback = r.feedback_rating != null;
+    const employee = r.profiles || null;
 
     return `
       <button class="srf-back" id="srf-track-back">${ICONS.arrowLeft}<span>Look up another</span></button>
@@ -388,13 +389,12 @@ export function renderLandingPage(container, onPortalClick) {
       <p class="srf-card-sub">${r.full_name} · ${r.service_item}</p>
 
       ${!resolved ? `
-        <div style="background:var(--bg-soft); padding:16px; border-radius:16px; margin:20px 0; border:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
-          <div>
-            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service SLA</div>
-            <div style="font-size:0.9rem; color:var(--text-soft); margin-top:4px;">Expected resolution within 12 working hours</div>
-          </div>
-          <div id="live-sla-timer" style="font-family:monospace; font-weight:900; font-size:1.4rem; color:var(--primary); letter-spacing:-0.5px;">
-            ${formatTimeRemaining(calculateSLA(r.created_at))}
+        <div style="background:var(--bg-soft); padding:18px 20px; border-radius:16px; margin:20px 0; border:1px solid var(--border); display:flex; align-items:center; gap:16px;">
+          <div style="width:48px;height:48px;border-radius:14px;background:var(--gradient);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 16px rgba(16,185,129,0.25);">${ICONS.clock}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service commitment</div>
+            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:2px;">Resolved by</div>
+            <div style="font-size:1.2rem; color:var(--text); font-weight:800; margin-top:4px; letter-spacing:-0.01em;">${formatDeadlineLong(calculateSLA(r.created_at))}</div>
           </div>
         </div>
       ` : ''}
@@ -408,6 +408,8 @@ export function renderLandingPage(container, onPortalClick) {
           ${i < STATUS_FLOW.length - 1 ? `<div class="srf-tl-line ${i < flowIdx ? 'done' : ''}"></div>` : ''}
         `).join('')}
       </div>
+
+      ${renderStatusPanel(flowStatus, r, employee)}
 
       ${hasBill ? `
         <div class="srf-bill-card">
@@ -857,7 +859,7 @@ export function renderLandingPage(container, onPortalClick) {
       render();
 
       const { data, error } = await supabase.from('inquiries')
-        .select('*')
+        .select('*,profiles(id,full_name,phone,role)')
         .eq('ticket_no', tno)
         .eq('phone', '+91' + ph)
         .maybeSingle();
@@ -878,14 +880,6 @@ export function renderLandingPage(container, onPortalClick) {
       render();
     });
 
-    // Live SLA Timer update for tracker
-    const timerEl = container.querySelector('#live-sla-timer');
-    if (timerEl && state.trackResult && displayStatus(state.trackResult.status) !== 'resolved') {
-      const interval = setInterval(() => {
-        if (!container.querySelector('#live-sla-timer')) return clearInterval(interval);
-        timerEl.innerHTML = formatTimeRemaining(calculateSLA(state.trackResult.created_at));
-      }, 1000);
-    }
   }
 
   render();
@@ -896,7 +890,7 @@ export function renderLandingPage(container, onPortalClick) {
       state.trackLoading = true;
       render();
       const { data } = await supabase.from('inquiries')
-        .select('*')
+        .select('*,profiles(id,full_name,phone,role)')
         .eq('ticket_no', urlTicket)
         .eq('phone', '+91' + urlPhone)
         .maybeSingle();
@@ -918,4 +912,80 @@ function formatPhone(p) {
 
 function escapeAttr(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function formatDeadlineLong(d) {
+  const date = d instanceof Date ? d : new Date(d);
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${time}, ${weekday} ${day} ${month} ${year}`;
+}
+
+// Status-aware info panel shown beneath the timeline on the tracking view.
+// Received → reassuring customer-detail card; Assigned/In-Progress → technician card.
+// Resolved is intentionally empty — the feedback block handles that state.
+function renderStatusPanel(flowStatus, r, employee) {
+  const cardOpen = `<div style="margin:18px 0;padding:18px;border-radius:18px;background:var(--bg-soft);box-shadow:var(--neu-in);border:1px solid var(--border);">`;
+  const cardClose = `</div>`;
+  const heading = (title, sub) => `
+    <div style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;font-weight:800;letter-spacing:0.5px;">${title}</div>
+    ${sub ? `<div style="font-size:0.85rem;color:var(--text-soft);margin-top:2px;">${sub}</div>` : ''}
+  `;
+  const row = (icon, label, value) => `
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-top:1px solid var(--border);">
+      <div style="width:32px;height:32px;border-radius:10px;background:var(--bg);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icon}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.7rem;color:var(--text-dim);text-transform:uppercase;font-weight:700;letter-spacing:0.4px;">${label}</div>
+        <div style="font-size:0.92rem;color:var(--text);font-weight:600;word-break:break-word;">${value}</div>
+      </div>
+    </div>
+  `;
+
+  if (flowStatus === 'open') {
+    return `
+      ${cardOpen}
+        ${heading('Request received', "We're reviewing your request and will dispatch the right technician shortly. You'll see their details here as soon as they're assigned.")}
+        <div style="margin-top:10px;">
+          ${row(ICONS.user, 'Customer', escapeHTML(r.full_name))}
+          ${row(ICONS.phone, 'Contact', escapeHTML(r.phone))}
+          ${row(ICONS.pin, 'Location', escapeHTML(r.location || '—'))}
+          ${row(ICONS.wrench, 'Service', escapeHTML(r.service_item || '—'))}
+          ${r.preferred_time ? row(ICONS.clock, 'Preferred time', escapeHTML(r.preferred_time)) : ''}
+        </div>
+      ${cardClose}
+    `;
+  }
+
+  if (flowStatus === 'assigned' || flowStatus === 'in_progress') {
+    const title = flowStatus === 'assigned' ? 'Technician assigned' : 'Technician on the job';
+    const sub = flowStatus === 'assigned'
+      ? 'Your technician has been dispatched and will reach out shortly.'
+      : 'Your technician is actively working on your service.';
+    if (!employee) {
+      return `
+        ${cardOpen}
+          ${heading(title, 'Technician details will appear here once assignment is confirmed.')}
+        ${cardClose}
+      `;
+    }
+    return `
+      ${cardOpen}
+        ${heading(title, sub)}
+        <div style="margin-top:10px;">
+          ${row(ICONS.user, 'Name', escapeHTML(employee.full_name || 'Technician'))}
+          ${employee.phone ? row(ICONS.phone, 'Phone', `<a href="tel:${escapeAttr(employee.phone)}" style="color:var(--primary);text-decoration:none;">${escapeHTML(employee.phone)}</a>`) : ''}
+          ${employee.role ? row(ICONS.shield, 'Role', escapeHTML(employee.role.charAt(0).toUpperCase() + employee.role.slice(1))) : ''}
+        </div>
+      ${cardClose}
+    `;
+  }
+
+  return '';
 }
