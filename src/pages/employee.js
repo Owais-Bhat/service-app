@@ -160,8 +160,7 @@ async function renderBillToPdfBlob(billHTML, filename) {
     'background:#ffffff',
     'z-index:-1',
     'pointer-events:none',
-    'opacity:0',             // visually hidden but still laid out
-    'transform:translateX(-200vw)',
+    'transform:translateX(-200vw)', // hide off-screen (opacity:0 would make html2canvas render a blank PDF)
   ].join(';');
   sandbox.innerHTML = billHTML;
   document.body.appendChild(sandbox);
