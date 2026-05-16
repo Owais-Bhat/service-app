@@ -156,13 +156,13 @@ async function renderBillToPdfBlob(billHTML, filename) {
   wrapper.setAttribute('aria-hidden', 'true');
   wrapper.style.cssText = [
     'position:fixed',
-    'left:0',
+    'left:-9999px',
     'top:0',
     'width:794px',
     'min-height:1123px',
     'background:#ffffff',
     'pointer-events:none',
-    'z-index:2147483647',
+    'z-index:-1',
   ].join(';');
 
   const sandbox = document.createElement('div');
@@ -278,8 +278,8 @@ export function openPremiumBillModal(data, opts = {}) {
         <h3>${title}</h3>
         <button class="btn-icon" id="pb-close">${ICONS.close}</button>
       </div>
-      <div class="modal-body" style="background:#F8FAFC; padding:30px;">
-        <div id="bill-preview-container" style="background:white; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); border-radius:8px; overflow:hidden;">
+      <div class="modal-body" style="background:#F8FAFC; padding:20px; overflow-x:auto;">
+        <div id="bill-preview-container" style="background:white; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); border-radius:8px; width:794px; margin:0 auto; transform-origin: top center;">
           ${billHTML}
         </div>
       </div>
