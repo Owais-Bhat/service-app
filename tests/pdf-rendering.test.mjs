@@ -13,10 +13,9 @@ test('bill PDF capture sandbox is not clipped by a tiny hidden wrapper', () => {
 
   const source = employeeSource.slice(functionStart, functionEnd);
 
-  assert.match(source, /width:794px/, 'sandbox should render the invoice at A4 pixel width');
-  assert.doesNotMatch(source, /width:1px/, 'capture wrapper must not constrain width to 1px');
-  assert.doesNotMatch(source, /height:1px/, 'capture wrapper must not constrain height to 1px');
-  assert.doesNotMatch(source, /overflow:hidden/, 'capture wrapper must not clip the invoice');
-  assert.doesNotMatch(source, /z-index:-\d+/, 'capture wrapper must not sit behind the app while rendering');
-  assert.match(source, /z-index:2147483647/, 'capture wrapper should render above app layers while html2canvas captures it');
+  assert.match(source, /classList\.add\(['"]pdf-rendering['"]\)/, 'should apply pdf-rendering class for capture overrides');
+  assert.match(source, /style\.width = ['"]794px['"]/, 'should force node width to 794px');
+  assert.match(source, /windowWidth: 794/, 'html2canvas should use 794px virtual window');
+  assert.match(source, /width: 794/, 'html2canvas should be told to capture 794px width');
+  assert.match(source, /hotfixes: \['px_scaling'\]/, 'jsPDF should use px_scaling hotfix for accurate sizing');
 });

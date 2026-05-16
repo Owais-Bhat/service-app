@@ -116,6 +116,7 @@ export function renderPremiumBillHTML(data) {
     </table>
 
     <div class="pb-totals">
+      <div class="pb-stamp" style="margin-bottom:12px; background:#10B981; color:#fff;">AMOUNT</div>
       <div class="pb-totals-row"><span>Services subtotal</span><b>${inr(data.servicesSubtotal)}</b></div>
       ${Number(data.extra) > 0 ? `<div class="pb-totals-row"><span>Additional charges</span><b>${inr(data.extra)}</b></div>` : ''}
       <div class="pb-totals-row"><span>Platform fee</span><b>${inr(data.platform)}</b></div>
@@ -191,10 +192,14 @@ async function renderBillToPdfBlob(billHTML, filename) {
   try {
     const html2pdf = await loadHtml2Pdf();
     const node = sandbox.firstElementChild;
+    node.classList.add('pdf-rendering');
+    node.style.width = '794px';
+    node.style.maxWidth = '794px';
+    node.style.minHeight = '1123px';
     const blob = await html2pdf().set({
-      margin: [10, 10, 10, 10],
+      margin: 0,
       filename,
-      image: { type: 'jpeg', quality: 0.95 },
+      image: { type: 'jpeg', quality: 1.0 },
       html2canvas: {
         scale: 2,
         useCORS: true,
@@ -202,10 +207,11 @@ async function renderBillToPdfBlob(billHTML, filename) {
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: 794,
+        width: 794,
         scrollX: 0,
         scrollY: 0,
       },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait', hotfixes: ['px_scaling'] },
       pagebreak: { mode: ['css', 'legacy'] },
     }).from(node).outputPdf('blob');
     const file = new File([blob], filename, { type: 'application/pdf' });

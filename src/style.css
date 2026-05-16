@@ -3305,3 +3305,41 @@ input, select, textarea { max-width: 100%; }
   .pb-parties { grid-template-columns: 1fr; gap: 14px; }
   .pb-totals { width: 100%; }
 }
+
+/* PDF Rendering Overrides */
+.pdf-rendering {
+  width: 794px !important;
+  max-width: 794px !important;
+  margin: 0 !important;
+  padding: 40px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.pdf-rendering .pb-header {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.pdf-rendering .pb-meta {
+  text-align: right !important;
+}
+
+.pdf-rendering .pb-parties {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 40px !important;
+}
+
+.pdf-rendering .pb-totals {
+  width: 50% !important;
+  margin-left: auto !important;
+}
+
+/* Ensure all items are visible */
+.pdf-rendering * {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
