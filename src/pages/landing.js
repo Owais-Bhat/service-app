@@ -26,7 +26,9 @@ const LOGO = new URL('../assets/logo.png', import.meta.url).href;
 //        })
 //      });
 // ────────────────────────────────────────────────────────────────────
-const DEV_OTP_MODE = String(import.meta.env.VITE_DEV_OTP_MODE || '').toLowerCase() === 'true';
+// Defaults ON so a real WhatsApp provider isn't required to demo the flow.
+// Set VITE_DEV_OTP_MODE=false in Vercel env (and redeploy) once the provider is wired up.
+const DEV_OTP_MODE = String(import.meta.env.VITE_DEV_OTP_MODE ?? 'true').toLowerCase() !== 'false';
 
 async function sendWhatsAppOTP(phone, code) {
   if (DEV_OTP_MODE) {
