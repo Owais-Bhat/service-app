@@ -17,7 +17,8 @@ function daysBetweenInclusive(start, end) {
   return Math.floor((b - a) / 86400000) + 1;
 }
 function money(value) {
-  return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
+  const val = Math.round(Number(value) || 0);
+  return '₹' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 import { ICONS } from '../icons.js';
 
@@ -404,15 +405,15 @@ async function openInquiryDetail(id, onDone) {
         </div>
 
         ${hasBill ? `
-          <div class="bill-breakdown" style="margin-bottom:16px;">
-            <div style="font-size:0.78rem; font-weight:800; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">Generated Bill</div>
-            <div class="bill-row"><span>Services subtotal</span><b>₹${Math.round(Number(i.bill_amount) || 0).toLocaleString('en-IN')}</b></div>
-            <div class="bill-row"><span>Platform fee</span><b>₹${Math.round(Number(i.platform_fee) || 0).toLocaleString('en-IN')}</b></div>
-            <div class="bill-row"><span>Transport (${Number(i.transport_km || 0).toFixed(1)} km × ₹5)</span><b>₹${Math.round(Number(i.transport_fee) || 0).toLocaleString('en-IN')}</b></div>
-            ${Number(i.discount_amount) > 0 ? `<div class="bill-row bill-row-discount"><span>Loyalty discount</span><b>−₹${Math.round(Number(i.discount_amount)).toLocaleString('en-IN')}</b></div>` : ''}
-            <div class="bill-row"><span>GST (18%)</span><b>₹${Math.round(Number(i.gst_amount) || 0).toLocaleString('en-IN')}</b></div>
-            <div class="bill-row bill-row-total"><span>Total billed</span><b>₹${Math.round(Number(i.bill_total)).toLocaleString('en-IN')}</b></div>
-            <button type="button" class="btn btn-secondary btn-wide" id="view-bill-btn" style="margin-top:10px;">📄 View Premium Bill</button>
+          <div class="bill-breakdown" style="margin-bottom:16px; background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #eef2f7;">
+            <div style="font-size:0.7rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">Generated Bill Detail</div>
+            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>Services subtotal</span><b style="color:#0f172a;">${money(i.bill_amount)}</b></div>
+            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>Platform fee</span><b style="color:#0f172a;">${money(i.platform_fee)}</b></div>
+            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>Transport (${Number(i.transport_km || 0).toFixed(1)} km)</span><b style="color:#0f172a;">${money(i.transport_fee)}</b></div>
+            ${Number(i.discount_amount) > 0 ? `<div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px; color:#059669;"><span>Loyalty discount</span><b>−${money(i.discount_amount)}</b></div>` : ''}
+            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>GST (18%)</span><b style="color:#0f172a;">${money(i.gst_amount)}</b></div>
+            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.95rem; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0; font-weight:800; color:#10b981;"><span>Total Payable</span><b>${money(i.bill_total)}</b></div>
+            <button type="button" class="btn btn-primary btn-wide" id="view-bill-btn" style="margin-top:12px; background:#10b981; border:none; box-shadow:0 4px 12px rgba(16,185,129,0.2);">📄 View & Download Premium Bill</button>
           </div>` : ''}
 
         <div class="form-group">
