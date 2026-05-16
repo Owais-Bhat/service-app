@@ -2122,6 +2122,59 @@ tr:hover td {
 }
 .srf-perks svg { width: 22px; height: 22px; color: var(--primary); flex-shrink: 0; }
 
+/* Ads carousel — single rotating slot (image or video) */
+.srf-ads {
+  margin-top: 4px;
+  border-radius: 22px;
+  background: var(--bg-soft);
+  padding: 10px;
+  box-shadow: var(--neu-sm);
+}
+.srf-ad-slot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.srf-ad-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.srf-ad-caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 14px 16px;
+  background: linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0));
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.srf-ad-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+.srf-ad-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+.srf-ad-dot.active {
+  background: var(--primary);
+  transform: scale(1.3);
+}
+
 /* Card wrap */
 .srf-card-wrap {
   width: 100%;
@@ -2448,7 +2501,7 @@ tr:hover td {
 /* Mode tabs */
 .srf-mode-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   background: var(--bg-soft);
   border-radius: 16px;
@@ -2459,17 +2512,18 @@ tr:hover td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 11px 8px;
   border: none;
   border-radius: 12px;
   background: transparent;
   color: var(--text-soft);
   font-weight: 700;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 .srf-mode-tab svg { width: 16px; height: 16px; }
 .srf-mode-tab.active {

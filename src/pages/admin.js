@@ -2169,3 +2169,335 @@ export async function renderFeedbackTab(container) {
     }
   }, 5000);
 }
+
+// ───────────────────────────────────────────────────────────
+// COMPLAINTS — public-filed complaints linked to existing tickets
+// ───────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+export async function renderComplaintsTab(container) {
+  container.innerHTML = `<div class="page-header"><h1>Complaints</h1><p>Loading…</p></div>`;
+  const { data, error } = await supabase.from('complaints').select('*').order('created_at', { ascending: false });
+  if (error) {
+    container.innerHTML = `<div class="page-header"><h1>Complaints</h1><p style="color:var(--danger)">Could not load complaints: ${escapeHtml(error.message || '')}</p></div>`;
+    return;
+  }
+  const rows = data || [];
+  const open = rows.filter(r => r.status === 'open').length;
+  const resolved = rows.filter(r => r.status === 'resolved').length;
+
+  const statusBadgeFor = (s) =>
+    s === 'resolved' ? `<span class="badge badge-resolved">Resolved</span>`
+    : s === 'in_progress' ? `<span class="badge badge-in_progress">In Progress</span>`
+    : `<span class="badge badge-danger">Open</span>`;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Complaints</h1>
+      <p>Customer complaints filed against existing tickets via the public portal</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${rows.length}</div><div class="stat-label">Total Complaints</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${open}</div><div class="stat-label">Open</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${resolved}</div><div class="stat-label">Resolved</div></div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span class="card-title">All Complaints</span>
+        <div class="search-input-wrap" style="min-width:200px;max-width:320px;">
+          <span>🔍</span>
+          <input class="search-input" id="cmp-search" placeholder="Filter by ticket or phone…" style="padding:6px 10px;font-size:0.85rem;"/>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="cmp-table">
+          <thead><tr><th>Filed</th><th>Ticket</th><th>Phone</th><th>Complaint</th><th>Status</th><th>Response</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${rows.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No complaints filed yet</td></tr>` :
+              rows.map(r => `
+                <tr data-search="${escapeHtml(((r.ticket_no || '') + ' ' + (r.phone || '')).toLowerCase())}">
+                  <td><small>${r.created_at ? formatDateTime(r.created_at) : '—'}</small></td>
+                  <td><code style="font-size:0.75rem;color:var(--primary)">${escapeHtml(r.ticket_no || '—')}</code></td>
+                  <td><small>${escapeHtml(r.phone || '—')}</small></td>
+                  <td style="max-width:360px;white-space:normal;font-size:.85rem;line-height:1.45;color:var(--text-soft)">${escapeHtml(r.complaint_text || '')}</td>
+                  <td>${statusBadgeFor(r.status)}</td>
+                  <td style="max-width:260px;white-space:normal;font-size:.82rem;color:var(--text-soft)">${r.admin_response ? escapeHtml(r.admin_response) : '<span style="color:var(--text-dim)">—</span>'}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm cmp-respond-btn" data-id="${r.id}">${r.status === 'resolved' ? 'View' : 'Respond'}</button>
+                  </td>
+                </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const search = container.querySelector('#cmp-search');
+  if (search) {
+    search.oninput = () => {
+      const q = search.value.toLowerCase();
+      container.querySelectorAll('#cmp-table tbody tr[data-search]').forEach(r => {
+        r.style.display = r.dataset.search.includes(q) ? '' : 'none';
+      });
+    };
+  }
+
+  container.querySelectorAll('.cmp-respond-btn').forEach(btn => {
+    btn.onclick = () => openComplaintResponder(rows.find(r => r.id === btn.dataset.id), () => renderComplaintsTab(container));
+  });
+
+  // Live refresh on new complaint inserts.
+  const channel = supabase.channel('admin-complaints')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'complaints' }, () => renderComplaintsTab(container))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'complaints' }, () => renderComplaintsTab(container))
+    .subscribe();
+  const cleanup = setInterval(() => {
+    if (!document.body.contains(container)) {
+      supabase.removeChannel(channel);
+      clearInterval(cleanup);
+    }
+  }, 5000);
+}
+
+function openComplaintResponder(complaint, onChange) {
+  if (!complaint) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <span class="modal-title">Complaint on ${escapeHtml(complaint.ticket_no)}</span>
+        <button class="modal-close">×</button>
+      </div>
+      <div style="padding:0 24px 12px;color:var(--text-soft);font-size:0.85rem;">From ${escapeHtml(complaint.phone)} · ${formatDateTime(complaint.created_at)}</div>
+      <div class="modal-body">
+        <div style="background:var(--bg-soft);padding:14px;border-radius:12px;font-size:0.9rem;line-height:1.5;color:var(--text);margin-bottom:18px;">
+          ${escapeHtml(complaint.complaint_text)}
+        </div>
+        <label class="srf-label" style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Internal / customer response</label>
+        <textarea id="cmp-response" rows="4" placeholder="What did we do or say in reply?" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;resize:vertical;">${escapeHtml(complaint.admin_response || '')}</textarea>
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin:14px 0 6px;">Status</label>
+        <select id="cmp-status" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;">
+          <option value="open" ${complaint.status === 'open' ? 'selected' : ''}>Open</option>
+          <option value="in_progress" ${complaint.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+          <option value="resolved" ${complaint.status === 'resolved' ? 'selected' : ''}>Resolved</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cmp-cancel">Cancel</button>
+        <button class="btn btn-primary" id="cmp-save">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('.modal-close').onclick = close;
+  overlay.querySelector('#cmp-cancel').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#cmp-save').onclick = async () => {
+    const response = overlay.querySelector('#cmp-response').value.trim();
+    const status = overlay.querySelector('#cmp-status').value;
+    const updates = {
+      admin_response: response || null,
+      status,
+    };
+    if (status === 'resolved' && !complaint.resolved_at) {
+      updates.resolved_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    }
+    const { error } = await supabase.from('complaints').update(updates).eq('id', complaint.id);
+    if (error) { toast('Could not save: ' + (error.message || ''), 'error'); return; }
+    toast('Complaint updated', 'success');
+    close();
+    if (onChange) onChange();
+  };
+}
+
+// ───────────────────────────────────────────────────────────
+// ADS — landing-page carousel content (admin-managed)
+// ───────────────────────────────────────────────────────────
+export async function renderAdsTab(container) {
+  container.innerHTML = `<div class="page-header"><h1>Landing Page Ads</h1><p>Loading…</p></div>`;
+  const { data, error } = await supabase.from('ads')
+    .select('*')
+    .order('position', { ascending: true });
+  if (error) {
+    container.innerHTML = `<div class="page-header"><h1>Landing Page Ads</h1><p style="color:var(--danger)">Could not load ads: ${escapeHtml(error.message || '')}</p></div>`;
+    return;
+  }
+  const ads = data || [];
+  const activeCount = ads.filter(a => a.active).length;
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h1>Landing Page Ads</h1>
+        <p>Slides shown in the rotating carousel on the public service portal</p>
+      </div>
+      <button class="btn btn-primary" id="ad-add-btn">+ Add slide</button>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${ads.length}</div><div class="stat-label">Total Slides</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${activeCount}</div><div class="stat-label">Active</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--text-dim)">${ads.length - activeCount}</div><div class="stat-label">Hidden</div></div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="card-header"><span class="card-title">Slides (drag order via Position field)</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:60px">Pos</th><th>Preview</th><th>Kind</th><th>Caption</th><th>Duration</th><th>Status</th><th style="width:200px">Actions</th></tr></thead>
+          <tbody>
+            ${ads.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No ads yet — click "Add slide" to create your first one</td></tr>` :
+              ads.map(a => `
+                <tr>
+                  <td><b>${a.position ?? 0}</b></td>
+                  <td>
+                    ${a.kind === 'video'
+                      ? `<video src="${escapeHtml(a.url)}" muted style="width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--bg-soft);" onmouseover="this.play()" onmouseout="this.pause()"></video>`
+                      : `<img src="${escapeHtml(a.url)}" alt="" style="width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--bg-soft);" loading="lazy"/>`}
+                  </td>
+                  <td><span class="badge ${a.kind === 'video' ? 'badge-in_progress' : 'badge-resolved'}">${a.kind}</span></td>
+                  <td style="max-width:240px;white-space:normal;font-size:0.85rem;color:var(--text-soft)">${escapeHtml(a.caption || '')}</td>
+                  <td><small>${((Number(a.duration_ms) || 6000) / 1000).toFixed(1)}s</small></td>
+                  <td>${a.active ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-danger">Hidden</span>'}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm ad-edit-btn" data-id="${a.id}">Edit</button>
+                    <button class="btn btn-secondary btn-sm ad-toggle-btn" data-id="${a.id}">${a.active ? 'Hide' : 'Show'}</button>
+                    <button class="btn btn-secondary btn-sm ad-delete-btn" data-id="${a.id}" style="color:var(--danger)">Delete</button>
+                  </td>
+                </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const refresh = () => renderAdsTab(container);
+
+  container.querySelector('#ad-add-btn').onclick = () => openAdEditor(null, refresh);
+  container.querySelectorAll('.ad-edit-btn').forEach(btn => {
+    btn.onclick = () => openAdEditor(ads.find(a => a.id === btn.dataset.id), refresh);
+  });
+  container.querySelectorAll('.ad-toggle-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const ad = ads.find(a => a.id === btn.dataset.id);
+      const { error } = await supabase.from('ads').update({ active: ad.active ? 0 : 1 }).eq('id', ad.id);
+      if (error) return toast('Could not update: ' + (error.message || ''), 'error');
+      toast(ad.active ? 'Slide hidden' : 'Slide shown', 'success');
+      refresh();
+    };
+  });
+  container.querySelectorAll('.ad-delete-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Delete this slide? This cannot be undone.')) return;
+      const { error } = await supabase.from('ads').delete().eq('id', btn.dataset.id);
+      if (error) return toast('Could not delete: ' + (error.message || ''), 'error');
+      toast('Slide deleted', 'success');
+      refresh();
+    };
+  });
+}
+
+function openAdEditor(ad, onChange) {
+  const editing = !!ad;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <span class="modal-title">${editing ? 'Edit slide' : 'Add slide'}</span>
+        <button class="modal-close">×</button>
+      </div>
+      <div class="modal-body">
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Slide type</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <label style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;cursor:pointer;text-align:center;font-weight:700;">
+            <input type="radio" name="ad-kind" value="image" ${(!ad || ad.kind === 'image') ? 'checked' : ''} style="margin-right:6px"/> Image
+          </label>
+          <label style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;cursor:pointer;text-align:center;font-weight:700;">
+            <input type="radio" name="ad-kind" value="video" ${ad?.kind === 'video' ? 'checked' : ''} style="margin-right:6px"/> Video
+          </label>
+        </div>
+
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Media URL</label>
+        <input id="ad-url" type="url" placeholder="https://…/image.jpg or https://…/video.mp4"
+               value="${escapeHtml(ad?.url || '')}"
+               style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;margin-bottom:14px;"/>
+
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Caption <span style="color:var(--text-dim);font-weight:500">(optional, max 255 chars)</span></label>
+        <input id="ad-caption" type="text" maxlength="255" placeholder="Short overlay text"
+               value="${escapeHtml(ad?.caption || '')}"
+               style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;margin-bottom:14px;"/>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Duration (seconds)</label>
+            <input id="ad-duration" type="number" min="2" max="60" step="0.5"
+                   value="${ad ? ((Number(ad.duration_ms) || 6000) / 1000) : 6}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+          <div>
+            <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Position</label>
+            <input id="ad-position" type="number" min="0" step="1"
+                   value="${ad?.position ?? 0}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.9rem;">
+          <input id="ad-active" type="checkbox" ${(!ad || ad.active) ? 'checked' : ''}/>
+          Active (show on landing page)
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="ad-cancel">Cancel</button>
+        <button class="btn btn-primary" id="ad-save">${editing ? 'Save' : 'Add slide'}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.modal-close').onclick = close;
+  overlay.querySelector('#ad-cancel').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#ad-save').onclick = async () => {
+    const kind = overlay.querySelector('input[name="ad-kind"]:checked').value;
+    const url = overlay.querySelector('#ad-url').value.trim();
+    const caption = overlay.querySelector('#ad-caption').value.trim();
+    const durationSec = parseFloat(overlay.querySelector('#ad-duration').value);
+    const position = parseInt(overlay.querySelector('#ad-position').value, 10) || 0;
+    const active = overlay.querySelector('#ad-active').checked ? 1 : 0;
+
+    if (!url) return toast('Media URL is required', 'error');
+    if (!/^https?:\/\//i.test(url)) return toast('URL must start with http(s)://', 'error');
+    if (!Number.isFinite(durationSec) || durationSec < 2) return toast('Duration must be at least 2 seconds', 'error');
+
+    const payload = {
+      kind,
+      url,
+      caption: caption || null,
+      duration_ms: Math.round(durationSec * 1000),
+      position,
+      active,
+    };
+
+    let res;
+    if (editing) {
+      res = await supabase.from('ads').update(payload).eq('id', ad.id);
+    } else {
+      res = await supabase.from('ads').insert(payload);
+    }
+    if (res.error) return toast('Could not save: ' + (res.error.message || ''), 'error');
+    toast(editing ? 'Slide updated' : 'Slide added', 'success');
+    close();
+    if (onChange) onChange();
+  };
+}

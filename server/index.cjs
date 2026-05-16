@@ -222,6 +222,18 @@ const requiredTables = [
         INDEX idx_complaint_ticket (ticket_no),
         INDEX idx_complaint_status (status)
     )`,
+    `CREATE TABLE IF NOT EXISTS ads (
+        id VARCHAR(36) PRIMARY KEY,
+        kind VARCHAR(20) NOT NULL,
+        url TEXT NOT NULL,
+        caption VARCHAR(255),
+        duration_ms INT DEFAULT 6000,
+        active TINYINT(1) DEFAULT 1,
+        position INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_ads_active (active),
+        INDEX idx_ads_position (position)
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -538,7 +550,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'profiles', 'inquiries', 'tickets', 'attendance', 'ticket_comments',
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
-    'payments', 'bills', 'complaints',
+    'payments', 'bills', 'complaints', 'ads',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -732,6 +744,12 @@ const dataAuth = (req, res, next) => {
     if (req.params.table === 'complaints' && req.method === 'POST') {
         // POST handler verifies the ticket_no/phone pair against inquiries
         // before inserting. GET/PATCH/DELETE still require staff auth.
+        req.user = { role: 'public' };
+        return next();
+    }
+    if (req.params.table === 'ads' && req.method === 'GET') {
+        // Ads are public marketing content shown on the landing page.
+        // Writes still require admin.
         req.user = { role: 'public' };
         return next();
     }

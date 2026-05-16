@@ -108,6 +108,15 @@ export function renderLandingPage(container, onPortalClick) {
     trackPhone: urlPhone,
     trackResult: null,
     trackLoading: false,
+    // Complaint tab state
+    complaintTicketNo: '',
+    complaintPhone: '',
+    complaintText: '',
+    complaintLoading: false,
+    complaintSubmitted: false,
+    // Ads carousel state
+    ads: [],
+    _adTimer: null,
   };
 
   function render() {
@@ -134,11 +143,22 @@ export function renderLandingPage(container, onPortalClick) {
             <div class="srf-badge">${ICONS.shield}<span>Verified Service Request</span></div>
             <h1 class="srf-title">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
             <p class="srf-sub">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
-            <ul class="srf-perks">
-              <li>${ICONS.whatsapp}<span>WhatsApp verification</span></li>
-              <li>${ICONS.crosshair}<span>Auto-detect your location</span></li>
-              <li>${ICONS.wrench}<span>Specialised technicians</span></li>
-            </ul>
+            ${state.ads.length > 0 ? `
+              <div class="srf-ads" id="srf-ads">
+                <div class="srf-ad-slot" id="srf-ad-slot"></div>
+                ${state.ads.length > 1 ? `
+                  <div class="srf-ad-dots" id="srf-ad-dots">
+                    ${state.ads.map((_, i) => `<button type="button" class="srf-ad-dot" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            ` : `
+              <ul class="srf-perks">
+                <li>${ICONS.whatsapp}<span>WhatsApp verification</span></li>
+                <li>${ICONS.crosshair}<span>Auto-detect your location</span></li>
+                <li>${ICONS.wrench}<span>Specialised technicians</span></li>
+              </ul>
+            `}
           </section>
 
           <section class="srf-card-wrap">
@@ -148,6 +168,9 @@ export function renderLandingPage(container, onPortalClick) {
               </button>
               <button class="srf-mode-tab ${state.mode === 'track' ? 'active' : ''}" data-mode="track" role="tab">
                 ${ICONS.search}<span>Track Request</span>
+              </button>
+              <button class="srf-mode-tab ${state.mode === 'complaint' ? 'active' : ''}" data-mode="complaint" role="tab">
+                ${ICONS.shield}<span>Complaint</span>
               </button>
             </div>
 
@@ -173,10 +196,65 @@ export function renderLandingPage(container, onPortalClick) {
 
     bindCommon();
     bindStep();
+    mountAdCarousel();
+  }
+
+  function mountAdCarousel() {
+    if (state._adTimer) { clearTimeout(state._adTimer); state._adTimer = null; }
+    if (!state.ads.length) return;
+    const slot = container.querySelector('#srf-ad-slot');
+    if (!slot) return;
+    const dots = [...container.querySelectorAll('.srf-ad-dot')];
+    let idx = 0;
+
+    const paint = () => {
+      const ad = state.ads[idx];
+      const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
+      const media = isVideo
+        ? `<video src="${escapeAttr(ad.url)}" autoplay muted loop playsinline class="srf-ad-media"></video>`
+        : `<img src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" class="srf-ad-media" loading="lazy"/>`;
+      slot.innerHTML = `${media}${ad.caption ? `<div class="srf-ad-caption">${escapeHTML(ad.caption)}</div>` : ''}`;
+      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    };
+
+    const schedule = () => {
+      if (state._adTimer) clearTimeout(state._adTimer);
+      if (state.ads.length <= 1) return;
+      const ms = Math.max(1500, Number(state.ads[idx].duration_ms) || 6000);
+      state._adTimer = setTimeout(() => {
+        idx = (idx + 1) % state.ads.length;
+        paint();
+        schedule();
+      }, ms);
+    };
+
+    dots.forEach((d, i) => {
+      d.onclick = () => { idx = i; paint(); schedule(); };
+    });
+
+    paint();
+    schedule();
+  }
+
+  async function loadAds() {
+    try {
+      const { data } = await supabase.from('ads')
+        .select('*')
+        .eq('active', 1)
+        .order('position', { ascending: true });
+      const ads = (data || []).filter(a => a.url && (a.kind === 'image' || a.kind === 'video'));
+      if (ads.length) {
+        state.ads = ads;
+        render();
+      }
+    } catch (err) {
+      console.warn('Could not load ads:', err);
+    }
   }
 
   function renderStep() {
     if (state.mode === 'track') return stepTrack();
+    if (state.mode === 'complaint') return stepComplaint();
     if (state.step === 1) return stepPhone();
     if (state.step === 2) return stepOTP();
     if (state.step === 3) return stepForm();
@@ -342,6 +420,52 @@ export function renderLandingPage(container, onPortalClick) {
     `;
   }
 
+  // ── COMPLAINT MODE ──────────────────────────────────
+  function stepComplaint() {
+    if (state.complaintSubmitted) {
+      return `
+        <div class="srf-success">
+          <div class="srf-success-ring">${ICONS.check}</div>
+          <h2 class="srf-card-title">Complaint received</h2>
+          <p class="srf-card-sub">Our team has been notified and will follow up on ticket <strong>${state.complaintTicketNo}</strong> soon.</p>
+          <button class="srf-btn srf-btn-primary" id="srf-complaint-another">
+            <span>File another complaint</span> ${ICONS.arrowRight}
+          </button>
+          <button class="srf-btn-link" id="srf-complaint-to-track">Track this ticket instead</button>
+        </div>
+      `;
+    }
+    return `
+      <h2 class="srf-card-title">File a complaint</h2>
+      <p class="srf-card-sub">Tell us what went wrong with a previous service. We verify the ticket against your WhatsApp number before forwarding it to the team.</p>
+
+      <label class="srf-label" for="srf-cmp-tno">Ticket number</label>
+      <div class="srf-input-wrap">
+        <span class="srf-input-icon">${ICONS.ticket}</span>
+        <input id="srf-cmp-tno" type="text" placeholder="NE-260506-1234" class="srf-input"
+               value="${state.complaintTicketNo}" autocomplete="off"/>
+      </div>
+
+      <label class="srf-label" for="srf-cmp-phone">Phone number</label>
+      <div class="srf-input-wrap">
+        <span class="srf-input-icon">${ICONS.phone}</span>
+        <span class="srf-cc">+91</span>
+        <input id="srf-cmp-phone" type="tel" inputmode="numeric" maxlength="10"
+               placeholder="98765 43210" class="srf-input srf-input-cc" value="${state.complaintPhone}"/>
+      </div>
+
+      <label class="srf-label" for="srf-cmp-text">What's the issue?</label>
+      <div class="srf-input-wrap">
+        <span class="srf-input-icon">${ICONS.edit}</span>
+        <textarea id="srf-cmp-text" placeholder="Describe what went wrong — the issue came back, the technician didn't show, billing was wrong, etc." class="srf-input" rows="4" maxlength="2000" style="padding-top:12px;padding-bottom:12px;resize:vertical;min-height:100px;">${escapeHTML(state.complaintText)}</textarea>
+      </div>
+
+      <button class="srf-btn srf-btn-primary" id="srf-cmp-submit" ${state.complaintLoading ? 'disabled' : ''}>
+        ${state.complaintLoading ? '<span class="srf-spin"></span>' : ''}<span>Submit complaint</span> ${ICONS.arrowRight}
+      </button>
+    `;
+  }
+
   // ── TRACK MODE ──────────────────────────────────────
   function stepTrack() {
     const r = state.trackResult;
@@ -501,6 +625,9 @@ export function renderLandingPage(container, onPortalClick) {
         if (state.mode === 'track') {
           state.trackResult = null;
         }
+        if (state.mode === 'complaint') {
+          state.complaintSubmitted = false;
+        }
         render();
       };
     });
@@ -508,6 +635,7 @@ export function renderLandingPage(container, onPortalClick) {
 
   function bindStep() {
     if (state.mode === 'track') return bindTrack();
+    if (state.mode === 'complaint') return bindComplaint();
     if (state.step === 1) bindPhone();
     else if (state.step === 2) bindOTP();
     else if (state.step === 3) bindForm();
@@ -882,7 +1010,73 @@ export function renderLandingPage(container, onPortalClick) {
 
   }
 
+  function bindComplaint() {
+    if (state.complaintSubmitted) {
+      bind('#srf-complaint-another', () => {
+        state.complaintSubmitted = false;
+        state.complaintTicketNo = '';
+        state.complaintText = '';
+        render();
+      });
+      bind('#srf-complaint-to-track', () => {
+        state.mode = 'track';
+        state.trackTicketNo = state.complaintTicketNo;
+        state.trackPhone = state.complaintPhone;
+        state.trackResult = null;
+        render();
+      });
+      return;
+    }
+
+    const tnoEl = container.querySelector('#srf-cmp-tno');
+    const phEl  = container.querySelector('#srf-cmp-phone');
+    const txtEl = container.querySelector('#srf-cmp-text');
+
+    tnoEl.addEventListener('input', e => {
+      state.complaintTicketNo = e.target.value.trim().toUpperCase();
+      e.target.value = state.complaintTicketNo;
+    });
+    phEl.addEventListener('input', e => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+      state.complaintPhone = e.target.value;
+    });
+    txtEl.addEventListener('input', e => { state.complaintText = e.target.value; });
+
+    bind('#srf-cmp-submit', async () => {
+      const tno = state.complaintTicketNo;
+      const ph  = state.complaintPhone;
+      const txt = state.complaintText.trim();
+
+      if (!tno) return toast('Enter your ticket number', 'error');
+      if (!/^\d{10}$/.test(ph)) return toast('Enter a valid 10-digit number', 'error');
+      if (txt.length < 10) return toast('Please describe the issue (at least 10 characters)', 'error');
+
+      state.complaintLoading = true;
+      render();
+
+      const { error } = await supabase.from('complaints').insert({
+        ticket_no: tno,
+        phone: '+91' + ph,
+        complaint_text: txt,
+      });
+
+      state.complaintLoading = false;
+      if (error) {
+        const msg = /No ticket found/i.test(error.message || '')
+          ? 'No ticket matches that number and phone. Double-check and try again.'
+          : 'Could not submit complaint — please try again.';
+        toast(msg, 'error');
+        render();
+        return;
+      }
+      state.complaintSubmitted = true;
+      toast('Complaint received', 'success');
+      render();
+    });
+  }
+
   render();
+  loadAds();
 
   // Auto-fetch inquiry when URL has ?tab=track&ticket=...&phone=...
   if (urlTab === 'track' && urlTicket && urlPhone && urlPhone.length === 10) {
