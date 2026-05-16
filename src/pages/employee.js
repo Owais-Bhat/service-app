@@ -49,7 +49,11 @@ function loadHtml2Pdf() {
 
 // Premium printable bill template, used by employee + admin.
 export function renderPremiumBillHTML(data) {
-  const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+  // Ultra-robust currency formatter — avoids toLocaleString to prevent potential JS errors in older browsers.
+  const inr = (n) => {
+    const val = Math.round(Number(n) || 0);
+    return '₹' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   const today = new Date();
   const issued = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
@@ -57,21 +61,21 @@ export function renderPremiumBillHTML(data) {
   
   const services = Array.isArray(data.services) ? data.services : [];
   const itemRows = services.map((s, i) => `
-    <tr>
-      <td style="padding:10px; border-bottom:1px solid #eee; color:#9CA3AF; width:30px;">${i + 1}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee; color:#1F2937;">${esc(s.name)}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(s.cost)}</td>
-    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:20px;">No itemised services</td></tr>`;
+    <tr style="display:table-row !important;">
+      <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#9CA3AF; width:30px;">${i + 1}</td>
+      <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#1F2937;">${esc(s.name)}</td>
+      <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(s.cost)}</td>
+    </tr>`).join('') || `<tr style="display:table-row !important;"><td colspan="3" style="display:table-cell !important; text-align:center;color:#9CA3AF;padding:20px;">No itemised services</td></tr>`;
 
   const extraRow = Number(data.extra) > 0 ? `
-    <tr>
-      <td style="padding:10px; border-bottom:1px solid #eee; color:#9CA3AF;">${services.length + 1}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee; color:#1F2937;">Additional charges${data.extraReason ? ` <small style="color:#6B7280">(${esc(data.extraReason)})</small>` : ''}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(data.extra)}</td>
+    <tr style="display:table-row !important;">
+      <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#9CA3AF;">${services.length + 1}</td>
+      <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#1F2937;">Additional charges${data.extraReason ? ` <small style="color:#6B7280">(${esc(data.extraReason)})</small>` : ''}</td>
+      <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(data.extra)}</td>
     </tr>` : '';
 
   return `
-  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important; background:#ffffff !important; color:#0F172A !important; padding:40px !important; width:794px !important; box-sizing:border-box !important;">
+  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important; background:#ffffff !important; color:#0F172A !important; padding:40px !important; width:794px !important; box-sizing:border-box !important; display:block !important; visibility:visible !important; opacity:1 !important;">
     <div class="pb-header" style="display:flex !important; flex-direction:row !important; justify-content:space-between !important; align-items:center !important; border-bottom:1px dashed #eee !important; padding-bottom:20px !important; margin-bottom:20px !important;">
       <div class="pb-brand" style="display:flex !important; align-items:center !important; gap:12px !important;">
         <img src="${LOGO_URL}" alt="${BUSINESS.name}" style="width:50px; height:50px; object-fit:contain;" onerror="this.style.display='none'"/>
@@ -104,28 +108,28 @@ export function renderPremiumBillHTML(data) {
       </div>
     </div>
 
-    <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+    <table style="width:100% !important; border-collapse:collapse !important; margin-bottom:20px !important; display:table !important;">
       <thead>
-        <tr style="background:#f9fafb; border-bottom:2px solid #10B981;">
-          <th style="padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase; width:30px;">#</th>
-          <th style="padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase;">Description</th>
-          <th style="padding:12px; text-align:right; font-size:11px; color:#064E3B; text-transform:uppercase;">Amount</th>
+        <tr style="background:#f9fafb; border-bottom:2px solid #10B981; display:table-row !important;">
+          <th style="display:table-cell !important; padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase; width:30px;">#</th>
+          <th style="display:table-cell !important; padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase;">Description</th>
+          <th style="display:table-cell !important; padding:12px; text-align:right; font-size:11px; color:#064E3B; text-transform:uppercase;">Amount</th>
         </tr>
       </thead>
-      <tbody>${itemRows}${extraRow}</tbody>
+      <tbody style="display:table-row-group !important;">${itemRows}${extraRow}</tbody>
     </table>
 
-    <div style="margin-left:auto; width:300px; background:#f9fafb; padding:15px; border-radius:12px;">
+    <div style="margin-left:auto; width:300px; background:#f9fafb; padding:15px; border-radius:12px; display:block !important;">
       <div style="display:inline-block; background:#10B981; color:#fff; padding:3px 10px; border-radius:15px; font-size:9px; font-weight:800; margin-bottom:12px;">AMOUNT BREAKDOWN</div>
-      <table style="width:100%; border-collapse:collapse; font-size:13px; color:#374151;">
-        <tr><td style="padding:4px 0;">Services subtotal</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.servicesSubtotal)}</td></tr>
-        ${Number(data.extra) > 0 ? `<tr><td style="padding:4px 0;">Extra charges</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
-        <tr><td style="padding:4px 0;">Platform fee</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
-        <tr><td style="padding:4px 0;">Transport</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
-        ${Number(data.discount) > 0 ? `<tr><td style="padding:4px 0; color:#059669;">Discount</td><td style="text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
-        <tr style="border-top:1px solid #eee;"><td style="padding:6px 0; font-weight:700;">Taxable</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
-        <tr><td style="padding:4px 0;">GST (18%)</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
-        <tr style="border-top:2px solid #10B981; font-size:16px;"><td style="padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
+      <table style="width:100% !important; border-collapse:collapse !important; font-size:13px !important; color:#374151 !important; display:table !important;">
+        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Services subtotal</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.servicesSubtotal)}</td></tr>
+        ${Number(data.extra) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Extra charges</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
+        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Platform fee</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
+        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Transport</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
+        ${Number(data.discount) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0; color:#059669;">Discount</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
+        <tr style="display:table-row !important; border-top:1px solid #eee !important;"><td style="display:table-cell !important; padding:6px 0; font-weight:700;">Taxable</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
+        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">GST (18%)</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
+        <tr style="display:table-row !important; border-top:2px solid #10B981 !important; font-size:16px !important;"><td style="display:table-cell !important; padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="display:table-cell !important; text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
       </table>
     </div>
 
