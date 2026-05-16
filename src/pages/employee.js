@@ -144,29 +144,53 @@ export function renderPremiumBillHTML(data) {
   </div>`;
 }
 
-// Render the bill HTML to a PDF Blob. We clone the HTML into a fresh,
-// fixed-position off-screen container with an explicit width — capturing
-// directly from inside the modal-overlay tree was producing blank pages
-// on some mobile browsers (html2canvas couldn't resolve dimensions for a
-// scaled / scrolled / flex-wrapped subtree).
+// Render the bill HTML to a PDF Blob. We clone the HTML into a fresh
+// container with an explicit A4 width — capturing directly from inside the
+// modal-overlay tree was producing blank pages on some mobile browsers.
+//
+// Hiding mechanism: the sandbox sits at (left:0, top:0) inside a 1×1 px
+// overflow-hidden wrapper. The bill keeps its full 794px layout (and positive
+// bounding-box coordinates so html2canvas captures the whole thing), while the
+// wrapper clips it to a single invisible pixel. Earlier attempts with
+// opacity:0 produced fully blank PDFs, and transform:translateX(-200vw)
+// produced PDFs that were horizontally clipped because the captured element
+// had negative x-coordinates.
 async function renderBillToPdfBlob(billHTML, filename) {
-  const sandbox = document.createElement('div');
-  sandbox.setAttribute('aria-hidden', 'true');
-  sandbox.style.cssText = [
+  const wrapper = document.createElement('div');
+  wrapper.setAttribute('aria-hidden', 'true');
+  wrapper.style.cssText = [
     'position:fixed',
     'left:0',
     'top:0',
-    'width:794px',           // ~A4 width at 96dpi
-    'background:#ffffff',
-    'z-index:-1',
+    'width:1px',
+    'height:1px',
+    'overflow:hidden',
     'pointer-events:none',
-    'transform:translateX(-200vw)', // hide off-screen (opacity:0 would make html2canvas render a blank PDF)
+    'z-index:-1',
   ].join(';');
-  sandbox.innerHTML = billHTML;
-  document.body.appendChild(sandbox);
 
-  // Wait two animation frames so layout + fonts settle before capturing.
+  const sandbox = document.createElement('div');
+  sandbox.style.cssText = 'width:794px;background:#ffffff;'; // ~A4 at 96dpi
+  sandbox.innerHTML = billHTML;
+  wrapper.appendChild(sandbox);
+  document.body.appendChild(wrapper);
+
+  // Wait two animation frames + an extra tick so layout + fonts + images settle.
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await new Promise(r => setTimeout(r, 50));
+
+  // Wait for any <img> tags inside the bill to finish loading so they don't
+  // render as empty boxes in the PDF.
+  const imgs = [...sandbox.querySelectorAll('img')];
+  await Promise.all(imgs.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise(resolve => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+      // Failsafe in case the image never resolves.
+      setTimeout(resolve, 2500);
+    });
+  }));
 
   try {
     const html2pdf = await loadHtml2Pdf();
@@ -178,16 +202,20 @@ async function renderBillToPdfBlob(billHTML, filename) {
       html2canvas: {
         scale: 2,
         useCORS: true,
+        allowTaint: false,
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: 794,
+        scrollX: 0,
+        scrollY: 0,
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+      pagebreak: { mode: ['css', 'legacy'] },
     }).from(node).outputPdf('blob');
     const file = new File([blob], filename, { type: 'application/pdf' });
     return { blob, file };
   } finally {
-    sandbox.remove();
+    wrapper.remove();
   }
 }
 
