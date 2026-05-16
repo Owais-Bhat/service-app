@@ -17,4 +17,6 @@ test('bill PDF capture sandbox is not clipped by a tiny hidden wrapper', () => {
   assert.doesNotMatch(source, /width:1px/, 'capture wrapper must not constrain width to 1px');
   assert.doesNotMatch(source, /height:1px/, 'capture wrapper must not constrain height to 1px');
   assert.doesNotMatch(source, /overflow:hidden/, 'capture wrapper must not clip the invoice');
+  assert.doesNotMatch(source, /z-index:-\d+/, 'capture wrapper must not sit behind the app while rendering');
+  assert.match(source, /z-index:2147483647/, 'capture wrapper should render above app layers while html2canvas captures it');
 });

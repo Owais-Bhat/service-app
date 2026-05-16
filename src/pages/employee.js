@@ -148,11 +148,8 @@ export function renderPremiumBillHTML(data) {
 // container with an explicit A4 width — capturing directly from inside the
 // modal-overlay tree was producing blank pages on some mobile browsers.
 //
-// Hiding mechanism: the sandbox sits at (left:0, top:0) inside a 1×1 px
-// overflow-hidden wrapper. The bill keeps its full 794px layout (and positive
-// bounding-box coordinates so html2canvas captures the whole thing), while the
-// The capture stage is kept behind the app but not clipped, so html2canvas can
-// measure and render the complete invoice area.
+// The capture stage is kept above the app and not clipped, so html2canvas can
+// measure and render the complete invoice area without other layers masking it.
 // The capture wrapper must stay full-size; do not hide it by clipping.
 async function renderBillToPdfBlob(billHTML, filename) {
   const wrapper = document.createElement('div');
@@ -165,7 +162,7 @@ async function renderBillToPdfBlob(billHTML, filename) {
     'min-height:1123px',
     'background:#ffffff',
     'pointer-events:none',
-    'z-index:-10000',
+    'z-index:2147483647',
   ].join(';');
 
   const sandbox = document.createElement('div');
