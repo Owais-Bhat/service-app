@@ -50,98 +50,101 @@ function loadHtml2Pdf() {
 // Premium printable bill template, used by employee + admin.
 export function renderPremiumBillHTML(data) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   const today = new Date();
-  const issued = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+  const issued = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
   const billNo = `NX-${(data.customer?.ticket_no || Date.now()).toString().slice(-8)}`;
+  
   const services = Array.isArray(data.services) ? data.services : [];
   const itemRows = services.map((s, i) => `
     <tr>
-      <td class="pb-idx">${i + 1}</td>
-      <td>${esc(s.name)}</td>
-      <td class="pb-right">${inr(s.cost)}</td>
-    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:18px;">No itemised services</td></tr>`;
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#9CA3AF; width:30px;">${i + 1}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#1F2937;">${esc(s.name)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(s.cost)}</td>
+    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:20px;">No itemised services</td></tr>`;
+
   const extraRow = Number(data.extra) > 0 ? `
     <tr>
-      <td class="pb-idx">${services.length + 1}</td>
-      <td>Additional charges${data.extraReason ? ` <span style="color:#6B7280;font-size:11px">(${esc(data.extraReason)})</span>` : ''}</td>
-      <td class="pb-right">${inr(data.extra)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#9CA3AF;">${services.length + 1}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#1F2937;">Additional charges${data.extraReason ? ` <small style="color:#6B7280">(${esc(data.extraReason)})</small>` : ''}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(data.extra)}</td>
     </tr>` : '';
 
   return `
-  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important;">
-    <div class="pb-header" style="display:flex !important; flex-direction:row !important; justify-content:space-between !important; align-items:center !important;">
+  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important; background:#ffffff !important; color:#0F172A !important; padding:40px !important; width:794px !important; box-sizing:border-box !important;">
+    <div class="pb-header" style="display:flex !important; flex-direction:row !important; justify-content:space-between !important; align-items:center !important; border-bottom:1px dashed #eee !important; padding-bottom:20px !important; margin-bottom:20px !important;">
       <div class="pb-brand" style="display:flex !important; align-items:center !important; gap:12px !important;">
-        <img src="${LOGO_URL}" alt="${BUSINESS.name}" class="pb-logo" onerror="this.style.display='none'"/>
+        <img src="${LOGO_URL}" alt="${BUSINESS.name}" style="width:50px; height:50px; object-fit:contain;" onerror="this.style.display='none'"/>
         <div>
-          <div class="pb-biz-name">${BUSINESS.name}</div>
-          <div class="pb-biz-sub">${BUSINESS.tagline}</div>
+          <div style="font-size:20px; font-weight:800; color:#064E3B;">${BUSINESS.name}</div>
+          <div style="font-size:11px; color:#6B7280; text-transform:uppercase; letter-spacing:1px;">${BUSINESS.tagline}</div>
         </div>
       </div>
       <div class="pb-meta" style="text-align:right !important;">
-        <div class="pb-stamp">TAX INVOICE</div>
-        <div class="pb-bill-no">Bill # <b>${esc(billNo)}</b></div>
-        <div class="pb-bill-date">Date: <b>${issued}</b></div>
+        <div style="display:inline-block; background:#10B981; color:#fff; padding:4px 12px; border-radius:20px; font-size:10px; font-weight:800; margin-bottom:8px;">TAX INVOICE</div>
+        <div style="font-size:12px; color:#4B5563;">Bill # <b style="color:#0F172A;">${esc(billNo)}</b></div>
+        <div style="font-size:12px; color:#4B5563;">Date: <b style="color:#0F172A;">${issued}</b></div>
       </div>
     </div>
 
-    <div class="pb-parties" style="display:grid !important; grid-template-columns:1fr 1fr !important; gap:24px !important; border-bottom:1px dashed #eee !important; padding-bottom:15px !important; margin-bottom:15px !important;">
+    <div class="pb-parties" style="display:grid !important; grid-template-columns:1fr 1fr !important; gap:30px !important; margin-bottom:20px !important; border-bottom:1px dashed #eee !important; padding-bottom:20px !important;">
       <div>
-        <div class="pb-section-title">Billed To</div>
-        <div class="pb-party-name">${esc(data.customer?.name || '—')}</div>
-        <div class="pb-party-line">${esc(data.customer?.phone || '')}</div>
-        ${data.customer?.company ? `<div class="pb-party-line">${esc(data.customer.company)}</div>` : ''}
-        <div class="pb-party-line pb-party-loc">${esc(data.customer?.location || '')}</div>
+        <div style="font-size:10px; font-weight:800; color:#10B981; text-transform:uppercase; margin-bottom:6px;">Billed To</div>
+        <div style="font-size:16px; font-weight:800; color:#0F172A;">${esc(data.customer?.name || '—')}</div>
+        <div style="font-size:13px; color:#4B5563;">${esc(data.customer?.phone || '')}</div>
+        ${data.customer?.company ? `<div style="font-size:13px; color:#4B5563;">${esc(data.customer.company)}</div>` : ''}
+        <div style="font-size:13px; color:#6B7280; font-style:italic;">${esc(data.customer?.location || '')}</div>
       </div>
       <div>
-        <div class="pb-section-title">Service Details</div>
-        <div class="pb-party-line"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '—')}</div>
-        <div class="pb-party-line"><b>Service:</b> ${esc(data.customer?.service_item || '—')}</div>
-        ${data.customer?.device_type ? `<div class="pb-party-line"><b>Device:</b> ${esc(data.customer.device_type)}</div>` : ''}
-        ${data.customer?.device_serial ? `<div class="pb-party-line"><b>Serial:</b> ${esc(data.customer.device_serial)}</div>` : ''}
-        ${data.technician ? `<div class="pb-party-line"><b>Technician:</b> ${esc(data.technician)}</div>` : ''}
+        <div style="font-size:10px; font-weight:800; color:#10B981; text-transform:uppercase; margin-bottom:6px;">Service Details</div>
+        <div style="font-size:13px; color:#4B5563;"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '—')}</div>
+        <div style="font-size:13px; color:#4B5563;"><b>Service:</b> ${esc(data.customer?.service_item || '—')}</div>
+        ${data.customer?.device_type ? `<div style="font-size:13px; color:#4B5563;"><b>Device:</b> ${esc(data.customer.device_type)}</div>` : ''}
+        ${data.technician ? `<div style="font-size:13px; color:#4B5563;"><b>Technician:</b> ${esc(data.technician)}</div>` : ''}
       </div>
     </div>
 
-    <table class="pb-items">
+    <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
       <thead>
-        <tr><th class="pb-idx">#</th><th>Description</th><th class="pb-right">Amount</th></tr>
+        <tr style="background:#f9fafb; border-bottom:2px solid #10B981;">
+          <th style="padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase; width:30px;">#</th>
+          <th style="padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase;">Description</th>
+          <th style="padding:12px; text-align:right; font-size:11px; color:#064E3B; text-transform:uppercase;">Amount</th>
+        </tr>
       </thead>
       <tbody>${itemRows}${extraRow}</tbody>
     </table>
 
-    <div class="pb-totals">
-      <div class="pb-stamp" style="margin-bottom:12px; background:#10B981; color:#fff;">AMOUNT</div>
-      <table style="width:100%; border-collapse:collapse; font-size:12px; color:#374151;">
-        <tr><td style="padding:4px 0;">Services subtotal</td><td style="text-align:right; font-weight:800;">${inr(data.servicesSubtotal)}</td></tr>
-        ${Number(data.extra) > 0 ? `<tr><td style="padding:4px 0;">Additional charges</td><td style="text-align:right; font-weight:800;">${inr(data.extra)}</td></tr>` : ''}
-        <tr><td style="padding:4px 0;">Platform fee</td><td style="text-align:right; font-weight:800;">${inr(data.platform)}</td></tr>
-        <tr><td style="padding:4px 0;">Transport (${Number(data.km || 0).toFixed(1)} km × ₹5)</td><td style="text-align:right; font-weight:800;">${inr(data.transport)}</td></tr>
-        ${Number(data.discount) > 0 ? `<tr><td style="padding:4px 0; color:#10B981;">Loyalty discount</td><td style="text-align:right; font-weight:800; color:#10B981;">−${inr(data.discount)}</td></tr>` : ''}
-        <tr><td style="padding:4px 0; border-top:1px solid #eee;">Taxable amount</td><td style="text-align:right; font-weight:800; border-top:1px solid #eee;">${inr(data.taxable)}</td></tr>
-        <tr><td style="padding:4px 0;">GST @ 18%</td><td style="text-align:right; font-weight:800;">${inr(data.gst)}</td></tr>
-        <tr style="font-size:16px; color:#064E3B;"><td style="padding:8px 0; font-weight:800;">Total Payable</td><td style="text-align:right; font-weight:800; color:#10B981;">${inr(data.total)}</td></tr>
+    <div style="margin-left:auto; width:300px; background:#f9fafb; padding:15px; border-radius:12px;">
+      <div style="display:inline-block; background:#10B981; color:#fff; padding:3px 10px; border-radius:15px; font-size:9px; font-weight:800; margin-bottom:12px;">AMOUNT BREAKDOWN</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; color:#374151;">
+        <tr><td style="padding:4px 0;">Services subtotal</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.servicesSubtotal)}</td></tr>
+        ${Number(data.extra) > 0 ? `<tr><td style="padding:4px 0;">Extra charges</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
+        <tr><td style="padding:4px 0;">Platform fee</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
+        <tr><td style="padding:4px 0;">Transport</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
+        ${Number(data.discount) > 0 ? `<tr><td style="padding:4px 0; color:#059669;">Discount</td><td style="text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
+        <tr style="border-top:1px solid #eee;"><td style="padding:6px 0; font-weight:700;">Taxable</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
+        <tr><td style="padding:4px 0;">GST (18%)</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
+        <tr style="border-top:2px solid #10B981; font-size:16px;"><td style="padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
       </table>
     </div>
 
     ${data.paymentLink ? `
-      <div class="pb-pay">
-        <div class="pb-pay-title">💳 Quick Pay</div>
-        <div class="pb-pay-link">${esc(data.paymentLink)}</div>
-        <img class="pb-pay-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.paymentLink)}" alt="Payment QR"/>
-        <div class="pb-pay-hint">Scan or tap the link to pay securely via Razorpay.</div>
+      <div style="margin-top:20px; padding:20px; border:1px dashed #10B981; border-radius:12px; text-align:center; background:rgba(16,185,129,0.02);">
+        <div style="font-weight:800; font-size:11px; color:#064E3B; text-transform:uppercase; margin-bottom:10px;">💳 Secure Payment</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(data.paymentLink)}" style="width:120px; height:120px; margin:0 auto 10px; display:block; border-radius:8px;"/>
+        <div style="font-size:11px; color:#2563EB; word-break:break-all;">${esc(data.paymentLink)}</div>
       </div>` : ''}
 
-    <div class="pb-footer">
-      <div class="pb-thanks">Thank you for choosing ${BUSINESS.name}!</div>
-      <div class="pb-foot-meta">
+    <div style="margin-top:30px; padding-top:20px; border-top:1px dashed #eee; text-align:center;">
+      <div style="font-weight:800; color:#10B981; font-size:14px;">Thank you for your business!</div>
+      <div style="font-size:11px; color:#6B7280; margin-top:5px;">
         ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}
       </div>
-      <div class="pb-foot-meta">GSTIN: ${BUSINESS.gstin} · This is a computer-generated invoice.</div>
+      <div style="font-size:10px; color:#9CA3AF; margin-top:5px;">GSTIN: ${BUSINESS.gstin} · Computer Generated Invoice</div>
     </div>
   </div>`;
 }
-
 
 // Render the bill HTML to a PDF Blob.
 async function renderBillToPdfBlob(billHTML, filename) {
@@ -180,10 +183,9 @@ async function renderBillToPdfBlob(billHTML, filename) {
   try {
     const html2pdf = await loadHtml2Pdf();
     const node = sandbox.firstElementChild;
-    node.classList.add('pdf-rendering');
-    node.style.width = '794px';
-    node.style.maxWidth = '794px';
-    node.style.minHeight = '1123px';
+    node.style.display = 'block';
+    node.style.overflow = 'visible';
+    node.style.position = 'relative';
 
     const blob = await html2pdf().set({
       margin: 0,
@@ -195,7 +197,7 @@ async function renderBillToPdfBlob(billHTML, filename) {
         allowTaint: false,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: 794,
+        windowWidth: 1024,
         width: 794,
         height: sandbox.offsetHeight,
         scrollX: 0,

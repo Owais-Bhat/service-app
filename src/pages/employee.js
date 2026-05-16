@@ -31,6 +31,8 @@ function statusText(status) {
   return labels[shown] || shown.replace('_', ' ');
 }
 
+// Lazily inject html2pdf.js (used to generate a downloadable PDF from the
+// bill template). The CDN bundle includes both html2canvas and jsPDF.
 let _html2pdfPromise = null;
 function loadHtml2Pdf() {
   if (window.html2pdf) return Promise.resolve(window.html2pdf);
@@ -45,11 +47,7 @@ function loadHtml2Pdf() {
   return _html2pdfPromise;
 }
 
-/**
- * NEW: Bulletproof Bill Template
- * Uses simple table-based layout for everything to ensure 100% consistent 
- * rendering across all browsers and canvas capture engines.
- */
+// Premium printable bill template, used by employee + admin.
 export function renderPremiumBillHTML(data) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -60,163 +58,161 @@ export function renderPremiumBillHTML(data) {
   const services = Array.isArray(data.services) ? data.services : [];
   const itemRows = services.map((s, i) => `
     <tr>
-      <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">${i + 1}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee;">${esc(s.name)}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee; text-align:right;">${inr(s.cost)}</td>
-    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:18px;">No itemised services</td></tr>`;
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#9CA3AF; width:30px;">${i + 1}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#1F2937;">${esc(s.name)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(s.cost)}</td>
+    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:20px;">No itemised services</td></tr>`;
 
   const extraRow = Number(data.extra) > 0 ? `
     <tr>
-      <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">${services.length + 1}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee;">Additional charges ${data.extraReason ? `<small>(${esc(data.extraReason)})</small>` : ''}</td>
-      <td style="padding:10px; border-bottom:1px solid #eee; text-align:right;">${inr(data.extra)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#9CA3AF;">${services.length + 1}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#1F2937;">Additional charges${data.extraReason ? ` <small style="color:#6B7280">(${esc(data.extraReason)})</small>` : ''}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(data.extra)}</td>
     </tr>` : '';
 
   return `
-  <div style="width:794px; background:#ffffff; color:#1f2937; font-family:Arial, sans-serif; padding:40px; box-sizing:border-box;">
-    <!-- Header Table -->
-    <table style="width:100%; margin-bottom:40px;">
-      <tr>
-        <td style="vertical-align:top;">
-          <img src="${LOGO_URL}" style="height:60px; margin-bottom:10px;" onerror="this.style.display='none'"/>
-          <div style="font-size:24px; font-weight:bold; color:#10b981;">${BUSINESS.name}</div>
-          <div style="font-size:14px; color:#6b7280;">${BUSINESS.tagline}</div>
-        </td>
-        <td style="text-align:right; vertical-align:top;">
-          <div style="display:inline-block; background:#10b981; color:#ffffff; padding:6px 15px; border-radius:4px; font-weight:bold; font-size:14px; margin-bottom:10px;">TAX INVOICE</div>
-          <div style="font-size:14px;">Bill #: <b>${esc(billNo)}</b></div>
-          <div style="font-size:14px;">Date: <b>${issued}</b></div>
-        </td>
-      </tr>
-    </table>
+  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important; background:#ffffff !important; color:#0F172A !important; padding:40px !important; width:794px !important; box-sizing:border-box !important;">
+    <div class="pb-header" style="display:flex !important; flex-direction:row !important; justify-content:space-between !important; align-items:center !important; border-bottom:1px dashed #eee !important; padding-bottom:20px !important; margin-bottom:20px !important;">
+      <div class="pb-brand" style="display:flex !important; align-items:center !important; gap:12px !important;">
+        <img src="${LOGO_URL}" alt="${BUSINESS.name}" style="width:50px; height:50px; object-fit:contain;" onerror="this.style.display='none'"/>
+        <div>
+          <div style="font-size:20px; font-weight:800; color:#064E3B;">${BUSINESS.name}</div>
+          <div style="font-size:11px; color:#6B7280; text-transform:uppercase; letter-spacing:1px;">${BUSINESS.tagline}</div>
+        </div>
+      </div>
+      <div class="pb-meta" style="text-align:right !important;">
+        <div style="display:inline-block; background:#10B981; color:#fff; padding:4px 12px; border-radius:20px; font-size:10px; font-weight:800; margin-bottom:8px;">TAX INVOICE</div>
+        <div style="font-size:12px; color:#4B5563;">Bill # <b style="color:#0F172A;">${esc(billNo)}</b></div>
+        <div style="font-size:12px; color:#4B5563;">Date: <b style="color:#0F172A;">${issued}</b></div>
+      </div>
+    </div>
 
-    <!-- Parties Table -->
-    <table style="width:100%; margin-bottom:40px; border-bottom:1px solid #eee; padding-bottom:20px;">
-      <tr>
-        <td style="width:50%; vertical-align:top;">
-          <div style="font-size:12px; text-transform:uppercase; color:#9ca3af; font-weight:bold; margin-bottom:8px;">Billed To</div>
-          <div style="font-size:18px; font-weight:bold; margin-bottom:4px;">${esc(data.customer?.name || '—')}</div>
-          <div style="font-size:14px; color:#4b5563;">${esc(data.customer?.phone || '')}</div>
-          <div style="font-size:14px; color:#4b5563; margin-top:4px;">${esc(data.customer?.location || '')}</div>
-        </td>
-        <td style="width:50%; vertical-align:top;">
-          <div style="font-size:12px; text-transform:uppercase; color:#9ca3af; font-weight:bold; margin-bottom:8px;">Service Details</div>
-          <table style="font-size:14px; color:#4b5563;">
-            <tr><td style="padding-right:10px;"><b>Ticket:</b></td><td>${esc(data.customer?.ticket_no || '—')}</td></tr>
-            <tr><td style="padding-right:10px;"><b>Service:</b></td><td>${esc(data.customer?.service_item || '—')}</td></tr>
-            ${data.customer?.device_type ? `<tr><td style="padding-right:10px;"><b>Device:</b></td><td>${esc(data.customer.device_type)}</td></tr>` : ''}
-          </table>
-        </td>
-      </tr>
-    </table>
+    <div class="pb-parties" style="display:grid !important; grid-template-columns:1fr 1fr !important; gap:30px !important; margin-bottom:20px !important; border-bottom:1px dashed #eee !important; padding-bottom:20px !important;">
+      <div>
+        <div style="font-size:10px; font-weight:800; color:#10B981; text-transform:uppercase; margin-bottom:6px;">Billed To</div>
+        <div style="font-size:16px; font-weight:800; color:#0F172A;">${esc(data.customer?.name || '—')}</div>
+        <div style="font-size:13px; color:#4B5563;">${esc(data.customer?.phone || '')}</div>
+        ${data.customer?.company ? `<div style="font-size:13px; color:#4B5563;">${esc(data.customer.company)}</div>` : ''}
+        <div style="font-size:13px; color:#6B7280; font-style:italic;">${esc(data.customer?.location || '')}</div>
+      </div>
+      <div>
+        <div style="font-size:10px; font-weight:800; color:#10B981; text-transform:uppercase; margin-bottom:6px;">Service Details</div>
+        <div style="font-size:13px; color:#4B5563;"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '—')}</div>
+        <div style="font-size:13px; color:#4B5563;"><b>Service:</b> ${esc(data.customer?.service_item || '—')}</div>
+        ${data.customer?.device_type ? `<div style="font-size:13px; color:#4B5563;"><b>Device:</b> ${esc(data.customer.device_type)}</div>` : ''}
+        ${data.technician ? `<div style="font-size:13px; color:#4B5563;"><b>Technician:</b> ${esc(data.technician)}</div>` : ''}
+      </div>
+    </div>
 
-    <!-- Items Table -->
-    <table style="width:100%; border-collapse:collapse; margin-bottom:30px;">
+    <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
       <thead>
-        <tr style="background:#f9fafb;">
-          <th style="padding:12px; border-bottom:2px solid #e5e7eb; width:50px; text-align:center;">#</th>
-          <th style="padding:12px; border-bottom:2px solid #e5e7eb; text-align:left;">Description</th>
-          <th style="padding:12px; border-bottom:2px solid #e5e7eb; text-align:right;">Amount</th>
+        <tr style="background:#f9fafb; border-bottom:2px solid #10B981;">
+          <th style="padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase; width:30px;">#</th>
+          <th style="padding:12px; text-align:left; font-size:11px; color:#064E3B; text-transform:uppercase;">Description</th>
+          <th style="padding:12px; text-align:right; font-size:11px; color:#064E3B; text-transform:uppercase;">Amount</th>
         </tr>
       </thead>
-      <tbody>
-        ${itemRows}
-        ${extraRow}
-      </tbody>
+      <tbody>${itemRows}${extraRow}</tbody>
     </table>
 
-    <!-- Totals Area -->
-    <table style="width:100%;">
-      <tr>
-        <td style="width:60%; vertical-align:top;">
-          ${data.paymentLink ? `
-            <div style="border:1px solid #e5e7eb; border-radius:8px; padding:15px; display:inline-block; background:#f9fafb;">
-              <div style="font-size:14px; font-weight:bold; margin-bottom:10px; color:#10b981;">💳 Secure Payment</div>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(data.paymentLink)}" style="width:100px; height:100px;"/>
-              <div style="font-size:11px; color:#6b7280; margin-top:8px;">Scan to pay via Razorpay</div>
-            </div>
-          ` : ''}
-        </td>
-        <td style="width:40%; vertical-align:top;">
-           <div style="background:#10b981; color:#fff; font-weight:bold; text-align:center; padding:5px; border-radius:4px; margin-bottom:15px;">AMOUNT</div>
-           <table style="width:100%; font-size:14px; color:#4b5563;">
-             <tr><td style="padding:5px 0;">Subtotal</td><td style="text-align:right; font-weight:bold;">${inr(data.servicesSubtotal)}</td></tr>
-             ${Number(data.extra) > 0 ? `<tr><td style="padding:5px 0;">Extra</td><td style="text-align:right; font-weight:bold;">${inr(data.extra)}</td></tr>` : ''}
-             <tr><td style="padding:5px 0;">Platform fee</td><td style="text-align:right; font-weight:bold;">${inr(data.platform)}</td></tr>
-             <tr><td style="padding:5px 0;">Transport</td><td style="text-align:right; font-weight:bold;">${inr(data.transport)}</td></tr>
-             ${Number(data.discount) > 0 ? `<tr><td style="padding:5px 0; color:#10b981;">Discount</td><td style="text-align:right; font-weight:bold; color:#10b981;">−${inr(data.discount)}</td></tr>` : ''}
-             <tr><td style="padding:10px 0; border-top:1px solid #eee; font-weight:bold; color:#111827;">Total Payable</td><td style="padding:10px 0; border-top:1px solid #eee; text-align:right; font-size:20px; font-weight:bold; color:#10b981;">${inr(data.total)}</td></tr>
-           </table>
-        </td>
-      </tr>
-    </table>
+    <div style="margin-left:auto; width:300px; background:#f9fafb; padding:15px; border-radius:12px;">
+      <div style="display:inline-block; background:#10B981; color:#fff; padding:3px 10px; border-radius:15px; font-size:9px; font-weight:800; margin-bottom:12px;">AMOUNT BREAKDOWN</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; color:#374151;">
+        <tr><td style="padding:4px 0;">Services subtotal</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.servicesSubtotal)}</td></tr>
+        ${Number(data.extra) > 0 ? `<tr><td style="padding:4px 0;">Extra charges</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
+        <tr><td style="padding:4px 0;">Platform fee</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
+        <tr><td style="padding:4px 0;">Transport</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
+        ${Number(data.discount) > 0 ? `<tr><td style="padding:4px 0; color:#059669;">Discount</td><td style="text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
+        <tr style="border-top:1px solid #eee;"><td style="padding:6px 0; font-weight:700;">Taxable</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
+        <tr><td style="padding:4px 0;">GST (18%)</td><td style="text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
+        <tr style="border-top:2px solid #10B981; font-size:16px;"><td style="padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
+      </table>
+    </div>
 
-    <!-- Footer -->
-    <div style="margin-top:60px; border-top:1px solid #eee; padding-top:20px; text-align:center;">
-      <div style="font-size:14px; font-weight:bold; color:#4b5563; margin-bottom:5px;">Thank you for your business!</div>
-      <div style="font-size:11px; color:#9ca3af;">
-        ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}<br/>
-        This is a computer generated invoice and does not require a physical signature.
+    ${data.paymentLink ? `
+      <div style="margin-top:20px; padding:20px; border:1px dashed #10B981; border-radius:12px; text-align:center; background:rgba(16,185,129,0.02);">
+        <div style="font-weight:800; font-size:11px; color:#064E3B; text-transform:uppercase; margin-bottom:10px;">💳 Secure Payment</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(data.paymentLink)}" style="width:120px; height:120px; margin:0 auto 10px; display:block; border-radius:8px;"/>
+        <div style="font-size:11px; color:#2563EB; word-break:break-all;">${esc(data.paymentLink)}</div>
+      </div>` : ''}
+
+    <div style="margin-top:30px; padding-top:20px; border-top:1px dashed #eee; text-align:center;">
+      <div style="font-weight:800; color:#10B981; font-size:14px;">Thank you for your business!</div>
+      <div style="font-size:11px; color:#6B7280; margin-top:5px;">
+        ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}
       </div>
+      <div style="font-size:10px; color:#9CA3AF; margin-top:5px;">GSTIN: ${BUSINESS.gstin} · Computer Generated Invoice</div>
     </div>
   </div>`;
 }
 
-/**
- * NEW: Isolated PDF Generation
- * This function bypasses the app's CSS entirely by creating a temporary, 
- * clean container and using explicit canvas dimensions.
- */
+// Render the bill HTML to a PDF Blob.
 async function renderBillToPdfBlob(billHTML, filename) {
-  const html2pdf = await loadHtml2Pdf();
-  
-  // 1. Create a hidden, isolated container with fixed width
+  const wrapper = document.createElement('div');
+  wrapper.setAttribute('aria-hidden', 'true');
+  wrapper.style.cssText = [
+    'position:fixed',
+    'left:0',
+    'top:0',
+    'width:794px',
+    'min-height:1123px',
+    'background:#ffffff',
+    'pointer-events:none',
+    'z-index:2147483647',
+  ].join(';');
+
   const sandbox = document.createElement('div');
-  sandbox.style.position = 'absolute';
-  sandbox.style.left = '-9999px';
-  sandbox.style.top = '0';
-  sandbox.style.width = '794px';
-  sandbox.style.background = '#ffffff';
+  sandbox.style.cssText = 'width:794px;min-height:1123px;background:#ffffff;padding:0;box-sizing:border-box;';
   sandbox.innerHTML = billHTML;
-  document.body.appendChild(sandbox);
+  wrapper.appendChild(sandbox);
+  document.body.appendChild(wrapper);
+
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await new Promise(r => setTimeout(r, 50));
+
+  const imgs = [...sandbox.querySelectorAll('img')];
+  await Promise.all(imgs.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise(resolve => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, 2500);
+    });
+  }));
 
   try {
-    // 2. Wait for images to be ready
-    const imgs = [...sandbox.querySelectorAll('img')];
-    await Promise.all(imgs.map(img => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 2000); });
-    }));
+    const html2pdf = await loadHtml2Pdf();
+    const node = sandbox.firstElementChild;
+    node.style.display = 'block';
+    node.style.overflow = 'visible';
+    node.style.position = 'relative';
 
-    // 3. Render using highly specific dimensions
-    const options = {
+    const blob = await html2pdf().set({
       margin: 0,
-      filename: filename,
+      filename,
       image: { type: 'jpeg', quality: 1.0 },
       html2canvas: {
-        scale: 2,           // Sharp quality
-        useCORS: true,      // Allow cross-origin images (QR codes)
-        width: 794,         // Lock canvas width
-        windowWidth: 794,   // Force browser to "think" the window is 794px wide
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
         backgroundColor: '#ffffff',
-        logging: false
+        logging: false,
+        windowWidth: 1024,
+        width: 794,
+        height: sandbox.offsetHeight,
+        scrollX: 0,
+        scrollY: 0,
       },
-      jsPDF: { 
-        unit: 'px', 
-        format: [794, 1123], // Exact A4 pixel dimensions at 96 DPI
-        orientation: 'portrait'
-      }
-    };
-
-    const blob = await html2pdf().set(options).from(sandbox).outputPdf('blob');
-    return { blob };
+      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait', hotfixes: ['px_scaling'] },
+      pagebreak: { mode: ['css', 'legacy'] },
+    }).from(sandbox).outputPdf('blob');
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    return { blob, file };
   } finally {
-    // 4. Cleanup
-    document.body.removeChild(sandbox);
+    wrapper.remove();
   }
 }
 
-// Convert a Blob to a base64 string (no data: prefix).
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -229,7 +225,6 @@ function blobToBase64(blob) {
   });
 }
 
-// Upload PDF to server, get back a public URL we can put in WhatsApp text.
 async function uploadBillPdf(blob, filename, inquiry_id) {
   const dataBase64 = await blobToBase64(blob);
   const token = localStorage.getItem('auth_token');
@@ -243,23 +238,18 @@ async function uploadBillPdf(blob, filename, inquiry_id) {
     throw new Error(data.error || 'Upload failed');
   }
   const { url } = await res.json();
-  return url; // server returns an absolute URL
+  return url;
 }
 
-// Trigger a download of the given blob.
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a);
-  a.click();
-  a.remove();
+  a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Short message that goes alongside the PDF on WhatsApp. The PDF is hosted
-// on our server and linked here, so the client opens it directly from their
-// chat without the technician needing to attach a file.
 function billShortCaption(data, pdfUrl) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const lines = [
@@ -273,14 +263,6 @@ function billShortCaption(data, pdfUrl) {
   return lines.join('\n');
 }
 
-// Opens the premium bill modal. Accepts an options object:
-//   onSent       — fires after the share is initiated (used by employee
-//                  to persist the breakdown + bill_pdf_url).
-//   allowShare   — when false, hides the "Send via WhatsApp" button (admin
-//                  view should not re-share).
-//   title        — overrides the modal title.
-//   inquiryId    — if set, server persists the uploaded bill_pdf_url on the
-//                  inquiry so admin can re-open the exact PDF later.
 export function openPremiumBillModal(data, opts = {}) {
   const { onSent, allowShare = true, title = '📄 Service Invoice Preview', inquiryId = null } = opts;
   const billHTML = renderPremiumBillHTML(data);
@@ -289,21 +271,20 @@ export function openPremiumBillModal(data, opts = {}) {
   overlay.innerHTML = `
     <div class="modal-card modal-large">
       <div class="modal-header">
-        <h3 class="modal-title">${title}</h3>
-        <button class="modal-close" id="pb-close">✕</button>
+        <h3>${title}</h3>
+        <button class="btn-icon" id="pb-close">${ICONS.close}</button>
       </div>
-      <div class="modal-body" style="background:#F8FAFC; padding:20px; overflow-y:auto; max-height:calc(100vh - 200px);">
-        <div id="bill-preview-wrap" style="background:white; box-shadow:0 10px 25px rgba(0,0,0,0.05); margin:0 auto; transform:scale(0.8); transform-origin:top center; width:794px;">
+      <div class="modal-body" style="background:#F8FAFC; padding:30px;">
+        <div id="bill-preview-container" style="background:white; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); border-radius:8px; overflow:hidden;">
           ${billHTML}
         </div>
       </div>
-      <div class="modal-footer" style="gap:12px; justify-content:center;">
+      <div class="modal-footer" style="gap:12px;">
         <button class="btn btn-secondary" id="pb-cancel">Close</button>
         <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
-        ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp" style="background:#25D366; border:none; box-shadow:0 4px 12px rgba(37,211,102,0.3);"><span>📱 Send via WhatsApp</span></button>` : ''}
+        ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp"><span>📱 Send via WhatsApp</span></button>` : ''}
       </div>
     </div>`;
-
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
@@ -331,30 +312,34 @@ export function openPremiumBillModal(data, opts = {}) {
     overlay.querySelector('#pb-whatsapp').onclick = async () => {
       const btn = overlay.querySelector('#pb-whatsapp');
       btn.disabled = true;
+      const originalHTML = btn.innerHTML;
       const phone = (data.customer?.phone || '').replace(/\D/g, '');
       if (!phone) {
-        toast('Client phone number missing', 'error');
-        btn.disabled = false;
+        toast('Client phone number is missing on this inquiry', 'error');
+        btn.disabled = false; btn.innerHTML = originalHTML;
         return;
       }
 
       try {
         btn.innerHTML = `<span>… preparing PDF</span>`;
         const { blob } = await renderBillToPdfBlob(billHTML, filename);
+
         btn.innerHTML = `<span>… uploading bill</span>`;
         const pdfUrl = await uploadBillPdf(blob, filename, inquiryId);
 
         const caption = billShortCaption(data, pdfUrl);
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(caption)}`, '_blank');
+        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
+        window.open(waUrl, '_blank');
 
-        toast('WhatsApp opened!', 'success');
-        if (typeof onSent === 'function') await onSent(pdfUrl);
+        toast('WhatsApp opened with PDF link — send the message to the client.', 'success');
+        if (typeof onSent === 'function') {
+          try { await onSent(pdfUrl); } catch { }
+        }
       } catch (err) {
         console.error(err);
-        toast('Failed to send WhatsApp', 'error');
+        toast(err.message || 'Could not send bill', 'error');
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>📱 Send via WhatsApp</span>';
+        btn.disabled = false; btn.innerHTML = originalHTML;
       }
     };
   }
