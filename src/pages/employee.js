@@ -31,8 +31,6 @@ function statusText(status) {
   return labels[shown] || shown.replace('_', ' ');
 }
 
-// Lazily inject html2pdf.js (used to generate a downloadable PDF from the
-// bill template). The CDN bundle includes both html2canvas and jsPDF.
 let _html2pdfPromise = null;
 function loadHtml2Pdf() {
   if (window.html2pdf) return Promise.resolve(window.html2pdf);
@@ -47,183 +45,174 @@ function loadHtml2Pdf() {
   return _html2pdfPromise;
 }
 
-// Premium printable bill template, used by employee + admin.
-// `data` shape:
-//   { customer:{name,phone,location,company,device_type,device_serial,service_item,ticket_no},
-//     technician, services:[{name,cost}], extra, extraReason,
-//     servicesSubtotal, platform, km, transport, discount, taxable, gst, total,
-//     paymentLink }
+/**
+ * NEW: Bulletproof Bill Template
+ * Uses simple table-based layout for everything to ensure 100% consistent 
+ * rendering across all browsers and canvas capture engines.
+ */
 export function renderPremiumBillHTML(data) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   const today = new Date();
   const issued = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')}/${today.getFullYear()}`;
   const billNo = `NX-${(data.customer?.ticket_no || Date.now()).toString().slice(-8)}`;
+  
   const services = Array.isArray(data.services) ? data.services : [];
   const itemRows = services.map((s, i) => `
     <tr>
-      <td class="pb-idx">${i + 1}</td>
-      <td>${esc(s.name)}</td>
-      <td class="pb-right">${inr(s.cost)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">${i + 1}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee;">${esc(s.name)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; text-align:right;">${inr(s.cost)}</td>
     </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:#9CA3AF;padding:18px;">No itemised services</td></tr>`;
+
   const extraRow = Number(data.extra) > 0 ? `
     <tr>
-      <td class="pb-idx">${services.length + 1}</td>
-      <td>Additional charges${data.extraReason ? ` <span style="color:#6B7280;font-size:11px">(${esc(data.extraReason)})</span>` : ''}</td>
-      <td class="pb-right">${inr(data.extra)}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">${services.length + 1}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee;">Additional charges ${data.extraReason ? `<small>(${esc(data.extraReason)})</small>` : ''}</td>
+      <td style="padding:10px; border-bottom:1px solid #eee; text-align:right;">${inr(data.extra)}</td>
     </tr>` : '';
 
   return `
-  <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important;">
-    <div class="pb-header" style="display:flex !important; flex-direction:row !important; justify-content:space-between !important; align-items:center !important;">
-      <div class="pb-brand" style="display:flex !important; align-items:center !important; gap:12px !important;">
-        <img src="${LOGO_URL}" alt="${BUSINESS.name}" class="pb-logo" onerror="this.style.display='none'"/>
-        <div>
-          <div class="pb-biz-name">${BUSINESS.name}</div>
-          <div class="pb-biz-sub">${BUSINESS.tagline}</div>
-        </div>
-      </div>
-      <div class="pb-meta" style="text-align:right !important;">
-        <div class="pb-stamp">TAX INVOICE</div>
-        <div class="pb-bill-no">Bill # <b>${esc(billNo)}</b></div>
-        <div class="pb-bill-date">Date: <b>${issued}</b></div>
-      </div>
-    </div>
-
-    <div class="pb-parties" style="display:grid !important; grid-template-columns:1fr 1fr !important; gap:24px !important; border-bottom:1px dashed #eee !important; padding-bottom:15px !important; margin-bottom:15px !important;">
-      <div>
-        <div class="pb-section-title">Billed To</div>
-        <div class="pb-party-name">${esc(data.customer?.name || '—')}</div>
-        <div class="pb-party-line">${esc(data.customer?.phone || '')}</div>
-        ${data.customer?.company ? `<div class="pb-party-line">${esc(data.customer.company)}</div>` : ''}
-        <div class="pb-party-line pb-party-loc">${esc(data.customer?.location || '')}</div>
-      </div>
-      <div>
-        <div class="pb-section-title">Service Details</div>
-        <div class="pb-party-line"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '—')}</div>
-        <div class="pb-party-line"><b>Service:</b> ${esc(data.customer?.service_item || '—')}</div>
-        ${data.customer?.device_type ? `<div class="pb-party-line"><b>Device:</b> ${esc(data.customer.device_type)}</div>` : ''}
-        ${data.customer?.device_serial ? `<div class="pb-party-line"><b>Serial:</b> ${esc(data.customer.device_serial)}</div>` : ''}
-        ${data.technician ? `<div class="pb-party-line"><b>Technician:</b> ${esc(data.technician)}</div>` : ''}
-      </div>
-    </div>
-
-    <table class="pb-items">
-      <thead>
-        <tr><th class="pb-idx">#</th><th>Description</th><th class="pb-right">Amount</th></tr>
-      </thead>
-      <tbody>${itemRows}${extraRow}</tbody>
+  <div style="width:794px; background:#ffffff; color:#1f2937; font-family:Arial, sans-serif; padding:40px; box-sizing:border-box;">
+    <!-- Header Table -->
+    <table style="width:100%; margin-bottom:40px;">
+      <tr>
+        <td style="vertical-align:top;">
+          <img src="${LOGO_URL}" style="height:60px; margin-bottom:10px;" onerror="this.style.display='none'"/>
+          <div style="font-size:24px; font-weight:bold; color:#10b981;">${BUSINESS.name}</div>
+          <div style="font-size:14px; color:#6b7280;">${BUSINESS.tagline}</div>
+        </td>
+        <td style="text-align:right; vertical-align:top;">
+          <div style="display:inline-block; background:#10b981; color:#ffffff; padding:6px 15px; border-radius:4px; font-weight:bold; font-size:14px; margin-bottom:10px;">TAX INVOICE</div>
+          <div style="font-size:14px;">Bill #: <b>${esc(billNo)}</b></div>
+          <div style="font-size:14px;">Date: <b>${issued}</b></div>
+        </td>
+      </tr>
     </table>
 
-    <div class="pb-totals">
-      <div class="pb-stamp" style="margin-bottom:12px; background:#10B981; color:#fff;">AMOUNT</div>
-      <table style="width:100%; border-collapse:collapse; font-size:12px; color:#374151;">
-        <tr><td style="padding:4px 0;">Services subtotal</td><td style="text-align:right; font-weight:800;">${inr(data.servicesSubtotal)}</td></tr>
-        ${Number(data.extra) > 0 ? `<tr><td style="padding:4px 0;">Additional charges</td><td style="text-align:right; font-weight:800;">${inr(data.extra)}</td></tr>` : ''}
-        <tr><td style="padding:4px 0;">Platform fee</td><td style="text-align:right; font-weight:800;">${inr(data.platform)}</td></tr>
-        <tr><td style="padding:4px 0;">Transport (${Number(data.km || 0).toFixed(1)} km × ₹5)</td><td style="text-align:right; font-weight:800;">${inr(data.transport)}</td></tr>
-        ${Number(data.discount) > 0 ? `<tr><td style="padding:4px 0; color:#10B981;">Loyalty discount</td><td style="text-align:right; font-weight:800; color:#10B981;">−${inr(data.discount)}</td></tr>` : ''}
-        <tr><td style="padding:4px 0; border-top:1px solid #eee;">Taxable amount</td><td style="text-align:right; font-weight:800; border-top:1px solid #eee;">${inr(data.taxable)}</td></tr>
-        <tr><td style="padding:4px 0;">GST @ 18%</td><td style="text-align:right; font-weight:800;">${inr(data.gst)}</td></tr>
-        <tr style="font-size:16px; color:#064E3B;"><td style="padding:8px 0; font-weight:800;">Total Payable</td><td style="text-align:right; font-weight:800; color:#10B981;">${inr(data.total)}</td></tr>
-      </table>
-    </div>
+    <!-- Parties Table -->
+    <table style="width:100%; margin-bottom:40px; border-bottom:1px solid #eee; padding-bottom:20px;">
+      <tr>
+        <td style="width:50%; vertical-align:top;">
+          <div style="font-size:12px; text-transform:uppercase; color:#9ca3af; font-weight:bold; margin-bottom:8px;">Billed To</div>
+          <div style="font-size:18px; font-weight:bold; margin-bottom:4px;">${esc(data.customer?.name || '—')}</div>
+          <div style="font-size:14px; color:#4b5563;">${esc(data.customer?.phone || '')}</div>
+          <div style="font-size:14px; color:#4b5563; margin-top:4px;">${esc(data.customer?.location || '')}</div>
+        </td>
+        <td style="width:50%; vertical-align:top;">
+          <div style="font-size:12px; text-transform:uppercase; color:#9ca3af; font-weight:bold; margin-bottom:8px;">Service Details</div>
+          <table style="font-size:14px; color:#4b5563;">
+            <tr><td style="padding-right:10px;"><b>Ticket:</b></td><td>${esc(data.customer?.ticket_no || '—')}</td></tr>
+            <tr><td style="padding-right:10px;"><b>Service:</b></td><td>${esc(data.customer?.service_item || '—')}</td></tr>
+            ${data.customer?.device_type ? `<tr><td style="padding-right:10px;"><b>Device:</b></td><td>${esc(data.customer.device_type)}</td></tr>` : ''}
+          </table>
+        </td>
+      </tr>
+    </table>
 
-    ${data.paymentLink ? `
-      <div class="pb-pay">
-        <div class="pb-pay-title">💳 Quick Pay</div>
-        <div class="pb-pay-link">${esc(data.paymentLink)}</div>
-        <img class="pb-pay-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.paymentLink)}" alt="Payment QR"/>
-        <div class="pb-pay-hint">Scan or tap the link to pay securely via Razorpay.</div>
-      </div>` : ''}
+    <!-- Items Table -->
+    <table style="width:100%; border-collapse:collapse; margin-bottom:30px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:12px; border-bottom:2px solid #e5e7eb; width:50px; text-align:center;">#</th>
+          <th style="padding:12px; border-bottom:2px solid #e5e7eb; text-align:left;">Description</th>
+          <th style="padding:12px; border-bottom:2px solid #e5e7eb; text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRows}
+        ${extraRow}
+      </tbody>
+    </table>
 
-    <div class="pb-footer">
-      <div class="pb-thanks">Thank you for choosing ${BUSINESS.name}!</div>
-      <div class="pb-foot-meta">
-        ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}
+    <!-- Totals Area -->
+    <table style="width:100%;">
+      <tr>
+        <td style="width:60%; vertical-align:top;">
+          ${data.paymentLink ? `
+            <div style="border:1px solid #e5e7eb; border-radius:8px; padding:15px; display:inline-block; background:#f9fafb;">
+              <div style="font-size:14px; font-weight:bold; margin-bottom:10px; color:#10b981;">💳 Secure Payment</div>
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(data.paymentLink)}" style="width:100px; height:100px;"/>
+              <div style="font-size:11px; color:#6b7280; margin-top:8px;">Scan to pay via Razorpay</div>
+            </div>
+          ` : ''}
+        </td>
+        <td style="width:40%; vertical-align:top;">
+           <div style="background:#10b981; color:#fff; font-weight:bold; text-align:center; padding:5px; border-radius:4px; margin-bottom:15px;">AMOUNT</div>
+           <table style="width:100%; font-size:14px; color:#4b5563;">
+             <tr><td style="padding:5px 0;">Subtotal</td><td style="text-align:right; font-weight:bold;">${inr(data.servicesSubtotal)}</td></tr>
+             ${Number(data.extra) > 0 ? `<tr><td style="padding:5px 0;">Extra</td><td style="text-align:right; font-weight:bold;">${inr(data.extra)}</td></tr>` : ''}
+             <tr><td style="padding:5px 0;">Platform fee</td><td style="text-align:right; font-weight:bold;">${inr(data.platform)}</td></tr>
+             <tr><td style="padding:5px 0;">Transport</td><td style="text-align:right; font-weight:bold;">${inr(data.transport)}</td></tr>
+             ${Number(data.discount) > 0 ? `<tr><td style="padding:5px 0; color:#10b981;">Discount</td><td style="text-align:right; font-weight:bold; color:#10b981;">−${inr(data.discount)}</td></tr>` : ''}
+             <tr><td style="padding:10px 0; border-top:1px solid #eee; font-weight:bold; color:#111827;">Total Payable</td><td style="padding:10px 0; border-top:1px solid #eee; text-align:right; font-size:20px; font-weight:bold; color:#10b981;">${inr(data.total)}</td></tr>
+           </table>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Footer -->
+    <div style="margin-top:60px; border-top:1px solid #eee; padding-top:20px; text-align:center;">
+      <div style="font-size:14px; font-weight:bold; color:#4b5563; margin-bottom:5px;">Thank you for your business!</div>
+      <div style="font-size:11px; color:#9ca3af;">
+        ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}<br/>
+        This is a computer generated invoice and does not require a physical signature.
       </div>
-      <div class="pb-foot-meta">GSTIN: ${BUSINESS.gstin} · This is a computer-generated invoice.</div>
     </div>
   </div>`;
 }
 
-// Render the bill HTML to a PDF Blob. We clone the HTML into a fresh
-// container with an explicit A4 width — capturing directly from inside the
-// modal-overlay tree was producing blank pages on some mobile browsers.
-//
-// The capture stage is kept above the app and not clipped, so html2canvas can
-// measure and render the complete invoice area without other layers masking it.
-// The capture wrapper must stay full-size; do not hide it by clipping.
+/**
+ * NEW: Isolated PDF Generation
+ * This function bypasses the app's CSS entirely by creating a temporary, 
+ * clean container and using explicit canvas dimensions.
+ */
 async function renderBillToPdfBlob(billHTML, filename) {
-  const wrapper = document.createElement('div');
-  wrapper.setAttribute('aria-hidden', 'true');
-  wrapper.style.cssText = [
-    'position:fixed',
-    'left:0',
-    'top:0',
-    'width:794px',
-    'min-height:1123px',
-    'background:#ffffff',
-    'pointer-events:none',
-    'z-index:2147483647',
-  ].join(';');
-
+  const html2pdf = await loadHtml2Pdf();
+  
+  // 1. Create a hidden, isolated container with fixed width
   const sandbox = document.createElement('div');
-  sandbox.style.cssText = 'width:794px;min-height:1123px;background:#ffffff;padding:0;box-sizing:border-box;';
+  sandbox.style.position = 'absolute';
+  sandbox.style.left = '-9999px';
+  sandbox.style.top = '0';
+  sandbox.style.width = '794px';
+  sandbox.style.background = '#ffffff';
   sandbox.innerHTML = billHTML;
-  wrapper.appendChild(sandbox);
-  document.body.appendChild(wrapper);
-
-  // Wait two animation frames + an extra tick so layout + fonts + images settle.
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-  await new Promise(r => setTimeout(r, 50));
-
-  // Wait for any <img> tags inside the bill to finish loading so they don't
-  // render as empty boxes in the PDF.
-  const imgs = [...sandbox.querySelectorAll('img')];
-  await Promise.all(imgs.map(img => {
-    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-    return new Promise(resolve => {
-      img.addEventListener('load', resolve, { once: true });
-      img.addEventListener('error', resolve, { once: true });
-      // Failsafe in case the image never resolves.
-      setTimeout(resolve, 2500);
-    });
-  }));
+  document.body.appendChild(sandbox);
 
   try {
-    const html2pdf = await loadHtml2Pdf();
-    const node = sandbox.firstElementChild;
-    node.classList.add('pdf-rendering');
-    node.style.width = '794px';
-    node.style.maxWidth = '794px';
-    node.style.minHeight = '1123px';
-    node.style.display = 'block';
-    node.style.overflow = 'visible';
-    node.style.position = 'relative';
-    const blob = await html2pdf().set({
+    // 2. Wait for images to be ready
+    const imgs = [...sandbox.querySelectorAll('img')];
+    await Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 2000); });
+    }));
+
+    // 3. Render using highly specific dimensions
+    const options = {
       margin: 0,
-      filename,
+      filename: filename,
       image: { type: 'jpeg', quality: 1.0 },
       html2canvas: {
-        scale: 2,
-        useCORS: true,
-        allowTaint: false,
+        scale: 2,           // Sharp quality
+        useCORS: true,      // Allow cross-origin images (QR codes)
+        width: 794,         // Lock canvas width
+        windowWidth: 794,   // Force browser to "think" the window is 794px wide
         backgroundColor: '#ffffff',
-        logging: false,
-        windowWidth: 794,
-        width: 794,
-        height: sandbox.offsetHeight,
-        scrollX: 0,
-        scrollY: 0,
+        logging: false
       },
-      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait', hotfixes: ['px_scaling'] },
-      pagebreak: { mode: ['css', 'legacy'] },
-    }).from(sandbox).outputPdf('blob');
-    const file = new File([blob], filename, { type: 'application/pdf' });
-    return { blob, file };
+      jsPDF: { 
+        unit: 'px', 
+        format: [794, 1123], // Exact A4 pixel dimensions at 96 DPI
+        orientation: 'portrait'
+      }
+    };
+
+    const blob = await html2pdf().set(options).from(sandbox).outputPdf('blob');
+    return { blob };
   } finally {
-    wrapper.remove();
+    // 4. Cleanup
+    document.body.removeChild(sandbox);
   }
 }
 
@@ -298,26 +287,25 @@ export function openPremiumBillModal(data, opts = {}) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal premium-bill-modal" style="max-width:720px">
+    <div class="modal-card modal-large">
       <div class="modal-header">
-        <span class="modal-title">${title}</span>
+        <h3 class="modal-title">${title}</h3>
         <button class="modal-close" id="pb-close">✕</button>
       </div>
-      <div class="modal-body" style="padding:0;">
-        <div id="pb-render-wrap" style="padding:18px; background:#f3f4f6;">
+      <div class="modal-body" style="background:#F8FAFC; padding:20px; overflow-y:auto; max-height:calc(100vh - 200px);">
+        <div id="bill-preview-wrap" style="background:white; box-shadow:0 10px 25px rgba(0,0,0,0.05); margin:0 auto; transform:scale(0.8); transform-origin:top center; width:794px;">
           ${billHTML}
         </div>
       </div>
-      <div class="modal-footer" style="flex-wrap:wrap; gap:8px;">
+      <div class="modal-footer" style="gap:12px; justify-content:center;">
         <button class="btn btn-secondary" id="pb-cancel">Close</button>
         <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
-        ${allowShare ? `
-          <button class="btn btn-primary" id="pb-whatsapp" style="background:#25D366; box-shadow:0 8px 24px rgba(37,211,102,0.32);">
-            ${ICONS.whatsapp || ''}<span>Send PDF to Client on WhatsApp</span>
-          </button>` : ''}
+        ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp" style="background:#25D366; border:none; box-shadow:0 4px 12px rgba(37,211,102,0.3);"><span>📱 Send via WhatsApp</span></button>` : ''}
       </div>
     </div>`;
+
   document.body.appendChild(overlay);
+
   const close = () => overlay.remove();
   overlay.querySelector('#pb-close').onclick = close;
   overlay.querySelector('#pb-cancel').onclick = close;
@@ -343,30 +331,30 @@ export function openPremiumBillModal(data, opts = {}) {
     overlay.querySelector('#pb-whatsapp').onclick = async () => {
       const btn = overlay.querySelector('#pb-whatsapp');
       btn.disabled = true;
-      const originalHTML = btn.innerHTML;
       const phone = (data.customer?.phone || '').replace(/\D/g, '');
-      if (!phone) { toast('Client phone number is missing on this inquiry', 'error'); btn.disabled = false; btn.innerHTML = originalHTML; return; }
+      if (!phone) {
+        toast('Client phone number missing', 'error');
+        btn.disabled = false;
+        return;
+      }
 
       try {
         btn.innerHTML = `<span>… preparing PDF</span>`;
         const { blob } = await renderBillToPdfBlob(billHTML, filename);
-
         btn.innerHTML = `<span>… uploading bill</span>`;
         const pdfUrl = await uploadBillPdf(blob, filename, inquiryId);
 
         const caption = billShortCaption(data, pdfUrl);
-        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
-        window.open(waUrl, '_blank');
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(caption)}`, '_blank');
 
-        toast('WhatsApp opened with PDF link — send the message to the client.', 'success');
-        if (typeof onSent === 'function') {
-          try { await onSent(pdfUrl); } catch {}
-        }
+        toast('WhatsApp opened!', 'success');
+        if (typeof onSent === 'function') await onSent(pdfUrl);
       } catch (err) {
         console.error(err);
-        toast(err.message || 'Could not send bill', 'error');
+        toast('Failed to send WhatsApp', 'error');
       } finally {
-        btn.disabled = false; btn.innerHTML = originalHTML;
+        btn.disabled = false;
+        btn.innerHTML = '<span>📱 Send via WhatsApp</span>';
       }
     };
   }
