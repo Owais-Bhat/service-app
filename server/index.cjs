@@ -732,6 +732,12 @@ const dataAuth = (req, res, next) => {
             req.user = { role: 'public' };
             return next();
         }
+        // Customers can also list ALL of their own tickets by phone alone
+        // (the landing-page "Track Request" tab shows a list view).
+        if (req.method === 'GET' && eqs.length === 1 && eqs[0].startsWith('phone:')) {
+            req.user = { role: 'public' };
+            return next();
+        }
         if (req.method === 'PATCH'
             && eqs.some(e => e.startsWith('id:'))
             && eqs.some(e => e.startsWith('ticket_no:'))

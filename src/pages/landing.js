@@ -107,6 +107,7 @@ export function renderLandingPage(container, onPortalClick) {
     trackTicketNo: urlTicket,
     trackPhone: urlPhone,
     trackResult: null,
+    trackList: null,
     trackLoading: false,
     // Complaint tab state
     complaintTicketNo: '',
@@ -468,33 +469,66 @@ export function renderLandingPage(container, onPortalClick) {
 
   // ── TRACK MODE ──────────────────────────────────────
   function stepTrack() {
-    const r = state.trackResult;
-    if (!r) {
-      return `
-        <h2 class="srf-card-title">Track your request</h2>
-        <p class="srf-card-sub">Enter your ticket number and the WhatsApp number you used.</p>
+    if (state.trackResult) return renderTrackResult(state.trackResult);
+    if (state.trackList) return renderTrackList(state.trackList);
+    return `
+      <h2 class="srf-card-title">Track your requests</h2>
+      <p class="srf-card-sub">Enter your WhatsApp number to see all the tickets you've filed. Add a ticket number to jump to one directly.</p>
 
-        <label class="srf-label" for="srf-track-tno">Ticket number</label>
-        <div class="srf-input-wrap">
-          <span class="srf-input-icon">${ICONS.ticket}</span>
-          <input id="srf-track-tno" type="text" placeholder="NE-260506-1234" class="srf-input"
-                 value="${state.trackTicketNo}" autocomplete="off"/>
-        </div>
+      <label class="srf-label" for="srf-track-phone">Phone number</label>
+      <div class="srf-input-wrap">
+        <span class="srf-input-icon">${ICONS.phone}</span>
+        <span class="srf-cc">+91</span>
+        <input id="srf-track-phone" type="tel" inputmode="numeric" maxlength="10"
+               placeholder="98765 43210" class="srf-input srf-input-cc" value="${state.trackPhone}"/>
+      </div>
 
-        <label class="srf-label" for="srf-track-phone">Phone number</label>
-        <div class="srf-input-wrap">
-          <span class="srf-input-icon">${ICONS.phone}</span>
-          <span class="srf-cc">+91</span>
-          <input id="srf-track-phone" type="tel" inputmode="numeric" maxlength="10"
-                 placeholder="98765 43210" class="srf-input srf-input-cc" value="${state.trackPhone}"/>
-        </div>
+      <label class="srf-label" for="srf-track-tno">Ticket number <span class="srf-optional">(optional)</span></label>
+      <div class="srf-input-wrap">
+        <span class="srf-input-icon">${ICONS.ticket}</span>
+        <input id="srf-track-tno" type="text" placeholder="NE-260506-1234" class="srf-input"
+               value="${state.trackTicketNo}" autocomplete="off"/>
+      </div>
 
-        <button class="srf-btn srf-btn-primary" id="srf-track-go" ${state.trackLoading ? 'disabled' : ''}>
-          ${state.trackLoading ? '<span class="srf-spin"></span>' : ''}<span>Get status</span> ${ICONS.arrowRight}
-        </button>
-      `;
-    }
-    return renderTrackResult(r);
+      <button class="srf-btn srf-btn-primary" id="srf-track-go" ${state.trackLoading ? 'disabled' : ''}>
+        ${state.trackLoading ? '<span class="srf-spin"></span>' : ''}<span>${state.trackTicketNo ? 'Get this ticket' : 'Show my tickets'}</span> ${ICONS.arrowRight}
+      </button>
+    `;
+  }
+
+  function renderTrackList(tickets) {
+    return `
+      <button class="srf-back" id="srf-track-back">${ICONS.arrowLeft}<span>New search</span></button>
+      <h2 class="srf-card-title">Your tickets</h2>
+      <p class="srf-card-sub">${tickets.length} ticket${tickets.length === 1 ? '' : 's'} found for +91 ${formatPhone(state.trackPhone)}</p>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+        ${tickets.length === 0 ? `
+          <div style="padding:24px;text-align:center;color:var(--text-soft);background:var(--bg-soft);border-radius:14px;">
+            No tickets found for this phone number.
+          </div>
+        ` : tickets.map(t => {
+          const st = displayStatus(t.status);
+          const stLabel = STATUS_LABELS[st === 'pending' ? 'open' : st] || st;
+          const stColor = st === 'resolved' ? 'var(--success)'
+            : st === 'in_progress' ? 'var(--warning)'
+            : st === 'assigned' ? 'var(--primary)'
+            : 'var(--text-dim)';
+          return `
+            <button type="button" class="srf-ticket-row" data-ticket-id="${t.id}"
+              style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);cursor:pointer;text-align:left;font-family:inherit;width:100%;">
+              <div style="flex-shrink:0;width:44px;height:44px;border-radius:12px;background:var(--bg);color:${stColor};display:flex;align-items:center;justify-content:center;">${ICONS.ticket}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:800;font-size:0.95rem;color:var(--text);">${escapeHTML(t.ticket_no || t.id.slice(0,8))}</div>
+                <div style="font-size:0.82rem;color:var(--text-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(t.service_item || '—')}</div>
+                <div style="font-size:0.74rem;color:var(--text-dim);margin-top:2px;">${t.created_at ? new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</div>
+              </div>
+              <span style="font-size:0.75rem;font-weight:700;padding:6px 12px;border-radius:999px;background:${stColor}1a;color:${stColor};white-space:nowrap;">${stLabel}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
   }
 
   function renderTrackResult(r) {
@@ -624,6 +658,7 @@ export function renderLandingPage(container, onPortalClick) {
         state.mode = t.dataset.mode;
         if (state.mode === 'track') {
           state.trackResult = null;
+          state.trackList = null;
         }
         if (state.mode === 'complaint') {
           state.complaintSubmitted = false;
@@ -870,6 +905,8 @@ export function renderLandingPage(container, onPortalClick) {
   function bindTrack() {
     if (state.trackResult) {
       container.querySelector('#srf-track-back').onclick = () => {
+        // Clearing trackResult naturally falls back to the list (if we came from
+        // one) or the search form (if we arrived via ticket_no + phone direct).
         state.trackResult = null;
         render();
       };
@@ -969,6 +1006,35 @@ export function renderLandingPage(container, onPortalClick) {
       return;
     }
 
+    // List view: wire ticket cards + back-to-search button.
+    if (state.trackList) {
+      bind('#srf-track-back', () => {
+        state.trackList = null;
+        render();
+      });
+      container.querySelectorAll('.srf-ticket-row').forEach(row => {
+        row.onclick = async () => {
+          const id = row.dataset.ticketId;
+          const ticket = state.trackList.find(t => t.id === id);
+          if (!ticket) return;
+          // The list endpoint doesn't include joined profiles, so re-fetch the
+          // full row by ticket_no + phone to get the assigned-employee details.
+          state.trackLoading = true;
+          render();
+          const { data } = await supabase.from('inquiries')
+            .select('*,profiles(id,full_name,phone,role)')
+            .eq('ticket_no', ticket.ticket_no)
+            .eq('phone', ticket.phone)
+            .maybeSingle();
+          state.trackLoading = false;
+          state.trackResult = data || ticket;
+          render();
+        };
+      });
+      return;
+    }
+
+    // Search form
     const tnoEl = container.querySelector('#srf-track-tno');
     const phEl = container.querySelector('#srf-track-phone');
     tnoEl.addEventListener('input', e => { state.trackTicketNo = e.target.value.trim().toUpperCase(); e.target.value = state.trackTicketNo; });
@@ -980,31 +1046,47 @@ export function renderLandingPage(container, onPortalClick) {
     bind('#srf-track-go', async () => {
       const tno = state.trackTicketNo;
       const ph = state.trackPhone;
-      if (!tno) return toast('Enter your ticket number', 'error');
-      if (!/^\d{10}$/.test(ph)) return toast('Enter a valid 10-digit number', 'error');
+      if (!/^\d{10}$/.test(ph)) return toast('Enter a valid 10-digit phone number', 'error');
 
       state.trackLoading = true;
       render();
 
-      const { data, error } = await supabase.from('inquiries')
-        .select('*,profiles(id,full_name,phone,role)')
-        .eq('ticket_no', tno)
-        .eq('phone', '+91' + ph)
-        .maybeSingle();
+      // Direct-ticket lookup (phone + ticket_no) — single result, jump straight to detail view.
+      if (tno) {
+        const { data, error } = await supabase.from('inquiries')
+          .select('*,profiles(id,full_name,phone,role)')
+          .eq('ticket_no', tno)
+          .eq('phone', '+91' + ph)
+          .maybeSingle();
+        state.trackLoading = false;
+        if (error) { console.error(error); toast('Lookup failed', 'error'); render(); return; }
+        if (!data) { toast('No matching ticket. Check the number and phone.', 'error'); render(); return; }
+        state.trackResult = data;
+        render();
+        return;
+      }
 
+      // Phone-only listing — show all this phone's tickets.
+      const { data, error } = await supabase.from('inquiries')
+        .select('*')
+        .eq('phone', '+91' + ph)
+        .order('created_at', { ascending: false });
       state.trackLoading = false;
-      if (error) {
-        console.error(error);
-        toast('Lookup failed', 'error');
-        render();
-        return;
+      if (error) { console.error(error); toast('Lookup failed', 'error'); render(); return; }
+      const list = Array.isArray(data) ? data : (data ? [data] : []);
+      if (!list.length) { toast('No tickets found for that phone number.', 'error'); render(); return; }
+      // If exactly one ticket, skip the list and go straight to detail view
+      // (re-fetched with profiles join).
+      if (list.length === 1) {
+        const { data: full } = await supabase.from('inquiries')
+          .select('*,profiles(id,full_name,phone,role)')
+          .eq('ticket_no', list[0].ticket_no)
+          .eq('phone', list[0].phone)
+          .maybeSingle();
+        state.trackResult = full || list[0];
+      } else {
+        state.trackList = list;
       }
-      if (!data) {
-        toast('No matching ticket. Check the number and phone.', 'error');
-        render();
-        return;
-      }
-      state.trackResult = data;
       render();
     });
 
@@ -1023,6 +1105,7 @@ export function renderLandingPage(container, onPortalClick) {
         state.trackTicketNo = state.complaintTicketNo;
         state.trackPhone = state.complaintPhone;
         state.trackResult = null;
+        state.trackList = null;
         render();
       });
       return;
