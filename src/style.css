@@ -2070,7 +2070,7 @@ tr:hover td {
 /* Intro */
 .srf-intro {
   width: 100%;
-  max-width: 506px;
+  max-width: 520px;
   justify-self: end;
   display: flex;
   flex-direction: column;
@@ -2133,7 +2133,7 @@ tr:hover td {
 /* Ads carousel — single rotating slot (image or video) */
 .srf-ads {
   width: 100%;
-  max-width: 520px;
+  max-width: 506px;
   border-radius: 24px;
   background: var(--bg-soft);
   padding: 10px;
@@ -2755,14 +2755,14 @@ tr:hover td {
     gap: 24px;
   }
   .srf-intro {
-    max-width: min(92vw, 506px);
+    max-width: min(92vw, 520px);
     justify-self: center;
     text-align: center;
     margin: 0 auto;
   }
   .srf-ads,
   .srf-ad-empty {
-    max-width: min(92vw, 520px);
+    max-width: min(92vw, 506px);
     margin: 0 auto;
   }
   .srf-perks { max-width: 420px; margin: 0 auto; }
