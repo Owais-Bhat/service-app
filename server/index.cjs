@@ -9,6 +9,11 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const {
+    sendFast2SmsOtp,
+    verifyFast2SmsOtp,
+    resendFast2SmsOtp,
+} = require('./fast2sms.cjs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Fail fast if required env is missing — better than 500s at request time.
@@ -791,6 +796,66 @@ const dataAuth = (req, res, next) => {
     }
     return authenticateToken(req, res, next);
 };
+
+// --- PUBLIC OTP ROUTES ---
+
+function fast2SmsConfig() {
+    return {
+        apiKey: process.env.SMS_API,
+        otpId: process.env.FAST2SMS_OTP_ID || process.env.SMS_OTP_ID || process.env.OTP_ID,
+    };
+}
+
+function sendOtpResponse(res, result, successPayload = {}) {
+    if (result.ok) return res.json({ ok: true, ...successPayload });
+    const status = result.status === 401 ? 503 : (result.status && result.status >= 400 ? result.status : 400);
+    return res.status(status).json({ ok: false, error: result.error || 'OTP request failed' });
+}
+
+app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' }), async (req, res) => {
+    try {
+        const { apiKey, otpId } = fast2SmsConfig();
+        const result = await sendFast2SmsOtp({
+            mobile: req.body?.phone || req.body?.mobile,
+            apiKey,
+            otpId,
+        });
+        sendOtpResponse(res, result);
+    } catch (err) {
+        console.error('[otp/send]', err);
+        res.status(500).json({ ok: false, error: 'Could not send OTP' });
+    }
+});
+
+app.post('/api/otp/verify', rateLimit({ windowMs: 60_000, max: 10, key: 'otp-verify' }), async (req, res) => {
+    try {
+        const { apiKey } = fast2SmsConfig();
+        const result = await verifyFast2SmsOtp({
+            mobile: req.body?.phone || req.body?.mobile,
+            otp: req.body?.otp,
+            apiKey,
+        });
+        sendOtpResponse(res, result, { verified: true });
+    } catch (err) {
+        console.error('[otp/verify]', err);
+        res.status(500).json({ ok: false, error: 'Could not verify OTP' });
+    }
+});
+
+app.post('/api/otp/resend', rateLimit({ windowMs: 60_000, max: 3, key: 'otp-resend' }), async (req, res) => {
+    try {
+        const { apiKey, otpId } = fast2SmsConfig();
+        const result = await resendFast2SmsOtp({
+            mobile: req.body?.phone || req.body?.mobile,
+            apiKey,
+            otpId,
+        });
+        sendOtpResponse(res, result);
+    } catch (err) {
+        console.error('[otp/resend]', err);
+        res.status(500).json({ ok: false, error: 'Could not resend OTP' });
+    }
+});
 
 // --- AUTH ROUTES ---
 

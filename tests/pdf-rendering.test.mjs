@@ -8,7 +8,7 @@ test('bill PDF capture sandbox is not clipped by a tiny hidden wrapper', () => {
   const functionStart = employeeSource.indexOf('async function renderBillToPdfBlob');
   assert.notEqual(functionStart, -1, 'renderBillToPdfBlob must exist');
 
-  const functionEnd = employeeSource.indexOf('// Convert a Blob to a base64 string', functionStart);
+  const functionEnd = employeeSource.indexOf('function blobToBase64', functionStart);
   assert.notEqual(functionEnd, -1, 'renderBillToPdfBlob block must end before blobToBase64');
 
   const source = employeeSource.slice(functionStart, functionEnd);

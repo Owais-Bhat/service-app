@@ -154,6 +154,8 @@ export function renderPremiumBillHTML(data) {
 async function renderBillToPdfBlob(billHTML, filename) {
   const wrapper = document.createElement('div');
   wrapper.setAttribute('aria-hidden', 'true');
+  wrapper.classList.add('pdf-rendering');
+  wrapper.style.width = '794px';
   wrapper.style.cssText = [
     'position:fixed',
     'left:-9999px',
@@ -201,7 +203,7 @@ async function renderBillToPdfBlob(billHTML, filename) {
         allowTaint: false,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: 1024,
+        windowWidth: 794,
         width: 794,
         height: sandbox.offsetHeight,
         scrollX: 0,

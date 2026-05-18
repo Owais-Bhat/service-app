@@ -2057,17 +2057,25 @@ tr:hover td {
   z-index: 5;
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: clamp(32px, 5vw, 80px);
-  padding: clamp(24px, 5vw, 60px) clamp(20px, 5vw, 80px);
-  align-items: center;
+  grid-template-columns: minmax(280px, 520px) minmax(360px, 520px);
+  justify-content: center;
+  gap: clamp(28px, 5vw, 72px);
+  padding: 32px clamp(20px, 5vw, 80px) clamp(36px, 5vw, 60px);
+  align-items: start;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
 }
 
 /* Intro */
-.srf-intro { max-width: 560px; }
+.srf-intro {
+  width: 100%;
+  max-width: 506px;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
 .srf-badge {
   display: inline-flex;
   align-items: center;
@@ -2124,41 +2132,64 @@ tr:hover td {
 
 /* Ads carousel — single rotating slot (image or video) */
 .srf-ads {
-  margin-top: 4px;
-  border-radius: 22px;
+  width: 100%;
+  max-width: 520px;
+  border-radius: 24px;
   background: var(--bg-soft);
   padding: 10px;
-  box-shadow: var(--neu-sm);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.10);
+  overflow: hidden;
 }
 .srf-ad-slot {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 486 / 518;
   border-radius: 16px;
   overflow: hidden;
-  background: var(--bg);
+  background: #fff;
 }
 .srf-ad-media {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 .srf-ad-caption {
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  padding: 14px 16px;
-  background: linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0));
+  padding: 60px 24px 24px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.85));
   color: #fff;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
   line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+}
+.srf-ad-caption span {
+  display: block;
+  animation: srfFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .srf-ad-dots {
   display: flex;
   justify-content: center;
   gap: 8px;
-  padding: 10px 0 4px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+.srf-ad-empty {
+  width: 100%;
+  aspect-ratio: 486 / 518;
+  text-align: center;
+  padding: 40px;
+  border-radius: 24px;
+  background: var(--bg-soft);
+  box-shadow: var(--neu);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 .srf-ad-dot {
   width: 8px;
@@ -2720,15 +2751,54 @@ tr:hover td {
 @media (max-width: 960px) {
   .srf-main {
     grid-template-columns: 1fr;
-    padding: 24px 20px 48px;
+    padding: 22px 20px 48px;
     gap: 24px;
   }
-  .srf-intro { max-width: unset; text-align: center; margin: 0 auto; }
+  .srf-intro {
+    max-width: min(92vw, 506px);
+    justify-self: center;
+    text-align: center;
+    margin: 0 auto;
+  }
+  .srf-ads,
+  .srf-ad-empty {
+    max-width: min(92vw, 520px);
+    margin: 0 auto;
+  }
   .srf-perks { max-width: 420px; margin: 0 auto; }
-  .srf-card-wrap { justify-self: stretch; max-width: unset; }
+  .srf-card-wrap {
+    justify-self: center;
+    max-width: min(92vw, 520px);
+  }
   .srf-logo { height: 44px; }
 }
 @media (max-width: 480px) {
+  .srf-top-banner {
+    padding: 12px 16px 0 !important;
+  }
+  .srf-top-banner > div:last-child {
+    gap: 12px !important;
+  }
+  .srf-top-banner > div:last-child > div {
+    font-size: 0.86rem !important;
+    gap: 8px !important;
+  }
+  .srf-top-banner > div:last-child > div > span {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 12px !important;
+  }
+  .srf-main {
+    padding-top: 18px !important;
+  }
+  .srf-ads {
+    padding: 8px;
+    border-radius: 18px;
+  }
+  .srf-ad-slot,
+  .srf-ad-empty {
+    border-radius: 12px;
+  }
   .srf-card { padding: 24px 20px; border-radius: 22px; }
   .srf-otp-row { gap: 6px; }
   .srf-otp-box { height: 50px; font-size: 1.2rem; }

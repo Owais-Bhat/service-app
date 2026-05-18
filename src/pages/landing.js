@@ -4,48 +4,27 @@ import { ICONS } from '../icons.js';
 
 const LOGO = new URL('../assets/logo.png', import.meta.url).href;
 
-// ────────────────────────────────────────────────────────────────────
-// WhatsApp OTP — DEV MODE
-// ────────────────────────────────────────────────────────────────────
-// For free testing, plug in Meta WhatsApp Cloud API:
-//   1. Create a Meta developer account → register a WhatsApp Business app.
-//   2. Use the free test phone number Meta provides (1000 free conversations/month).
-//   3. Add an authentication template (e.g. "otp_code") with one body variable.
-//   4. Move the call below into a Supabase Edge Function so the access token
-//      stays server-side. Replace the body of `sendWhatsAppOTP` with:
-//
-//      await fetch(`https://graph.facebook.com/v20.0/${PHONE_ID}/messages`, {
-//        method: 'POST',
-//        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-//        body: JSON.stringify({
-//          messaging_product: 'whatsapp',
-//          to: phone,
-//          type: 'template',
-//          template: { name: 'otp_code', language: { code: 'en_US' },
-//            components: [{ type: 'body', parameters: [{ type: 'text', text: code }] }] }
-//        })
-//      });
-// ────────────────────────────────────────────────────────────────────
-// Defaults ON so a real WhatsApp provider isn't required to demo the flow.
-// Set VITE_DEV_OTP_MODE=false in Vercel env (and redeploy) once the provider is wired up.
-const DEV_OTP_MODE = String(import.meta.env.VITE_DEV_OTP_MODE ?? 'true').toLowerCase() !== 'false';
+const API_URL = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? '/api'
+  : 'http://localhost:5000/api';
 
-async function sendWhatsAppOTP(phone, code) {
-  if (DEV_OTP_MODE) {
-    console.info(`[DEV] WhatsApp OTP for ${phone}: ${code}`);
-    return { ok: true, dev: true };
+async function postPublicApi(path, body) {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'Request failed' };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Network request failed' };
   }
-  // Real provider call goes here (via Supabase Edge Function).
-  return { ok: false, error: 'WhatsApp provider not configured' };
 }
 
-async function sendWhatsAppTicket(phone, ticketNo) {
-  if (DEV_OTP_MODE) {
-    console.info(`[DEV] WhatsApp ticket confirmation for ${phone}: ${ticketNo}`);
-    return { ok: true, dev: true };
-  }
-  return { ok: false, error: 'WhatsApp provider not configured' };
-}
+const sendSmsOTP = (phone) => postPublicApi('/otp/send', { phone });
+const verifySmsOTP = (phone, otp) => postPublicApi('/otp/verify', { phone, otp });
+const resendSmsOTP = (phone) => postPublicApi('/otp/resend', { phone });
 
 function generateTicketNo() {
   // NE-YYMMDD-XXXX (4-digit random)
@@ -98,7 +77,6 @@ export function renderLandingPage(container, onPortalClick) {
     step: 1,
     phone: '',
     otp: '',
-    expectedOTP: '',
     captcha: makeCaptcha(),
     locationMode: 'gps',
     locationValue: '',
@@ -153,14 +131,14 @@ export function renderLandingPage(container, onPortalClick) {
         <section class="srf-top-banner" style="max-width:1000px; margin:0 auto; padding: 24px 20px 0; text-align:center;">
           <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
           <h1 class="srf-title" style="text-align:center; margin-bottom:18px;">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
-          <p class="srf-sub" style="margin: 0 auto 32px; text-align:center; max-width:600px;">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
+          <p class="srf-sub" style="margin: 0 auto 32px; text-align:center; max-width:600px;">Raise a service request in three quick steps. We'll send a one-time code by SMS, take your details, and dispatch the right technician.</p>
           
           <div style="display:flex; justify-content:center; gap:32px; flex-wrap:wrap;">
              <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
                <span style="width:44px; height:44px; border-radius:14px; background:rgba(37,211,102,0.15); color:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(37,211,102,0.12);">
                  ${ICONS.whatsapp}
                </span> 
-               WhatsApp verification
+               SMS verification
              </div>
              <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
                <span style="width:44px; height:44px; border-radius:14px; background:rgba(56,189,248,0.15); color:var(--primary); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(56,189,248,0.12);">
@@ -177,19 +155,19 @@ export function renderLandingPage(container, onPortalClick) {
           </div>
         </section>
 
-        <main class="srf-main" style="align-items: stretch; padding-top: 32px;">
-          <section class="srf-intro" style="display:flex; flex-direction:column; height:100%;">
+        <main class="srf-main">
+          <section class="srf-intro">
             ${state.ads.length > 0 ? `
-              <div class="srf-ads" id="srf-ads" style="flex:1; display:flex; flex-direction:column; width:100%; max-width:100%; margin:0; border-radius:24px; overflow:hidden; box-shadow:0 12px 32px rgba(0,0,0,0.1); background:var(--bg-soft);">
-                <div class="srf-ad-slot" id="srf-ad-slot" style="flex:1; min-height:400px; position:relative; overflow:hidden; background:#000;"></div>
+              <div class="srf-ads" id="srf-ads">
+                <div class="srf-ad-slot" id="srf-ad-slot"></div>
                 ${state.ads.length > 1 ? `
-                  <div class="srf-ad-dots" id="srf-ad-dots" style="display:flex; justify-content:center; gap:8px; padding:16px; background:var(--bg-soft); border-top:1px solid var(--border);">
+                  <div class="srf-ad-dots" id="srf-ad-dots">
                     ${state.ads.map((_, i) => `<button type="button" class="srf-ad-dot" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
                   </div>
                 ` : ''}
               </div>
             ` : `
-               <div style="flex:1; min-height:400px; text-align:center; padding: 40px; border-radius:24px; background:var(--bg-soft); box-shadow:var(--neu); display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%;">
+               <div class="srf-ad-empty">
                   <h2 style="font-size:1.5rem; font-weight:800; color:var(--text); margin-bottom:12px;">Welcome to Networking Experts</h2>
                   <p style="color:var(--text-soft); font-size:1rem;">Your trusted partner for all networking needs.</p>
                </div>
@@ -246,12 +224,12 @@ export function renderLandingPage(container, onPortalClick) {
       const ad = state.ads[idx];
       const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
       const media = isVideo
-        ? `<video src="${escapeAttr(ad.url)}" autoplay muted loop playsinline style="width:100%; height:100%; object-fit:cover; animation: srfAdZoom 15s alternate infinite ease-in-out;"></video>`
-        : `<img src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" style="width:100%; height:100%; object-fit:cover; animation: srfAdZoom 15s alternate infinite ease-in-out;" loading="lazy"/>`;
+        ? `<video class="srf-ad-media" src="${escapeAttr(ad.url)}" autoplay muted loop playsinline></video>`
+        : `<img class="srf-ad-media" src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" loading="lazy"/>`;
       
       const captionHtml = ad.caption 
-        ? `<div style="position:absolute; bottom:0; left:0; right:0; padding:60px 24px 24px; background:linear-gradient(transparent, rgba(0,0,0,0.85)); display:flex; flex-direction:column; justify-content:flex-end;">
-             <span style="color:#fff; font-size:1.15rem; font-weight:700; letter-spacing:0.02em; text-shadow:0 2px 6px rgba(0,0,0,0.6); animation: srfFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;">${escapeHTML(ad.caption)}</span>
+        ? `<div class="srf-ad-caption">
+             <span>${escapeHTML(ad.caption)}</span>
            </div>` 
         : '';
 
@@ -314,7 +292,7 @@ export function renderLandingPage(container, onPortalClick) {
   // ── STEP 1: phone + captcha ──────────────────────────
   function stepPhone() {
     return `
-      <h2 class="srf-card-title">Enter your WhatsApp number</h2>
+      <h2 class="srf-card-title">Enter your mobile number</h2>
       <p class="srf-card-sub">We'll send a one-time code to verify it's you.</p>
 
       <label class="srf-label" for="srf-phone">Phone number</label>
@@ -333,14 +311,8 @@ export function renderLandingPage(container, onPortalClick) {
         <button type="button" class="srf-input-action" id="srf-refresh-captcha" title="New question">${ICONS.refresh}</button>
       </div>
 
-      ${DEV_OTP_MODE ? `
-        <button class="srf-btn srf-btn-secondary" id="srf-demo-fill" style="margin-top:12px; background:rgba(16,185,129,0.1); border:1px dashed var(--primary); color:var(--primary);">
-          ${ICONS.shield} <span>Fill Demo Data</span>
-        </button>
-      ` : ''}
-
       <button class="srf-btn srf-btn-primary" id="srf-send-otp">
-        <span>Send OTP on WhatsApp</span> ${ICONS.arrowRight}
+        <span>Send OTP by SMS</span> ${ICONS.arrowRight}
       </button>
 
       <p class="srf-fineprint">${ICONS.shield}<span>Your number is only used to verify and contact you about this request.</span></p>
@@ -352,15 +324,13 @@ export function renderLandingPage(container, onPortalClick) {
     return `
       <button class="srf-back" id="srf-back">${ICONS.arrowLeft}<span>Back</span></button>
       <h2 class="srf-card-title">Enter the 6-digit code</h2>
-      <p class="srf-card-sub">Sent on WhatsApp to <strong>+91 ${formatPhone(state.phone)}</strong></p>
+      <p class="srf-card-sub">Sent by SMS to <strong>+91 ${formatPhone(state.phone)}</strong></p>
 
       <div class="srf-otp-row">
         ${Array.from({ length: 6 }).map((_, i) => `
           <input class="srf-otp-box" maxlength="1" inputmode="numeric" data-idx="${i}" />
         `).join('')}
       </div>
-
-      ${DEV_OTP_MODE ? `<div class="srf-dev-hint">${ICONS.shield}<span>Dev mode: your code is <strong>${state.expectedOTP}</strong></span></div>` : ''}
 
       <button class="srf-btn srf-btn-primary" id="srf-verify-otp">
         <span>Verify & continue</span> ${ICONS.arrowRight}
@@ -432,12 +402,6 @@ export function renderLandingPage(container, onPortalClick) {
         <input id="srf-other" type="text" placeholder="Describe your issue briefly" class="srf-input" />
       </div>
 
-      ${DEV_OTP_MODE ? `
-        <button class="srf-btn srf-btn-secondary" id="srf-demo-fill-form" style="margin-top:12px; background:rgba(16,185,129,0.1); border:1px dashed var(--primary); color:var(--primary);">
-          ${ICONS.shield} <span>Fill Demo Details</span>
-        </button>
-      ` : ''}
-
       <button class="srf-btn srf-btn-primary" id="srf-submit">
         <span>Submit request</span> ${ICONS.arrowRight}
       </button>
@@ -459,7 +423,7 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
 
         <p class="srf-fineprint" style="justify-content:center;text-align:center;">
-          ${ICONS.whatsapp}<span>A confirmation has been sent to your WhatsApp.</span>
+          ${ICONS.phone}<span>Your request has been saved with this mobile number.</span>
         </p>
 
         <button class="srf-btn srf-btn-primary" id="srf-track-now">
@@ -487,7 +451,7 @@ export function renderLandingPage(container, onPortalClick) {
     }
     return `
       <h2 class="srf-card-title">File a complaint</h2>
-      <p class="srf-card-sub">Tell us what went wrong with a previous service. We verify the ticket against your WhatsApp number before forwarding it to the team.</p>
+      <p class="srf-card-sub">Tell us what went wrong with a previous service. We verify the ticket against your mobile number before forwarding it to the team.</p>
 
       <label class="srf-label" for="srf-cmp-tno">Ticket number</label>
       <div class="srf-input-wrap">
@@ -522,7 +486,7 @@ export function renderLandingPage(container, onPortalClick) {
     if (state.trackList) return renderTrackList(state.trackList);
     return `
       <h2 class="srf-card-title">Track your requests</h2>
-      <p class="srf-card-sub">Enter your WhatsApp number to see all the tickets you've filed. Add a ticket number to jump to one directly.</p>
+      <p class="srf-card-sub">Enter your mobile number to see all the tickets you've filed. Add a ticket number to jump to one directly.</p>
 
       <label class="srf-label" for="srf-track-phone">Phone number</label>
       <div class="srf-input-wrap">
@@ -741,13 +705,6 @@ export function renderLandingPage(container, onPortalClick) {
       render();
     });
 
-    bind('#srf-demo-fill', () => {
-      state.phone = '9876543210';
-      state.captcha = { a: 1, b: 1 };
-      render();
-      container.querySelector('#srf-captcha').value = '2';
-    });
-
     if (sendBtn) sendBtn.onclick = async () => {
       if (!/^\d{10}$/.test(state.phone)) return toast('Enter a valid 10-digit number', 'error');
       const ans = parseInt(capEl.value, 10);
@@ -759,12 +716,9 @@ export function renderLandingPage(container, onPortalClick) {
 
       sendBtn.disabled = true;
       sendBtn.innerHTML = `<span class="srf-spin"></span><span>Sending…</span>`;
-      const code = DEV_OTP_MODE ? '123456' : String(Math.floor(100000 + Math.random() * 900000));
-      state.expectedOTP = code;
-      const res = await sendWhatsAppOTP('+91' + state.phone, code);
+      const res = await sendSmsOTP('+91' + state.phone);
       if (!res.ok) { toast(res.error || 'Could not send OTP', 'error'); render(); return; }
-      if (res.dev) toast('Dev OTP shown on screen — check console', 'info');
-      else toast('OTP sent on WhatsApp', 'success');
+      toast('OTP sent by SMS', 'success');
       state.step = 2;
       render();
     };
@@ -792,18 +746,21 @@ export function renderLandingPage(container, onPortalClick) {
 
     bind('#srf-back', () => { state.step = 1; render(); });
 
-    bind('#srf-verify-otp', () => {
+    bind('#srf-verify-otp', async () => {
       const entered = boxes.map(b => b.value).join('');
       if (entered.length !== 6) return toast('Enter the full 6-digit code', 'error');
-      if (entered !== state.expectedOTP) return toast('Incorrect code', 'error');
+      const btn = container.querySelector('#srf-verify-otp');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="srf-spin"></span><span>Verifying...</span>`;
+      const res = await verifySmsOTP('+91' + state.phone, entered);
+      if (!res.ok) { toast(res.error || 'Incorrect code', 'error'); render(); return; }
       state.step = 3;
       render();
     });
 
     bind('#srf-resend', async () => {
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      state.expectedOTP = code;
-      await sendWhatsAppOTP('+91' + state.phone, code);
+      const res = await resendSmsOTP('+91' + state.phone);
+      if (!res.ok) return toast(res.error || 'Could not resend OTP', 'error');
       toast('New code sent', 'success');
       render();
     });
@@ -815,15 +772,6 @@ export function renderLandingPage(container, onPortalClick) {
     issueEl.onchange = () => {
       otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
     };
-
-    bind('#srf-demo-fill-form', () => {
-      container.querySelector('#srf-name').value = 'John Doe (Demo)';
-      state.locationMode = 'manual';
-      state.locationValue = '123 Tech Park, Silicon Valley';
-      container.querySelector('#srf-location').value = state.locationValue;
-      container.querySelector('#srf-issue').value = 'internet-down';
-      container.querySelector('#srf-time').value = 'Morning (10 AM - 1 PM)';
-    });
 
     container.querySelectorAll('.srf-seg').forEach(seg => {
       seg.onclick = () => {
@@ -912,7 +860,6 @@ export function renderLandingPage(container, onPortalClick) {
       }
 
       state.ticketNo = ticket_no;
-      await sendWhatsAppTicket('+91' + state.phone, ticket_no);
       toast('Request submitted', 'success');
       state.step = 4;
       render();
@@ -941,7 +888,6 @@ export function renderLandingPage(container, onPortalClick) {
       state.step = 1;
       state.phone = '';
       state.otp = '';
-      state.expectedOTP = '';
       state.ticketNo = '';
       state.captcha = makeCaptcha();
       state.locationMode = 'gps';

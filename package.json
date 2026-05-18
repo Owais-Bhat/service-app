@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test tests/pdf-rendering.test.mjs",
+    "test": "node --test tests/pdf-rendering.test.mjs tests/fast2sms.test.mjs",
     "preview": "vite preview",
     "start": "node server.cjs"
   },
