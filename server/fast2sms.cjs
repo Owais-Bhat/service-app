@@ -1,6 +1,7 @@
 const FAST2SMS_OTP_SEND_URL = 'https://www.fast2sms.com/dev/otp/send';
 const FAST2SMS_OTP_VERIFY_URL = 'https://www.fast2sms.com/dev/otp/verify';
 const FAST2SMS_OTP_RESEND_URL = 'https://www.fast2sms.com/dev/otp/resend';
+const FAST2SMS_BULK_URL = 'https://www.fast2sms.com/dev/bulkV2';
 
 function normalizeIndianMobile(input) {
     const digits = String(input || '').replace(/\D/g, '');
@@ -58,6 +59,19 @@ async function sendFast2SmsOtp({ mobile, apiKey, otpId, fetchImpl, otpLength = 6
     }, { apiKey, fetchImpl });
 }
 
+async function sendFast2SmsQuickOtp({ mobile, otp, apiKey, fetchImpl, brand = 'Networking Experts' }) {
+    const normalizedMobile = normalizeIndianMobile(mobile);
+    if (!normalizedMobile) return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' };
+    if (!/^\d{4,10}$/.test(String(otp || ''))) return { ok: false, error: 'Enter a valid OTP.' };
+
+    return fast2SmsPost(FAST2SMS_BULK_URL, {
+        route: 'q',
+        numbers: normalizedMobile,
+        message: `${otp} is your ${brand} verification code. It is valid for 10 minutes.`,
+        flash: '0',
+    }, { apiKey, fetchImpl });
+}
+
 async function verifyFast2SmsOtp({ mobile, otp, apiKey, fetchImpl }) {
     const normalizedMobile = normalizeIndianMobile(mobile);
     if (!normalizedMobile) return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' };
@@ -83,6 +97,7 @@ async function resendFast2SmsOtp({ mobile, apiKey, otpId, fetchImpl }) {
 module.exports = {
     normalizeIndianMobile,
     sendFast2SmsOtp,
+    sendFast2SmsQuickOtp,
     verifyFast2SmsOtp,
     resendFast2SmsOtp,
 };
