@@ -853,16 +853,19 @@ app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' 
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         const otp = generateOtpCode();
-        const result = otpId ? await sendFast2SmsOtp({
-            mobile: normalizedMobile,
-            apiKey,
-            otpId,
-            otp,
-        }) : await sendFast2SmsQuickOtp({
-            mobile: normalizedMobile,
-            apiKey,
-            otp,
-        });
+
+        // Dev mode: no SMS API key configured or explicitly enabled via env var.
+        // Stores OTP locally and echoes it so the form remains usable without a
+        // real SMS provider (DLT registration pending, staging, etc.).
+        if (!apiKey || process.env.DEV_OTP_MODE === 'true') {
+            storeLocalOtp(normalizedMobile, otp);
+            console.log(`\n🔑 [DEV OTP] ${normalizedMobile}: ${otp}\n`);
+            return res.json({ ok: true, devMode: true, devOtp: otp });
+        }
+
+        const result = otpId
+            ? await sendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId })
+            : await sendFast2SmsQuickOtp({ mobile: normalizedMobile, apiKey, otp });
         if (result.ok && !otpId) storeLocalOtp(normalizedMobile, otp);
         sendOtpResponse(res, result);
     } catch (err) {
@@ -896,15 +899,16 @@ app.post('/api/otp/resend', rateLimit({ windowMs: 60_000, max: 3, key: 'otp-rese
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         const otp = generateOtpCode();
-        const result = otpId ? await resendFast2SmsOtp({
-            mobile: normalizedMobile,
-            apiKey,
-            otpId,
-        }) : await sendFast2SmsQuickOtp({
-            mobile: normalizedMobile,
-            apiKey,
-            otp,
-        });
+
+        if (!apiKey || process.env.DEV_OTP_MODE === 'true') {
+            storeLocalOtp(normalizedMobile, otp);
+            console.log(`\n🔑 [DEV OTP resend] ${normalizedMobile}: ${otp}\n`);
+            return res.json({ ok: true, devMode: true, devOtp: otp });
+        }
+
+        const result = otpId
+            ? await resendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId })
+            : await sendFast2SmsQuickOtp({ mobile: normalizedMobile, apiKey, otp });
         if (result.ok && !otpId) storeLocalOtp(normalizedMobile, otp);
         sendOtpResponse(res, result);
     } catch (err) {

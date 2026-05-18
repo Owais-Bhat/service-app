@@ -677,7 +677,11 @@ export function renderLandingPage(container, onPortalClick) {
     const sendBtn = container.querySelector('#srf-send-otp');
 
     phoneEl.addEventListener('input', e => {
-      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+      let v = e.target.value.replace(/\D/g, '');
+      // Strip country code from pasted numbers (e.g. +91 or 0 prefix)
+      if (v.length > 10 && v.startsWith('91')) v = v.slice(2);
+      else if (v.length === 11 && v.startsWith('0')) v = v.slice(1);
+      e.target.value = v.slice(0, 10);
       state.phone = e.target.value;
     });
 
@@ -699,7 +703,11 @@ export function renderLandingPage(container, onPortalClick) {
       sendBtn.innerHTML = `<span class="srf-spin"></span><span>Sending…</span>`;
       const res = await sendSmsOTP('+91' + state.phone);
       if (!res.ok) { toast(res.error || 'Could not send OTP', 'error'); render(); return; }
-      toast('OTP sent by SMS', 'success');
+      if (res.devMode && res.devOtp) {
+        toast(`Demo mode — your code is: ${res.devOtp}`, 'warning');
+      } else {
+        toast('OTP sent by SMS', 'success');
+      }
       state.step = 2;
       render();
     };
@@ -742,7 +750,11 @@ export function renderLandingPage(container, onPortalClick) {
     bind('#srf-resend', async () => {
       const res = await resendSmsOTP('+91' + state.phone);
       if (!res.ok) return toast(res.error || 'Could not resend OTP', 'error');
-      toast('New code sent', 'success');
+      if (res.devMode && res.devOtp) {
+        toast(`Demo mode — new code: ${res.devOtp}`, 'warning');
+      } else {
+        toast('New code sent', 'success');
+      }
       render();
     });
   }
