@@ -863,6 +863,24 @@ export async function renderAllTickets(container) {
   const { data: tickets } = await supabase.from('tickets').select('*, inquiries(*)').order('created_at', { ascending: false });
   const { data: profiles } = await supabase.from('profiles').select('id, full_name');
   const profileMap = (profiles || []).reduce((acc, p) => ({ ...acc, [p.id]: p.full_name }), {});
+  const ticketRows = (tickets || []).map(t => {
+    const inq = Array.isArray(t.inquiries) ? t.inquiries[0] : t.inquiries;
+    const contact = inq
+      ? `<small>${inq.phone || '—'}<br/>${inq.location ? inq.location.slice(0, 20) + '...' : '—'}</small>`
+      : '—';
+    const action = inq?.id
+      ? `<button class="btn btn-primary btn-sm all-ticket-manage" data-id="${inq.id}">Manage</button>`
+      : '<span style="color:var(--text-dim);font-size:0.8rem;">No request</span>';
+    return `<tr>
+      <td><code style="font-size:0.75rem;">#${t.id.slice(0,8)}</code></td>
+      <td><b>${inq ? inq.full_name : 'Guest'}</b></td>
+      <td>${contact}</td>
+      <td>${t.assigned_to ? profileMap[t.assigned_to] || 'Staff' : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>
+      <td>${statusBadge(t.status)}</td>
+      <td><small>${formatDate(t.created_at)}</small></td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
 
   container.innerHTML = `
     <div class="page-header">
@@ -880,10 +898,12 @@ export async function renderAllTickets(container) {
               <th>Assigned To</th>
               <th>Status</th>
               <th>Created</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            ${(tickets||[]).map(t => {
+            ${ticketRows || '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No tickets found</td></tr>'}
+            ${'' && (tickets||[]).map(t => {
               const inq = t.inquiries?.[0];
               return `<tr>
                 <td><code style="font-size:0.75rem;">#${t.id.slice(0,8)}</code></td>
@@ -899,6 +919,9 @@ export async function renderAllTickets(container) {
       </div>
     </div>
   `;
+  container.querySelectorAll('.all-ticket-manage').forEach(btn => {
+    btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAllTickets(container));
+  });
 }
 
 export async function renderLeaveRequests(container) {
