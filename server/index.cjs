@@ -821,7 +821,8 @@ function fast2SmsConfig() {
 }
 
 // Fire-and-forget DLT notification SMS. Never throws — failures are logged only.
-// templateEnvKey: the env var name holding the DLT template ID (e.g. 'SMS_TID_TICKET')
+// templateEnvKey: the env var name holding the Fast2SMS DLT Manager Message ID
+// (e.g. 'SMS_TID_TICKET'). This is passed to Fast2SMS as the `message` param.
 // variables: array of values matching {#var#} placeholders in the template
 function smsNotify(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;

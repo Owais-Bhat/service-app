@@ -100,7 +100,7 @@ test('resendFast2SmsOtp posts mobile and OTP id to Fast2SMS resend endpoint', as
   });
 });
 
-test('sendDltSms posts DLT template variables to Fast2SMS bulk route', async () => {
+test('sendDltSms sends Fast2SMS DLT message id and variables to bulk route', async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
@@ -113,7 +113,7 @@ test('sendDltSms posts DLT template variables to Fast2SMS bulk route', async () 
 
   const result = await sendDltSms({
     mobile: '+91 98765 43210',
-    templateId: 'payment-template-1',
+    templateId: '123456',
     variables: ['Customer', 'Rs.500', 'NE-123', 'BILL-123'],
     apiKey: 'secret-key',
     senderId: 'NTWRKE',
@@ -121,14 +121,16 @@ test('sendDltSms posts DLT template variables to Fast2SMS bulk route', async () 
   });
 
   assert.equal(result.ok, true);
-  assert.equal(calls[0].url, 'https://www.fast2sms.com/dev/bulkV2');
-  assert.equal(calls[0].options.headers.authorization, 'secret-key');
-  assert.deepEqual(JSON.parse(calls[0].options.body), {
-    route: 'dlt',
-    numbers: '9876543210',
-    sender_id: 'NTWRKE',
-    variables_values: 'Customer|Rs.500|NE-123|BILL-123',
-    flash: '0',
-    dlt_te_id: 'payment-template-1',
-  });
+  assert.equal(calls[0].options.method, 'GET');
+  assert.equal(calls[0].options.headers.accept, 'application/json');
+
+  const url = new URL(calls[0].url);
+  assert.equal(`${url.origin}${url.pathname}`, 'https://www.fast2sms.com/dev/bulkV2');
+  assert.equal(url.searchParams.get('authorization'), 'secret-key');
+  assert.equal(url.searchParams.get('route'), 'dlt');
+  assert.equal(url.searchParams.get('numbers'), '9876543210');
+  assert.equal(url.searchParams.get('sender_id'), 'NTWRKE');
+  assert.equal(url.searchParams.get('message'), '123456');
+  assert.equal(url.searchParams.get('variables_values'), 'Customer|Rs.500|NE-123|BILL-123');
+  assert.equal(url.searchParams.get('flash'), '0');
 });

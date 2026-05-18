@@ -46,6 +46,36 @@ async function fast2SmsPost(url, body, { apiKey, fetchImpl = fetch } = {}) {
     return { ok: true, status: response.status, provider: payload, otp: payload?.otp };
 }
 
+async function fast2SmsGet(url, params, { apiKey, fetchImpl = fetch } = {}) {
+    if (!apiKey) return { ok: false, error: 'SMS_API is not configured on the server.' };
+
+    const requestUrl = new URL(url);
+    requestUrl.search = new URLSearchParams({
+        authorization: apiKey,
+        ...params,
+    }).toString();
+
+    const response = await fetchImpl(requestUrl.toString(), {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+    });
+
+    let payload = null;
+    try { payload = await response.json(); }
+    catch { payload = null; }
+
+    if (!response.ok || payload?.return === false) {
+        return {
+            ok: false,
+            status: response.status,
+            error: getFast2SmsMessage(payload),
+            provider: payload,
+        };
+    }
+
+    return { ok: true, status: response.status, provider: payload };
+}
+
 async function sendFast2SmsOtp({ mobile, apiKey, otpId, fetchImpl, otpLength = 6, otpExpiry = 10 }) {
     const normalizedMobile = normalizeIndianMobile(mobile);
     if (!normalizedMobile) return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' };
@@ -82,6 +112,7 @@ async function resendFast2SmsOtp({ mobile, apiKey, otpId, fetchImpl }) {
 }
 
 // Send a DLT-registered notification SMS via Fast2SMS bulk route.
+// templateId is the Fast2SMS DLT Manager Message ID required in the `message` field.
 // variables: array of string values matching {#var#} placeholders in the template,
 // e.g. ['NE-260518-1234', 'John Doe'] for a 2-variable template.
 // Failures are logged but never thrown — notifications are best-effort.
@@ -90,13 +121,13 @@ async function sendDltSms({ mobile, templateId, variables = [], apiKey, senderId
     const normalizedMobile = normalizeIndianMobile(mobile);
     if (!normalizedMobile) return { ok: false, error: 'Invalid mobile number' };
 
-    return fast2SmsPost(FAST2SMS_BULK_URL, {
+    return fast2SmsGet(FAST2SMS_BULK_URL, {
         route: 'dlt',
         numbers: normalizedMobile,
         sender_id: senderId || 'NTWRKE',
+        message: templateId,
         variables_values: variables.join('|'),
         flash: '0',
-        dlt_te_id: templateId,
     }, { apiKey, fetchImpl });
 }
 
