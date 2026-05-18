@@ -142,20 +142,19 @@ export function renderLandingPage(container, onPortalClick) {
         <div class="srf-bg-orb srf-orb-3"></div>
 
         <nav class="srf-nav">
-          <div style="display:flex; align-items:center; gap:16px;">
-            <img src="${LOGO}" alt="Networking Experts" class="srf-logo"
-                 onerror="this.outerHTML='<span class=\\'srf-brand\\'>Networking Experts</span>'"/>
-            <div class="srf-nav-title">
-              <span style="font-weight:800; color:var(--text); font-size:1.1rem;">Need help?</span> <span class="srf-grad" style="font-size:1.1rem;">We'll be there in minutes.</span>
-            </div>
-          </div>
+          <img src="${LOGO}" alt="Networking Experts" class="srf-logo"
+               onerror="this.outerHTML='<span class=\\'srf-brand\\'>Networking Experts</span>'"/>
           <div class="srf-nav-actions">
             <button class="srf-icon-btn theme-toggle-btn" title="Toggle theme">${themeIcon}</button>
             <button class="srf-icon-btn srf-staff-btn" title="Staff Login">${ICONS.staff}</button>
           </div>
         </nav>
 
-        <section class="srf-top-banner" style="max-width:1400px; margin:0 auto; padding: 24px 40px 0; text-align:center;">
+        <section class="srf-top-banner" style="max-width:1000px; margin:0 auto; padding: 24px 20px 0; text-align:center;">
+          <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
+          <h1 class="srf-title" style="text-align:center; margin-bottom:18px;">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
+          <p class="srf-sub" style="margin: 0 auto 32px; text-align:center; max-width:600px;">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
+          
           <div style="display:flex; justify-content:center; gap:32px; flex-wrap:wrap;">
              <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
                <span style="width:44px; height:44px; border-radius:14px; background:rgba(37,211,102,0.15); color:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(37,211,102,0.12);">
@@ -167,7 +166,7 @@ export function renderLandingPage(container, onPortalClick) {
                <span style="width:44px; height:44px; border-radius:14px; background:rgba(56,189,248,0.15); color:var(--primary); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(56,189,248,0.12);">
                  ${ICONS.crosshair}
                </span> 
-               Auto-detect location
+               Auto-detect your location
              </div>
              <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
                <span style="width:44px; height:44px; border-radius:14px; background:rgba(245,158,11,0.15); color:var(--warning); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(245,158,11,0.12);">
