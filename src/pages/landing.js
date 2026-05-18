@@ -127,6 +127,14 @@ export function renderLandingPage(container, onPortalClick) {
     container.innerHTML = `
       <style>
         @media (max-width: 640px) { .srf-nav-title { display: none !important; } }
+        @keyframes srfAdZoom {
+          0% { transform: scale(1); }
+          100% { transform: scale(1.08); }
+        }
+        @keyframes srfFadeUp {
+          0% { opacity: 0; transform: translateY(15px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
       </style>
       <div class="srf-page">
         <div class="srf-bg-orb srf-orb-1"></div>
@@ -147,13 +155,13 @@ export function renderLandingPage(container, onPortalClick) {
           </div>
         </nav>
 
-        <main class="srf-main">
+        <main class="srf-main" style="align-items: flex-start;">
           <section class="srf-intro">
             <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
             <p class="srf-sub" style="margin-bottom: 24px;">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
             ${state.ads.length > 0 ? `
-              <div class="srf-ads" id="srf-ads" style="width:100%; max-width:800px; margin:0 auto 24px; border-radius:24px; overflow:hidden; box-shadow:var(--neu); background:var(--bg-soft);">
-                <div class="srf-ad-slot" id="srf-ad-slot" style="aspect-ratio:16/9; position:relative;"></div>
+              <div class="srf-ads" id="srf-ads" style="width:100%; max-width:800px; margin:0 auto 24px; border-radius:24px; overflow:hidden; box-shadow:0 12px 32px rgba(0,0,0,0.1); background:var(--bg-soft);">
+                <div class="srf-ad-slot" id="srf-ad-slot" style="height:350px; position:relative; overflow:hidden; background:#000;"></div>
                 ${state.ads.length > 1 ? `
                   <div class="srf-ad-dots" id="srf-ad-dots" style="display:flex; justify-content:center; gap:8px; padding:12px; background:var(--bg-soft);">
                     ${state.ads.map((_, i) => `<button type="button" class="srf-ad-dot" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
@@ -218,9 +226,16 @@ export function renderLandingPage(container, onPortalClick) {
       const ad = state.ads[idx];
       const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
       const media = isVideo
-        ? `<video src="${escapeAttr(ad.url)}" autoplay muted loop playsinline class="srf-ad-media"></video>`
-        : `<img src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" class="srf-ad-media" loading="lazy"/>`;
-      slot.innerHTML = `${media}${ad.caption ? `<div class="srf-ad-caption">${escapeHTML(ad.caption)}</div>` : ''}`;
+        ? `<video src="${escapeAttr(ad.url)}" autoplay muted loop playsinline style="width:100%; height:100%; object-fit:cover; animation: srfAdZoom 15s alternate infinite ease-in-out;"></video>`
+        : `<img src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" style="width:100%; height:100%; object-fit:cover; animation: srfAdZoom 15s alternate infinite ease-in-out;" loading="lazy"/>`;
+      
+      const captionHtml = ad.caption 
+        ? `<div style="position:absolute; bottom:0; left:0; right:0; padding:60px 24px 24px; background:linear-gradient(transparent, rgba(0,0,0,0.85)); display:flex; flex-direction:column; justify-content:flex-end;">
+             <span style="color:#fff; font-size:1.15rem; font-weight:700; letter-spacing:0.02em; text-shadow:0 2px 6px rgba(0,0,0,0.6); animation: srfFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;">${escapeHTML(ad.caption)}</span>
+           </div>` 
+        : '';
+
+      slot.innerHTML = `${media}${captionHtml}`;
       dots.forEach((d, i) => d.classList.toggle('active', i === idx));
     };
 
