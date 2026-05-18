@@ -177,19 +177,19 @@ export function renderLandingPage(container, onPortalClick) {
           </div>
         </section>
 
-        <main class="srf-main" style="align-items: flex-start; padding-top: 32px;">
-          <section class="srf-intro">
+        <main class="srf-main" style="align-items: stretch; padding-top: 32px;">
+          <section class="srf-intro" style="display:flex; flex-direction:column; height:100%;">
             ${state.ads.length > 0 ? `
-              <div class="srf-ads" id="srf-ads" style="width:100%; max-width:800px; margin:0 auto; border-radius:24px; overflow:hidden; box-shadow:0 12px 32px rgba(0,0,0,0.1); background:var(--bg-soft);">
-                <div class="srf-ad-slot" id="srf-ad-slot" style="height:350px; position:relative; overflow:hidden; background:#000;"></div>
+              <div class="srf-ads" id="srf-ads" style="flex:1; display:flex; flex-direction:column; width:100%; max-width:100%; margin:0; border-radius:24px; overflow:hidden; box-shadow:0 12px 32px rgba(0,0,0,0.1); background:var(--bg-soft);">
+                <div class="srf-ad-slot" id="srf-ad-slot" style="flex:1; min-height:400px; position:relative; overflow:hidden; background:#000;"></div>
                 ${state.ads.length > 1 ? `
-                  <div class="srf-ad-dots" id="srf-ad-dots" style="display:flex; justify-content:center; gap:8px; padding:12px; background:var(--bg-soft);">
+                  <div class="srf-ad-dots" id="srf-ad-dots" style="display:flex; justify-content:center; gap:8px; padding:16px; background:var(--bg-soft); border-top:1px solid var(--border);">
                     ${state.ads.map((_, i) => `<button type="button" class="srf-ad-dot" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
                   </div>
                 ` : ''}
               </div>
             ` : `
-               <div style="text-align:center; padding: 40px; border-radius:24px; background:var(--bg-soft); box-shadow:var(--neu); height: 350px; display:flex; flex-direction:column; align-items:center; justify-content:center; max-width:800px; margin:0 auto;">
+               <div style="flex:1; min-height:400px; text-align:center; padding: 40px; border-radius:24px; background:var(--bg-soft); box-shadow:var(--neu); display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%;">
                   <h2 style="font-size:1.5rem; font-weight:800; color:var(--text); margin-bottom:12px;">Welcome to Networking Experts</h2>
                   <p style="color:var(--text-soft); font-size:1rem;">Your trusted partner for all networking needs.</p>
                </div>
