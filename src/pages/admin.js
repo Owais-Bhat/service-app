@@ -2366,6 +2366,12 @@ export async function renderAdsTab(container) {
                   <td><span class="badge ${a.kind === 'video' ? 'badge-in_progress' : 'badge-resolved'}">${a.kind}</span></td>
                   <td style="max-width:240px;white-space:normal;font-size:0.85rem;color:var(--text-soft)">${escapeHtml(a.caption || '')}</td>
                   <td><small>${((Number(a.duration_ms) || 6000) / 1000).toFixed(1)}s</small></td>
+                  <td>
+                    <div style="font-size:0.75rem; color:var(--text-soft)">
+                      <div><b>Start:</b> ${a.starts_at ? new Date(a.starts_at).toLocaleString() : 'Now'}</div>
+                      <div><b>End:</b> ${a.expires_at ? new Date(a.expires_at).toLocaleString() : 'Never'}</div>
+                    </div>
+                  </td>
                   <td>${a.active ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-danger">Hidden</span>'}</td>
                   <td>
                     <button class="btn btn-secondary btn-sm ad-edit-btn" data-id="${a.id}">Edit</button>
@@ -2426,10 +2432,23 @@ function openAdEditor(ad, onChange) {
           </label>
         </div>
 
-        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Media URL</label>
-        <input id="ad-url" type="url" placeholder="https://…/image.jpg or https://…/video.mp4"
-               value="${escapeHtml(ad?.url || '')}"
-               style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;margin-bottom:14px;"/>
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Media Source</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <label style="font-size:0.85rem;cursor:pointer;"><input type="radio" name="media-source" value="upload" checked> Upload File</label>
+            <label style="font-size:0.85rem;cursor:pointer;"><input type="radio" name="media-source" value="url"> Enter URL</label>
+          </div>
+          
+          <div id="media-upload-div">
+            <input type="file" id="ad-file" accept="image/*,video/*" style="width:100%;padding:8px;border-radius:10px;border:1px dashed var(--border);background:var(--bg);font-size:0.9rem;" />
+          </div>
+          <div id="media-url-div" style="display:none;">
+            <input id="ad-url" type="url" placeholder="https://…/image.jpg or https://…/video.mp4"
+                   value="${escapeHtml(ad?.url || '')}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+          ${ad?.url ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;overflow:hidden;text-overflow:ellipsis;">Current URL: <a href="${escapeHtml(ad.url)}" target="_blank" style="color:var(--primary)">${escapeHtml(ad.url)}</a></div>` : ''}
+        </div>
 
         <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Caption <span style="color:var(--text-dim);font-weight:500">(optional, max 255 chars)</span></label>
         <input id="ad-caption" type="text" maxlength="255" placeholder="Short overlay text"
@@ -2451,6 +2470,21 @@ function openAdEditor(ad, onChange) {
           </div>
         </div>
 
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Starts At (optional)</label>
+            <input id="ad-starts" type="datetime-local"
+                   value="${ad?.starts_at ? new Date(new Date(ad.starts_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+          <div>
+            <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Expires At (optional)</label>
+            <input id="ad-expires" type="datetime-local"
+                   value="${ad?.expires_at ? new Date(new Date(ad.expires_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+        </div>
+
         <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.9rem;">
           <input id="ad-active" type="checkbox" ${(!ad || ad.active) ? 'checked' : ''}/>
           Active (show on landing page)
@@ -2468,16 +2502,62 @@ function openAdEditor(ad, onChange) {
   overlay.querySelector('#ad-cancel').onclick = close;
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
+  overlay.querySelectorAll('input[name="media-source"]').forEach(r => {
+    r.onchange = () => {
+      overlay.querySelector('#media-upload-div').style.display = r.value === 'upload' ? 'block' : 'none';
+      overlay.querySelector('#media-url-div').style.display = r.value === 'url' ? 'block' : 'none';
+    };
+  });
+
   overlay.querySelector('#ad-save').onclick = async () => {
     const kind = overlay.querySelector('input[name="ad-kind"]:checked').value;
-    const url = overlay.querySelector('#ad-url').value.trim();
     const caption = overlay.querySelector('#ad-caption').value.trim();
     const durationSec = parseFloat(overlay.querySelector('#ad-duration').value);
     const position = parseInt(overlay.querySelector('#ad-position').value, 10) || 0;
+    const startsAt = overlay.querySelector('#ad-starts').value;
+    const expiresAt = overlay.querySelector('#ad-expires').value;
     const active = overlay.querySelector('#ad-active').checked ? 1 : 0;
 
-    if (!url) return toast('Media URL is required', 'error');
-    if (!/^https?:\/\//i.test(url)) return toast('URL must start with http(s)://', 'error');
+    let url = overlay.querySelector('#ad-url').value.trim();
+    const radioUpload = overlay.querySelector('input[name="media-source"][value="upload"]').checked;
+    const fileInput = overlay.querySelector('#ad-file');
+
+    if (radioUpload && fileInput.files.length > 0) {
+      const btn = overlay.querySelector('#ad-save');
+      btn.disabled = true;
+      btn.textContent = 'Uploading...';
+      
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      
+      try {
+        const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        const apiUrl = isProd ? '/api/upload' : 'http://localhost:5000/api/upload';
+        
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        url = data.url;
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = editing ? 'Save' : 'Add slide';
+        return toast(err.message, 'error');
+      }
+    }
+
+    if (!url) {
+      if (ad?.url) {
+        url = ad.url;
+      } else {
+        return toast('Media File or URL is required', 'error');
+      }
+    }
+
+    if (!/^https?:\/\//i.test(url) && !url.startsWith('/uploads/')) return toast('URL must start with http(s):// or /uploads/', 'error');
     if (!Number.isFinite(durationSec) || durationSec < 2) return toast('Duration must be at least 2 seconds', 'error');
 
     const payload = {
@@ -2486,6 +2566,8 @@ function openAdEditor(ad, onChange) {
       caption: caption || null,
       duration_ms: Math.round(durationSec * 1000),
       position,
+      starts_at: startsAt ? new Date(startsAt).toISOString().slice(0, 19).replace('T', ' ') : null,
+      expires_at: expiresAt ? new Date(expiresAt).toISOString().slice(0, 19).replace('T', ' ') : null,
       active,
     };
 

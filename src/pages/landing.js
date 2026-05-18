@@ -125,14 +125,22 @@ export function renderLandingPage(container, onPortalClick) {
     const themeIcon = savedTheme === 'dark' ? ICONS.sun : ICONS.moon;
 
     container.innerHTML = `
+      <style>
+        @media (max-width: 640px) { .srf-nav-title { display: none !important; } }
+      </style>
       <div class="srf-page">
         <div class="srf-bg-orb srf-orb-1"></div>
         <div class="srf-bg-orb srf-orb-2"></div>
         <div class="srf-bg-orb srf-orb-3"></div>
 
         <nav class="srf-nav">
-          <img src="${LOGO}" alt="Networking Experts" class="srf-logo"
-               onerror="this.outerHTML='<span class=\\'srf-brand\\'>Networking Experts</span>'"/>
+          <div style="display:flex; align-items:center; gap:16px;">
+            <img src="${LOGO}" alt="Networking Experts" class="srf-logo"
+                 onerror="this.outerHTML='<span class=\\'srf-brand\\'>Networking Experts</span>'"/>
+            <div class="srf-nav-title">
+              <span style="font-weight:800; color:var(--text); font-size:1.1rem;">Need help?</span> <span class="srf-grad" style="font-size:1.1rem;">We'll be there in minutes.</span>
+            </div>
+          </div>
           <div class="srf-nav-actions">
             <button class="srf-icon-btn theme-toggle-btn" title="Toggle theme">${themeIcon}</button>
             <button class="srf-icon-btn srf-staff-btn" title="Staff Login">${ICONS.staff}</button>
@@ -141,25 +149,23 @@ export function renderLandingPage(container, onPortalClick) {
 
         <main class="srf-main">
           <section class="srf-intro">
-            <div class="srf-badge">${ICONS.shield}<span>Verified Service Request</span></div>
-            <h1 class="srf-title">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
-            <p class="srf-sub">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
+            <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
+            <p class="srf-sub" style="margin-bottom: 24px;">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
             ${state.ads.length > 0 ? `
-              <div class="srf-ads" id="srf-ads">
-                <div class="srf-ad-slot" id="srf-ad-slot"></div>
+              <div class="srf-ads" id="srf-ads" style="width:100%; max-width:800px; margin:0 auto 24px; border-radius:24px; overflow:hidden; box-shadow:var(--neu); background:var(--bg-soft);">
+                <div class="srf-ad-slot" id="srf-ad-slot" style="aspect-ratio:16/9; position:relative;"></div>
                 ${state.ads.length > 1 ? `
-                  <div class="srf-ad-dots" id="srf-ad-dots">
+                  <div class="srf-ad-dots" id="srf-ad-dots" style="display:flex; justify-content:center; gap:8px; padding:12px; background:var(--bg-soft);">
                     ${state.ads.map((_, i) => `<button type="button" class="srf-ad-dot" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
                   </div>
                 ` : ''}
               </div>
-            ` : `
-              <ul class="srf-perks">
-                <li>${ICONS.whatsapp}<span>WhatsApp verification</span></li>
-                <li>${ICONS.crosshair}<span>Auto-detect your location</span></li>
-                <li>${ICONS.wrench}<span>Specialised technicians</span></li>
-              </ul>
-            `}
+            ` : ''}
+            <ul class="srf-perks" style="justify-content:center;">
+              <li>${ICONS.whatsapp}<span>WhatsApp verification</span></li>
+              <li>${ICONS.crosshair}<span>Auto-detect your location</span></li>
+              <li>${ICONS.wrench}<span>Specialised technicians</span></li>
+            </ul>
           </section>
 
           <section class="srf-card-wrap">
@@ -243,7 +249,15 @@ export function renderLandingPage(container, onPortalClick) {
         .select('*')
         .eq('active', 1)
         .order('position', { ascending: true });
-      const ads = (data || []).filter(a => a.url && (a.kind === 'image' || a.kind === 'video'));
+      
+      const now = new Date().getTime();
+      const ads = (data || []).filter(a => {
+        if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
+        if (a.starts_at && new Date(a.starts_at).getTime() > now) return false;
+        if (a.expires_at && new Date(a.expires_at).getTime() <= now) return false;
+        return true;
+      });
+
       if (ads.length) {
         state.ads = ads;
         render();

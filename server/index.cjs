@@ -29,6 +29,10 @@ if (process.env.JWT_SECRET.length < 32) {
 const BILLS_DIR = path.join(__dirname, '..', 'bills');
 if (!fs.existsSync(BILLS_DIR)) fs.mkdirSync(BILLS_DIR, { recursive: true });
 
+const multer = require('multer');
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -93,6 +97,26 @@ app.use('/bills', express.static(BILLS_DIR, {
         res.setHeader('Content-Disposition', 'inline');
     },
 }));
+
+// Serve uploaded files
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+const uploadStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, UPLOADS_DIR);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: uploadStorage });
+
+app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    res.json({ url: `/uploads/${req.file.filename}` });
+});
 
 const dbConfig = {
     host: process.env.DB_HOST,
@@ -169,6 +193,10 @@ const requiredColumns = {
         { name: 'sub_category', definition: 'VARCHAR(180)' },
         { name: 'sub_sub_category', definition: 'VARCHAR(255)' },
     ],
+    ads: [
+        { name: 'starts_at', definition: 'TIMESTAMP NULL' },
+        { name: 'expires_at', definition: 'TIMESTAMP NULL' },
+    ],
 };
 
 const requiredTables = [
@@ -230,6 +258,8 @@ const requiredTables = [
         duration_ms INT DEFAULT 6000,
         active TINYINT(1) DEFAULT 1,
         position INT DEFAULT 0,
+        starts_at TIMESTAMP NULL,
+        expires_at TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_ads_active (active),
         INDEX idx_ads_position (position)
