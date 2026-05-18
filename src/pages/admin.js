@@ -1178,7 +1178,7 @@ export async function renderUsers(container) {
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Role</th><th>Update</th></tr></thead>
+          <thead><tr><th>Name</th><th>Current Role</th><th>Change Role</th><th>SMS Phone</th><th>Update</th></tr></thead>
           <tbody>${(users||[]).map(u => `<tr>
             <td><b>${u.full_name||'—'}</b></td>
             <td><span class="badge badge-open">${u.role||'client'}</span></td>
@@ -1189,6 +1189,15 @@ export async function renderUsers(container) {
                 <option ${u.role==='admin'?'selected':''} value="admin">Admin</option>
               </select>
             </td>
+            <td>
+              <input class="employee-phone-input" data-uid="${u.id}" type="tel" inputmode="numeric" maxlength="14"
+                     placeholder="9876543210" value="${escapeHtml((u.phone || '').replace(/^\\+91\\s*/, ''))}"
+                     style="width:150px;padding:7px 10px;border-radius:8px;box-shadow:var(--neu-inner);border:none;background:var(--bg);"/>
+              <small style="display:block;color:var(--text-dim);margin-top:4px;">Used for staff job SMS</small>
+            </td>
+            <td>
+              <button class="btn btn-secondary btn-sm save-user-phone" data-uid="${u.id}">Save Phone</button>
+            </td>
           </tr>`).join('')}</tbody>
         </table>
       </div>
@@ -1197,6 +1206,34 @@ export async function renderUsers(container) {
     sel.addEventListener('change', async () => {
       await supabase.from('profiles').update({ role: sel.value }).eq('id', sel.dataset.uid);
       toast('Role updated', 'success');
+    });
+  });
+  container.querySelectorAll('.employee-phone-input').forEach(input => {
+    input.addEventListener('input', () => {
+      let v = input.value.replace(/\D/g, '');
+      if (v.length > 10 && v.startsWith('91')) v = v.slice(2);
+      else if (v.length === 11 && v.startsWith('0')) v = v.slice(1);
+      input.value = v.slice(0, 10);
+    });
+  });
+  container.querySelectorAll('.save-user-phone').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const input = container.querySelector(`.employee-phone-input[data-uid="${btn.dataset.uid}"]`);
+      const digits = (input?.value || '').replace(/\D/g, '');
+      if (digits && !/^[6-9]\d{9}$/.test(digits)) {
+        toast('Enter a valid 10-digit Indian mobile number', 'error');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      const { error } = await supabase.from('profiles').update({ phone: digits ? `+91${digits}` : null }).eq('id', btn.dataset.uid);
+      btn.disabled = false;
+      btn.textContent = 'Save Phone';
+      if (error) {
+        toast('Phone update failed: ' + (error.message || ''), 'error');
+        return;
+      }
+      toast('Employee SMS phone saved', 'success');
     });
   });
 }
