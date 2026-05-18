@@ -14,6 +14,7 @@ const {
     verifyFast2SmsOtp,
     resendFast2SmsOtp,
     normalizeIndianMobile,
+    sendDltSms,
 } = require('./fast2sms.cjs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
@@ -456,6 +457,18 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
         });
     }
 
+    // SMS → client: payment confirmation with amount, ticket no, bill no
+    // Template variables: {customer_name} {amount} {ticket_no} {bill_no}
+    if (inqRow?.phone) {
+        const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
+        smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
+            inqRow.full_name || 'Customer',
+            `Rs.${Math.round(billTotal)}`,
+            ticket_no,
+            inqRow.bill_no || 'N/A',
+        ]);
+    }
+
     return inqRow;
 }
 
@@ -805,6 +818,19 @@ function fast2SmsConfig() {
         apiKey: process.env.SMS_API,
         otpId: process.env.FAST2SMS_OTP_ID || process.env.SMS_OTP_ID || process.env.OTP_ID,
     };
+}
+
+// Fire-and-forget DLT notification SMS. Never throws — failures are logged only.
+// templateEnvKey: the env var name holding the DLT template ID (e.g. 'SMS_TID_TICKET')
+// variables: array of values matching {#var#} placeholders in the template
+function smsNotify(mobile, templateEnvKey, variables) {
+    const apiKey = process.env.SMS_API;
+    const templateId = process.env[templateEnvKey];
+    const senderId = process.env.FAST2SMS_SENDER_ID || 'NTWRKE';
+    if (!apiKey || !templateId || !mobile) return;
+    sendDltSms({ mobile, templateId, variables, apiKey, senderId })
+        .then(r => { if (!r.ok) console.warn(`[SMS ${templateEnvKey}]`, r.error); })
+        .catch(e => console.error(`[SMS ${templateEnvKey}]`, e.message));
 }
 
 function sendOtpResponse(res, result, successPayload = {}) {
@@ -1228,6 +1254,80 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         connection.release();
         updatedRows.forEach(row => broadcastChange('UPDATE', table, row));
         if (updatedRows.length === 0) broadcastChange('UPDATE', table, { ...data, _filter: eqs });
+
+        // Trigger notification SMS based on what changed in the inquiry.
+        if (table === 'inquiries' && updatedRows.length > 0) {
+            const row = updatedRows[0];
+
+            // Any manual/admin/cash payment completion should also notify the client.
+            // Template variables: {customer_name} {amount} {ticket_no} {bill_no}
+            if (data.payment_status === 'paid' && row.phone) {
+                const amount = row.bill_total || row.bill_amount || 0;
+                smsNotify(row.phone, 'SMS_TID_PAYMENT', [
+                    row.full_name || 'Customer',
+                    `Rs.${Math.round(Number(amount) || 0)}`,
+                    row.ticket_no || '',
+                    row.bill_no || 'N/A',
+                ]);
+            }
+
+            // Admin assigns employee → SMS to employee with full job details
+            // Template variables: {ticket_no} {service_item} {customer_name} {customer_phone} {location}
+            if (data.assigned_employee_id) {
+                (async () => {
+                    try {
+                        const conn = await getConn();
+                        const [emp] = await conn.execute(
+                            'SELECT phone, full_name FROM profiles WHERE id = ? LIMIT 1',
+                            [data.assigned_employee_id]
+                        );
+                        conn.release();
+                        if (emp[0]?.phone) {
+                            smsNotify(emp[0].phone, 'SMS_TID_ASSIGN_EMP', [
+                                row.ticket_no || '',
+                                row.service_item || 'General Service',
+                                row.full_name || 'Customer',
+                                row.phone || 'N/A',
+                                row.location || 'See app',
+                            ]);
+                        }
+                    } catch {}
+                })();
+            }
+
+            // Employee accepts assignment → SMS to client with technician contact
+            // Template variables: {ticket_no} {emp_name} {emp_phone}
+            if (data.assignment_status === 'accepted' && row.phone && row.assigned_employee_id) {
+                (async () => {
+                    try {
+                        const conn = await getConn();
+                        const [emp] = await conn.execute(
+                            'SELECT phone, full_name FROM profiles WHERE id = ? LIMIT 1',
+                            [row.assigned_employee_id]
+                        );
+                        conn.release();
+                        smsNotify(row.phone, 'SMS_TID_ACCEPTED', [
+                            row.ticket_no || '',
+                            emp[0]?.full_name || 'our technician',
+                            emp[0]?.phone || '',
+                        ]);
+                    } catch {}
+                })();
+            }
+        }
+
+        // Complaint admin_response updated → SMS to client with ticket no and reply
+        // Template variables: {ticket_no} {admin_response}
+        if (table === 'complaints' && data.admin_response && updatedRows.length > 0) {
+            const row = updatedRows[0];
+            if (row.phone) {
+                smsNotify(row.phone, 'SMS_TID_COMPLAINT', [
+                    row.ticket_no || '',
+                    String(data.admin_response).slice(0, 120),
+                ]);
+            }
+        }
+
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating data:', error);
@@ -1366,6 +1466,16 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 audience: { role: 'admin' },
                 data: { inquiry_id: data.id, ticket_no: data.ticket_no || null },
             });
+            // SMS → client: ticket confirmed with ticket no, service type, preferred time
+            // Template variables: {name} {ticket_no} {service_item} {preferred_time}
+            if (data.phone && data.ticket_no) {
+                smsNotify(data.phone, 'SMS_TID_TICKET', [
+                    data.full_name || 'Customer',
+                    data.ticket_no,
+                    data.service_item || 'General Service',
+                    data.preferred_time || 'As soon as possible',
+                ]);
+            }
         }
         if (table === 'complaints') {
             broadcastNotify({
@@ -1528,7 +1638,7 @@ app.post('/api/webhook/razorpay', async (req, res) => {
 
                 // Cascade resolve to the linked ticket so the employee dashboard reflects it.
                 const [inqRows] = await connection.execute(
-                    'SELECT id, ticket_id, assigned_employee_id, full_name, bill_amount FROM inquiries WHERE ticket_no = ? LIMIT 1',
+                    'SELECT id, ticket_id, assigned_employee_id, full_name, phone, bill_no, bill_amount, bill_total FROM inquiries WHERE ticket_no = ? LIMIT 1',
                     [ticket_no]
                 );
                 const inqRow = inqRows[0];
@@ -1570,6 +1680,17 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                         audience: { userId: inqRow.assigned_employee_id },
                         data: { ticket_no, inquiry_id: inqRow.id, amount },
                     });
+                }
+
+                // SMS → client: payment confirmation
+                if (inqRow?.phone) {
+                    const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
+                    smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
+                        inqRow.full_name || 'Customer',
+                        `Rs.${Math.round(billTotal)}`,
+                        ticket_no,
+                        inqRow.bill_no || 'N/A',
+                    ]);
                 }
             } catch (err) {
                 if (connection) { try { await connection.rollback(); } catch {} }

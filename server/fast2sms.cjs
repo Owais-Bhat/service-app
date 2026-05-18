@@ -1,6 +1,7 @@
 const FAST2SMS_OTP_SEND_URL = 'https://www.fast2sms.com/dev/otp/send';
 const FAST2SMS_OTP_VERIFY_URL = 'https://www.fast2sms.com/dev/otp/verify';
 const FAST2SMS_OTP_RESEND_URL = 'https://www.fast2sms.com/dev/otp/resend';
+const FAST2SMS_BULK_URL = 'https://www.fast2sms.com/dev/bulkV2';
 
 function normalizeIndianMobile(input) {
     const digits = String(input || '').replace(/\D/g, '');
@@ -80,9 +81,29 @@ async function resendFast2SmsOtp({ mobile, apiKey, otpId, fetchImpl }) {
     }, { apiKey, fetchImpl });
 }
 
+// Send a DLT-registered notification SMS via Fast2SMS bulk route.
+// variables: array of string values matching {#var#} placeholders in the template,
+// e.g. ['NE-260518-1234', 'John Doe'] for a 2-variable template.
+// Failures are logged but never thrown — notifications are best-effort.
+async function sendDltSms({ mobile, templateId, variables = [], apiKey, senderId, fetchImpl }) {
+    if (!apiKey || !templateId) return { ok: false, error: 'SMS not configured' };
+    const normalizedMobile = normalizeIndianMobile(mobile);
+    if (!normalizedMobile) return { ok: false, error: 'Invalid mobile number' };
+
+    return fast2SmsPost(FAST2SMS_BULK_URL, {
+        route: 'dlt',
+        numbers: normalizedMobile,
+        sender_id: senderId || 'NTWRKE',
+        variables_values: variables.join('|'),
+        flash: '0',
+        dlt_te_id: templateId,
+    }, { apiKey, fetchImpl });
+}
+
 module.exports = {
     normalizeIndianMobile,
     sendFast2SmsOtp,
     verifyFast2SmsOtp,
     resendFast2SmsOtp,
+    sendDltSms,
 };
