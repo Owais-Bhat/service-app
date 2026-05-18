@@ -2057,12 +2057,12 @@ tr:hover td {
   z-index: 5;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(280px, 520px) minmax(360px, 520px);
+  grid-template-columns: minmax(560px, 860px) minmax(360px, 520px);
   justify-content: center;
   gap: clamp(28px, 5vw, 72px);
   padding: 32px clamp(20px, 5vw, 80px) clamp(36px, 5vw, 60px);
   align-items: start;
-  max-width: 1400px;
+  max-width: 1520px;
   width: 100%;
   margin: 0 auto;
 }
@@ -2070,7 +2070,7 @@ tr:hover td {
 /* Intro */
 .srf-intro {
   width: 100%;
-  max-width: 520px;
+  max-width: 860px;
   justify-self: end;
   display: flex;
   flex-direction: column;
@@ -2133,7 +2133,7 @@ tr:hover td {
 /* Ads carousel — single rotating slot (image or video) */
 .srf-ads {
   width: 100%;
-  max-width: 506px;
+  max-width: 860px;
   border-radius: 24px;
   background: var(--bg-soft);
   padding: 10px;
@@ -2143,7 +2143,7 @@ tr:hover td {
 .srf-ad-slot {
   position: relative;
   width: 100%;
-  aspect-ratio: 486 / 518;
+  aspect-ratio: 3 / 2;
   border-radius: 16px;
   overflow: hidden;
   background: #fff;
@@ -2764,6 +2764,10 @@ tr:hover td {
   .srf-ad-empty {
     max-width: min(92vw, 506px);
     margin: 0 auto;
+  }
+  .srf-ad-slot,
+  .srf-ad-empty {
+    aspect-ratio: 486 / 518;
   }
   .srf-perks { max-width: 420px; margin: 0 auto; }
   .srf-card-wrap {

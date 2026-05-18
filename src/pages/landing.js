@@ -68,9 +68,9 @@ const ISSUE_OPTIONS = [
 export function renderLandingPage(container, onPortalClick) {
   // Read URL params — support ?tab=track&ticket=NE-...&phone=...
   const urlParams = new URLSearchParams(window.location.search);
-  const urlTab    = urlParams.get('tab');
+  const urlTab = urlParams.get('tab');
   const urlTicket = urlParams.get('ticket') || '';
-  const urlPhone  = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
+  const urlPhone = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
 
   const state = {
     mode: urlTab === 'track' ? 'track' : 'new',
@@ -128,32 +128,7 @@ export function renderLandingPage(container, onPortalClick) {
           </div>
         </nav>
 
-        <section class="srf-top-banner" style="max-width:1000px; margin:0 auto; padding: 24px 20px 0; text-align:center;">
-          <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
-          <h1 class="srf-title" style="text-align:center; margin-bottom:18px;">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
-          <p class="srf-sub" style="margin: 0 auto 32px; text-align:center; max-width:600px;">Raise a service request in three quick steps. We'll send a one-time code by SMS, take your details, and dispatch the right technician.</p>
-          
-          <div style="display:flex; justify-content:center; gap:32px; flex-wrap:wrap;">
-             <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
-               <span style="width:44px; height:44px; border-radius:14px; background:rgba(37,211,102,0.15); color:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(37,211,102,0.12);">
-                 ${ICONS.whatsapp}
-               </span> 
-               SMS verification
-             </div>
-             <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
-               <span style="width:44px; height:44px; border-radius:14px; background:rgba(56,189,248,0.15); color:var(--primary); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(56,189,248,0.12);">
-                 ${ICONS.crosshair}
-               </span> 
-               Auto-detect your location
-             </div>
-             <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
-               <span style="width:44px; height:44px; border-radius:14px; background:rgba(245,158,11,0.15); color:var(--warning); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(245,158,11,0.12);">
-                 ${ICONS.wrench}
-               </span> 
-               Specialised technicians
-             </div>
-          </div>
-        </section>
+        
 
         <main class="srf-main">
           <section class="srf-intro">
@@ -226,11 +201,11 @@ export function renderLandingPage(container, onPortalClick) {
       const media = isVideo
         ? `<video class="srf-ad-media" src="${escapeAttr(ad.url)}" autoplay muted loop playsinline></video>`
         : `<img class="srf-ad-media" src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" loading="lazy"/>`;
-      
-      const captionHtml = ad.caption 
+
+      const captionHtml = ad.caption
         ? `<div class="srf-ad-caption">
              <span>${escapeHTML(ad.caption)}</span>
-           </div>` 
+           </div>`
         : '';
 
       slot.innerHTML = `${media}${captionHtml}`;
@@ -262,7 +237,7 @@ export function renderLandingPage(container, onPortalClick) {
         .select('*')
         .eq('active', 1)
         .order('position', { ascending: true });
-      
+
       const now = new Date().getTime();
       const ads = (data || []).filter(a => {
         if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
@@ -521,25 +496,25 @@ export function renderLandingPage(container, onPortalClick) {
             No tickets found for this phone number.
           </div>
         ` : tickets.map(t => {
-          const st = displayStatus(t.status);
-          const stLabel = STATUS_LABELS[st === 'pending' ? 'open' : st] || st;
-          const stColor = st === 'resolved' ? 'var(--success)'
-            : st === 'in_progress' ? 'var(--warning)'
-            : st === 'assigned' ? 'var(--primary)'
+      const st = displayStatus(t.status);
+      const stLabel = STATUS_LABELS[st === 'pending' ? 'open' : st] || st;
+      const stColor = st === 'resolved' ? 'var(--success)'
+        : st === 'in_progress' ? 'var(--warning)'
+          : st === 'assigned' ? 'var(--primary)'
             : 'var(--text-dim)';
-          return `
+      return `
             <button type="button" class="srf-ticket-row" data-ticket-id="${t.id}"
               style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);cursor:pointer;text-align:left;font-family:inherit;width:100%;">
               <div style="flex-shrink:0;width:44px;height:44px;border-radius:12px;background:var(--bg);color:${stColor};display:flex;align-items:center;justify-content:center;">${ICONS.ticket}</div>
               <div style="flex:1;min-width:0;">
-                <div style="font-weight:800;font-size:0.95rem;color:var(--text);">${escapeHTML(t.ticket_no || t.id.slice(0,8))}</div>
+                <div style="font-weight:800;font-size:0.95rem;color:var(--text);">${escapeHTML(t.ticket_no || t.id.slice(0, 8))}</div>
                 <div style="font-size:0.82rem;color:var(--text-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(t.service_item || '—')}</div>
                 <div style="font-size:0.74rem;color:var(--text-dim);margin-top:2px;">${t.created_at ? new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</div>
               </div>
               <span style="font-size:0.75rem;font-weight:700;padding:6px 12px;border-radius:999px;background:${stColor}1a;color:${stColor};white-space:nowrap;">${stLabel}</span>
             </button>
           `;
-        }).join('')}
+    }).join('')}
       </div>
     `;
   }
@@ -591,11 +566,11 @@ export function renderLandingPage(container, onPortalClick) {
               <div class="srf-bill-amount">₹${Number(r.bill_amount).toLocaleString('en-IN')}</div>
             </div>
             ${paid
-              ? `<span class="srf-bill-paid">${ICONS.check}<span>Paid</span></span>`
-              : (r.payment_link
-                  ? `<a class="srf-btn srf-btn-primary srf-pay-btn" href="${escapeAttr(r.payment_link)}" target="_blank" rel="noopener">${ICONS.card}<span>Pay now</span></a>`
-                  : `<span class="srf-bill-pending">${ICONS.hourglass}<span>Link pending</span></span>`)
-            }
+          ? `<span class="srf-bill-paid">${ICONS.check}<span>Paid</span></span>`
+          : (r.payment_link
+            ? `<a class="srf-btn srf-btn-primary srf-pay-btn" href="${escapeAttr(r.payment_link)}" target="_blank" rel="noopener">${ICONS.card}<span>Pay now</span></a>`
+            : `<span class="srf-bill-pending">${ICONS.hourglass}<span>Link pending</span></span>`)
+        }
           </div>
         </div>
       ` : ''}
@@ -608,7 +583,7 @@ export function renderLandingPage(container, onPortalClick) {
           <div style="margin-bottom:18px;">
             <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Overall Experience</div>
             <div class="srf-stars" id="srf-stars" data-rating="0">
-              ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}">${ICONS.starOutline}</button>`).join('')}
+              ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="srf-star" data-val="${n}">${ICONS.starOutline}</button>`).join('')}
             </div>
             <div id="srf-rating-label" style="font-size:0.82rem;color:var(--primary);font-weight:700;margin-top:6px;min-height:18px;"></div>
           </div>
@@ -617,13 +592,13 @@ export function renderLandingPage(container, onPortalClick) {
             <div>
               <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Service Quality</div>
               <div class="srf-stars" id="srf-stars-quality" data-rating="0" style="gap:2px;">
-                ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}" style="padding:2px;">${ICONS.starOutline}</button>`).join('')}
+                ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="srf-star" data-val="${n}" style="padding:2px;">${ICONS.starOutline}</button>`).join('')}
               </div>
             </div>
             <div>
               <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Technician</div>
               <div class="srf-stars" id="srf-stars-tech" data-rating="0" style="gap:2px;">
-                ${[1,2,3,4,5].map(n => `<button type="button" class="srf-star" data-val="${n}" style="padding:2px;">${ICONS.starOutline}</button>`).join('')}
+                ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="srf-star" data-val="${n}" style="padding:2px;">${ICONS.starOutline}</button>`).join('')}
               </div>
             </div>
           </div>
@@ -791,7 +766,7 @@ export function renderLandingPage(container, onPortalClick) {
           async pos => {
             const { latitude: lat, longitude: lng } = pos.coords;
             state.coords = { lat, lng };
-            
+
             try {
               const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
               const data = await res.json();
@@ -800,7 +775,7 @@ export function renderLandingPage(container, onPortalClick) {
               console.error('Reverse geocoding failed:', err);
               state.locationValue = `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
             }
-            
+
             container.querySelector('#srf-location').value = state.locationValue;
             detectBtn.innerHTML = ICONS.crosshair;
             toast('Location detected', 'success');
@@ -1107,7 +1082,7 @@ export function renderLandingPage(container, onPortalClick) {
     }
 
     const tnoEl = container.querySelector('#srf-cmp-tno');
-    const phEl  = container.querySelector('#srf-cmp-phone');
+    const phEl = container.querySelector('#srf-cmp-phone');
     const txtEl = container.querySelector('#srf-cmp-text');
 
     tnoEl.addEventListener('input', e => {
@@ -1122,7 +1097,7 @@ export function renderLandingPage(container, onPortalClick) {
 
     bind('#srf-cmp-submit', async () => {
       const tno = state.complaintTicketNo;
-      const ph  = state.complaintPhone;
+      const ph = state.complaintPhone;
       const txt = state.complaintText.trim();
 
       if (!tno) return toast('Enter your ticket number', 'error');
@@ -1183,11 +1158,11 @@ function formatPhone(p) {
 }
 
 function escapeAttr(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function formatDeadlineLong(d) {
