@@ -703,11 +703,7 @@ export function renderLandingPage(container, onPortalClick) {
       sendBtn.innerHTML = `<span class="srf-spin"></span><span>Sending…</span>`;
       const res = await sendSmsOTP('+91' + state.phone);
       if (!res.ok) { toast(res.error || 'Could not send OTP', 'error'); render(); return; }
-      if (res.devMode && res.devOtp) {
-        toast(`Demo mode — your code is: ${res.devOtp}`, 'warning');
-      } else {
-        toast('OTP sent by SMS', 'success');
-      }
+      toast('OTP sent by SMS', 'success');
       state.step = 2;
       render();
     };
@@ -750,11 +746,7 @@ export function renderLandingPage(container, onPortalClick) {
     bind('#srf-resend', async () => {
       const res = await resendSmsOTP('+91' + state.phone);
       if (!res.ok) return toast(res.error || 'Could not resend OTP', 'error');
-      if (res.devMode && res.devOtp) {
-        toast(`Demo mode — new code: ${res.devOtp}`, 'warning');
-      } else {
-        toast('New code sent', 'success');
-      }
+      toast('New code sent', 'success');
       render();
     });
   }

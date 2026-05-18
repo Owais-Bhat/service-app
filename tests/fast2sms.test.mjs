@@ -8,7 +8,6 @@ const {
   sendFast2SmsOtp,
   verifyFast2SmsOtp,
   resendFast2SmsOtp,
-  sendFast2SmsQuickOtp,
 } = require('../server/fast2sms.cjs');
 
 test('normalizeIndianMobile returns a 10 digit Indian mobile number', () => {
@@ -45,35 +44,6 @@ test('sendFast2SmsOtp posts mobile, otp id, and generated OTP with SMS_API autho
     otp_id: 'otp-template-1',
     otp_length: 6,
     otp_expiry: 10,
-  });
-});
-
-test('sendFast2SmsQuickOtp posts a complete OTP message without requiring an OTP template id', async () => {
-  const calls = [];
-  const fetchImpl = async (url, options) => {
-    calls.push({ url, options });
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ return: true, request_id: 'quick_123' }),
-    };
-  };
-
-  const result = await sendFast2SmsQuickOtp({
-    mobile: '+91 98765 43210',
-    otp: '445566',
-    apiKey: 'secret-key',
-    fetchImpl,
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(calls[0].url, 'https://www.fast2sms.com/dev/bulkV2');
-  assert.equal(calls[0].options.headers.authorization, 'secret-key');
-  assert.deepEqual(JSON.parse(calls[0].options.body), {
-    route: 'q',
-    numbers: '9876543210',
-    message: '445566 is your Networking Experts verification code. It is valid for 10 minutes.',
-    flash: '0',
   });
 });
 
