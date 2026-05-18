@@ -89,6 +89,7 @@ function getNavItems(role) {
     { id: 'device-types', icon: ICONS.box, label: 'Device Types' },
     { id: 'feedback', icon: ICONS.star, label: 'Feedback' },
     { id: 'complaints', icon: ICONS.shield, label: 'Complaints' },
+    { id: 'ads', icon: ICONS.box, label: 'Landing Ads' },
     { type: 'section', label: 'Account' },
     { id: 'profile', icon: ICONS.user, label: 'Profile' },
   ];
@@ -112,6 +113,7 @@ function getPageRenderer(role, page) {
       inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
       payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
+      ads: renderAdsTab,
     }
   };
   return (map[role] || map.admin)[page];
