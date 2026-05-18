@@ -155,12 +155,33 @@ export function renderLandingPage(container, onPortalClick) {
           </div>
         </nav>
 
-        <main class="srf-main" style="align-items: flex-start;">
+        <section class="srf-top-banner" style="max-width:1400px; margin:0 auto; padding: 24px 40px 0; text-align:center;">
+          <div style="display:flex; justify-content:center; gap:32px; flex-wrap:wrap;">
+             <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
+               <span style="width:44px; height:44px; border-radius:14px; background:rgba(37,211,102,0.15); color:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(37,211,102,0.12);">
+                 ${ICONS.whatsapp}
+               </span> 
+               WhatsApp verification
+             </div>
+             <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
+               <span style="width:44px; height:44px; border-radius:14px; background:rgba(56,189,248,0.15); color:var(--primary); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(56,189,248,0.12);">
+                 ${ICONS.crosshair}
+               </span> 
+               Auto-detect location
+             </div>
+             <div style="display:flex; align-items:center; gap:12px; font-weight:700; color:var(--text); font-size:1.05rem;">
+               <span style="width:44px; height:44px; border-radius:14px; background:rgba(245,158,11,0.15); color:var(--warning); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(245,158,11,0.12);">
+                 ${ICONS.wrench}
+               </span> 
+               Specialised technicians
+             </div>
+          </div>
+        </section>
+
+        <main class="srf-main" style="align-items: flex-start; padding-top: 32px;">
           <section class="srf-intro">
-            <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
-            <p class="srf-sub" style="margin-bottom: 24px;">Raise a service request in three quick steps. We'll send a one-time code on WhatsApp, take your details, and dispatch the right technician.</p>
             ${state.ads.length > 0 ? `
-              <div class="srf-ads" id="srf-ads" style="width:100%; max-width:800px; margin:0 auto 24px; border-radius:24px; overflow:hidden; box-shadow:0 12px 32px rgba(0,0,0,0.1); background:var(--bg-soft);">
+              <div class="srf-ads" id="srf-ads" style="width:100%; max-width:800px; margin:0 auto; border-radius:24px; overflow:hidden; box-shadow:0 12px 32px rgba(0,0,0,0.1); background:var(--bg-soft);">
                 <div class="srf-ad-slot" id="srf-ad-slot" style="height:350px; position:relative; overflow:hidden; background:#000;"></div>
                 ${state.ads.length > 1 ? `
                   <div class="srf-ad-dots" id="srf-ad-dots" style="display:flex; justify-content:center; gap:8px; padding:12px; background:var(--bg-soft);">
@@ -168,12 +189,12 @@ export function renderLandingPage(container, onPortalClick) {
                   </div>
                 ` : ''}
               </div>
-            ` : ''}
-            <ul class="srf-perks" style="justify-content:center;">
-              <li>${ICONS.whatsapp}<span>WhatsApp verification</span></li>
-              <li>${ICONS.crosshair}<span>Auto-detect your location</span></li>
-              <li>${ICONS.wrench}<span>Specialised technicians</span></li>
-            </ul>
+            ` : `
+               <div style="text-align:center; padding: 40px; border-radius:24px; background:var(--bg-soft); box-shadow:var(--neu); height: 350px; display:flex; flex-direction:column; align-items:center; justify-content:center; max-width:800px; margin:0 auto;">
+                  <h2 style="font-size:1.5rem; font-weight:800; color:var(--text); margin-bottom:12px;">Welcome to Networking Experts</h2>
+                  <p style="color:var(--text-soft); font-size:1rem;">Your trusted partner for all networking needs.</p>
+               </div>
+            `}
           </section>
 
           <section class="srf-card-wrap">
