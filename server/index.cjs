@@ -462,10 +462,10 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     if (inqRow?.phone) {
         const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
         smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
-            inqRow.full_name || 'Customer',
-            `Rs.${Math.round(billTotal)}`,
-            ticket_no,
-            inqRow.bill_no || 'N/A',
+            smsVar(inqRow.full_name, 'Customer', 60),
+            smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
+            smsVar(ticket_no, 'N/A', 20),
+            smsVar(inqRow.bill_no, 'N/A', 30),
         ]);
     }
 
@@ -828,10 +828,28 @@ function smsNotify(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;
     const templateId = process.env[templateEnvKey];
     const senderId = process.env.FAST2SMS_SENDER_ID || 'NTWRKE';
-    if (!apiKey || !templateId || !mobile) return;
+    if (!apiKey || !templateId || !mobile) {
+        console.warn(`[SMS ${templateEnvKey}] skipped: missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'}`);
+        return;
+    }
     sendDltSms({ mobile, templateId, variables, apiKey, senderId })
-        .then(r => { if (!r.ok) console.warn(`[SMS ${templateEnvKey}]`, r.error); })
+        .then(r => {
+            if (!r.ok) console.warn(`[SMS ${templateEnvKey}]`, r.error);
+            else console.log(`[SMS ${templateEnvKey}] sent to ${normalizeIndianMobile(mobile) || 'invalid-mobile'}`);
+        })
         .catch(e => console.error(`[SMS ${templateEnvKey}]`, e.message));
+}
+
+function smsVar(value, fallback = 'N/A', maxLen = 80) {
+    const cleaned = String(value || fallback)
+        .replace(/[|\r\n\t]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return cleaned.slice(0, maxLen) || fallback;
+}
+
+function smsPhoneVar(value) {
+    return normalizeIndianMobile(value) || '0000000000';
 }
 
 function sendOtpResponse(res, result, successPayload = {}) {
@@ -1265,10 +1283,10 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             if (data.payment_status === 'paid' && row.phone) {
                 const amount = row.bill_total || row.bill_amount || 0;
                 smsNotify(row.phone, 'SMS_TID_PAYMENT', [
-                    row.full_name || 'Customer',
-                    `Rs.${Math.round(Number(amount) || 0)}`,
-                    row.ticket_no || '',
-                    row.bill_no || 'N/A',
+                    smsVar(row.full_name, 'Customer', 60),
+                    smsVar(`Rs.${Math.round(Number(amount) || 0)}`, 'Rs.0', 20),
+                    smsVar(row.ticket_no, 'N/A', 20),
+                    smsVar(row.bill_no, 'N/A', 30),
                 ]);
             }
 
@@ -1285,14 +1303,18 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                         conn.release();
                         if (emp[0]?.phone) {
                             smsNotify(emp[0].phone, 'SMS_TID_ASSIGN_EMP', [
-                                row.ticket_no || '',
-                                row.service_item || 'General Service',
-                                row.full_name || 'Customer',
-                                row.phone || 'N/A',
-                                row.location || 'See app',
+                                smsVar(row.ticket_no, 'N/A', 20),
+                                smsVar(row.service_item, 'General Service', 80),
+                                smsVar(row.full_name, 'Customer', 60),
+                                smsPhoneVar(row.phone),
+                                smsVar(row.location, 'See app', 100),
                             ]);
+                        } else {
+                            console.warn(`[SMS SMS_TID_ASSIGN_EMP] skipped: employee ${data.assigned_employee_id} has no phone`);
                         }
-                    } catch {}
+                    } catch (err) {
+                        console.error('[SMS SMS_TID_ASSIGN_EMP]', err.message);
+                    }
                 })();
             }
 
@@ -1308,11 +1330,13 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                         );
                         conn.release();
                         smsNotify(row.phone, 'SMS_TID_ACCEPTED', [
-                            row.ticket_no || '',
-                            emp[0]?.full_name || 'our technician',
-                            emp[0]?.phone || '',
+                            smsVar(row.ticket_no, 'N/A', 20),
+                            smsVar(emp[0]?.full_name, 'our technician', 60),
+                            smsPhoneVar(emp[0]?.phone),
                         ]);
-                    } catch {}
+                    } catch (err) {
+                        console.error('[SMS SMS_TID_ACCEPTED]', err.message);
+                    }
                 })();
             }
         }
@@ -1323,8 +1347,8 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             const row = updatedRows[0];
             if (row.phone) {
                 smsNotify(row.phone, 'SMS_TID_COMPLAINT', [
-                    row.ticket_no || '',
-                    String(data.admin_response).slice(0, 120),
+                    smsVar(row.ticket_no, 'N/A', 20),
+                    smsVar(data.admin_response, 'We are checking your complaint', 120),
                 ]);
             }
         }
@@ -1471,10 +1495,10 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
             // Template variables: {name} {ticket_no} {service_item} {preferred_time}
             if (data.phone && data.ticket_no) {
                 smsNotify(data.phone, 'SMS_TID_TICKET', [
-                    data.full_name || 'Customer',
-                    data.ticket_no,
-                    data.service_item || 'General Service',
-                    data.preferred_time || 'As soon as possible',
+                    smsVar(data.full_name, 'Customer', 60),
+                    smsVar(data.ticket_no, 'N/A', 20),
+                    smsVar(data.service_item, 'General Service', 80),
+                    smsVar(data.preferred_time, 'As soon as possible', 60),
                 ]);
             }
         }
@@ -1687,10 +1711,10 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 if (inqRow?.phone) {
                     const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
                     smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
-                        inqRow.full_name || 'Customer',
-                        `Rs.${Math.round(billTotal)}`,
-                        ticket_no,
-                        inqRow.bill_no || 'N/A',
+                        smsVar(inqRow.full_name, 'Customer', 60),
+                        smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
+                        smsVar(ticket_no, 'N/A', 20),
+                        smsVar(inqRow.bill_no, 'N/A', 30),
                     ]);
                 }
             } catch (err) {
