@@ -54,19 +54,41 @@ app.use((req, res, next) => {
 });
 
 // Restrict CORS to known origins. CORS_ORIGINS is a comma-separated list.
-// In dev we default to localhost; in prod we include the live domain.
-const corsOrigins = (process.env.CORS_ORIGINS || 'https://services.networkingexperts.in,http://localhost:5173,http://localhost:5000')
-    .split(',').map(s => s.trim()).filter(Boolean);
+// In dev we default to localhost; in prod we include the live domain and
+// Hostinger preview domain used before the custom domain fully points here.
+const corsOrigins = (process.env.CORS_ORIGINS || [
+    'https://services.networkingexperts.in',
+    'https://skyblue-goldfish-328951.hostingersite.com',
+    'http://localhost:5173',
+    'http://localhost:5000',
+].join(','))
+    .split(',')
+    .map(s => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+function isAllowedCorsOrigin(origin) {
+    if (!origin) return true;
+    const cleanOrigin = String(origin).replace(/\/+$/, '');
+    if (corsOrigins.includes(cleanOrigin)) return true;
+    try {
+        const { hostname } = new URL(cleanOrigin);
+        return hostname === 'networkingexperts.in'
+            || hostname.endsWith('.networkingexperts.in')
+            || hostname === 'skyblue-goldfish-328951.hostingersite.com';
+    } catch {
+        return false;
+    }
+}
 
 app.use(cors({
     origin(origin, cb) {
         // 1. Allow same-origin (no Origin header, e.g. server-side or same-domain fetch)
         // 2. Allow listed origins
-        if (!origin || corsOrigins.includes(origin) || origin.endsWith('.networkingexperts.in')) {
+        if (isAllowedCorsOrigin(origin)) {
             return cb(null, true);
         }
         console.warn(`⚠️ CORS blocked request from origin: ${origin}`);
-        return cb(new Error('Origin not allowed by CORS'));
+        return cb(null, false);
     },
     credentials: true, // Changed to true to support session/auth if needed later
 }));
