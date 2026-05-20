@@ -27,6 +27,27 @@ async function openInquiryDetailWithLoader(btn, id, onDone) {
   }
 }
 
+function generateAdminTicketNo() {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const rnd = String(Math.floor(1000 + Math.random() * 9000));
+  return `NE-${yy}${mm}${dd}-${rnd}`;
+}
+
+function normalizeAdminPhone(input) {
+  const digits = String(input || '').replace(/\D/g, '');
+  const ten = digits.length > 10 ? digits.slice(-10) : digits;
+  return ten.length === 10 ? `+91${ten}` : null;
+}
+
+function optionFromCategory(category) {
+  const label = String(category || '').trim();
+  const value = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'service';
+  return { value, label };
+}
+
 function hoursWorked(clockIn, clockOut) {
   if (!clockIn || !clockOut) return null;
   const diff = new Date(clockOut) - new Date(clockIn);
@@ -823,6 +844,178 @@ export async function renderAttendance(container) {
   };
 }
 
+async function openAdminRequestModal(onDone) {
+  const [{ data: employees }, { data: pricing }] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, phone').eq('role', 'employee'),
+    supabase.from('service_pricing').select('category').order('category'),
+  ]);
+
+  const seen = new Map();
+  (pricing || []).forEach(row => {
+    const label = String(row.category || '').trim();
+    if (!label || ['uncategorized', 'other'].includes(label.toLowerCase())) return;
+    const opt = optionFromCategory(label);
+    if (!seen.has(opt.value)) seen.set(opt.value, opt);
+  });
+  const issueOptions = seen.size
+    ? [...seen.values()]
+    : [
+        { value: 'camera-offline', label: 'Camera offline' },
+        { value: 'software-issue', label: 'Software issue' },
+        { value: 'new-installation', label: 'New installation' },
+      ];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:620px">
+      <div class="modal-header">
+        <span class="modal-title">Register Service Request</span>
+        <button class="modal-close" id="admin-request-close">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="padding:12px 14px;border-radius:12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.18);color:var(--text-soft);font-size:0.84rem;line-height:1.45;margin-bottom:16px;">
+          This creates the ticket directly. No OTP is sent. The customer will receive the ticket confirmation SMS, and the assigned employee will receive the job SMS if you assign one.
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+          <div class="form-group">
+            <label>Customer Name</label>
+            <input id="ar-name" type="text" placeholder="Customer name" />
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input id="ar-phone" type="tel" placeholder="10 digit mobile number" />
+          </div>
+          <div class="form-group">
+            <label>Company <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
+            <input id="ar-company" type="text" placeholder="Company / building name" />
+          </div>
+          <div class="form-group">
+            <label>Preferred Time</label>
+            <select id="ar-time">
+              <option value="As soon as possible">As soon as possible</option>
+              <option value="Morning (10 AM - 1 PM)">Morning (10 AM - 1 PM)</option>
+              <option value="Afternoon (1 PM - 4 PM)">Afternoon (1 PM - 4 PM)</option>
+              <option value="Evening (4 PM - 6 PM)">Evening (4 PM - 6 PM)</option>
+              <option value="Tomorrow Morning">Tomorrow Morning</option>
+              <option value="Flexible">Flexible</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Issue</label>
+            <select id="ar-issue">
+              <option value="">Select issue</option>
+              ${issueOptions.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group" id="ar-other-wrap" style="display:none;">
+            <label>Other Issue</label>
+            <input id="ar-other" type="text" placeholder="Describe issue" />
+          </div>
+          <div class="form-group">
+            <label>Assign Employee <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
+            <select id="ar-employee">
+              <option value="">Create unassigned</option>
+              ${(employees || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name || 'Employee')}${e.phone ? ` - ${escapeHtml(e.phone)}` : ''}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Device Bill No <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
+            <input id="ar-bill" type="text" placeholder="Invoice / bill no" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Location</label>
+          <textarea id="ar-location" rows="3" placeholder="Customer address / landmark"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Description <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
+          <textarea id="ar-description" rows="3" placeholder="Any extra details from the customer"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="ar-cancel">Cancel</button>
+        <button class="btn btn-primary" id="ar-submit">${ICONS.plus}<span>Create Request</span></button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('#admin-request-close').onclick = close;
+  overlay.querySelector('#ar-cancel').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  const issueEl = overlay.querySelector('#ar-issue');
+  const otherWrap = overlay.querySelector('#ar-other-wrap');
+  issueEl.onchange = () => { otherWrap.style.display = issueEl.value === 'other' ? '' : 'none'; };
+
+  overlay.querySelector('#ar-submit').onclick = async () => {
+    const btn = overlay.querySelector('#ar-submit');
+    const restore = setButtonLoading(btn, 'Creating');
+    try {
+      const full_name = overlay.querySelector('#ar-name').value.trim();
+      const phone = normalizeAdminPhone(overlay.querySelector('#ar-phone').value);
+      const company_name = overlay.querySelector('#ar-company').value.trim();
+      const preferred_time = overlay.querySelector('#ar-time').value;
+      const issueVal = issueEl.value;
+      const issueLabel = issueOptions.find(o => o.value === issueVal)?.label || '';
+      const otherText = overlay.querySelector('#ar-other')?.value.trim() || '';
+      const assigned_employee_id = overlay.querySelector('#ar-employee').value;
+      const location = overlay.querySelector('#ar-location').value.trim();
+      const description = overlay.querySelector('#ar-description').value.trim();
+      const bill_no = overlay.querySelector('#ar-bill').value.trim();
+
+      if (!full_name) return toast('Customer name is required', 'error');
+      if (!phone) return toast('Enter a valid 10 digit phone number', 'error');
+      if (!location) return toast('Location is required', 'error');
+      if (!issueVal) return toast('Select the issue', 'error');
+      if (issueVal === 'other' && !otherText) return toast('Describe the issue', 'error');
+
+      const id = crypto.randomUUID();
+      const ticket_no = generateAdminTicketNo();
+      const service_item = issueVal === 'other' ? `Other: ${otherText}` : issueLabel;
+
+      const { error } = await supabase.from('inquiries').insert({
+        id,
+        full_name,
+        phone,
+        company_name: company_name || null,
+        location,
+        bill_no: bill_no || null,
+        service_item,
+        description: description || null,
+        ticket_no,
+        preferred_time,
+        status: 'open',
+        assignment_status: 'none',
+      });
+      if (error) throw new Error(error.message || 'Could not create request');
+
+      if (assigned_employee_id) {
+        const { error: assignError } = await supabase.from('inquiries')
+          .update({
+            assigned_employee_id,
+            assignment_status: 'pending',
+            decline_reason: null,
+          })
+          .eq('id', id);
+        if (assignError) throw new Error(assignError.message || 'Request created, but assignment failed');
+      }
+
+      toast(`Request ${ticket_no} created`, 'success');
+      close();
+      if (onDone) onDone();
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Could not create request', 'error');
+    } finally {
+      restore();
+    }
+  };
+}
+
 export async function renderInquiries(container) {
   const filterKey = container.dataset.srFilter === 'closed' ? 'resolved' : (container.dataset.srFilter || 'active');
   const companyFilter = container.dataset.srCompany || '';
@@ -866,6 +1059,7 @@ export async function renderInquiries(container) {
         <p>Manage customer service requests, billing and payments</p>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="sr-new">${ICONS.plus}<span>Register Request</span></button>
         <button class="btn btn-secondary" id="sr-export">${ICONS.clipboard}<span>Export</span></button>
         <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>
       </div>
@@ -922,6 +1116,7 @@ export async function renderInquiries(container) {
   `;
 
   container.querySelector('#sr-refresh').onclick = () => renderInquiries(container);
+  container.querySelector('#sr-new').onclick = () => openAdminRequestModal(() => renderInquiries(container));
   container.querySelector('#sr-company-filter').oninput = (e) => {
     container.dataset.srCompany = e.target.value.trim();
     renderInquiries(container);

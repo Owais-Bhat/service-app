@@ -2231,6 +2231,45 @@ tr:hover td {
   flex: 0 0 auto;
   animation: srf-rotate 0.75s linear infinite;
 }
+
+.employee-task-loader {
+  min-height: min(62vh, 560px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+}
+.employee-task-loader-card {
+  width: min(100%, 420px);
+  border-radius: 20px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  box-shadow: var(--neu);
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.employee-task-loader-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 4px solid rgba(16, 185, 129, 0.18);
+  border-top-color: var(--primary);
+  flex: 0 0 auto;
+  animation: srf-rotate 0.85s linear infinite;
+}
+.employee-task-loader-title {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+.employee-task-loader-sub {
+  color: var(--text-dim);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  margin-top: 4px;
+}
 .srf-perks svg { width: 22px; height: 22px; color: var(--primary); flex-shrink: 0; }
 
 /* Ads carousel — single rotating slot (image or video) */

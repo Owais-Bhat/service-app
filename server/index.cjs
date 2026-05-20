@@ -803,6 +803,9 @@ const dataAuth = (req, res, next) => {
     if (req.params.table === 'inquiries') {
         const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
 
+        if (req.method === 'POST' && req.headers.authorization) {
+            return authenticateToken(req, res, next);
+        }
         if (req.method === 'POST') {
             req.user = { role: 'public' };
             return next();

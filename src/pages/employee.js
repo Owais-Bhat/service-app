@@ -1166,7 +1166,17 @@ export async function renderEmployeeTasks(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
-  container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;padding:60px;"><div class="spinner"></div></div>`;
+  container.innerHTML = `
+    <div class="employee-task-loader" role="status" aria-live="polite">
+      <div class="employee-task-loader-card">
+        <span class="employee-task-loader-spinner"></span>
+        <div>
+          <div class="employee-task-loader-title">Loading your tasks</div>
+          <div class="employee-task-loader-sub">Fetching assigned jobs, active services, and pending requests...</div>
+        </div>
+      </div>
+    </div>
+  `;
 
   let tasks, pendingInquiries, acceptedInquiries;
   try {
@@ -1423,7 +1433,14 @@ export async function renderEmployeeTasks(container) {
   `;
 
   // Refresh
-  container.querySelector('#tasks-refresh').onclick = () => renderEmployeeTasks(container);
+  container.querySelector('#tasks-refresh').onclick = async () => {
+    const restore = setButtonLoading(container.querySelector('#tasks-refresh'), 'Loading');
+    try {
+      await renderEmployeeTasks(container);
+    } finally {
+      restore();
+    }
+  };
 
   // Filter tabs
   let activeFilter = 'all';
