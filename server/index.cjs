@@ -95,7 +95,15 @@ try {
 
 // Serve static files from the frontend build directory
 const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === 'index.html') {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    },
+}));
 
 // Serve generated bill PDFs publicly so wa.me links can point clients here.
 app.use('/bills', express.static(BILLS_DIR, {
@@ -1806,7 +1814,12 @@ app.post('/api/bills/upload', authenticateToken, express.json({ limit: BILL_UPLO
 });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
+app.get('/assets/{*asset}', (req, res) => {
+    res.status(404).type('text/plain').send('Asset not found');
+});
+
 app.get('/{*splat}', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(distPath, 'index.html'));
 });
 

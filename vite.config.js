@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
+      cleanupOutdatedCaches: true,
       devOptions: { enabled: false }, // don't cache in dev — avoids stale SW blank pages
       includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {

@@ -31,18 +31,69 @@ function statusText(status) {
   return labels[shown] || shown.replace('_', ' ');
 }
 
-// Lazily inject html2pdf.js (used to generate a downloadable PDF from the
-// bill template). The CDN bundle includes both html2canvas and jsPDF.
+// Lazily inject PDF renderer libraries. Try the html2pdf bundle first, then
+// load html2canvas + jsPDF separately if a CDN blocks one of the files.
 let _html2pdfPromise = null;
+function loadScriptFromSources(sources) {
+  return new Promise((resolve, reject) => {
+    let i = 0;
+    const tryNext = () => {
+      const src = sources[i++];
+      if (!src) return reject(new Error('Could not load PDF library'));
+      const existing = document.querySelector(`script[data-pdf-src="${src}"]`);
+      if (existing?.dataset.loaded === 'true') return resolve();
+      const s = existing || document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.dataset.pdfSrc = src;
+      s.onload = () => { s.dataset.loaded = 'true'; resolve(); };
+      s.onerror = () => {
+        s.remove();
+        tryNext();
+      };
+      if (!existing) document.head.appendChild(s);
+    };
+    tryNext();
+  });
+}
+
 function loadHtml2Pdf() {
-  if (window.html2pdf) return Promise.resolve(window.html2pdf);
+  if (window.html2canvas && (window.jspdf?.jsPDF || window.jsPDF)) {
+    return Promise.resolve({ html2canvas: window.html2canvas, jsPDF: window.jspdf?.jsPDF || window.jsPDF });
+  }
   if (_html2pdfPromise) return _html2pdfPromise;
-  _html2pdfPromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    s.onload = () => resolve(window.html2pdf);
-    s.onerror = () => { _html2pdfPromise = null; reject(new Error('Could not load PDF library')); };
-    document.head.appendChild(s);
+  _html2pdfPromise = (async () => {
+    await loadScriptFromSources([
+      'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
+      'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js',
+      'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js',
+    ]).catch(() => {});
+
+    if (!window.html2canvas) {
+      await loadScriptFromSources([
+        'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+        'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+        'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js',
+      ]);
+    }
+
+    if (!(window.jspdf?.jsPDF || window.jsPDF)) {
+      await loadScriptFromSources([
+        'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+        'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+        'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js',
+      ]);
+    }
+
+    const html2canvas = window.html2canvas;
+    const JsPDF = window.jspdf?.jsPDF || window.jsPDF;
+    if (!html2canvas || !JsPDF) {
+      throw new Error('PDF renderer did not load correctly');
+    }
+    return { html2canvas, jsPDF: JsPDF };
+  })().catch(err => {
+    _html2pdfPromise = null;
+    throw err;
   });
   return _html2pdfPromise;
 }
@@ -187,12 +238,7 @@ async function renderBillToPdfBlob(billHTML, filename) {
   }));
 
   try {
-    await loadHtml2Pdf();
-    const html2canvas = window.html2canvas;
-    const JsPDF = window.jspdf?.jsPDF || window.jsPDF;
-    if (!html2canvas || !JsPDF) {
-      throw new Error('PDF renderer did not load correctly');
-    }
+    const { html2canvas, jsPDF: JsPDF } = await loadHtml2Pdf();
 
     const node = sandbox.firstElementChild;
     node.style.display = 'block';
