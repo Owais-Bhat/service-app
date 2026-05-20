@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatTime, showNotification } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, showNotification } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
@@ -490,6 +490,12 @@ function money(value) {
   return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 }
 
+function byNewestCreated(a, b) {
+  const aDate = a?.created_at || a?.inquiries?.[0]?.created_at || 0;
+  const bDate = b?.created_at || b?.inquiries?.[0]?.created_at || 0;
+  return new Date(bDate) - new Date(aDate);
+}
+
 async function getEmployeeContext() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { user: null };
@@ -514,16 +520,18 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('attendance').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
-      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']),
+      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     const allInquiries = res[3].data || [];
+    const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
     // Build phone → company map for labelling service jobs
 
-    pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending');
+    pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
-      .filter(x => x.assignment_status === 'accepted' && !['resolved', 'closed'].includes(x.status))
+      .filter(x => x.assignment_status === 'accepted' && !taskInquiryIds.has(x.id) && !['resolved', 'closed'].includes(x.status))
+      .sort(byNewestCreated)
       .map(x => ({ ...x, _company: x.company_name || null }));
   } catch (err) {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
@@ -562,7 +570,7 @@ export async function renderEmployeeDashboard(container) {
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:var(--warning)">
           <span style="width:24px; height:24px; display:flex;">${ICONS.wrench}</span>
-          <span>${activeTasks.length}</span>
+          <span>${activeTasks.length + acceptedInquiries.length}</span>
         </div>
         <div class="stat-label">Active Tasks</div>
       </div>
@@ -1093,13 +1101,15 @@ export async function renderEmployeeTasks(container) {
   try {
     const [ticketsRes, inquiriesRes] = await Promise.all([
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
-      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']),
+      supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
     ]);
     tasks = ticketsRes.data || [];
     const allInquiries = inquiriesRes.data || [];
-    pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending');
+    const taskInquiryIds = new Set(tasks.map(task => task.inquiries?.[0]?.id).filter(Boolean));
+    pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
-      .filter(x => x.assignment_status === 'accepted' && !['resolved', 'closed'].includes(x.status))
+      .filter(x => x.assignment_status === 'accepted' && !taskInquiryIds.has(x.id))
+      .sort(byNewestCreated)
       .map(x => ({ ...x, _company: x.company_name || null }));
   } catch (err) {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);display:inline-flex;align-items:center;gap:8px;">${ICONS.alert}<span>Error</span></h3><p>${err.message}</p></div></div>`;
@@ -1115,11 +1125,13 @@ export async function renderEmployeeTasks(container) {
   });
   const completedTasks = tasks.filter(x => displayStatus(x.status) === 'resolved');
   const issueTasks = tasks.filter(x => displayStatus(x.status) === 'issue_not_resolved');
+  const activeAcceptedInquiries = acceptedInquiries.filter(x => !['resolved', 'closed'].includes(x.status));
+  const resolvedAcceptedInquiries = acceptedInquiries.filter(x => ['resolved', 'closed'].includes(x.status));
 
   const filterCounts = {
     all: tasks.length + acceptedInquiries.length,
-    active: activeTasks.length + acceptedInquiries.length,
-    completed: completedTasks.length,
+    active: activeTasks.length + activeAcceptedInquiries.length,
+    completed: completedTasks.length + resolvedAcceptedInquiries.length,
     issues: issueTasks.length,
   };
 
@@ -1130,6 +1142,7 @@ export async function renderEmployeeTasks(container) {
            <div style="font-weight:800; font-size:1.15rem; color:var(--primary)">${inq.full_name}</div>
            ${inq._company ? `<div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px">${inq._company}</div>` : ''}
            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
+           <div style="font-size:0.82rem; color:var(--text-dim); margin-top:4px;"><b>Created:</b> ${formatDateTime(inq.created_at)}</div>
            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
          </div>
          <span class="badge badge-${displayStatus(inq.status)}" style="font-size:0.75rem">${statusText(inq.status)}</span>
@@ -1182,6 +1195,7 @@ export async function renderEmployeeTasks(container) {
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="flex:1">
             <div style="font-weight:800; font-size:1.1rem; color:var(--text)">${task.title}</div>
+            <div style="font-size:0.82rem; color:var(--text-dim); margin-top:4px;"><b>Created:</b> ${formatDateTime(inq?.created_at || task.created_at)}</div>
             <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${task.description || 'No description provided.'}</div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
@@ -1239,6 +1253,15 @@ export async function renderEmployeeTasks(container) {
     `;
   };
 
+  const activeServiceCards = [
+    ...activeAcceptedInquiries,
+    ...activeTasks,
+  ].sort(byNewestCreated);
+  const resolvedServiceCards = [
+    ...resolvedAcceptedInquiries,
+    ...completedTasks,
+  ].sort(byNewestCreated);
+
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div>
@@ -1257,11 +1280,11 @@ export async function renderEmployeeTasks(container) {
         <div class="stat-label">Total Jobs</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--warning)">${activeTasks.length + acceptedInquiries.length}</div>
+        <div class="stat-value" style="color:var(--warning)">${activeTasks.length + activeAcceptedInquiries.length}</div>
         <div class="stat-label">Active</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--success)">${completedTasks.length}</div>
+        <div class="stat-value" style="color:var(--success)">${completedTasks.length + resolvedAcceptedInquiries.length}</div>
         <div class="stat-label">Completed</div>
       </div>
       <div class="stat-card">
@@ -1278,6 +1301,7 @@ export async function renderEmployeeTasks(container) {
             <div style="display:flex; justify-content:space-between; align-items:center; padding:14px; background:var(--bg-soft); border-radius:14px; margin-bottom:10px; box-shadow:var(--neu-sm);">
               <div>
                 <div style="font-weight:700">${pi.full_name} — ${pi.service_item}</div>
+                <div style="font-size:0.82rem; color:var(--text-dim)">Created: ${formatDateTime(pi.created_at)}</div>
                 <div style="font-size:0.82rem; color:var(--text-soft)">Preferred: ${pi.preferred_time || 'Flexible'}</div>
               </div>
               <div style="display:flex; gap:8px;">
@@ -1306,10 +1330,24 @@ export async function renderEmployeeTasks(container) {
     <div id="task-list">
       ${(tasks.length === 0 && acceptedInquiries.length === 0)
         ? '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:2rem;margin-bottom:12px;">📋</div><p style="font-weight:600;">No tasks assigned yet</p><p style="font-size:0.85rem;">Tasks will appear here once admin assigns service requests to you.</p></div></div>'
-        : [
-            ...acceptedInquiries.map(inq => jobCard(inq)),
-            ...tasks.map(task => taskCard(task))
-          ].join('')}
+        : `
+          <div class="card">
+            <div class="card-header"><span class="card-title">Active Services</span></div>
+            <div class="card-body emp-scroll-list">
+              ${activeServiceCards.length === 0
+                ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No active services</div>'
+                : activeServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Resolved Services</span></div>
+            <div class="card-body emp-scroll-list">
+              ${resolvedServiceCards.length === 0
+                ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No resolved services yet</div>'
+                : resolvedServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
+            </div>
+          </div>
+        `}
     </div>
   `;
 

@@ -915,6 +915,19 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.recent-requests-scroll,
+.emp-scroll-list {
+  max-height: 420px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.recent-requests-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

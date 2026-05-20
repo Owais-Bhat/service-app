@@ -46,6 +46,10 @@ function statusBadge(status) {
   return `<span class="badge ${cls}">${STATUS_LABEL[shown] || shown}</span>`;
 }
 
+function newestFirst(a, b) {
+  return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+}
+
 function buildPaidUpdates(row, extra = {}) {
   const updates = {
     payment_status: 'paid',
@@ -96,7 +100,7 @@ export async function renderAdminDashboard(container) {
   p.forEach(pr => { if (pr.phone && pr.company) phoneToCompany.set(pr.phone, pr.company); });
 
   // Aggregate all inquiries by company
-  const { data: allInquiries } = await supabase.from('inquiries').select('phone,status,company_name').order('created_at', { ascending: false });
+  const { data: allInquiries } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
   const companyMap = new Map();
   (allInquiries || []).forEach(inq => {
     const company = inq.company_name || phoneToCompany.get(inq.phone) || 'Walk-in / Unregistered';
@@ -109,6 +113,10 @@ export async function renderAdminDashboard(container) {
   const companyRows = [...companyMap.entries()]
     .sort((a, b) => b[1].total - a[1].total)
     .slice(0, 10);
+  const activeInquiries = [...i].sort(newestFirst);
+  const resolvedInquiries = (allInquiries || [])
+    .filter(x => ['resolved', 'closed'].includes(x.status))
+    .sort(newestFirst);
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -160,13 +168,15 @@ export async function renderAdminDashboard(container) {
       <!-- Service Requests Card (From Guests) -->
       <div class="card">
         <div class="card-header"><span class="card-title">Recent Service Requests</span></div>
-        <div class="table-wrap">
+        <div class="table-wrap recent-requests-scroll">
           <table>
-            <thead><tr><th>Ticket</th><th>Name</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Ticket</th><th>Service Date</th><th>Company</th><th>Name</th><th>Status</th><th></th></tr></thead>
             <tbody>
-              ${i.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No active requests</td></tr>' :
-                i.slice(0,5).map(x => `<tr>
+              ${activeInquiries.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-dim)">No active requests</td></tr>' :
+                activeInquiries.map(x => `<tr>
                   <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || '—'}</code></td>
+                  <td><small>${formatDateTime(x.created_at)}</small></td>
+                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">â€”</span>'}</td>
                   <td><b>${x.full_name}</b></td>
                   <td>${statusBadge(x.status)}</td>
                   <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>
@@ -177,12 +187,36 @@ export async function renderAdminDashboard(container) {
       </div>
     </div>
 
+    <div class="card" style="margin-top:24px">
+      <div class="card-header"><span class="card-title">Resolved Services</span></div>
+      <div class="table-wrap recent-requests-scroll">
+        <table>
+          <thead><tr><th>Ticket</th><th>Service Date</th><th>Company</th><th>Name</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${resolvedInquiries.length === 0
+              ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-dim)">No resolved services yet</td></tr>'
+              : resolvedInquiries.map(x => `<tr>
+                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || 'â€”'}</code></td>
+                  <td><small>${formatDateTime(x.created_at)}</small></td>
+                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">â€”</span>'}</td>
+                  <td><b>${x.full_name}</b></td>
+                  <td>${statusBadge(x.status)}</td>
+                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>
+                </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card" style="margin-top:24px" id="company-svc-card">
       <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
         <span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <div class="search-input-wrap" style="min-width:160px;max-width:260px;">
           <span>🔍</span>
           <input class="search-input" id="company-search" placeholder="Filter company…" style="padding:6px 10px;font-size:0.82rem;"/>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="company-export">Export Companies</button>
         </div>
       </div>
       <div class="table-wrap" id="company-table-wrap">
@@ -223,6 +257,20 @@ export async function renderAdminDashboard(container) {
       });
     };
   }
+  const companyExport = container.querySelector('#company-export');
+  if (companyExport) {
+    companyExport.onclick = () => {
+      const q = (companySearch?.value || '').toLowerCase();
+      exportToCSV('services-by-company.csv', companyRows
+        .filter(([company]) => !q || company.toLowerCase().includes(q))
+        .map(([company, counts]) => ({
+          company,
+          total: counts.total,
+          active: counts.active,
+          resolved: counts.resolved,
+        })));
+    };
+  }
 
   // Build phone set per company for modal lookup
   const companyPhones = new Map();
@@ -245,6 +293,9 @@ export async function renderAdminDashboard(container) {
       } else {
         companyInquiries = [];
       }
+      companyInquiries = (allInquiries || [])
+        .filter(x => (x.company_name || phoneToCompany.get(x.phone) || 'Walk-in / Unregistered') === company)
+        .sort(newestFirst);
 
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -257,12 +308,13 @@ export async function renderAdminDashboard(container) {
           <div class="modal-body" style="padding:0">
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Ticket</th><th>Customer</th><th>Service</th><th>Status</th><th>Bill</th><th></th></tr></thead>
+                <thead><tr><th>Ticket</th><th>Service Date</th><th>Customer</th><th>Service</th><th>Status</th><th>Bill</th><th></th></tr></thead>
                 <tbody>
                   ${companyInquiries.length === 0
-                    ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No inquiries found</td></tr>'
+                    ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No inquiries found</td></tr>'
                     : companyInquiries.map(x => `<tr>
                         <td><code style="font-size:0.75rem;color:var(--primary)">${x.ticket_no || '—'}</code></td>
+                        <td><small>${formatDateTime(x.created_at)}</small></td>
                         <td><b>${x.full_name}</b><br/><small>${x.phone}</small></td>
                         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || '—'}</td>
                         <td>${statusBadge(x.status)}</td>
@@ -273,10 +325,25 @@ export async function renderAdminDashboard(container) {
               </table>
             </div>
           </div>
-          <div class="modal-footer"><button class="btn btn-secondary" id="cm-co2">Close</button></div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="co-export">Export This Company</button>
+            <button class="btn btn-secondary" id="cm-co2">Close</button>
+          </div>
         </div>`;
       document.body.appendChild(overlay);
       overlay.querySelector('#cm-co').onclick = overlay.querySelector('#cm-co2').onclick = () => overlay.remove();
+      overlay.querySelector('#co-export').onclick = () => exportToCSV(`${company.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-services.csv`, companyInquiries.map(x => ({
+        ticket: x.ticket_no || x.id,
+        service_date: x.created_at || '',
+        company,
+        customer: x.full_name || '',
+        phone: x.phone || '',
+        service: x.service_item || '',
+        status: x.status || '',
+        bill_amount: x.bill_amount || '',
+        payment_status: x.payment_status || '',
+        location: x.location || '',
+      })));
       overlay.querySelectorAll('.co-inq-btn').forEach(b => {
         b.onclick = () => { overlay.remove(); openInquiryDetail(b.dataset.id, () => renderAdminDashboard(container)); };
       });
@@ -367,6 +434,10 @@ async function openInquiryDetail(id, onDone) {
           <div class="sr-meta-row">
             <div><div class="sr-meta-label">Ticket</div><div class="sr-meta-value sr-mono">${i.ticket_no || '—'}</div></div>
             <div><div class="sr-meta-label">Status</div><div>${statusBadge(i.status)}</div></div>
+          </div>
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Service Created</div><div class="sr-meta-value">${formatDateTime(i.created_at)}</div></div>
+            <div><div class="sr-meta-label">Last Updated</div><div class="sr-meta-value">${formatDateTime(i.updated_at || i.created_at)}</div></div>
           </div>
           <div class="sr-meta-row">
             <div><div class="sr-meta-label">Name</div><div class="sr-meta-value">${i.full_name}</div></div>
@@ -691,7 +762,7 @@ export async function renderInquiries(container) {
         <table>
           <thead>
             <tr>
-              <th>Ticket</th><th>Date</th><th>Company</th><th>Customer</th><th>Service</th>
+              <th>Ticket</th><th>Service Date</th><th>Company</th><th>Customer</th><th>Service</th>
               <th>Status</th><th>Bill</th><th>Payment</th><th></th>
             </tr>
           </thead>
@@ -700,7 +771,7 @@ export async function renderInquiries(container) {
               ? `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>`
               : filtered.map(x => `<tr>
                   <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0,8)}</code></td>
-                  <td>${formatDate(x.created_at)}</td>
+                  <td><small>${formatDateTime(x.created_at)}</small></td>
                   <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>
                   <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.phone}</small></td>
                   <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || '—'}</td>
@@ -731,7 +802,7 @@ export async function renderInquiries(container) {
   container.querySelector('#sr-export').onclick = () => {
     exportToCSV('service-requests.csv', filtered.map(x => ({
       ticket: x.ticket_no || x.id,
-      date: x.created_at,
+      service_date: x.created_at,
       company: x.company_name || '',
       customer: x.full_name,
       phone: x.phone,
