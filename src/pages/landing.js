@@ -301,7 +301,7 @@ export function renderLandingPage(container, onPortalClick) {
       const ad = state.ads[state.adIndex];
       const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
       const media = isVideo
-        ? `<video class="srf-ad-media" src="${escapeAttr(ad.url)}" autoplay muted loop playsinline></video>`
+        ? `<video class="srf-ad-media" src="${escapeAttr(ad.url)}" autoplay muted playsinline preload="auto"></video>`
         : `<img class="srf-ad-media" src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" loading="eager"/>`;
 
       const captionHtml = ad.caption
@@ -311,12 +311,28 @@ export function renderLandingPage(container, onPortalClick) {
         : '';
 
       slot.innerHTML = `${media}${captionHtml}`;
+      if (isVideo) {
+        const video = slot.querySelector('video');
+        if (video) {
+          const replay = () => {
+            try {
+              video.currentTime = 0;
+              const playPromise = video.play();
+              if (playPromise?.catch) playPromise.catch(() => {});
+            } catch { /* ignore autoplay edge cases */ }
+          };
+          video.addEventListener('ended', replay);
+          video.addEventListener('error', replay, { once: true });
+          video.play().catch?.(() => {});
+        }
+      }
       dots.forEach((d, i) => d.classList.toggle('active', i === state.adIndex));
     };
 
     const schedule = () => {
       if (state._adTimer) clearTimeout(state._adTimer);
       if (state.ads.length <= 1) return;
+      if ((state.ads[state.adIndex]?.kind || 'image').toLowerCase() === 'video') return;
       const ms = Math.max(1500, Number(state.ads[state.adIndex].duration_ms) || 6000);
       state._adTimer = setTimeout(() => {
         state.adIndex = (state.adIndex + 1) % state.ads.length;
