@@ -117,6 +117,16 @@ export async function renderAdminDashboard(container) {
   const resolvedInquiries = (allInquiries || [])
     .filter(x => ['resolved', 'closed'].includes(x.status))
     .sort(newestFirst);
+  const attentionItems = activeInquiries
+    .filter(x => !x.assigned_employee_id || ['pending', 'open'].includes(displayStatus(x.status)) || x.assignment_status === 'declined')
+    .map(x => ({
+      ...x,
+      _reason: x.assignment_status === 'declined'
+        ? 'Declined'
+        : !x.assigned_employee_id
+          ? 'Unassigned'
+          : 'Needs update',
+    }));
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -147,18 +157,19 @@ export async function renderAdminDashboard(container) {
     </div>
 
     <div class="grid-layout">
-      <!-- Recent Tickets (From Clients) -->
+      <!-- Actionable service queue -->
       <div class="card">
-        <div class="card-header"><span class="card-title">Recent Client Tickets</span></div>
-        <div class="table-wrap">
+        <div class="card-header"><span class="card-title">Needs Attention</span></div>
+        <div class="table-wrap recent-requests-scroll">
           <table>
-            <thead><tr><th>Title</th><th>Status</th><th>Priority</th></tr></thead>
+            <thead><tr><th>Ticket</th><th>Customer</th><th>Reason</th><th></th></tr></thead>
             <tbody>
-              ${t.filter(x => x.status !== 'resolved' && x.status !== 'closed').length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">No active tickets</td></tr>' : 
-                t.filter(x => x.status !== 'resolved' && x.status !== 'closed').slice(0,5).map(x => `<tr>
-                  <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${x.title}</b></td>
-                  <td>${statusBadge(x.status)}</td>
-                  <td><span class="badge badge-${x.priority || 'medium'}">${x.priority || 'medium'}</span></td>
+              ${attentionItems.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No requests need attention</td></tr>' :
+                attentionItems.map(x => `<tr>
+                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || 'â€”'}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>
+                  <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.company_name || x.service_item || 'Service request'}</small></td>
+                  <td><span class="badge badge-${x._reason === 'Declined' ? 'danger' : 'medium'}">${x._reason}</span></td>
+                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>
                 </tr>`).join('')}
             </tbody>
           </table>
