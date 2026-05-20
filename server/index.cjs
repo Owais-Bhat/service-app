@@ -758,7 +758,7 @@ function parseSelectClause(select) {
 const PUBLIC_INQUIRY_FEEDBACK_FIELDS = new Set(['feedback_rating', 'feedback_comment', 'feedback_at', 'employee_rating', 'feedback_employee_id']);
 const PUBLIC_INQUIRY_CREATE_FIELDS = new Set([
     'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
-    'bill_no', 'service_item', 'ticket_no', 'preferred_time', 'status', 'assignment_status',
+    'bill_no', 'service_item', 'description', 'ticket_no', 'preferred_time', 'status', 'assignment_status',
 ]);
 // Public complaint submissions: anyone with a valid ticket_no + phone (verified
 // in the POST handler) can file a complaint. Field set is intentionally minimal
@@ -808,6 +808,12 @@ const dataAuth = (req, res, next) => {
         req.user = { role: 'public' };
         return next();
     }
+    if (req.params.table === 'service_pricing' && req.method === 'GET') {
+        // Public landing-page form reads distinct categories from here to
+        // populate the "What's the issue?" dropdown. Writes stay admin-only.
+        req.user = { role: 'public' };
+        return next();
+    }
     return authenticateToken(req, res, next);
 };
 
@@ -828,16 +834,25 @@ function smsNotify(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;
     const templateId = process.env[templateEnvKey];
     const senderId = process.env.FAST2SMS_SENDER_ID || 'NTWRKE';
+    const normalized = normalizeIndianMobile(mobile);
     if (!apiKey || !templateId || !mobile) {
-        console.warn(`[SMS ${templateEnvKey}] skipped: missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'}`);
+        console.warn(`[SMS ${templateEnvKey}] skipped: missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'} (raw mobile=${JSON.stringify(mobile)})`);
         return;
     }
+    if (!normalized) {
+        console.warn(`[SMS ${templateEnvKey}] skipped: could not normalize mobile=${JSON.stringify(mobile)}`);
+        return;
+    }
+    console.log(`[SMS ${templateEnvKey}] sending → mobile=${normalized} templateId=${templateId} senderId=${senderId} vars(${variables.length})=${JSON.stringify(variables)}`);
     sendDltSms({ mobile, templateId, variables, apiKey, senderId })
         .then(r => {
-            if (!r.ok) console.warn(`[SMS ${templateEnvKey}]`, r.error);
-            else console.log(`[SMS ${templateEnvKey}] sent to ${normalizeIndianMobile(mobile) || 'invalid-mobile'}`);
+            if (!r.ok) {
+                console.warn(`[SMS ${templateEnvKey}] FAILED → status=${r.status || '?'} error=${r.error || 'unknown'} provider=${JSON.stringify(r.provider || null)}`);
+            } else {
+                console.log(`[SMS ${templateEnvKey}] sent to ${normalized} → provider=${JSON.stringify(r.provider || null)}`);
+            }
         })
-        .catch(e => console.error(`[SMS ${templateEnvKey}]`, e.message));
+        .catch(e => console.error(`[SMS ${templateEnvKey}] threw:`, e.message, e.stack));
 }
 
 function smsVar(value, fallback = 'N/A', maxLen = 80) {
@@ -1292,15 +1307,22 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
             // Admin assigns employee → SMS to employee with full job details
             // Template variables: {ticket_no} {service_item} {customer_name} {customer_phone} {location}
-            if (data.assigned_employee_id) {
+            // Fire when PATCH set assigned_employee_id, OR when the row currently
+            // has one and the assignment_status was just bumped to 'pending'
+            // (catches reassigns where the same empId is reapplied).
+            const empIdToNotify = data.assigned_employee_id
+                || (data.assignment_status === 'pending' && row.assigned_employee_id);
+            if (empIdToNotify) {
+                console.log(`[SMS SMS_TID_ASSIGN_EMP] trigger → empId=${empIdToNotify} ticket=${row.ticket_no} (patch keys: ${Object.keys(data).join(',')})`);
                 (async () => {
                     try {
                         const conn = await getConn();
                         const [emp] = await conn.execute(
                             'SELECT phone, full_name FROM profiles WHERE id = ? LIMIT 1',
-                            [data.assigned_employee_id]
+                            [empIdToNotify]
                         );
                         conn.release();
+                        console.log(`[SMS SMS_TID_ASSIGN_EMP] employee lookup → ${JSON.stringify(emp[0] || null)}`);
                         if (emp[0]?.phone) {
                             smsNotify(emp[0].phone, 'SMS_TID_ASSIGN_EMP', [
                                 smsVar(row.ticket_no, 'N/A', 20),
@@ -1310,10 +1332,10 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                                 smsVar(row.location, 'See app', 100),
                             ]);
                         } else {
-                            console.warn(`[SMS SMS_TID_ASSIGN_EMP] skipped: employee ${data.assigned_employee_id} has no phone`);
+                            console.warn(`[SMS SMS_TID_ASSIGN_EMP] skipped: employee ${empIdToNotify} has no phone (row=${JSON.stringify(emp[0] || null)})`);
                         }
                     } catch (err) {
-                        console.error('[SMS SMS_TID_ASSIGN_EMP]', err.message);
+                        console.error('[SMS SMS_TID_ASSIGN_EMP] db error:', err.message, err.stack);
                     }
                 })();
             }

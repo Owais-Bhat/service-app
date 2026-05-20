@@ -50,7 +50,9 @@ function displayStatus(status) {
   return status === 'closed' ? 'resolved' : (status || 'open');
 }
 
-const ISSUE_OPTIONS = [
+// Hardcoded fallback used until admin-defined service categories load
+// (or if the service_pricing table is empty).
+const FALLBACK_ISSUE_OPTIONS = [
   { value: 'internet-down', label: 'Internet down' },
   { value: 'slow-connection', label: 'Slow connection' },
   { value: 'wifi-issue', label: 'Wi-Fi issue' },
@@ -61,6 +63,29 @@ const ISSUE_OPTIONS = [
   { value: 'new-installation', label: 'New installation' },
   { value: 'other', label: 'Other (specify below)' },
 ];
+const OTHER_OPTION = { value: 'other', label: 'Other (specify below)' };
+
+function slugify(s) {
+  return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'option';
+}
+
+async function loadIssueOptionsFromPricing() {
+  try {
+    const { data, error } = await supabase.from('service_pricing').select('category');
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+    const seen = new Map();
+    for (const r of data) {
+      const cat = (r?.category || '').trim();
+      if (!cat || cat.toLowerCase() === 'uncategorized') continue;
+      const key = slugify(cat);
+      if (!seen.has(key)) seen.set(key, { value: key, label: cat });
+    }
+    if (seen.size === 0) return null;
+    return [...seen.values(), OTHER_OPTION];
+  } catch {
+    return null;
+  }
+}
 
 // ────────────────────────────────────────────────────────────────────
 // State + flow
@@ -81,6 +106,7 @@ export function renderLandingPage(container, onPortalClick) {
     locationMode: 'gps',
     locationValue: '',
     coords: null,
+    description: '',
     ticketNo: '',
     trackTicketNo: urlTicket,
     trackPhone: urlPhone,
@@ -96,6 +122,8 @@ export function renderLandingPage(container, onPortalClick) {
     // Ads carousel state
     ads: [],
     _adTimer: null,
+    issueOptions: FALLBACK_ISSUE_OPTIONS,
+    issueValue: '',
   };
 
   function render() {
@@ -374,13 +402,26 @@ export function renderLandingPage(container, onPortalClick) {
         <span class="srf-input-icon">${ICONS.wrench}</span>
         <select id="srf-issue" class="srf-input srf-select">
           <option value="">Select an issue…</option>
-          ${ISSUE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+          ${state.issueOptions.map(o => `
+            <option value="${escapeAttr(o.value)}" ${state.issueValue === o.value ? 'selected' : ''}>
+              ${escapeHTML(o.label)}
+            </option>
+          `).join('')}
         </select>
       </div>
 
       <div class="srf-input-wrap srf-other-wrap" id="srf-other-wrap" style="display:none;">
         <span class="srf-input-icon">${ICONS.edit}</span>
         <input id="srf-other" type="text" placeholder="Describe your issue briefly" class="srf-input" />
+      </div>
+
+      <label class="srf-label" for="srf-desc">Describe the problem <span class="srf-optional">(optional)</span></label>
+      <div class="srf-input-wrap" style="align-items:flex-start;">
+        <span class="srf-input-icon" style="margin-top:12px;">${ICONS.edit}</span>
+        <textarea id="srf-desc" rows="3" maxlength="1000"
+                  placeholder="Anything our technician should know — model, when it started, what you tried, etc."
+                  class="srf-input"
+                  style="padding-top:12px;padding-bottom:12px;resize:vertical;min-height:84px;">${state.description ? String(state.description).replace(/[<>]/g, '') : ''}</textarea>
       </div>
 
       <button class="srf-btn srf-btn-primary" id="srf-submit">
@@ -754,7 +795,9 @@ export function renderLandingPage(container, onPortalClick) {
   function bindForm() {
     const issueEl = container.querySelector('#srf-issue');
     const otherWrap = container.querySelector('#srf-other-wrap');
+    otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
     issueEl.onchange = () => {
+      state.issueValue = issueEl.value;
       otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
     };
 
@@ -802,12 +845,16 @@ export function renderLandingPage(container, onPortalClick) {
     const locEl = container.querySelector('#srf-location');
     locEl.addEventListener('input', e => { state.locationValue = e.target.value; });
 
+    const descEl = container.querySelector('#srf-desc');
+    if (descEl) descEl.addEventListener('input', e => { state.description = e.target.value; });
+
     bind('#srf-submit', async () => {
       const name = container.querySelector('#srf-name').value.trim();
       const bill = container.querySelector('#srf-bill').value.trim();
       const preferred_time = container.querySelector('#srf-time').value;
       const issueVal = issueEl.value;
-      const issueLabel = ISSUE_OPTIONS.find(o => o.value === issueVal)?.label || '';
+      state.issueValue = issueVal;
+      const issueLabel = state.issueOptions.find(o => o.value === issueVal)?.label || '';
       const otherText = container.querySelector('#srf-other')?.value.trim() || '';
 
       if (!name) return toast('Please enter your name', 'error');
@@ -816,6 +863,7 @@ export function renderLandingPage(container, onPortalClick) {
       if (issueVal === 'other' && !otherText) return toast('Please describe the issue', 'error');
 
       const service_item = issueVal === 'other' ? `Other: ${otherText}` : issueLabel;
+      const description = (state.description || '').trim().slice(0, 1000) || null;
       const submitBtn = container.querySelector('#srf-submit');
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<span class="srf-spin"></span><span>Submitting…</span>`;
@@ -829,6 +877,7 @@ export function renderLandingPage(container, onPortalClick) {
         customer_lng: state.coords?.lng ?? null,
         bill_no: bill || null,
         service_item,
+        description,
         status: 'open',
         assignment_status: 'none',
         ticket_no,
@@ -849,6 +898,15 @@ export function renderLandingPage(container, onPortalClick) {
       state.step = 4;
       render();
     });
+  }
+
+  async function loadIssueOptions() {
+    const loadedOptions = await loadIssueOptionsFromPricing();
+    state.issueOptions = loadedOptions || FALLBACK_ISSUE_OPTIONS;
+    if (state.issueValue && !state.issueOptions.some(o => o.value === state.issueValue)) {
+      state.issueValue = '';
+    }
+    render();
   }
 
   function bindSuccess() {
@@ -1139,6 +1197,7 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   render();
+  loadIssueOptions();
   loadAds();
 
   // Auto-fetch inquiry when URL has ?tab=track&ticket=...&phone=...
@@ -1214,6 +1273,7 @@ function renderStatusPanel(flowStatus, r, employee) {
           ${row(ICONS.phone, 'Contact', escapeHTML(r.phone))}
           ${row(ICONS.pin, 'Location', escapeHTML(r.location || '—'))}
           ${row(ICONS.wrench, 'Service', escapeHTML(r.service_item || '—'))}
+          ${r.description ? row(ICONS.edit, 'Description', escapeHTML(r.description)) : ''}
           ${r.preferred_time ? row(ICONS.clock, 'Preferred time', escapeHTML(r.preferred_time)) : ''}
         </div>
       ${cardClose}

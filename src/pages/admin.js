@@ -545,6 +545,7 @@ async function openInquiryDetail(id, onDone) {
             <div><div class="sr-meta-label">Phone</div><div class="sr-meta-value">${i.phone}</div></div>
           </div>
           <div><div class="sr-meta-label">Service item</div><div class="sr-meta-value">${i.service_item || '—'}</div></div>
+          ${i.description ? `<div><div class="sr-meta-label">Customer description</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(i.description)}</div></div>` : ''}
           <div><div class="sr-meta-label">Location</div><div class="sr-meta-value">${i.location || '—'}</div></div>
           ${i.company_name ? `<div><div class="sr-meta-label">Company</div><div class="sr-meta-value">${i.company_name}</div></div>` : ''}
           ${(i.device_type || i.device_serial_no) ? `
@@ -662,7 +663,7 @@ async function openInquiryDetail(id, onDone) {
 
       const { data: ticket, error: tErr } = await supabase.from('tickets').insert({
         title: `Service: ${(i.service_item || '').slice(0, 30)}`,
-        description: `Ticket ${i.ticket_no || ''} from ${i.full_name} (${i.phone}). ${i.service_item || ''}`,
+        description: `Ticket ${i.ticket_no || ''} from ${i.full_name} (${i.phone}). ${i.service_item || ''}${i.description ? `\n\nCustomer says: ${i.description}` : ''}`,
         assigned_to: empId,
         client_id: existingClient ? existingClient.id : null,
         status: 'assigned',
@@ -2515,8 +2516,13 @@ function openComplaintResponder(complaint, onChange) {
         <div style="background:var(--bg-soft);padding:14px;border-radius:12px;font-size:0.9rem;line-height:1.5;color:var(--text);margin-bottom:18px;">
           ${escapeHtml(complaint.complaint_text)}
         </div>
-        <label class="srf-label" style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Internal / customer response</label>
+        <label class="srf-label" style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Customer response (sent via SMS)</label>
         <textarea id="cmp-response" rows="4" placeholder="What did we do or say in reply?" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;resize:vertical;">${escapeHtml(complaint.admin_response || '')}</textarea>
+        <div style="margin-top:6px;font-size:0.78rem;color:var(--text-dim);line-height:1.4;">
+          ${complaint.admin_response
+            ? `SMS already delivered to <b>${escapeHtml(complaint.phone || '')}</b>. Editing the text and saving will re-send.`
+            : `No SMS has been sent yet. The customer will receive an SMS the moment you save a non-empty response.`}
+        </div>
         <label style="display:block;font-weight:700;font-size:0.85rem;margin:14px 0 6px;">Status</label>
         <select id="cmp-status" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;">
           <option value="open" ${complaint.status === 'open' ? 'selected' : ''}>Open</option>
@@ -2540,16 +2546,21 @@ function openComplaintResponder(complaint, onChange) {
   overlay.querySelector('#cmp-save').onclick = async () => {
     const response = overlay.querySelector('#cmp-response').value.trim();
     const status = overlay.querySelector('#cmp-status').value;
-    const updates = {
-      admin_response: response || null,
-      status,
-    };
+    const prevResponse = (complaint.admin_response || '').trim();
+
+    // Build the patch. Only include admin_response if it actually changed —
+    // this keeps the server-side SMS trigger (which fires on `data.admin_response`)
+    // from re-sending the same reply on a status-only update.
+    const updates = { status };
+    if (response !== prevResponse) {
+      updates.admin_response = response || null;
+    }
     if (status === 'resolved' && !complaint.resolved_at) {
       updates.resolved_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
     const { error } = await supabase.from('complaints').update(updates).eq('id', complaint.id);
     if (error) { toast('Could not save: ' + (error.message || ''), 'error'); return; }
-    toast('Complaint updated', 'success');
+    toast(updates.admin_response ? 'Response saved — customer will receive SMS' : 'Complaint updated', 'success');
     close();
     if (onChange) onChange();
   };

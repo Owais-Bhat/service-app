@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS inquiries (
     location TEXT,
     bill_no VARCHAR(50),
     service_item TEXT,
+    description TEXT,
     status VARCHAR(20) DEFAULT 'pending',
     ticket_no VARCHAR(50) UNIQUE,
     bill_amount DECIMAL(10, 2),
