@@ -183,6 +183,7 @@ const requiredColumns = {
         { name: 'company_name', definition: 'VARCHAR(150)' },
         { name: 'bill_no', definition: 'VARCHAR(50)' },
         { name: 'ticket_no', definition: 'VARCHAR(50) UNIQUE' },
+        { name: 'description', definition: 'TEXT' },
         { name: 'bill_amount', definition: 'DECIMAL(10, 2)' },
         { name: 'payment_link', definition: 'TEXT' },
         { name: 'payment_link_id', definition: 'VARCHAR(100)' },
