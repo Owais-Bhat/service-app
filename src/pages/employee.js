@@ -187,36 +187,114 @@ async function renderBillToPdfBlob(billHTML, filename) {
   }));
 
   try {
-    const html2pdf = await loadHtml2Pdf();
+    await loadHtml2Pdf();
+    const html2canvas = window.html2canvas;
+    const JsPDF = window.jspdf?.jsPDF || window.jsPDF;
+    if (!html2canvas || !JsPDF) {
+      throw new Error('PDF renderer did not load correctly');
+    }
+
     const node = sandbox.firstElementChild;
     node.style.display = 'block';
     node.style.overflow = 'visible';
     node.style.position = 'relative';
+    node.style.width = '794px';
+    node.style.maxWidth = '794px';
+    node.style.minHeight = '1123px';
 
-    const blob = await html2pdf().set({
-      margin: 0,
-      filename,
-      image: { type: 'jpeg', quality: 1.0 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: '#ffffff',
-        logging: false,
-        windowWidth: 794,
-        width: 794,
-        height: sandbox.offsetHeight,
-        scrollX: 0,
-        scrollY: 0,
-      },
-      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait', hotfixes: ['px_scaling'] },
-      pagebreak: { mode: ['css', 'legacy'] },
-    }).from(sandbox).outputPdf('blob');
+    const canvas = await html2canvas(node, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: '#ffffff',
+      logging: false,
+      windowWidth: 794,
+      width: 794,
+      height: node.scrollHeight,
+      scrollX: 0,
+      scrollY: 0,
+    });
+
+    const pdf = new JsPDF({
+      unit: 'px',
+      format: [794, 1123],
+      orientation: 'portrait',
+      hotfixes: ['px_scaling'],
+    });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const imgData = canvas.toDataURL('image/jpeg', 1.0);
+
+    let remainingHeight = imgHeight;
+    let y = 0;
+    pdf.addImage(imgData, 'JPEG', 0, y, imgWidth, imgHeight, undefined, 'FAST');
+    remainingHeight -= pageHeight;
+
+    while (remainingHeight > 0) {
+      y -= pageHeight;
+      pdf.addPage([794, 1123], 'portrait');
+      pdf.addImage(imgData, 'JPEG', 0, y, imgWidth, imgHeight, undefined, 'FAST');
+      remainingHeight -= pageHeight;
+    }
+
+    const blob = pdf.output('blob');
     const file = new File([blob], filename, { type: 'application/pdf' });
     return { blob, file };
   } finally {
     wrapper.remove();
   }
+}
+
+function openBillPrintWindow(billHTML, filename) {
+  const printWindow = window.open('', '_blank', 'width=900,height=1200');
+  if (!printWindow) {
+    throw new Error('Allow popups to print or save this bill as PDF');
+  }
+  printWindow.opener = null;
+
+  const safeTitle = String(filename || 'invoice.pdf').replace(/[<>&"]/g, '');
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${safeTitle}</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .print-shell { width: 794px; min-height: 1123px; background: #ffffff; }
+    @media print {
+      body { display: block; }
+      .print-shell { width: 100%; min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-shell">${billHTML}</div>
+  <script>
+    const finish = () => setTimeout(() => window.print(), 150);
+    const images = Array.from(document.images || []);
+    if (!images.length) finish();
+    else Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+      img.onload = resolve;
+      img.onerror = resolve;
+      setTimeout(resolve, 2500);
+    }))).then(finish);
+  </script>
+</body>
+</html>`);
+  printWindow.document.close();
 }
 
 function blobToBase64(blob) {
@@ -287,6 +365,7 @@ export function openPremiumBillModal(data, opts = {}) {
       </div>
       <div class="modal-footer" style="gap:12px;">
         <button class="btn btn-secondary" id="pb-cancel">Close</button>
+        <button class="btn btn-secondary" id="pb-print">Print / Save PDF</button>
         <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
         ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp"><span>📱 Send via WhatsApp</span></button>` : ''}
       </div>
@@ -298,6 +377,15 @@ export function openPremiumBillModal(data, opts = {}) {
   overlay.querySelector('#pb-cancel').onclick = close;
 
   const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
+
+  overlay.querySelector('#pb-print').onclick = () => {
+    try {
+      openBillPrintWindow(billHTML, filename);
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Could not open print window', 'error');
+    }
+  };
 
   overlay.querySelector('#pb-download').onclick = async () => {
     const btn = overlay.querySelector('#pb-download');
