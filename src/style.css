@@ -2216,6 +2216,21 @@ tr:hover td {
   border-radius: 14px;
   box-shadow: var(--neu-sm);
 }
+
+.btn.is-loading {
+  pointer-events: none;
+  opacity: 0.82;
+}
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  display: inline-block;
+  flex: 0 0 auto;
+  animation: srf-rotate 0.75s linear infinite;
+}
 .srf-perks svg { width: 22px; height: 22px; color: var(--primary); flex-shrink: 0; }
 
 /* Ads carousel — single rotating slot (image or video) */

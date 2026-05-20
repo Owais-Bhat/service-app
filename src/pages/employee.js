@@ -4,6 +4,31 @@ import { ICONS } from '../icons.js';
 
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
 
+function setButtonLoading(btn, label = 'Loading...') {
+  if (!btn) return () => {};
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.innerHTML = `<span class="btn-spinner"></span><span>${label}</span>`;
+  return () => {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.innerHTML = originalHTML;
+  };
+}
+
+async function openTaskModalWithLoader(btn, taskId, inqId, currentStatus, onDone) {
+  const restore = setButtonLoading(btn, 'Loading');
+  try {
+    await openTaskModal(taskId, inqId, currentStatus, onDone);
+  } catch (err) {
+    console.error(err);
+    toast('Could not open service manager', 'error');
+  } finally {
+    restore();
+  }
+}
+
 // Business info shown on every premium bill.
 const BUSINESS = {
   name: 'Networking Experts',
@@ -769,7 +794,7 @@ export async function renderEmployeeDashboard(container) {
 
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {
-    btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeDashboard(container));
+    btn.onclick = () => openTaskModalWithLoader(btn, btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeDashboard(container));
   });
 
   // Accept/Decline logic
@@ -1435,7 +1460,7 @@ export async function renderEmployeeTasks(container) {
 
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {
-    btn.onclick = () => openTaskModal(btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeTasks(container));
+    btn.onclick = () => openTaskModalWithLoader(btn, btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeTasks(container));
   });
 
   // Accept/Decline
@@ -1471,7 +1496,7 @@ export async function renderEmployeeTasks(container) {
 }
 
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
-  (async () => {
+  return (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
     const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
     const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];

@@ -2,6 +2,31 @@ import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining, showNotification } from '../utils.js';
 import { openPremiumBillModal } from './employee.js';
 
+function setButtonLoading(btn, label = 'Loading...') {
+  if (!btn) return () => {};
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.innerHTML = `<span class="btn-spinner"></span><span>${label}</span>`;
+  return () => {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.innerHTML = originalHTML;
+  };
+}
+
+async function openInquiryDetailWithLoader(btn, id, onDone) {
+  const restore = setButtonLoading(btn, 'Loading');
+  try {
+    await openInquiryDetail(id, onDone);
+  } catch (err) {
+    console.error(err);
+    toast('Could not open request details', 'error');
+  } finally {
+    restore();
+  }
+}
+
 function hoursWorked(clockIn, clockOut) {
   if (!clockIn || !clockOut) return null;
   const diff = new Date(clockOut) - new Date(clockIn);
@@ -446,14 +471,14 @@ export async function renderAdminDashboard(container) {
         location: x.location || '',
       })));
       overlay.querySelectorAll('.co-inq-btn').forEach(b => {
-        b.onclick = () => { overlay.remove(); openInquiryDetail(b.dataset.id, () => renderAdminDashboard(container)); };
+        b.onclick = () => { overlay.remove(); openInquiryDetailWithLoader(b, b.dataset.id, () => renderAdminDashboard(container)); };
       });
     };
   });
 
   
   container.querySelectorAll('.inq-btn').forEach(btn => {
-    btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAdminDashboard(container));
+    btn.onclick = () => openInquiryDetailWithLoader(btn, btn.dataset.id, () => renderAdminDashboard(container));
   });
 
   // Real-time listener for new inquiries
@@ -932,7 +957,7 @@ export async function renderInquiries(container) {
     };
   });
   container.querySelectorAll('.inq-btn').forEach(btn => {
-    btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderInquiries(container));
+    btn.onclick = () => openInquiryDetailWithLoader(btn, btn.dataset.id, () => renderInquiries(container));
   });
 }
 
@@ -1098,7 +1123,7 @@ export async function renderAllTickets(container) {
     </div>
   `;
   container.querySelectorAll('.all-ticket-manage').forEach(btn => {
-    btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderAllTickets(container));
+    btn.onclick = () => openInquiryDetailWithLoader(btn, btn.dataset.id, () => renderAllTickets(container));
   });
 }
 
@@ -1526,7 +1551,7 @@ export async function renderPaymentsTab(container) {
 
   const bindRowActions = () => {
     container.querySelectorAll('.inq-btn').forEach(btn => {
-      btn.onclick = () => openInquiryDetail(btn.dataset.id, () => renderPaymentsTab(container));
+      btn.onclick = () => openInquiryDetailWithLoader(btn, btn.dataset.id, () => renderPaymentsTab(container));
     });
     container.querySelectorAll('.mark-paid-btn').forEach(btn => {
       btn.onclick = async () => {
