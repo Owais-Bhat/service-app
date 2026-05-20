@@ -26,6 +26,9 @@ const sendSmsOTP = (phone) => postPublicApi('/otp/send', { phone });
 const verifySmsOTP = (phone, otp) => postPublicApi('/otp/verify', { phone, otp });
 const resendSmsOTP = (phone) => postPublicApi('/otp/resend', { phone });
 
+const AD_CACHE_KEY = 'nest_landing_ads_v1';
+const AD_CACHE_TTL_MS = 10 * 60 * 1000;
+
 function generateTicketNo() {
   // NE-YYMMDD-XXXX (4-digit random)
   const d = new Date();
@@ -87,6 +90,58 @@ async function loadIssueOptionsFromPricing() {
   }
 }
 
+function getCachedAds() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(AD_CACHE_KEY) || 'null');
+    if (!cached || !Array.isArray(cached.ads) || !cached.ads.length) return [];
+    if (Date.now() - Number(cached.savedAt || 0) > AD_CACHE_TTL_MS) return [];
+    return cached.ads;
+  } catch {
+    return [];
+  }
+}
+
+function cacheAds(ads) {
+  try {
+    localStorage.setItem(AD_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), ads }));
+  } catch {
+    // Storage can be disabled or full; ads still render from memory.
+  }
+}
+
+function preloadAdMedia(ad) {
+  if (!ad?.url) return Promise.resolve();
+  const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
+  return new Promise(resolve => {
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(resolve, 8000);
+    if (isVideo) {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.preload = 'metadata';
+      video.playsInline = true;
+      video.onloadeddata = done;
+      video.onloadedmetadata = done;
+      video.onerror = done;
+      video.src = ad.url;
+      video.load();
+      return;
+    }
+    const img = new Image();
+    img.onload = done;
+    img.onerror = done;
+    img.src = ad.url;
+    if (img.decode) img.decode().then(done).catch(() => {});
+  });
+}
+
+async function preloadAds(ads) {
+  await Promise.all((ads || []).map(preloadAdMedia));
+}
+
 // ────────────────────────────────────────────────────────────────────
 // State + flow
 // ────────────────────────────────────────────────────────────────────
@@ -96,6 +151,7 @@ export function renderLandingPage(container, onPortalClick) {
   const urlTab = urlParams.get('tab');
   const urlTicket = urlParams.get('ticket') || '';
   const urlPhone = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
+  const cachedAds = getCachedAds();
 
   const state = {
     mode: urlTab === 'track' ? 'track' : 'new',
@@ -120,7 +176,9 @@ export function renderLandingPage(container, onPortalClick) {
     complaintLoading: false,
     complaintSubmitted: false,
     // Ads carousel state
-    ads: [],
+    ads: cachedAds,
+    adsLoading: cachedAds.length === 0,
+    adIndex: 0,
     _adTimer: null,
     issueOptions: FALLBACK_ISSUE_OPTIONS,
     issueValue: '',
@@ -143,6 +201,16 @@ export function renderLandingPage(container, onPortalClick) {
         }
       </style>
       <div class="srf-page">
+        ${state.adsLoading ? `
+          <div class="srf-loading-screen" role="status" aria-live="polite">
+            <div class="srf-loading-card">
+              <img src="${LOGO}" alt="Networking Experts" class="srf-loading-logo"
+                   onerror="this.style.display='none'"/>
+              <span class="srf-loading-spinner"></span>
+              <div class="srf-loading-title">Loading service portal</div>
+            </div>
+          </div>
+        ` : ''}
         <div class="srf-bg-orb srf-orb-1"></div>
         <div class="srf-bg-orb srf-orb-2"></div>
         <div class="srf-bg-orb srf-orb-3"></div>
@@ -227,14 +295,14 @@ export function renderLandingPage(container, onPortalClick) {
     const slot = container.querySelector('#srf-ad-slot');
     if (!slot) return;
     const dots = [...container.querySelectorAll('.srf-ad-dot')];
-    let idx = 0;
+    state.adIndex = Math.min(Math.max(Number(state.adIndex) || 0, 0), state.ads.length - 1);
 
     const paint = () => {
-      const ad = state.ads[idx];
+      const ad = state.ads[state.adIndex];
       const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
       const media = isVideo
         ? `<video class="srf-ad-media" src="${escapeAttr(ad.url)}" autoplay muted loop playsinline></video>`
-        : `<img class="srf-ad-media" src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" loading="lazy"/>`;
+        : `<img class="srf-ad-media" src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" loading="eager"/>`;
 
       const captionHtml = ad.caption
         ? `<div class="srf-ad-caption">
@@ -243,22 +311,22 @@ export function renderLandingPage(container, onPortalClick) {
         : '';
 
       slot.innerHTML = `${media}${captionHtml}`;
-      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+      dots.forEach((d, i) => d.classList.toggle('active', i === state.adIndex));
     };
 
     const schedule = () => {
       if (state._adTimer) clearTimeout(state._adTimer);
       if (state.ads.length <= 1) return;
-      const ms = Math.max(1500, Number(state.ads[idx].duration_ms) || 6000);
+      const ms = Math.max(1500, Number(state.ads[state.adIndex].duration_ms) || 6000);
       state._adTimer = setTimeout(() => {
-        idx = (idx + 1) % state.ads.length;
+        state.adIndex = (state.adIndex + 1) % state.ads.length;
         paint();
         schedule();
       }, ms);
     };
 
     dots.forEach((d, i) => {
-      d.onclick = () => { idx = i; paint(); schedule(); };
+      d.onclick = () => { state.adIndex = i; paint(); schedule(); };
     });
 
     paint();
@@ -281,11 +349,15 @@ export function renderLandingPage(container, onPortalClick) {
       });
 
       if (ads.length) {
+        await preloadAds(ads);
+        cacheAds(ads);
         state.ads = ads;
-        render();
       }
     } catch (err) {
       console.warn('Could not load ads:', err);
+    } finally {
+      state.adsLoading = false;
+      render();
     }
   }
 
