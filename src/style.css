@@ -1083,6 +1083,35 @@ tr:hover td {
   justify-content: flex-end;
 }
 
+.modal-card {
+  background: var(--bg-soft);
+  border-radius: 24px;
+  box-shadow: 20px 20px 60px #c2d0e4, -20px -20px 60px #ffffff;
+  width: 100%;
+  max-width: 580px;
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-card .modal-header,
+.modal-card .modal-footer {
+  flex-shrink: 0;
+}
+
+.modal-card .modal-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-height: 0;
+}
+
+.modal-large {
+  max-width: min(980px, calc(100vw - 40px));
+}
+
 /* ─── FILTER BAR ─── */
 .filter-bar {
   display: flex;
@@ -3296,7 +3325,65 @@ input, select, textarea { max-width: 100%; }
    Self-contained colors — should look identical in light/dark
    themes and survive html-to-PDF rendering.
    ══════════════════════════════════════════════════════════ */
-.premium-bill-modal .modal-body { background: #f3f4f6; }
+.premium-bill-modal {
+  align-items: flex-start;
+  overflow-y: auto;
+}
+
+.premium-bill-modal .modal-large {
+  margin: 20px auto;
+}
+
+.premium-bill-modal .modal-body {
+  background: #f3f4f6;
+  overflow: auto !important;
+}
+
+@media (max-width: 768px) {
+  .premium-bill-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .premium-bill-modal .modal-large {
+    max-width: 100vw;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .premium-bill-modal .modal-header {
+    padding: 16px 18px;
+  }
+
+  .premium-bill-modal .modal-header h3 {
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .premium-bill-modal .modal-body {
+    padding: 12px !important;
+  }
+
+  .premium-bill-modal .modal-footer {
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .premium-bill-modal .modal-footer .btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 0.82rem;
+  }
+
+  .premium-bill-modal #pb-whatsapp {
+    grid-column: 1 / -1;
+  }
+}
 
 .premium-bill {
   background: #ffffff;

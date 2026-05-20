@@ -297,6 +297,21 @@ function openBillPrintWindow(billHTML, filename) {
   printWindow.document.close();
 }
 
+function fitBillPreview(overlay) {
+  const stage = overlay.querySelector('#bill-preview-stage');
+  const container = overlay.querySelector('#bill-preview-container');
+  const body = overlay.querySelector('.modal-body');
+  if (!stage || !container || !body) return;
+
+  container.style.transform = 'scale(1)';
+  stage.style.height = 'auto';
+
+  const availableWidth = Math.max(260, body.clientWidth - 16);
+  const scale = Math.min(1, availableWidth / 794);
+  container.style.transform = `scale(${scale})`;
+  stage.style.height = `${container.offsetHeight * scale}px`;
+}
+
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -351,7 +366,7 @@ export function openPremiumBillModal(data, opts = {}) {
   const { onSent, allowShare = true, title = '📄 Service Invoice Preview', inquiryId = null } = opts;
   const billHTML = renderPremiumBillHTML(data);
   const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
+  overlay.className = 'modal-overlay premium-bill-modal';
   overlay.innerHTML = `
     <div class="modal-card modal-large">
       <div class="modal-header">
@@ -359,8 +374,10 @@ export function openPremiumBillModal(data, opts = {}) {
         <button class="btn-icon" id="pb-close">${ICONS.close}</button>
       </div>
       <div class="modal-body" style="background:#F8FAFC; padding:20px; overflow-x:auto;">
-        <div id="bill-preview-container" style="background:white; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); border-radius:8px; width:794px; margin:0 auto; transform-origin: top center;">
-          ${billHTML}
+        <div id="bill-preview-stage" style="width:100%; display:flex; justify-content:center;">
+          <div id="bill-preview-container" style="background:white; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); border-radius:8px; width:794px; margin:0 auto; transform-origin: top center;">
+            ${billHTML}
+          </div>
         </div>
       </div>
       <div class="modal-footer" style="gap:12px;">
@@ -375,6 +392,15 @@ export function openPremiumBillModal(data, opts = {}) {
   const close = () => overlay.remove();
   overlay.querySelector('#pb-close').onclick = close;
   overlay.querySelector('#pb-cancel').onclick = close;
+  requestAnimationFrame(() => fitBillPreview(overlay));
+  const onResize = () => fitBillPreview(overlay);
+  window.addEventListener('resize', onResize);
+  const closeBillModal = () => {
+    window.removeEventListener('resize', onResize);
+    close();
+  };
+  overlay.querySelector('#pb-close').onclick = closeBillModal;
+  overlay.querySelector('#pb-cancel').onclick = closeBillModal;
 
   const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
 
