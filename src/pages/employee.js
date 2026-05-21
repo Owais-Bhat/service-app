@@ -411,6 +411,20 @@ async function uploadBillPdf(blob, filename, inquiry_id) {
   return url;
 }
 
+/**
+ * Generate the bill PDF for the given bill data and upload it to the server.
+ * Returns the public URL of the uploaded PDF.
+ * If an existing pdfUrl is provided (already stored on the inquiry) it is returned immediately
+ * without generating a new PDF.
+ */
+export async function shareBillToPublicLink(billData, { inquiryId = null, existingUrl = null } = {}) {
+  if (existingUrl) return existingUrl;
+  const billHTML = renderPremiumBillHTML(billData);
+  const filename = `Invoice-${billData.customer?.ticket_no || 'service'}.pdf`;
+  const { blob } = await renderBillToPdfBlob(billHTML, filename);
+  return uploadBillPdf(blob, filename, inquiryId);
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

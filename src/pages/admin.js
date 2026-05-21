@@ -1,6 +1,6 @@
 import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining, showNotification, ensureNotifyPermission } from '../utils.js';
-import { openPremiumBillModal } from './employee.js';
+import { openPremiumBillModal, shareBillToPublicLink } from './employee.js';
 
 function setButtonLoading(btn, label = 'Loading...') {
   if (!btn) return () => {};
@@ -2028,7 +2028,7 @@ export async function renderBillsTab(container) {
   };
 
   const rowHtml = (items) => items.length === 0
-    ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No bills generated yet</td></tr>'
+    ? '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No bills generated yet</td></tr>'
     : items.map(x => `
       <tr>
         <td><small style="color:var(--text-dim)">${dateOf(x)}</small></td>
@@ -2037,7 +2037,8 @@ export async function renderBillsTab(container) {
         <td>${x.device_type || '<span style="color:var(--text-dim)">—</span>'}<br/><small style="color:var(--text-dim)">${x.device_serial_no || ''}</small></td>
         <td><b>₹${Math.round(Number(x.bill_total)).toLocaleString('en-IN')}</b></td>
         <td><span class="badge badge-${x.payment_status === 'paid' ? 'resolved' : 'medium'}">${x.payment_status === 'paid' ? 'Paid' : 'Unpaid'}</span></td>
-        <td><button class="btn btn-primary btn-sm bill-view-btn" data-id="${x.id}">📄 View Bill</button></td>
+        <td><button class="btn btn-primary btn-sm bill-view-btn" data-id="${x.id}">📄 View</button></td>
+        <td><button class="btn btn-secondary btn-sm bill-share-btn" data-id="${x.id}" title="Get shareable PDF link">🔗 Share</button></td>
       </tr>`).join('');
 
   container.innerHTML = `
@@ -2084,7 +2085,7 @@ export async function renderBillsTab(container) {
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Date</th><th>Ticket</th><th>Customer</th><th>Device</th><th>Total</th><th>Payment</th><th></th></tr>
+            <tr><th>Date</th><th>Ticket</th><th>Customer</th><th>Device</th><th>Total</th><th>Payment</th><th></th><th></th></tr>
           </thead>
           <tbody>${rowHtml(list)}</tbody>
         </table>
@@ -2107,47 +2108,64 @@ export async function renderBillsTab(container) {
     bindRowActions();
   };
 
+  const buildBillData = async (row) => {
+    const technicianName = row.assigned_employee_id
+      ? ((await supabase.from('profiles').select('full_name').eq('id', row.assigned_employee_id).single()).data?.full_name || '')
+      : '';
+    const { data: links } = await supabase.from('inquiry_services')
+      .select('service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)')
+      .eq('inquiry_id', row.id);
+    const services = (links || []).map(r => {
+      const p = r.service_pricing || {};
+      const parts = [p.category, p.sub_category, p.sub_sub_category || p.name].filter(Boolean);
+      return { name: parts.join(' › '), cost: Number(p.cost) || 0 };
+    });
+    const servicesSubtotal = Math.max(0, Number(row.bill_amount || 0) - Number(row.extra_cost || 0));
+    return {
+      customer: {
+        name: row.full_name, phone: row.phone, location: row.location,
+        company: row.company_name, device_type: row.device_type,
+        device_serial: row.device_serial_no, service_item: row.service_item,
+        ticket_no: row.ticket_no,
+      },
+      technician: technicianName,
+      services,
+      servicesSubtotal,
+      extra: Number(row.extra_cost) || 0,
+      extraReason: row.extra_cost_reason || '',
+      platform: Number(row.platform_fee) || 0,
+      km: Number(row.transport_km) || 0,
+      transport: Number(row.transport_fee) || 0,
+      discount: Number(row.discount_amount) || 0,
+      taxable: (servicesSubtotal + Number(row.extra_cost || 0) + Number(row.platform_fee || 0) + Number(row.transport_fee || 0)) - Number(row.discount_amount || 0),
+      gst: Number(row.gst_amount) || 0,
+      total: Number(row.bill_total) || 0,
+      paymentLink: row.payment_link || '',
+    };
+  };
+
   const bindRowActions = () => {
     container.querySelectorAll('.bill-view-btn').forEach(btn => {
       btn.onclick = async () => {
         const row = list.find(x => String(x.id) === String(btn.dataset.id));
         if (!row) return;
-        const technicianName = row.assigned_employee_id
-          ? ((await supabase.from('profiles').select('full_name').eq('id', row.assigned_employee_id).single()).data?.full_name || '')
-          : '';
-        const { data: links } = await supabase.from('inquiry_services')
-          .select('service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)')
-          .eq('inquiry_id', row.id);
-        const services = (links || []).map(r => {
-          const p = r.service_pricing || {};
-          const parts = [p.category, p.sub_category, p.sub_sub_category || p.name].filter(Boolean);
-          return { name: parts.join(' › '), cost: Number(p.cost) || 0 };
-        });
-        const servicesSubtotal = Math.max(0, Number(row.bill_amount || 0) - Number(row.extra_cost || 0));
-        openPremiumBillModal({
-          customer: {
-            name: row.full_name, phone: row.phone, location: row.location,
-            company: row.company_name, device_type: row.device_type,
-            device_serial: row.device_serial_no, service_item: row.service_item,
-            ticket_no: row.ticket_no,
-          },
-          technician: technicianName,
-          services,
-          servicesSubtotal,
-          extra: Number(row.extra_cost) || 0,
-          extraReason: row.extra_cost_reason || '',
-          platform: Number(row.platform_fee) || 0,
-          km: Number(row.transport_km) || 0,
-          transport: Number(row.transport_fee) || 0,
-          discount: Number(row.discount_amount) || 0,
-          taxable: (servicesSubtotal + Number(row.extra_cost || 0) + Number(row.platform_fee || 0) + Number(row.transport_fee || 0)) - Number(row.discount_amount || 0),
-          gst: Number(row.gst_amount) || 0,
-          total: Number(row.bill_total) || 0,
-          paymentLink: row.payment_link || '',
-        }, { allowShare: false, title: '📄 Bill (Sent to Client)' });
+        const billData = await buildBillData(row);
+        openPremiumBillModal(billData, { allowShare: false, title: '📄 Bill (Sent to Client)' });
+      };
+    });
+
+    container.querySelectorAll('.bill-share-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const row = list.find(x => String(x.id) === String(btn.dataset.id));
+        if (!row) return;
+        const restore = setButtonLoading(btn, 'Preparing…');
+        let billData;
+        try { billData = await buildBillData(row); } finally { restore(); }
+        showBillShareModal(row, billData);
       };
     });
   };
+
 
   container.querySelector('#bills-refresh').onclick = () => renderBillsTab(container);
   container.querySelector('#bills-search').oninput = (e) => { searchQ = e.target.value.toLowerCase(); filterAndRender(); };
@@ -2162,6 +2180,91 @@ export async function renderBillsTab(container) {
 
   bindRowActions();
 }
+
+// ── BILL SHARE MODAL ────────────────────────────────────
+// Shows a copyable public PDF link for sharing with the client.
+async function showBillShareModal(row, billData) {
+  // Overlay with a spinner while we generate/upload the PDF
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:480px;width:100%;">
+      <div class="modal-header">
+        <h3>🔗 Share Bill with Client</h3>
+        <button class="btn-icon" id="bsm-close">✕</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <div id="bsm-loading" style="text-align:center;padding:20px 0;">
+          <div class="spinner" style="margin:0 auto 12px;"></div>
+          <p style="color:var(--text-dim);font-size:14px;">Generating PDF…</p>
+        </div>
+        <div id="bsm-content" style="display:none;">
+          <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">Copy this public link and send it to the client — they can open and download the PDF without logging in.</p>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="bsm-url" readonly style="flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);" value="" />
+            <button class="btn btn-primary" id="bsm-copy" style="white-space:nowrap;">📋 Copy</button>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <a id="bsm-open" target="_blank" rel="noopener" class="btn btn-secondary" style="text-decoration:none;">🌐 Open PDF</a>
+            <button class="btn btn-secondary" id="bsm-whatsapp">📱 Send via WhatsApp</button>
+          </div>
+        </div>
+        <div id="bsm-error" style="display:none;color:var(--danger);font-size:14px;"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#bsm-close').onclick = () => overlay.remove();
+
+  try {
+    const url = await shareBillToPublicLink(billData, {
+      inquiryId: row.id,
+      existingUrl: row.bill_pdf_url || null,
+    });
+    // Store the URL back on the row so next click is instant
+    row.bill_pdf_url = url;
+
+    overlay.querySelector('#bsm-loading').style.display = 'none';
+    overlay.querySelector('#bsm-content').style.display = 'block';
+
+    const urlInput = overlay.querySelector('#bsm-url');
+    urlInput.value = url;
+
+    overlay.querySelector('#bsm-copy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast('Link copied to clipboard!', 'success');
+      } catch {
+        urlInput.select();
+        document.execCommand('copy');
+        toast('Link copied!', 'success');
+      }
+    };
+    overlay.querySelector('#bsm-open').href = url;
+
+    overlay.querySelector('#bsm-whatsapp').onclick = () => {
+      const phone = (row.phone || '').replace(/\D/g, '');
+      if (!phone) { toast('No phone number on this bill', 'error'); return; }
+      const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+      const msg = [
+        `Hi ${row.full_name || ''}! 👋`,
+        `Your service invoice from *Networking Experts* is ready.`,
+        `Ticket: *${row.ticket_no || '—'}* · Total: *${inr(row.bill_total)}*`,
+        '',
+        `📄 View / download bill PDF:`,
+        url,
+        '',
+        '— Networking Experts',
+      ].join('\n');
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+  } catch (err) {
+    console.error('[showBillShareModal]', err);
+    overlay.querySelector('#bsm-loading').style.display = 'none';
+    overlay.querySelector('#bsm-error').style.display = 'block';
+    overlay.querySelector('#bsm-error').textContent = `Failed to generate PDF: ${err.message}`;
+  }
+}
+
 
 // ── DEVICE TYPES (admin master list) ─────────────────────
 // Simple CRUD. Employees see this list as a datalist on the Manage Service
