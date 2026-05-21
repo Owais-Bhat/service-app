@@ -861,7 +861,70 @@ function fast2SmsConfig() {
             || process.env.SMS_TID_OTP
             || process.env.SMS_OTP_ID
             || process.env.OTP_ID,
+        dltOtpTemplateId: process.env.SMS_TID_OTP
+            || process.env.FAST2SMS_OTP_MESSAGE_ID
+            || process.env.FAST2SMS_OTP_ID
+            || process.env.SMS_OTP_ID
+            || process.env.OTP_ID,
+        senderId: process.env.FAST2SMS_SENDER_ID || 'NTWRKE',
     };
+}
+
+const localOtpStore = new Map();
+const LOCAL_OTP_EXPIRY_MS = 10 * 60 * 1000;
+
+function generateOtpCode(length = 6) {
+    const min = 10 ** (length - 1);
+    const max = (10 ** length) - 1;
+    return String(Math.floor(min + Math.random() * (max - min + 1)));
+}
+
+function cleanupLocalOtpStore() {
+    const now = Date.now();
+    for (const [mobile, record] of localOtpStore.entries()) {
+        if (!record || record.expiresAt <= now) localOtpStore.delete(mobile);
+    }
+}
+
+async function sendLocalDltOtp({ mobile, apiKey, templateId, senderId }) {
+    cleanupLocalOtpStore();
+    if (!templateId) return { ok: false, error: 'OTP DLT message id is not configured.' };
+    const normalizedMobile = normalizeIndianMobile(mobile);
+    if (!normalizedMobile) return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' };
+
+    const otp = generateOtpCode(6);
+    const result = await sendDltSms({
+        mobile: normalizedMobile,
+        templateId,
+        variables: [otp],
+        apiKey,
+        senderId,
+    });
+    if (!result.ok) return result;
+
+    localOtpStore.set(normalizedMobile, {
+        otp,
+        expiresAt: Date.now() + LOCAL_OTP_EXPIRY_MS,
+        attempts: 0,
+    });
+    return { ok: true, provider: result.provider };
+}
+
+function verifyLocalDltOtp({ mobile, otp }) {
+    cleanupLocalOtpStore();
+    const normalizedMobile = normalizeIndianMobile(mobile);
+    const record = normalizedMobile ? localOtpStore.get(normalizedMobile) : null;
+    if (!record) return { ok: false, missing: true };
+    record.attempts += 1;
+    if (record.attempts > 5) {
+        localOtpStore.delete(normalizedMobile);
+        return { ok: false, error: 'Too many OTP attempts. Please request a new code.' };
+    }
+    if (String(record.otp) !== String(otp || '').trim()) {
+        return { ok: false, error: 'Incorrect OTP.' };
+    }
+    localOtpStore.delete(normalizedMobile);
+    return { ok: true };
 }
 
 // Fire-and-forget DLT notification SMS. Never throws — failures are logged only.
@@ -913,7 +976,7 @@ function sendOtpResponse(res, result, successPayload = {}) {
 
 app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' }), async (req, res) => {
     try {
-        const { apiKey, otpId } = fast2SmsConfig();
+        const { apiKey, otpId, dltOtpTemplateId, senderId } = fast2SmsConfig();
         const mobile = req.body?.phone || req.body?.mobile;
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
@@ -921,7 +984,16 @@ app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' 
         if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
 
         const result = await sendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId });
-        sendOtpResponse(res, result);
+        if (result.ok) return sendOtpResponse(res, result);
+
+        console.warn(`[otp/send] managed OTP failed, trying DLT fallback: status=${result.status || '?'} error=${result.error || 'unknown'}`);
+        const fallback = await sendLocalDltOtp({
+            mobile: normalizedMobile,
+            apiKey,
+            templateId: dltOtpTemplateId,
+            senderId,
+        });
+        sendOtpResponse(res, fallback);
     } catch (err) {
         console.error('[otp/send]', err);
         res.status(500).json({ ok: false, error: 'Could not send OTP' });
@@ -936,6 +1008,10 @@ app.post('/api/otp/verify', rateLimit({ windowMs: 60_000, max: 10, key: 'otp-ver
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
         if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
+        const localResult = verifyLocalDltOtp({ mobile: normalizedMobile, otp: req.body?.otp });
+        if (localResult.ok) return sendOtpResponse(res, localResult, { verified: true });
+        if (!localResult.missing) return sendOtpResponse(res, localResult);
+
         const result = await verifyFast2SmsOtp({
             mobile: normalizedMobile,
             otp: req.body?.otp,
@@ -950,14 +1026,34 @@ app.post('/api/otp/verify', rateLimit({ windowMs: 60_000, max: 10, key: 'otp-ver
 
 app.post('/api/otp/resend', rateLimit({ windowMs: 60_000, max: 3, key: 'otp-resend' }), async (req, res) => {
     try {
-        const { apiKey, otpId } = fast2SmsConfig();
+        const { apiKey, otpId, dltOtpTemplateId, senderId } = fast2SmsConfig();
         const mobile = req.body?.phone || req.body?.mobile;
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
         if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
+
+        if (localOtpStore.has(normalizedMobile)) {
+            const fallback = await sendLocalDltOtp({
+                mobile: normalizedMobile,
+                apiKey,
+                templateId: dltOtpTemplateId,
+                senderId,
+            });
+            return sendOtpResponse(res, fallback);
+        }
+
         const result = await resendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId });
-        sendOtpResponse(res, result);
+        if (result.ok) return sendOtpResponse(res, result);
+
+        console.warn(`[otp/resend] managed OTP failed, trying DLT fallback: status=${result.status || '?'} error=${result.error || 'unknown'}`);
+        const fallback = await sendLocalDltOtp({
+            mobile: normalizedMobile,
+            apiKey,
+            templateId: dltOtpTemplateId,
+            senderId,
+        });
+        sendOtpResponse(res, fallback);
     } catch (err) {
         console.error('[otp/resend]', err);
         res.status(500).json({ ok: false, error: 'Could not resend OTP' });
