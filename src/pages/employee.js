@@ -571,18 +571,18 @@ function hoursWorked(clockIn, clockOut) {
   return `${h}h ${m}m`;
 }
 
-const MAX_ACTIVE_SHIFT_HOURS = 10;
+const AUTO_CLOCK_OUT_HOUR = 18;
 const STRICT_CLOCKOUT_LIMIT = 4;
 
-function activeShiftHours(row) {
-  if (!row?.clock_in) return 0;
-  const diff = Date.now() - new Date(row.clock_in).getTime();
-  return Number.isFinite(diff) ? diff / 3600000 : 0;
+function isPastAutoClockOut(now = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setHours(AUTO_CLOCK_OUT_HOUR, 0, 0, 0);
+  return now >= cutoff;
 }
 
 function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
   if (!row?.clock_in || row?.clock_out) return false;
-  return row.date !== today || activeShiftHours(row) > MAX_ACTIVE_SHIFT_HOURS;
+  return row.date !== today || isPastAutoClockOut();
 }
 
 function money(value) {

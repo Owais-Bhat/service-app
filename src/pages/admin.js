@@ -68,22 +68,22 @@ function money(value) {
 }
 import { ICONS } from '../icons.js';
 
-const MAX_ACTIVE_SHIFT_HOURS = 10;
+const AUTO_CLOCK_OUT_HOUR = 18;
 const STRICT_CLOCKOUT_LIMIT = 4;
 
-function activeShiftHours(row) {
-  if (!row?.clock_in) return 0;
-  const diff = Date.now() - new Date(row.clock_in).getTime();
-  return Number.isFinite(diff) ? diff / 3600000 : 0;
+function isPastAutoClockOut(now = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setHours(AUTO_CLOCK_OUT_HOUR, 0, 0, 0);
+  return now >= cutoff;
 }
 
 function isValidActiveAttendance(row, today = new Date().toLocaleDateString('en-CA')) {
-  return Boolean(row?.clock_in && !row?.clock_out && row?.date === today && activeShiftHours(row) <= MAX_ACTIVE_SHIFT_HOURS);
+  return Boolean(row?.clock_in && !row?.clock_out && row?.date === today && !isPastAutoClockOut());
 }
 
 function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
   if (!row?.clock_in || row?.clock_out) return false;
-  return row.date !== today || activeShiftHours(row) > MAX_ACTIVE_SHIFT_HOURS;
+  return row.date !== today || isPastAutoClockOut();
 }
 
 function groupedForgottenClockouts(rows = []) {
@@ -98,11 +98,13 @@ function groupedForgottenClockouts(rows = []) {
 
 function resolvedClockOutFor(row) {
   const clockInMs = new Date(row?.clock_in || Date.now()).getTime();
-  const fallbackMs = Number.isFinite(clockInMs)
-    ? clockInMs + (MAX_ACTIVE_SHIFT_HOURS * 3600000)
-    : Date.now();
   const today = new Date().toLocaleDateString('en-CA');
-  const resolvedMs = row?.date === today ? Date.now() : fallbackMs;
+  const cutoff = new Date(`${row?.date || today}T00:00:00`);
+  cutoff.setHours(AUTO_CLOCK_OUT_HOUR, 0, 0, 0);
+  const cutoffMs = cutoff.getTime();
+  const resolvedMs = row?.date === today
+    ? Date.now()
+    : Math.max(Number.isFinite(clockInMs) ? clockInMs : cutoffMs, cutoffMs);
   return new Date(resolvedMs).toISOString();
 }
 
