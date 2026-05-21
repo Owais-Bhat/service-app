@@ -856,7 +856,11 @@ const dataAuth = (req, res, next) => {
 function fast2SmsConfig() {
     return {
         apiKey: process.env.SMS_API,
-        otpId: process.env.FAST2SMS_OTP_ID || process.env.SMS_OTP_ID || process.env.OTP_ID,
+        otpId: process.env.FAST2SMS_OTP_ID
+            || process.env.FAST2SMS_OTP_MESSAGE_ID
+            || process.env.SMS_TID_OTP
+            || process.env.SMS_OTP_ID
+            || process.env.OTP_ID,
     };
 }
 
@@ -914,7 +918,7 @@ app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' 
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
-        if (!otpId) return res.status(503).json({ ok: false, error: 'FAST2SMS_OTP_ID is required for DLT OTP sending.' });
+        if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
 
         const result = await sendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId });
         sendOtpResponse(res, result);
@@ -931,7 +935,7 @@ app.post('/api/otp/verify', rateLimit({ windowMs: 60_000, max: 10, key: 'otp-ver
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
-        if (!otpId) return res.status(503).json({ ok: false, error: 'FAST2SMS_OTP_ID is required for DLT OTP verification.' });
+        if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
         const result = await verifyFast2SmsOtp({
             mobile: normalizedMobile,
             otp: req.body?.otp,
@@ -951,7 +955,7 @@ app.post('/api/otp/resend', rateLimit({ windowMs: 60_000, max: 3, key: 'otp-rese
         const normalizedMobile = normalizeIndianMobile(mobile);
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
-        if (!otpId) return res.status(503).json({ ok: false, error: 'FAST2SMS_OTP_ID is required for DLT OTP resend.' });
+        if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
         const result = await resendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId });
         sendOtpResponse(res, result);
     } catch (err) {
