@@ -710,7 +710,7 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
       ` : ''}
 
-      ${!hasFeedback ? `
+      ${resolved && !hasFeedback ? `
         <div class="srf-feedback">
           <h3 class="srf-fb-title">How did we do?</h3>
           <p class="srf-fb-sub">Your honest feedback helps us serve you better.</p>
@@ -755,7 +755,7 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
       ` : ''}
 
-      ${hasFeedback ? `
+      ${resolved && hasFeedback ? `
         <div class="srf-fb-done">
           <div class="srf-fb-done-ring">${ICONS.star}</div>
           <h3 style="font-weight:800;font-size:1.1rem;color:var(--text);margin:0 0 6px;">Thank you for your feedback!</h3>

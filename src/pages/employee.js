@@ -557,6 +557,20 @@ function hoursWorked(clockIn, clockOut) {
   return `${h}h ${m}m`;
 }
 
+const MAX_ACTIVE_SHIFT_HOURS = 10;
+const STRICT_CLOCKOUT_LIMIT = 4;
+
+function activeShiftHours(row) {
+  if (!row?.clock_in) return 0;
+  const diff = Date.now() - new Date(row.clock_in).getTime();
+  return Number.isFinite(diff) ? diff / 3600000 : 0;
+}
+
+function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
+  if (!row?.clock_in || row?.clock_out) return false;
+  return row.date !== today || activeShiftHours(row) > MAX_ACTIVE_SHIFT_HOURS;
+}
+
 function money(value) {
   return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 }
@@ -565,6 +579,17 @@ function byNewestCreated(a, b) {
   const aDate = a?.created_at || a?.inquiries?.[0]?.created_at || 0;
   const bDate = b?.created_at || b?.inquiries?.[0]?.created_at || 0;
   return new Date(bDate) - new Date(aDate);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function starsHtml(n) {
+  const v = Math.round(Number(n) || 0);
+  return Array.from({ length: 5 }, (_, i) =>
+    `<span style="color:${i < v ? 'var(--warning)' : 'var(--border)'};display:inline-flex;width:14px;height:14px">${i < v ? ICONS.star : ICONS.starOutline}</span>`
+  ).join('');
 }
 
 async function getEmployeeContext() {
@@ -584,7 +609,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
+  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
 
   try {
     const res = await Promise.all([
@@ -592,8 +617,10 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
+      supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
+    attendanceHistory = res[4].data || [];
     const allInquiries = res[3].data || [];
     const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
@@ -620,6 +647,8 @@ export async function renderEmployeeDashboard(container) {
   const isClockedIn = !!attendance?.clock_in;
   const isClockedOut = !!attendance?.clock_out;
   const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
+  const missedClockOuts = attendanceHistory.filter(row => isForgottenClockOut(row, today));
+  const strictClockoutBlock = missedClockOuts.length >= STRICT_CLOCKOUT_LIMIT;
 
   container.innerHTML = `
     <div class="page-header">
@@ -629,6 +658,20 @@ export async function renderEmployeeDashboard(container) {
       </h1>
       <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
     </div>
+
+    ${missedClockOuts.length ? `
+      <div class="card" style="margin-bottom:18px;border:1px solid ${strictClockoutBlock ? 'var(--danger)' : 'rgba(245,158,11,0.45)'};">
+        <div class="card-body" style="display:flex;gap:14px;align-items:flex-start;">
+          <span style="width:24px;height:24px;color:${strictClockoutBlock ? 'var(--danger)' : 'var(--warning)'};display:flex;">${ICONS.alert}</span>
+          <div>
+            <div style="font-weight:800;color:${strictClockoutBlock ? 'var(--danger)' : 'var(--warning)'};">${strictClockoutBlock ? 'Clock-in restricted' : 'Clock-out warning'}</div>
+            <div style="color:var(--text-soft);font-size:0.88rem;line-height:1.45;margin-top:4px;">
+              You have ${missedClockOuts.length} missed clock-out record${missedClockOuts.length === 1 ? '' : 's'}. ${strictClockoutBlock ? 'Please contact admin to fix attendance before starting a new shift.' : 'Please avoid repeated missed clock-outs.'}
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : ''}
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -661,7 +704,7 @@ export async function renderEmployeeDashboard(container) {
         <div class="card-body attendance-card-body">
           <div id="live-clock" class="live-clock">--:--:--</div>
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn ? 'disabled' : ''}>
+            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn || strictClockoutBlock ? 'disabled' : ''}>
               ${ICONS.play}<span>Clock In</span>
             </button>
             <button class="btn btn-secondary" id="btn-clock-out" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
@@ -742,6 +785,10 @@ export async function renderEmployeeDashboard(container) {
 
   // Clock In
   bind('#btn-clock-in', async () => {
+    if (strictClockoutBlock) {
+      toast('Clock-in is restricted because you have 4 or more missed clock-outs. Contact admin.', 'error');
+      return;
+    }
     const btn = container.querySelector('#btn-clock-in');
     btn.disabled = true; btn.textContent = 'Getting location…';
     let locationStr = 'Unknown';
@@ -880,6 +927,8 @@ export async function renderEmployeeAttendanceRecords(container) {
   const monthRows = attendance.filter(x => String(x.date || '').startsWith(monthKey));
   const presentDays = new Set(monthRows.map(x => x.date)).size;
   const completed = monthRows.filter(x => x.clock_in && x.clock_out);
+  const forgottenRows = attendance.filter(x => isForgottenClockOut(x));
+  const strictClockoutBlock = forgottenRows.length >= STRICT_CLOCKOUT_LIMIT;
   const totalMins = completed.reduce((sum, x) => sum + Math.max(0, new Date(x.clock_out) - new Date(x.clock_in)) / 60000, 0);
   const totalHours = `${Math.floor(totalMins / 60)}h ${Math.round(totalMins % 60)}m`;
 
@@ -890,7 +939,8 @@ export async function renderEmployeeAttendanceRecords(container) {
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-value">${presentDays}</div><div class="stat-label">Days Present This Month</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${monthRows.filter(x => x.clock_in && !x.clock_out).length}</div><div class="stat-label">Active Sessions</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${monthRows.filter(x => x.clock_in && !x.clock_out && !isForgottenClockOut(x)).length}</div><div class="stat-label">Active Sessions</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:${forgottenRows.length ? 'var(--danger)' : 'var(--success)'}">${forgottenRows.length}</div><div class="stat-label">${strictClockoutBlock ? 'Strict Warning' : 'Missed Clock-outs'}</div></div>
       <div class="stat-card"><div class="stat-value" style="font-size:1.7rem;color:var(--warning)">${totalHours}</div><div class="stat-label">Logged Hours This Month</div></div>
     </div>
     <div class="card">
@@ -902,7 +952,11 @@ export async function renderEmployeeAttendanceRecords(container) {
               attendance.map(x => `<tr>
                 <td>${formatDate(x.date)}</td>
                 <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
-                <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
+                <td>${x.clock_out
+                  ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>`
+                  : isForgottenClockOut(x)
+                    ? '<span class="badge badge-danger">Forgot clock-out</span>'
+                    : '<span class="badge badge-open">Active</span>'}</td>
                 <td>${hoursWorked(x.clock_in, x.clock_out) || '—'}</td>
                 <td><small>${x.location || '—'}</small></td>
               </tr>`).join('')}
@@ -1162,6 +1216,96 @@ export async function renderEmployeeSalary(container) {
 }
 
 // ── EMPLOYEE: MY TASKS (dedicated page) ──────────────────
+export async function renderEmployeeLeaderboard(container) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  const monthKey = getMonthKey();
+  const [{ data: rows }, { data: profiles }] = await Promise.all([
+    supabase.from('inquiries').select('*').order('feedback_at', { ascending: false }),
+    supabase.from('profiles').select('id,full_name,role'),
+  ]);
+
+  const employees = new Map((profiles || [])
+    .filter(p => p.role === 'employee')
+    .map(p => [p.id, p]));
+  const feedbackRows = (rows || []).filter(r => r.feedback_rating != null);
+  const monthRows = feedbackRows.filter(r => String(r.feedback_at || r.updated_at || '').startsWith(monthKey));
+
+  const buildRows = (sourceRows) => {
+    const agg = new Map();
+    sourceRows.forEach(r => {
+      const empId = r.feedback_employee_id || r.assigned_employee_id;
+      if (!empId || !employees.has(empId)) return;
+      const score = Number(r.employee_rating || r.feedback_rating || 0);
+      if (!score) return;
+      if (!agg.has(empId)) agg.set(empId, { total: 0, count: 0, fiveStars: 0 });
+      const entry = agg.get(empId);
+      entry.total += score;
+      entry.count += 1;
+      if (score >= 5) entry.fiveStars += 1;
+    });
+    return [...agg.entries()]
+      .map(([id, a]) => ({ id, name: employees.get(id)?.full_name || 'Employee', avg: a.total / a.count, count: a.count, fiveStars: a.fiveStars }))
+      .sort((a, b) => b.avg - a.avg || b.count - a.count || b.fiveStars - a.fiveStars);
+  };
+
+  const monthly = buildRows(monthRows);
+  const allTime = buildRows(feedbackRows);
+  const winner = monthly[0] || null;
+  const myMonthly = monthly.find(x => x.id === user.id);
+  const myAllTime = allTime.find(x => x.id === user.id);
+  const myRank = monthly.findIndex(x => x.id === user.id) + 1;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Leaderboard</h1>
+      <p>Employee of the month is calculated from resolved service feedback.</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.8rem">${winner ? escapeHtml(winner.name) : '-'}</div><div class="stat-label">Employee of Month</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${myRank || '-'}</div><div class="stat-label">Your Monthly Rank</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${myMonthly ? myMonthly.avg.toFixed(2) : '0.00'} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Your Month Rating</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${myAllTime ? myAllTime.count : 0}</div><div class="stat-label">Your Total Reviews</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">This Month</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>Employee</th><th>Rating</th><th>Reviews</th><th>5-Star</th></tr></thead>
+          <tbody>
+            ${monthly.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">No feedback this month yet</td></tr>' :
+              monthly.map((e, idx) => `<tr style="${e.id === user.id ? 'background:rgba(16,185,129,0.06)' : ''}">
+                <td><b>#${idx + 1}</b></td>
+                <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
+                <td>${starsHtml(e.avg)} <span style="margin-left:6px;font-weight:700">${e.avg.toFixed(2)}</span></td>
+                <td>${e.count}</td>
+                <td><span class="badge badge-resolved">${e.fiveStars}</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:24px">
+      <div class="card-header"><span class="card-title">All-Time Ranking</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>Employee</th><th>Rating</th><th>Reviews</th></tr></thead>
+          <tbody>
+            ${allTime.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No ratings yet</td></tr>' :
+              allTime.map((e, idx) => `<tr style="${e.id === user.id ? 'background:rgba(16,185,129,0.06)' : ''}">
+                <td><b>#${idx + 1}</b></td>
+                <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
+                <td>${starsHtml(e.avg)} <span style="margin-left:6px;font-weight:700">${e.avg.toFixed(2)}</span></td>
+                <td>${e.count}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 export async function renderEmployeeTasks(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }

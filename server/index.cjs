@@ -934,7 +934,10 @@ function verifyLocalDltOtp({ mobile, otp }) {
 function smsNotify(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;
     const templateId = process.env[templateEnvKey];
-    const senderId = process.env.FAST2SMS_SENDER_ID || 'NTWRKE';
+    const senderId = process.env[`FAST2SMS_SENDER_ID_${templateEnvKey}`]
+        || process.env[`SMS_SENDER_ID_${templateEnvKey}`]
+        || process.env.FAST2SMS_SENDER_ID
+        || 'NTWRKE';
     const normalized = normalizeIndianMobile(mobile);
     if (!apiKey || !templateId || !mobile) {
         console.warn(`[SMS ${templateEnvKey}] skipped: missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'} (raw mobile=${JSON.stringify(mobile)})`);
@@ -959,7 +962,10 @@ function smsNotify(mobile, templateEnvKey, variables) {
 async function smsNotifyResult(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;
     const templateId = process.env[templateEnvKey];
-    const senderId = process.env.FAST2SMS_SENDER_ID || 'NTWRKE';
+    const senderId = process.env[`FAST2SMS_SENDER_ID_${templateEnvKey}`]
+        || process.env[`SMS_SENDER_ID_${templateEnvKey}`]
+        || process.env.FAST2SMS_SENDER_ID
+        || 'NTWRKE';
     const normalized = normalizeIndianMobile(mobile);
     if (!apiKey || !templateId || !mobile) {
         return { ok: false, error: `Missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'}` };

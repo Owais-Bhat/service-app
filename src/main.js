@@ -3,7 +3,7 @@ import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
 import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab } from './pages/admin.js';
-import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks } from './pages/employee.js';
+import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
@@ -64,6 +64,7 @@ function getNavItems(role) {
       { id: 'my-eod', icon: ICONS.clipboard, label: 'EOD Reports' },
       { id: 'my-cash', icon: ICONS.rupee, label: 'My Cash' },
       { id: 'my-salary', icon: ICONS.rupee, label: 'Salary' },
+      { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
       { type: 'section', label: 'Account' },
       { id: 'profile', icon: ICONS.user, label: 'Profile' },
     ];
@@ -87,7 +88,7 @@ function getNavItems(role) {
     { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
     { id: 'pricing', icon: ICONS.receipt, label: 'Service Pricing' },
     { id: 'device-types', icon: ICONS.box, label: 'Device Types' },
-    { id: 'feedback', icon: ICONS.star, label: 'Feedback' },
+    { id: 'feedback', icon: ICONS.star, label: 'Leaderboard' },
     { id: 'complaints', icon: ICONS.shield, label: 'Complaints' },
     { id: 'ads', icon: ICONS.box, label: 'Landing Ads' },
     { type: 'section', label: 'Account' },
@@ -106,6 +107,7 @@ function getPageRenderer(role, page) {
       'my-eod': renderEmployeeEODReports,
       'my-cash': renderEmployeeCash,
       'my-salary': renderEmployeeSalary,
+      leaderboard: renderEmployeeLeaderboard,
       profile: renderProfile
     },
     admin: {

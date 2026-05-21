@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining, showNotification } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, exportToCSV, calculateSLA, formatTimeRemaining, showNotification, ensureNotifyPermission } from '../utils.js';
 import { openPremiumBillModal } from './employee.js';
 
 function setButtonLoading(btn, label = 'Loading...') {
@@ -68,6 +68,34 @@ function money(value) {
 }
 import { ICONS } from '../icons.js';
 
+const MAX_ACTIVE_SHIFT_HOURS = 10;
+const STRICT_CLOCKOUT_LIMIT = 4;
+
+function activeShiftHours(row) {
+  if (!row?.clock_in) return 0;
+  const diff = Date.now() - new Date(row.clock_in).getTime();
+  return Number.isFinite(diff) ? diff / 3600000 : 0;
+}
+
+function isValidActiveAttendance(row, today = new Date().toLocaleDateString('en-CA')) {
+  return Boolean(row?.clock_in && !row?.clock_out && row?.date === today && activeShiftHours(row) <= MAX_ACTIVE_SHIFT_HOURS);
+}
+
+function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
+  if (!row?.clock_in || row?.clock_out) return false;
+  return row.date !== today || activeShiftHours(row) > MAX_ACTIVE_SHIFT_HOURS;
+}
+
+function groupedForgottenClockouts(rows = []) {
+  const map = new Map();
+  rows.filter(isForgottenClockOut).forEach(row => {
+    const key = row.user_id || 'unknown';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  });
+  return map;
+}
+
 const STATUS_LABEL = {
   pending: 'Received',
   open: 'Received',
@@ -135,13 +163,22 @@ async function markInquiryPaid(row, extra = {}) {
 
 // ── ADMIN HUB ───────────────────────────────────────────
 export async function renderAdminDashboard(container) {
+  if (container._adminDashboardChannel) {
+    supabase.removeChannel(container._adminDashboardChannel);
+    container._adminDashboardChannel = null;
+  }
+  if (container._adminDashboardCleanup) {
+    clearInterval(container._adminDashboardCleanup);
+    container._adminDashboardCleanup = null;
+  }
+
   const today = new Date().toLocaleDateString('en-CA');
   const reportFilters = {
     from: container.dataset.companyFrom || '',
     to: container.dataset.companyTo || '',
     status: container.dataset.companyStatus || 'all',
   };
-  let tickets, inquiries, attendance, stocks, profiles;
+  let tickets, inquiries, attendance, stocks, profiles, complaints;
   
   try {
     const res = await Promise.all([
@@ -149,9 +186,10 @@ export async function renderAdminDashboard(container) {
       supabase.from('inquiries').select('*').in('status', ['pending', 'open', 'assigned', 'in_progress']).order('created_at', { ascending: false }),
       supabase.from('attendance').select('*, profiles(full_name)').order('clock_in', { ascending: false }),
       supabase.from('stocks').select('*'),
-      supabase.from('profiles').select('*')
+      supabase.from('profiles').select('*'),
+      supabase.from('complaints').select('*').order('created_at', { ascending: false })
     ]);
-    tickets = res[0].data; inquiries = res[1].data; attendance = res[2].data; stocks = res[3].data; profiles = res[4].data;
+    tickets = res[0].data; inquiries = res[1].data; attendance = res[2].data; stocks = res[3].data; profiles = res[4].data; complaints = res[5].data;
     const firstErr = res.find(r => r.error)?.error;
     if (firstErr) console.warn('[Admin] Partial load issue:', firstErr.message);
   } catch (err) {
@@ -159,13 +197,28 @@ export async function renderAdminDashboard(container) {
     return;
   }
 
-  const t = tickets || [], i = inquiries || [], all_a = attendance || [], s = stocks || [], p = profiles || [];
-  const a = all_a.filter(x => x.date === today);
+  const t = tickets || [], i = inquiries || [], all_a = attendance || [], s = stocks || [], p = profiles || [], c = complaints || [];
+  let a = all_a.filter(x => isValidActiveAttendance(x, today));
   const lowStock = s.filter(x => x.quantity <= x.min_stock).length;
 
   // Build phone → company map from profiles
   const phoneToCompany = new Map();
+  const profileById = new Map();
   p.forEach(pr => { if (pr.phone && pr.company) phoneToCompany.set(pr.phone, pr.company); });
+  p.forEach(pr => { if (pr.id) profileById.set(pr.id, pr); });
+  const missedClockoutMap = groupedForgottenClockouts(all_a);
+  const clockoutWarnings = [...missedClockoutMap.entries()]
+    .map(([userId, rows]) => ({
+      userId,
+      count: rows.length,
+      latest: rows.sort((x, y) => new Date(y.clock_in || 0) - new Date(x.clock_in || 0))[0],
+      employee: profileById.get(userId),
+    }))
+    .sort((x, y) => y.count - x.count || new Date(y.latest?.clock_in || 0) - new Date(x.latest?.clock_in || 0));
+  const strictClockoutUsers = new Set(clockoutWarnings
+    .filter(x => x.count >= STRICT_CLOCKOUT_LIMIT)
+    .map(x => x.userId));
+  a = a.filter(row => !strictClockoutUsers.has(row.user_id));
 
   // Aggregate all inquiries by company
   const { data: allInquiries } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
@@ -195,6 +248,8 @@ export async function renderAdminDashboard(container) {
   const cashPending = allRows
     .filter(x => x.payment_method === 'cash' && x.payment_status === 'paid' && x.cash_collected_at && !x.cash_submitted_at)
     .reduce((sum, x) => sum + (Number(x.bill_total) || 0), 0);
+  const openComplaints = c.filter(x => !['resolved', 'closed'].includes(String(x.status || '').toLowerCase()));
+  const recentComplaints = [...c].sort(newestFirst).slice(0, 5);
   const attentionItems = activeInquiries
     .filter(x => !x.assigned_employee_id || ['pending', 'open'].includes(displayStatus(x.status)) || x.assignment_status === 'declined')
     .map(x => ({
@@ -212,7 +267,11 @@ export async function renderAdminDashboard(container) {
         <h1>Admin Hub</h1>
         <p>Real-time operations monitoring</p>
       </div>
-      <button class="btn btn-secondary" id="admin-refresh">Refresh</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="admin-dashboard-register">${ICONS.plus}<span>Register Request</span></button>
+        <button class="btn btn-secondary" id="admin-enable-alerts">Enable Alerts</button>
+        <button class="btn btn-secondary" id="admin-refresh">Refresh</button>
+      </div>
     </div>
 
     <div class="stats-grid">
@@ -259,9 +318,36 @@ export async function renderAdminDashboard(container) {
         <div class="stat-value" style="color:var(--warning);font-size:1.7rem">${money(cashPending)}</div>
         <div class="stat-label">Cash Pending</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--danger)">${openComplaints.length}</div>
+        <div class="stat-label">Open Complaints</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:${clockoutWarnings.length ? 'var(--danger)' : 'var(--success)'}">${clockoutWarnings.length}</div>
+        <div class="stat-label">Clock-out Warnings</div>
+      </div>
     </div>
 
     <div class="grid-layout">
+      ${clockoutWarnings.length ? `
+      <div class="card">
+        <div class="card-header"><span class="card-title">Clock-out Warnings</span></div>
+        <div class="table-wrap recent-requests-scroll">
+          <table>
+            <thead><tr><th>Employee</th><th>Missed</th><th>Last Open Shift</th><th>Action</th></tr></thead>
+            <tbody>
+              ${clockoutWarnings.slice(0, 5).map(x => `<tr>
+                <td><b>${escapeHtml(x.employee?.full_name || 'Employee')}</b></td>
+                <td><span class="badge ${x.count >= STRICT_CLOCKOUT_LIMIT ? 'badge-danger' : 'badge-medium'}">${x.count} day${x.count === 1 ? '' : 's'}</span></td>
+                <td><small>${formatDateTime(x.latest?.clock_in)}</small></td>
+                <td>${x.count >= STRICT_CLOCKOUT_LIMIT
+                  ? '<span class="badge badge-danger">Strict: block clock-in</span>'
+                  : '<span class="badge badge-medium">Warn employee</span>'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
       <!-- Actionable service queue -->
       <div class="card">
         <div class="card-header"><span class="card-title">Needs Attention</span></div>
@@ -295,6 +381,24 @@ export async function renderAdminDashboard(container) {
                   <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>
                   <td>${statusBadge(x.status)}</td>
                   <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Recent Complaints</span></div>
+        <div class="table-wrap recent-requests-scroll">
+          <table>
+            <thead><tr><th>Ticket</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${recentComplaints.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No complaints yet</td></tr>' :
+                recentComplaints.map(x => `<tr>
+                  <td><code style="font-size:0.78rem;color:var(--primary)">${escapeHtml(x.ticket_no || '-')}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>
+                  <td><b>${escapeHtml(x.phone || '-')}</b><br/><small style="color:var(--text-dim);display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.complaint_text || 'Complaint')}</small></td>
+                  <td>${statusBadge(x.status)}</td>
+                  <td><button class="btn btn-primary btn-sm cmp-dash-btn" data-id="${escapeHtml(x.id)}">Respond</button></td>
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -371,6 +475,16 @@ export async function renderAdminDashboard(container) {
   };
 
   bind('#admin-refresh', () => renderAdminDashboard(container));
+  bind('#admin-dashboard-register', () => openAdminRequestModal(() => renderAdminDashboard(container)));
+  bind('#admin-enable-alerts', async () => {
+    const permission = await ensureNotifyPermission();
+    showNotification({
+      title: 'Alerts enabled',
+      body: permission === 'granted' ? 'Live admin alerts will show with sound.' : 'In-app alerts will show with sound after browser interaction.',
+      type: 'success',
+      tag: 'admin-alerts-test',
+    });
+  });
 
   // Services by Company: search filter
   const companySearch = container.querySelector('#company-search');
@@ -501,11 +615,25 @@ export async function renderAdminDashboard(container) {
   container.querySelectorAll('.inq-btn').forEach(btn => {
     btn.onclick = () => openInquiryDetailWithLoader(btn, btn.dataset.id, () => renderAdminDashboard(container));
   });
+  container.querySelectorAll('.cmp-dash-btn').forEach(btn => {
+    btn.onclick = () => openComplaintResponder(c.find(r => String(r.id) === String(btn.dataset.id)), () => renderAdminDashboard(container));
+  });
 
-  // Real-time listener for new inquiries
-  const channel = supabase.channel('admin-inquiries')
+  const refreshDashboard = () => {
+    if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
+  };
+
+  // Real-time listener for dashboard changes.
+  const channel = supabase.channel('admin-dashboard-live')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inquiries' }, payload => {
-      if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
+      const row = payload.new || {};
+      showNotification({
+        title: 'New service request',
+        body: `${row.ticket_no || 'New ticket'} from ${row.full_name || 'client'}`,
+        type: 'alert',
+        tag: `new-request-${row.id || Date.now()}`,
+      });
+      refreshDashboard();
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inquiries' }, payload => {
       const row = payload.new || {};
@@ -524,17 +652,66 @@ export async function renderAdminDashboard(container) {
           tag: `fb-${row.id || ''}`,
         });
       }
-      if (document.getElementById('admin-refresh')) renderAdminDashboard(container);
+      refreshDashboard();
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'complaints' }, payload => {
+      const row = payload.new || {};
+      showNotification({
+        title: 'New complaint',
+        body: `${row.ticket_no || 'Ticket'}: ${row.complaint_text || 'Customer complaint received'}`,
+        type: 'alert',
+        tag: `complaint-${row.id || Date.now()}`,
+      });
+      refreshDashboard();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'complaints' }, () => {
+      refreshDashboard();
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance' }, payload => {
+      const row = payload.new || {};
+      const employee = profileById.get(row.user_id);
+      showNotification({
+        title: 'Employee online',
+        body: `${employee?.full_name || 'Employee'} clocked in`,
+        type: 'success',
+        tag: `attendance-in-${row.id || row.user_id || Date.now()}`,
+      });
+      refreshDashboard();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'attendance' }, payload => {
+      const row = payload.new || {};
+      const oldRow = payload.old || {};
+      const employee = profileById.get(row.user_id);
+      if (row.clock_out && !oldRow.clock_out) {
+        showNotification({
+          title: 'Employee offline',
+          body: `${employee?.full_name || 'Employee'} clocked out`,
+          type: 'info',
+          tag: `attendance-out-${row.id || row.user_id || Date.now()}`,
+        });
+      } else if (row.clock_in && !row.clock_out) {
+        showNotification({
+          title: 'Employee online',
+          body: `${employee?.full_name || 'Employee'} is online`,
+          type: 'success',
+          tag: `attendance-online-${row.id || row.user_id || Date.now()}`,
+        });
+      }
+      refreshDashboard();
     })
     .subscribe();
+  container._adminDashboardChannel = channel;
 
   // Cleanup channel on container removal (using a simple check)
   const checkRemoval = setInterval(() => {
     if (!document.body.contains(container)) {
       supabase.removeChannel(channel);
+      if (container._adminDashboardChannel === channel) container._adminDashboardChannel = null;
+      if (container._adminDashboardCleanup === checkRemoval) container._adminDashboardCleanup = null;
       clearInterval(checkRemoval);
     }
   }, 5000);
+  container._adminDashboardCleanup = checkRemoval;
 }
 
 // ── SERVICE REQUEST DETAIL MODAL ────────────────────────
@@ -543,10 +720,13 @@ async function openInquiryDetail(id, onDone) {
   const { data: employees } = await supabase.from('profiles').select('*').eq('role', 'employee');
   const today = new Date().toLocaleDateString('en-CA');
   const { data: activeAttendance } = await supabase.from('attendance')
-    .select('user_id,clock_in,clock_out')
-    .eq('date', today);
+    .select('user_id,clock_in,clock_out,date');
+  const missedByEmployee = groupedForgottenClockouts(activeAttendance || []);
+  const restrictedEmployeeIds = new Set([...missedByEmployee.entries()]
+    .filter(([, rows]) => rows.length >= STRICT_CLOCKOUT_LIMIT)
+    .map(([userId]) => userId));
   const activeEmployeeIds = new Set((activeAttendance || [])
-    .filter(row => row.clock_in && !row.clock_out)
+    .filter(row => isValidActiveAttendance(row, today) && !restrictedEmployeeIds.has(row.user_id))
     .map(row => row.user_id));
   const availableEmployees = (employees || []).map(e => ({
     ...e,
@@ -554,6 +734,7 @@ async function openInquiryDetail(id, onDone) {
   }));
   // Resolve technician name for the bill view, if assigned.
   const technicianName = (employees || []).find(e => e.id === i.assigned_employee_id)?.full_name || '';
+  const assignmentAwaitingResponse = Boolean(i.assigned_employee_id && i.assignment_status === 'pending');
   // Items used on the bill — fetched only if a bill has been generated.
   let billServices = [];
   if (i.bill_total) {
@@ -613,6 +794,11 @@ async function openInquiryDetail(id, onDone) {
               <div class="sr-meta-label" style="color:var(--danger)">Employee Declined</div>
               <div class="sr-meta-value" style="font-size:0.85rem">${i.decline_reason || 'No reason provided'}</div>
             </div>` : ''}
+          ${assignmentAwaitingResponse ? `
+            <div style="padding:12px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);margin-top:10px;">
+              <div class="sr-meta-label" style="color:var(--warning)">Waiting for employee response</div>
+              <div class="sr-meta-value" style="font-size:0.85rem">${technicianName || 'Assigned technician'} must accept or decline before admin can change this assignment.</div>
+            </div>` : ''}
           ${i.feedback_rating ? `
             <div class="sr-fb-shown">
               ${ICONS.star}
@@ -637,16 +823,16 @@ async function openInquiryDetail(id, onDone) {
 
         <div class="form-group">
           <label>Assign to Technician</label>
-          <select id="assign-to">
+          <select id="assign-to" ${assignmentAwaitingResponse ? 'disabled' : ''}>
             <option value="">— None —</option>
-            ${availableEmployees.map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''} ${e._clockedIn ? '' : 'disabled'}>${e._clockedIn ? 'Online' : 'Offline'} - ${e.full_name}</option>`).join('')}
+            ${availableEmployees.map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''} ${e._clockedIn ? '' : 'disabled'}>${e._clockedIn ? 'Online' : (restrictedEmployeeIds.has(e.id) ? 'Restricted' : 'Offline')} - ${e.full_name}</option>`).join('')}
           </select>
-          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">Only currently clocked-in employees can receive new assignments.</small>
+          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentAwaitingResponse ? 'Assignment is locked until the employee accepts or rejects it.' : 'Only currently clocked-in employees with no strict clock-out restriction can receive new assignments.'}</small>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="ci2">Close</button>
-        <button class="btn btn-primary" id="save-sr">${ICONS.check}<span>Save assignment</span></button>
+        <button class="btn btn-primary" id="save-sr" ${assignmentAwaitingResponse ? 'disabled' : ''}>${ICONS.check}<span>${assignmentAwaitingResponse ? 'Awaiting employee response' : 'Save assignment'}</span></button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -680,6 +866,10 @@ async function openInquiryDetail(id, onDone) {
   }
 
   overlay.querySelector('#save-sr').onclick = async () => {
+    if (assignmentAwaitingResponse) {
+      toast('Wait for the employee to accept or reject this assignment first.', 'warning');
+      return;
+    }
     const empId = overlay.querySelector('#assign-to').value;
     if (empId && !activeEmployeeIds.has(empId)) {
       toast('This employee is not clocked in. Please choose an active technician.', 'warning');
@@ -750,7 +940,8 @@ export async function renderAttendance(container) {
   const today = new Date().toLocaleDateString('en-CA');
 
   const todayLogs = list.filter(x => x.date === today);
-  const activeLogs = list.filter(x => x.clock_in && !x.clock_out);
+  const activeLogs = list.filter(x => isValidActiveAttendance(x, today));
+  const forgottenLogs = list.filter(x => isForgottenClockOut(x, today));
   const completedToday = todayLogs.filter(x => x.clock_in && x.clock_out);
   const avgMins = completedToday.length
     ? completedToday.reduce((sum, x) => sum + (new Date(x.clock_out) - new Date(x.clock_in)), 0) / completedToday.length / 60000
@@ -765,7 +956,11 @@ export async function renderAttendance(container) {
           <td>${formatDate(x.date)}</td>
           <td><b>${x.profiles?.full_name || '—'}</b></td>
           <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>
-          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : '<span style="color:var(--text-dim)">Active</span>'}</td>
+          <td>${x.clock_out
+            ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>`
+            : isForgottenClockOut(x, today)
+              ? '<span class="badge badge-danger">Forgot clock-out</span>'
+              : '<span class="badge badge-open">Active</span>'}</td>
           <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
           <td><small>${x.location || '—'}</small></td>
         </tr>`;
@@ -788,6 +983,10 @@ export async function renderAttendance(container) {
       <div class="stat-card">
         <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>
         <div class="stat-label">Currently Active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:${forgottenLogs.length ? 'var(--danger)' : 'var(--success)'}">${forgottenLogs.length}</div>
+        <div class="stat-label">Forgot Clock-out</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>
@@ -845,10 +1044,20 @@ export async function renderAttendance(container) {
 }
 
 async function openAdminRequestModal(onDone) {
-  const [{ data: employees }, { data: pricing }] = await Promise.all([
+  const today = new Date().toLocaleDateString('en-CA');
+  const [{ data: employees }, { data: pricing }, { data: activeAttendance }] = await Promise.all([
     supabase.from('profiles').select('id, full_name, phone').eq('role', 'employee'),
     supabase.from('service_pricing').select('category').order('category'),
+    supabase.from('attendance').select('user_id,clock_in,clock_out,date'),
   ]);
+  const missedByEmployee = groupedForgottenClockouts(activeAttendance || []);
+  const restrictedEmployeeIds = new Set([...missedByEmployee.entries()]
+    .filter(([, rows]) => rows.length >= STRICT_CLOCKOUT_LIMIT)
+    .map(([userId]) => userId));
+  const onlineEmployeeIds = new Set((activeAttendance || [])
+    .filter(row => isValidActiveAttendance(row, today) && !restrictedEmployeeIds.has(row.user_id))
+    .map(row => row.user_id));
+  const onlineEmployees = (employees || []).filter(e => onlineEmployeeIds.has(e.id));
 
   const seen = new Map();
   (pricing || []).forEach(row => {
@@ -917,8 +1126,11 @@ async function openAdminRequestModal(onDone) {
             <label>Assign Employee <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
             <select id="ar-employee">
               <option value="">Create unassigned</option>
-              ${(employees || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name || 'Employee')}${e.phone ? ` - ${escapeHtml(e.phone)}` : ''}</option>`).join('')}
+              ${onlineEmployees.length
+                ? onlineEmployees.map(e => `<option value="${escapeHtml(e.id)}">Online - ${escapeHtml(e.full_name || 'Employee')}${e.phone ? ` - ${escapeHtml(e.phone)}` : ''}</option>`).join('')
+                : '<option value="" disabled>No employees online</option>'}
             </select>
+            <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">Only employees currently clocked in with no strict clock-out restriction can be assigned.</small>
           </div>
           <div class="form-group">
             <label>Device Bill No <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
@@ -972,6 +1184,9 @@ async function openAdminRequestModal(onDone) {
       if (!location) return toast('Location is required', 'error');
       if (!issueVal) return toast('Select the issue', 'error');
       if (issueVal === 'other' && !otherText) return toast('Describe the issue', 'error');
+      if (assigned_employee_id && !onlineEmployeeIds.has(assigned_employee_id)) {
+        return toast('This employee is not online. Choose an online employee or create unassigned.', 'warning');
+      }
 
       const id = crypto.randomUUID();
       const ticket_no = generateAdminTicketNo();
@@ -2513,6 +2728,8 @@ export async function renderFeedbackTab(container) {
   ]);
   const all = (rows || []).filter(r => r.feedback_rating != null);
   const profileById = new Map((profiles || []).map(p => [p.id, p]));
+  const monthKey = new Date().toLocaleDateString('en-CA').slice(0, 7);
+  const monthFeedback = all.filter(r => String(r.feedback_at || r.updated_at || '').startsWith(monthKey));
 
   // Per-employee aggregation: averages the explicit employee_rating column (falls back to overall rating).
   const empAgg = new Map();
@@ -2530,6 +2747,23 @@ export async function renderFeedbackTab(container) {
   const empRows = [...empAgg.entries()]
     .map(([id, a]) => ({ id, name: profileById.get(id)?.full_name || '—', avg: a.total / a.count, count: a.count, fiveStars: a.fiveStars }))
     .sort((a, b) => b.avg - a.avg || b.count - a.count);
+
+  const monthAgg = new Map();
+  monthFeedback.forEach(r => {
+    const empId = r.feedback_employee_id || r.assigned_employee_id;
+    if (!empId) return;
+    const score = r.employee_rating || r.feedback_rating;
+    if (!score) return;
+    if (!monthAgg.has(empId)) monthAgg.set(empId, { total: 0, count: 0, fiveStars: 0 });
+    const a = monthAgg.get(empId);
+    a.total += Number(score);
+    a.count += 1;
+    if (score >= 5) a.fiveStars += 1;
+  });
+  const monthEmpRows = [...monthAgg.entries()]
+    .map(([id, a]) => ({ id, name: profileById.get(id)?.full_name || 'Employee', avg: a.total / a.count, count: a.count, fiveStars: a.fiveStars }))
+    .sort((a, b) => b.avg - a.avg || b.count - a.count || b.fiveStars - a.fiveStars);
+  const employeeOfMonth = monthEmpRows[0] || null;
 
   const overallAvg = all.length ? (all.reduce((s, r) => s + Number(r.feedback_rating || 0), 0) / all.length) : 0;
   const fiveCount = all.filter(r => r.feedback_rating >= 5).length;
@@ -2552,6 +2786,7 @@ export async function renderFeedbackTab(container) {
       <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${overallAvg.toFixed(2)} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Overall Average</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--success)">${fiveCount}</div><div class="stat-label">5-Star Reviews</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${empRows.length}</div><div class="stat-label">Employees Rated</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.55rem">${employeeOfMonth ? escapeHtml(employeeOfMonth.name) : '-'}</div><div class="stat-label">Employee of Month</div></div>
     </div>
 
     <div class="card">
