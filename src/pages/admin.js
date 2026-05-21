@@ -96,6 +96,16 @@ function groupedForgottenClockouts(rows = []) {
   return map;
 }
 
+function resolvedClockOutFor(row) {
+  const clockInMs = new Date(row?.clock_in || Date.now()).getTime();
+  const fallbackMs = Number.isFinite(clockInMs)
+    ? clockInMs + (MAX_ACTIVE_SHIFT_HOURS * 3600000)
+    : Date.now();
+  const today = new Date().toLocaleDateString('en-CA');
+  const resolvedMs = row?.date === today ? Date.now() : fallbackMs;
+  return new Date(resolvedMs).toISOString();
+}
+
 const STATUS_LABEL = {
   pending: 'Received',
   open: 'Received',
@@ -940,6 +950,15 @@ export async function renderAttendance(container) {
   const todayLogs = list.filter(x => x.date === today);
   const activeLogs = list.filter(x => isValidActiveAttendance(x, today));
   const forgottenLogs = list.filter(x => isForgottenClockOut(x, today));
+  const forgottenByEmployee = groupedForgottenClockouts(list);
+  const restrictedEmployees = [...forgottenByEmployee.entries()]
+    .filter(([, rows]) => rows.length >= STRICT_CLOCKOUT_LIMIT)
+    .map(([userId, rows]) => ({
+      userId,
+      rows: rows.sort((a, b) => new Date(b.clock_in || 0) - new Date(a.clock_in || 0)),
+      name: rows[0]?.profiles?.full_name || 'Employee',
+    }))
+    .sort((a, b) => b.rows.length - a.rows.length || a.name.localeCompare(b.name));
   const completedToday = todayLogs.filter(x => x.clock_in && x.clock_out);
   const avgMins = completedToday.length
     ? completedToday.reduce((sum, x) => sum + (new Date(x.clock_out) - new Date(x.clock_in)), 0) / completedToday.length / 60000
@@ -987,10 +1006,39 @@ export async function renderAttendance(container) {
         <div class="stat-label">Forgot Clock-out</div>
       </div>
       <div class="stat-card">
+        <div class="stat-value" style="color:${restrictedEmployees.length ? 'var(--danger)' : 'var(--success)'}">${restrictedEmployees.length}</div>
+        <div class="stat-label">Restricted Users</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>
         <div class="stat-label">Avg Hours Today</div>
       </div>
     </div>
+
+    ${restrictedEmployees.length ? `
+      <div class="card" style="margin-bottom:24px;border:1px solid rgba(239,68,68,0.35);">
+        <div class="card-header">
+          <span class="card-title sr-icon-title">${ICONS.alert}<span>Clock-in Restrictions</span></span>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Employee</th><th>Missed Clock-outs</th><th>Latest Missed</th><th>Action</th></tr></thead>
+              <tbody>
+                ${restrictedEmployees.map(x => `
+                  <tr>
+                    <td><b>${escapeHtml(x.name)}</b></td>
+                    <td><span class="badge badge-danger">${x.rows.length}</span></td>
+                    <td><small>${formatDateTime(x.rows[0]?.clock_in)}</small></td>
+                    <td><button class="btn btn-primary btn-sm resolve-attendance-restriction" data-user-id="${escapeHtml(x.userId)}">Resolve restriction</button></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ` : ''}
 
     <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">
       <div class="search-input-wrap" style="flex:1; min-width:200px;">
@@ -1005,7 +1053,7 @@ export async function renderAttendance(container) {
       <div class="table-wrap">
         <table>
           <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th></tr></thead>
-          <tbody>${rowHtml(list)}</tbody>
+          <tbody id="attendance-log-rows">${rowHtml(list)}</tbody>
         </table>
       </div>
     </div>
@@ -1022,12 +1070,36 @@ export async function renderAttendance(container) {
       const matchesDate = !d || x.date === d;
       return matchesName && matchesDate;
     });
-    container.querySelector('tbody').innerHTML = rowHtml(filtered);
+    container.querySelector('#attendance-log-rows').innerHTML = rowHtml(filtered);
   };
 
   search.oninput = doFilter;
   date.onchange = doFilter;
   container.querySelector('#att-clear').onclick = () => renderAttendance(container);
+  container.querySelectorAll('.resolve-attendance-restriction').forEach(btn => {
+    btn.onclick = async () => {
+      const rows = forgottenByEmployee.get(btn.dataset.userId) || [];
+      if (!rows.length) {
+        toast('No unresolved missed clock-outs found', 'info');
+        renderAttendance(container);
+        return;
+      }
+
+      const restore = setButtonLoading(btn, 'Resolving');
+      const updates = await Promise.all(rows.map(row => supabase.from('attendance')
+        .update({ clock_out: resolvedClockOutFor(row) })
+        .eq('id', row.id)));
+      restore();
+
+      const error = updates.find(result => result.error)?.error;
+      if (error) {
+        toast(error.message || 'Could not resolve restriction', 'error');
+        return;
+      }
+      toast('Restriction resolved', 'success');
+      renderAttendance(container);
+    };
+  });
   container.querySelector('#att-export').onclick = () => {
     const csvData = list.map(x => ({
       date: x.date,
