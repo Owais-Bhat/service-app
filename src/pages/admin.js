@@ -1812,7 +1812,7 @@ export async function renderUsers(container) {
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Current Role</th><th>Change Role</th><th>SMS Phone</th><th>Update</th></tr></thead>
+          <thead><tr><th>Name</th><th>Current Role</th><th>Change Role</th><th>SMS Phone</th><th>Service Access</th><th>Update</th></tr></thead>
           <tbody>${(users||[]).map(u => `<tr>
             <td><b>${u.full_name||'—'}</b></td>
             <td><span class="badge badge-open">${u.role||'client'}</span></td>
@@ -1830,6 +1830,14 @@ export async function renderUsers(container) {
               <small style="display:block;color:var(--text-dim);margin-top:4px;">Used for staff job SMS</small>
             </td>
             <td>
+              ${u.role === 'employee' ? `
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="checkbox" class="can-add-service-chk" data-uid="${u.id}" ${u.can_add_service ? 'checked' : ''} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
+                  Add Service
+                </label>
+              ` : '<span style="color:var(--text-dim)">—</span>'}
+            </td>
+            <td>
               <button class="btn btn-secondary btn-sm save-user-phone" data-uid="${u.id}">Save Phone</button>
             </td>
           </tr>`).join('')}</tbody>
@@ -1840,6 +1848,18 @@ export async function renderUsers(container) {
     sel.addEventListener('change', async () => {
       await supabase.from('profiles').update({ role: sel.value }).eq('id', sel.dataset.uid);
       toast('Role updated', 'success');
+      renderUsers(container);
+    });
+  });
+  container.querySelectorAll('.can-add-service-chk').forEach(chk => {
+    chk.addEventListener('change', async () => {
+      const { error } = await supabase.from('profiles').update({ can_add_service: chk.checked ? 1 : 0 }).eq('id', chk.dataset.uid);
+      if (error) {
+        toast('Failed to update service access: ' + (error.message || ''), 'error');
+        chk.checked = !chk.checked;
+        return;
+      }
+      toast('Service access updated', 'success');
     });
   });
   container.querySelectorAll('.employee-phone-input').forEach(input => {
@@ -2147,55 +2167,160 @@ export async function renderBillsTab(container) {
 // Simple CRUD. Employees see this list as a datalist on the Manage Service
 // modal so they pick standard device types instead of typing free-form.
 export async function renderDeviceTypesTab(container) {
-  const { data: rows } = await supabase.from('device_types').select('*').order('name');
-  const list = Array.isArray(rows) ? rows : [];
+  const [
+    { data: rows },
+    { data: compRows },
+    { data: inqs }
+  ] = await Promise.all([
+    supabase.from('device_types').select('*').order('name'),
+    supabase.from('companies').select('*').order('name'),
+    supabase.from('inquiries').select('full_name, company_name, device_type, device_serial_no, ticket_no, created_at')
+  ]);
 
-  const rowHtml = (items) => items.length === 0
-    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No device types yet — add one above.</td></tr>'
-    : items.map(x => `
+  const list = Array.isArray(rows) ? rows : [];
+  const compList = Array.isArray(compRows) ? compRows : [];
+  const reportedDevices = (inqs || []).filter(x => (x.device_type && x.device_type.trim()) || (x.device_serial_no && x.device_serial_no.trim()));
+  reportedDevices.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  const dtHtml = list.length === 0
+    ? '<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-dim)">No device types yet.</td></tr>'
+    : list.map(x => `
       <tr data-id="${x.id}">
-        <td><b>${x.name}</b></td>
-        <td><small style="color:var(--text-dim)">${x.description || '—'}</small></td>
+        <td><b>${escapeHtml(x.name)}</b></td>
+        <td><small style="color:var(--text-dim)">${escapeHtml(x.description || '—')}</small></td>
         <td style="text-align:right; white-space:nowrap;">
-          <button class="btn btn-secondary btn-sm dt-edit-btn" data-id="${x.id}">Edit</button>
-          <button class="btn btn-danger btn-sm dt-del-btn" data-id="${x.id}">Delete</button>
+          <button class="btn btn-secondary btn-sm dt-edit-btn" data-id="${x.id}" style="padding:2px 8px; font-size:0.75rem;">Edit</button>
+          <button class="btn btn-danger btn-sm dt-del-btn" data-id="${x.id}" style="padding:2px 8px; font-size:0.75rem;">Delete</button>
         </td>
       </tr>`).join('');
 
+  const compHtml = compList.length === 0
+    ? '<tr><td colspan="2" style="text-align:center;padding:24px;color:var(--text-dim)">No companies yet.</td></tr>'
+    : compList.map(x => {
+        const isDefault = x.name.toLowerCase() === 'networking experts';
+        return `
+          <tr data-id="${x.id}">
+            <td><b>${escapeHtml(x.name)}</b></td>
+            <td style="text-align:right; white-space:nowrap;">
+              ${isDefault ? '<span style="color:var(--text-dim); font-size:0.75rem; margin-right:8px; font-weight:600;">Default</span>' : `
+                <button class="btn btn-secondary btn-sm comp-edit-btn" data-id="${x.id}" style="padding:2px 8px; font-size:0.75rem;">Edit</button>
+                <button class="btn btn-danger btn-sm comp-del-btn" data-id="${x.id}" style="padding:2px 8px; font-size:0.75rem;">Delete</button>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+  const deviceRowsHtml = reportedDevices.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No reported customer devices found.</td></tr>'
+    : reportedDevices.map(x => `
+      <tr>
+        <td><b>${escapeHtml(x.full_name || '—')}</b></td>
+        <td>${escapeHtml(x.company_name || '—')}</td>
+        <td><span class="badge badge-open">${escapeHtml(x.device_type || '—')}</span></td>
+        <td><code>${escapeHtml(x.device_serial_no || '—')}</code></td>
+        <td><code>${escapeHtml(x.ticket_no || '—')}</code></td>
+        <td>${x.created_at ? new Date(x.created_at).toLocaleDateString('en-IN') : '—'}</td>
+      </tr>
+    `).join('');
+
   container.innerHTML = `
-    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
       <div>
-        <h1>Device Types</h1>
-        <p>Master list of devices that technicians can pick on the Manage Service screen.</p>
+        <h1>Devices & Companies Management</h1>
+        <p>Manage device types, registered companies, and view reported customer devices.</p>
       </div>
       <button class="btn btn-secondary" id="dt-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
 
-    <div class="card" style="margin-bottom:18px;">
-      <div class="card-body" style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; align-items:end;">
-        <div class="form-group" style="margin:0;">
-          <label>Device Name</label>
-          <input id="dt-name" placeholder="e.g. Video Door Phone"/>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap:20px; margin-bottom:20px;">
+      <!-- Device Types CRUD -->
+      <div class="card" style="margin:0; display:flex; flex-direction:column; justify-content:space-between;">
+        <div class="card-body">
+          <h2 style="font-size:1.2rem; margin-top:0; margin-bottom:12px;">Device Types CRUD</h2>
+          <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:16px;">Pickable device types for technicians.</p>
+          <div style="display:flex; gap:10px; margin-bottom:16px; align-items:flex-end;">
+            <div class="form-group" style="margin:0; flex:1;">
+              <label style="font-size:0.75rem;">Device Name</label>
+              <input id="dt-name" placeholder="e.g. Video Door Phone" style="width:100%; padding:6px 10px; font-size:0.85rem;"/>
+            </div>
+            <div class="form-group" style="margin:0; flex:1.5;">
+              <label style="font-size:0.75rem;">Description (optional)</label>
+              <input id="dt-desc" placeholder="Short note" style="width:100%; padding:6px 10px; font-size:0.85rem;"/>
+            </div>
+            <button class="btn btn-primary" id="dt-add" style="padding:6px 12px; height:34px; font-size:0.85rem; display:flex; align-items:center; gap:4px;">
+              ${ICONS.plus}<span>Add</span>
+            </button>
+          </div>
+          <div class="table-wrap" style="max-height: 280px; overflow-y: auto;">
+            <table>
+              <thead><tr><th>Name</th><th>Description</th><th style="text-align:right;"></th></tr></thead>
+              <tbody>${dtHtml}</tbody>
+            </table>
+          </div>
         </div>
-        <div class="form-group" style="margin:0;">
-          <label>Description (optional)</label>
-          <input id="dt-desc" placeholder="Short note about this device"/>
+      </div>
+
+      <!-- Companies CRUD -->
+      <div class="card" style="margin:0; display:flex; flex-direction:column; justify-content:space-between;">
+        <div class="card-body">
+          <h2 style="font-size:1.2rem; margin-top:0; margin-bottom:12px;">Companies Registry</h2>
+          <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:16px;">Registered client companies.</p>
+          <div style="display:flex; gap:10px; margin-bottom:16px; align-items:flex-end;">
+            <div class="form-group" style="margin:0; flex:1;">
+              <label style="font-size:0.75rem;">Company Name</label>
+              <input id="comp-name" placeholder="e.g. ACME Corp" style="width:100%; padding:6px 10px; font-size:0.85rem;"/>
+            </div>
+            <button class="btn btn-primary" id="comp-add" style="padding:6px 12px; height:34px; font-size:0.85rem; display:flex; align-items:center; gap:4px;">
+              ${ICONS.plus}<span>Add</span>
+            </button>
+          </div>
+          <div class="table-wrap" style="max-height: 280px; overflow-y: auto;">
+            <table>
+              <thead><tr><th>Name</th><th style="text-align:right;"></th></tr></thead>
+              <tbody>${compHtml}</tbody>
+            </table>
+          </div>
         </div>
-        <button class="btn btn-primary" id="dt-add">${ICONS.plus}<span>Add Device</span></button>
       </div>
     </div>
 
+    <!-- Reported Customer Devices Table Card -->
     <div class="card">
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Name</th><th>Description</th><th></th></tr></thead>
-          <tbody>${rowHtml(list)}</tbody>
-        </table>
+      <div class="card-body">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:1.25rem; margin:0;">Reported Customer Devices</h2>
+            <p style="font-size:0.85rem; color:var(--text-dim); margin:4px 0 0 0;">
+              List of all customer devices registered or reported in service inquiries.
+            </p>
+          </div>
+          <button class="btn btn-secondary" id="export-devices-csv" style="display:flex; align-items:center; gap:6px; font-size:0.85rem; padding:8px 14px;">
+            Export CSV
+          </button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer Name</th>
+                <th>Company</th>
+                <th>Device Type</th>
+                <th>Serial Number</th>
+                <th>Ticket Number</th>
+                <th>Service Date</th>
+              </tr>
+            </thead>
+            <tbody>${deviceRowsHtml}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
 
   container.querySelector('#dt-refresh').onclick = () => renderDeviceTypesTab(container);
+
+  // Device Add
   container.querySelector('#dt-add').onclick = async () => {
     const name = container.querySelector('#dt-name').value.trim();
     const description = container.querySelector('#dt-desc').value.trim();
@@ -2211,18 +2336,7 @@ export async function renderDeviceTypesTab(container) {
     renderDeviceTypesTab(container);
   };
 
-  container.querySelectorAll('.dt-del-btn').forEach(btn => {
-    btn.onclick = async () => {
-      const row = list.find(x => String(x.id) === btn.dataset.id);
-      if (!row) return;
-      if (!confirm(`Delete device type "${row.name}"?`)) return;
-      const { error } = await supabase.from('device_types').delete().eq('id', row.id);
-      if (error) { toast(error.message, 'error'); return; }
-      toast('Deleted', 'success');
-      renderDeviceTypesTab(container);
-    };
-  });
-
+  // Device Edit
   container.querySelectorAll('.dt-edit-btn').forEach(btn => {
     btn.onclick = async () => {
       const row = list.find(x => String(x.id) === btn.dataset.id);
@@ -2240,6 +2354,101 @@ export async function renderDeviceTypesTab(container) {
       renderDeviceTypesTab(container);
     };
   });
+
+  // Device Delete
+  container.querySelectorAll('.dt-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const row = list.find(x => String(x.id) === btn.dataset.id);
+      if (!row) return;
+      if (!confirm(`Delete device type "${row.name}"?`)) return;
+      const { error } = await supabase.from('device_types').delete().eq('id', row.id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Deleted', 'success');
+      renderDeviceTypesTab(container);
+    };
+  });
+
+  // Company Add
+  container.querySelector('#comp-add').onclick = async () => {
+    const name = container.querySelector('#comp-name').value.trim();
+    if (!name) { toast('Enter a company name', 'warning'); return; }
+    if (compList.some(x => x.name.toLowerCase() === name.toLowerCase())) {
+      toast('That company already exists', 'warning');
+      return;
+    }
+    const id = (window.crypto?.randomUUID && window.crypto.randomUUID()) || `comp-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const { error } = await supabase.from('companies').insert({ id, name });
+    if (error) { toast(error.message, 'error'); return; }
+    toast('Company added', 'success');
+    renderDeviceTypesTab(container);
+  };
+
+  // Company Edit
+  container.querySelectorAll('.comp-edit-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const row = compList.find(x => String(x.id) === btn.dataset.id);
+      if (!row) return;
+      const isDefault = row.name.toLowerCase() === 'networking experts';
+      if (isDefault) {
+        toast('Cannot edit default company', 'error');
+        return;
+      }
+      const newName = prompt('Company name:', row.name);
+      if (!newName || !newName.trim()) return;
+      if (compList.some(x => x.name.toLowerCase() === newName.trim().toLowerCase() && x.id !== row.id)) {
+        toast('That company name already exists', 'warning');
+        return;
+      }
+      const { error } = await supabase.from('companies').update({
+        name: newName.trim(),
+      }).eq('id', row.id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Company updated', 'success');
+      renderDeviceTypesTab(container);
+    };
+  });
+
+  // Company Delete
+  container.querySelectorAll('.comp-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const row = compList.find(x => String(x.id) === btn.dataset.id);
+      if (!row) return;
+      const isDefault = row.name.toLowerCase() === 'networking experts';
+      if (isDefault) {
+        toast('Cannot delete default company', 'error');
+        return;
+      }
+      if (!confirm(`Delete company "${row.name}"?`)) return;
+      const { error } = await supabase.from('companies').delete().eq('id', row.id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Company deleted', 'success');
+      renderDeviceTypesTab(container);
+    };
+  });
+
+  // Export CSV
+  container.querySelector('#export-devices-csv').onclick = () => {
+    const headers = ['Customer Name', 'Company', 'Device Type', 'Serial Number', 'Ticket Number', 'Service Date'];
+    const csvRows = reportedDevices.map(x => [
+      x.full_name || '',
+      x.company_name || '',
+      x.device_type || '',
+      x.device_serial_no || '',
+      x.ticket_no || '',
+      x.created_at ? new Date(x.created_at).toLocaleDateString('en-IN') : ''
+    ]);
+
+    const csvData = [headers.join(','), ...csvRows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "reported-devices.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 }
 
 // ── CASH COLLECTIONS (admin) ────────────────────────────

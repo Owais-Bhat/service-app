@@ -609,7 +609,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
+  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], canAddService = false;
 
   try {
     const res = await Promise.all([
@@ -618,10 +618,13 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
+      supabase.from('profiles').select('can_add_service').eq('id', user.id).maybeSingle(),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     attendanceHistory = res[4].data || [];
     const allInquiries = res[3].data || [];
+    const profile = res[5].data;
+    canAddService = profile && profile.can_add_service === 1;
     const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
     // Build phone → company map for labelling service jobs
@@ -651,12 +654,19 @@ export async function renderEmployeeDashboard(container) {
   const strictClockoutBlock = missedClockOuts.length >= STRICT_CLOCKOUT_LIMIT;
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1 style="display:flex; align-items:center; gap:12px;">
-        <span style="width:32px; height:32px; display:flex; color:var(--primary);">${ICONS.staff}</span>
-        <span>Employee Portal</span>
-      </h1>
-      <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h1 style="display:flex; align-items:center; gap:12px;">
+          <span style="width:32px; height:32px; display:flex; color:var(--primary);">${ICONS.staff}</span>
+          <span>Employee Portal</span>
+        </h1>
+        <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
+      </div>
+      ${canAddService ? `
+        <button class="btn btn-primary" id="btn-register-request" style="display:inline-flex; align-items:center; gap:8px;">
+          ${ICONS.plus}<span>Register Request</span>
+        </button>
+      ` : ''}
     </div>
 
     ${missedClockOuts.length ? `
@@ -782,6 +792,12 @@ export async function renderEmployeeDashboard(container) {
     const el = container.querySelector(sel);
     if (el) el.onclick = cb;
   };
+
+  if (canAddService) {
+    bind('#btn-register-request', () => {
+      openEmployeeRequestModal(user, () => renderEmployeeDashboard(container));
+    });
+  }
 
   // Clock In
   bind('#btn-clock-in', async () => {
@@ -1322,14 +1338,17 @@ export async function renderEmployeeTasks(container) {
     </div>
   `;
 
-  let tasks, pendingInquiries, acceptedInquiries;
+  let tasks, pendingInquiries, acceptedInquiries, canAddService = false;
   try {
-    const [ticketsRes, inquiriesRes] = await Promise.all([
+    const [ticketsRes, inquiriesRes, profileRes] = await Promise.all([
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
+      supabase.from('profiles').select('can_add_service').eq('id', user.id).maybeSingle(),
     ]);
     tasks = ticketsRes.data || [];
     const allInquiries = inquiriesRes.data || [];
+    const profile = profileRes.data;
+    canAddService = profile && profile.can_add_service === 1;
     const taskInquiryIds = new Set(tasks.map(task => task.inquiries?.[0]?.id).filter(Boolean));
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
@@ -1496,7 +1515,14 @@ export async function renderEmployeeTasks(container) {
         </h1>
         <p>All your assigned tasks, service jobs, and pending assignments</p>
       </div>
-      <button class="btn btn-secondary" id="tasks-refresh">${ICONS.refresh}<span>Refresh</span></button>
+      <div style="display:flex; gap:10px; align-items:center;">
+        ${canAddService ? `
+          <button class="btn btn-primary" id="btn-register-request" style="display:inline-flex; align-items:center; gap:8px;">
+            ${ICONS.plus}<span>Register Request</span>
+          </button>
+        ` : ''}
+        <button class="btn btn-secondary" id="tasks-refresh">${ICONS.refresh}<span>Refresh</span></button>
+      </div>
     </div>
 
     <div class="stats-grid" style="margin-bottom:24px;">
@@ -1586,6 +1612,15 @@ export async function renderEmployeeTasks(container) {
     }
   };
 
+  if (canAddService) {
+    const reqBtn = container.querySelector('#btn-register-request');
+    if (reqBtn) {
+      reqBtn.onclick = () => {
+        openEmployeeRequestModal(user, () => renderEmployeeTasks(container));
+      };
+    }
+  }
+
   // Filter tabs
   let activeFilter = 'all';
   let searchQuery = '';
@@ -1661,6 +1696,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
     const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
     const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];
+    const { data: companies } = await supabase.from('companies').select('*').order('name');
+    const companyList = Array.isArray(companies) ? companies : [];
     // Snapshot current payment state so we can gate the resolved submit button.
     let paymentState = { status: 'unpaid', received_at: null };
     let inquiryRow = null;
@@ -1751,8 +1788,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <!-- TAB 2: DEVICE INFO -->
           <div class="mst-pane" data-pane="device">
             <div class="form-group">
-              <label>Company Name (Optional)</label>
-              <input type="text" id="resolve-company" placeholder="Which company is this for?" value="${(inquiryRow?.company_name ?? '').replace(/"/g,'&quot;')}"/>
+              <label>Company Name <span style="color:var(--danger)">*</span></label>
+              <select id="resolve-company" style="margin-bottom:8px;">
+                <option value="">Select Company…</option>
+                ${companyList.map(c => {
+                  const isSel = (inquiryRow?.company_name || 'networking experts').toLowerCase() === c.name.toLowerCase();
+                  return `<option value="${c.name.replace(/"/g,'&quot;')}" ${isSel ? 'selected' : ''}>${c.name}</option>`;
+                }).join('')}
+                <option value="Other">Other (Type manually)</option>
+              </select>
+              <input type="text" id="resolve-company-custom" placeholder="Type custom company name (Mandatory)" style="display:none;"/>
             </div>
             <div class="form-group">
               <label>Device Type</label>
@@ -1904,12 +1949,47 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const saveBtn = overlay.querySelector('#save-update');
 
     // Bill constants
-    const PLATFORM_FEE = 50;
     const TRANSPORT_PER_KM = 5;
     const DISCOUNT_THRESHOLD = 250;
     const DISCOUNT_AMOUNT = 30;
     const GST_RATE = 0.18;
     const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+
+    const getSelectedCompany = () => {
+      const selectEl = overlay.querySelector('#resolve-company');
+      const customEl = overlay.querySelector('#resolve-company-custom');
+      if (!selectEl) return '';
+      if (selectEl.value === 'Other') {
+        return customEl?.value.trim() || '';
+      }
+      return selectEl.value;
+    };
+
+    const getPlatformFee = () => {
+      const companyName = getSelectedCompany();
+      const isNetworkingExperts = companyName.toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
+      return isNetworkingExperts ? 50 : 100;
+    };
+
+    const ensureCompanyExists = async (companyName) => {
+      if (!companyName) return;
+      const nameClean = companyName.trim();
+      if (nameClean.toLowerCase() === 'networking experts') return;
+      
+      const existsLocal = companyList.some(c => c.name.toLowerCase() === nameClean.toLowerCase());
+      if (existsLocal) return;
+      
+      const { data: dbComp } = await supabase.from('companies').select('name').eq('name', nameClean).maybeSingle();
+      if (dbComp) return;
+      
+      const { error } = await supabase.from('companies').insert({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Math.random()),
+        name: nameClean
+      });
+      if (!error) {
+        companyList.push({ name: nameClean });
+      }
+    };
 
     // Selected services chosen via the cascading picker. Each entry:
     // { id, main, sub, leaf, cost }.
@@ -1917,7 +1997,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     // Live breakdown — also stored on a closure object so the bill modal can read it.
     const bill = {
-      servicesSubtotal: 0, extra: 0, platform: PLATFORM_FEE,
+      servicesSubtotal: 0, extra: 0, platform: getPlatformFee(),
       km: 0, transport: 0, discount: 0, taxable: 0, gst: 0, total: 0,
     };
 
@@ -1926,7 +2006,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       bill.extra = Number(extraInput.value) || 0;
       bill.km = Math.max(0, Number(kmInput.value) || 0);
       bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
-      bill.platform = PLATFORM_FEE;
+      bill.platform = getPlatformFee();
       const preDiscount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
       bill.discount = preDiscount > DISCOUNT_THRESHOLD ? DISCOUNT_AMOUNT : 0;
       bill.taxable = preDiscount - bill.discount;
@@ -1987,6 +2067,43 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       toast(`Distance: ${km.toFixed(1)} km`, 'success');
     };
     kmInput.oninput = () => { calcTotal(); renderPayStatus(); };
+    const progressDetailInput = overlay.querySelector('#progress-detail');
+    if (progressDetailInput) {
+      progressDetailInput.oninput = () => { renderPayStatus(); };
+    }
+    const companySelect = overlay.querySelector('#resolve-company');
+    const companyCustom = overlay.querySelector('#resolve-company-custom');
+
+    const toggleCustomCompany = () => {
+      if (companySelect.value === 'Other') {
+        companyCustom.style.display = 'block';
+      } else {
+        companyCustom.style.display = 'none';
+        companyCustom.value = '';
+      }
+      calcTotal();
+      renderPayStatus();
+    };
+
+    if (companySelect) {
+      companySelect.onchange = toggleCustomCompany;
+      
+      // Initialize state: if the current company name is not in the list, set to 'Other' and prefill custom field
+      const initialCompany = inquiryRow?.company_name || 'networking experts';
+      const isInList = companyList.some(c => c.name.toLowerCase() === initialCompany.toLowerCase());
+      if (isInList) {
+        companySelect.value = companyList.find(c => c.name.toLowerCase() === initialCompany.toLowerCase())?.name || initialCompany;
+        companyCustom.style.display = 'none';
+        companyCustom.value = '';
+      } else {
+        companySelect.value = 'Other';
+        companyCustom.style.display = 'block';
+        companyCustom.value = initialCompany;
+      }
+    }
+    if (companyCustom) {
+      companyCustom.oninput = () => { calcTotal(); renderPayStatus(); };
+    }
 
     // ── Cascading picker wiring ───────────────────────────────────────────
     const mainSel = overlay.querySelector('#svc-main');
@@ -2138,13 +2255,43 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           : 'Generate a link, then wait for the client to pay.';
       }
 
+      const progressDetail = overlay.querySelector('#progress-detail')?.value.trim() || '';
+      const companyName = getSelectedCompany();
+      
+      const isStatusTabValid = progressDetail.length > 0;
+      const isDeviceTabValid = companyName.length > 0;
+
       if (!isLastTab()) {
-        // On Status / Device Info tabs the primary button just advances the wizard.
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Next →';
-        saveBtn.style.opacity = '1';
-        saveBtn.style.cursor = 'pointer';
-        saveBtn.title = '';
+        const currentTab = getActiveTab();
+        let tabValid = true;
+        let missingFieldMsg = '';
+        if (currentTab === 'status') {
+          tabValid = isStatusTabValid;
+          missingFieldMsg = 'Please fill out the Work Details / Progress Update first.';
+        } else if (currentTab === 'device') {
+          tabValid = isDeviceTabValid;
+          missingFieldMsg = 'Please fill out the Company Name first.';
+        }
+        
+        if (!tabValid) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Next →';
+          saveBtn.style.opacity = '0.6';
+          saveBtn.style.cursor = 'not-allowed';
+          saveBtn.title = missingFieldMsg;
+        } else {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Next →';
+          saveBtn.style.opacity = '1';
+          saveBtn.style.cursor = 'pointer';
+          saveBtn.title = '';
+        }
+      } else if (!isStatusTabValid || !isDeviceTabValid) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Save Changes';
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.title = 'Please fill out all mandatory fields in previous tabs (Status and Device Info).';
       } else if (isResolvedReadOnly) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Resolved';
@@ -2283,6 +2430,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
         genBtn.disabled = true; genBtn.textContent = '…';
         try {
+          const compVal = getSelectedCompany();
+          await ensureCompanyExists(compVal);
+
           const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
           const res = await fetch('/api/payments/create-link', {
             method: 'POST',
@@ -2311,7 +2461,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
             device_type: overlay.querySelector('#device-type')?.value.trim() || null,
             device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
-            company_name: overlay.querySelector('#resolve-company')?.value.trim() || null,
+            company_name: compVal || null,
           }).eq('id', inqId);
           _hasLinkBeenGenerated = true;
           renderPayStatus();
@@ -2340,7 +2490,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             name: customer.full_name || '',
             phone: customer.phone || '',
             location: customer.location || '',
-            company: overlay.querySelector('#resolve-company')?.value.trim() || customer.company_name || '',
+            company: getSelectedCompany() || customer.company_name || '',
             device_type: overlay.querySelector('#device-type')?.value.trim() || customer.device_type || '',
             device_serial: overlay.querySelector('#device-serial')?.value.trim() || customer.device_serial_no || '',
             service_item: customer.service_item || '',
@@ -2367,7 +2517,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
               device_type: billData.customer.device_type || null,
               device_serial_no: billData.customer.device_serial || null,
-              company_name: billData.customer.company || null,
+              company_name: getSelectedCompany() || null,
             };
             if (pdfUrl) updates.bill_pdf_url = pdfUrl;
             await supabase.from('inquiries').update(updates).eq('id', inqId);
@@ -2417,10 +2567,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       markCashBtn.onclick = async () => {
         if (!inqId) { toast('Cannot mark cash on a task without an inquiry record', 'error'); return; }
         if (bill.total <= 0) { toast('Add services or charges first', 'warning'); return; }
+        const compVal = getSelectedCompany();
         markCashBtn.disabled = true;
         const orig = markCashBtn.innerHTML;
         markCashBtn.innerHTML = '<span>Saving…</span>';
         try {
+          await ensureCompanyExists(compVal);
           const nowIso = new Date().toISOString().slice(0,19).replace('T',' ');
           const updates = {
             payment_method: 'cash',
@@ -2439,7 +2591,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             bill_generated_at: nowIso,
             device_type: overlay.querySelector('#device-type')?.value.trim() || null,
             device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
-            company_name: overlay.querySelector('#resolve-company')?.value.trim() || null,
+            company_name: compVal || null,
           };
           const { error } = await supabase.from('inquiries').update(updates).eq('id', inqId);
           if (error) throw new Error(error.message);
@@ -2473,11 +2625,19 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
       const newStatus = statusSel.value;
       const detail = overlay.querySelector('#progress-detail').value.trim();
+      const companyName = getSelectedCompany();
       
       if (!detail) { toast('Please provide details of your work', 'warning'); return; }
+      if (!companyName) { toast('Please provide the company name', 'warning'); return; }
 
       const btn = overlay.querySelector('#save-update');
       btn.disabled = true; btn.textContent = 'Saving...';
+
+      try {
+        await ensureCompanyExists(companyName);
+      } catch (err) {
+        console.error('Failed to ensure company:', err);
+      }
 
       const selectedServiceIds = [];
       const resolving = newStatus === 'resolved';
@@ -2489,7 +2649,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
 
       const inqUpdates = { status: newStatus };
-      const companyName = overlay.querySelector('#resolve-company')?.value.trim();
       const deviceType = overlay.querySelector('#device-type')?.value.trim();
       const deviceSerial = overlay.querySelector('#device-serial')?.value.trim();
       if (companyName) inqUpdates.company_name = companyName;
@@ -2607,4 +2766,340 @@ function openLeaveModal(employeeId, onDone) {
     if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = 'Submit Request'; }
     else { toast('Leave request submitted!', 'success'); overlay.remove(); onDone(); }
   };
+}
+
+async function ensureCompanyExists(companyName) {
+  if (!companyName || !companyName.trim()) return;
+  const nameTrim = companyName.trim();
+  const { data, error } = await supabase.from('companies').select('id, name');
+  if (error) {
+    console.error('Error fetching companies in ensureCompanyExists:', error);
+    return;
+  }
+  const exists = data.some(c => c.name.toLowerCase() === nameTrim.toLowerCase());
+  if (!exists) {
+    const id = (window.crypto?.randomUUID && window.crypto.randomUUID()) || `comp-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const { error: insErr } = await supabase.from('companies').insert({ id, name: nameTrim });
+    if (insErr) {
+      console.error('Error inserting company in ensureCompanyExists:', insErr);
+    }
+  }
+}
+
+function generateEmployeeTicketNo() {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const rnd = String(Math.floor(1000 + Math.random() * 9000));
+  return `NE-${yy}${mm}${dd}-${rnd}`;
+}
+
+function optionFromCategory(category) {
+  const label = String(category || '').trim();
+  const value = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'service';
+  return { value, label };
+}
+
+export async function openEmployeeRequestModal(authUser, onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:550px">
+      <div class="modal-body" style="text-align:center; padding:32px;">
+        <span style="font-size:1.5rem;">Loading registration form…</span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  try {
+    const [compRes, priceRes] = await Promise.all([
+      supabase.from('companies').select('*').order('name'),
+      supabase.from('service_pricing').select('*').order('category')
+    ]);
+    if (compRes.error) throw compRes.error;
+    if (priceRes.error) throw priceRes.error;
+    
+    const companyList = compRes.data || [];
+    const pricingList = priceRes.data || [];
+    
+    const seen = new Map();
+    pricingList.forEach(row => {
+      const label = String(row.category || '').trim();
+      if (!label || ['uncategorized', 'other'].includes(label.toLowerCase())) return;
+      const opt = optionFromCategory(label);
+      if (!seen.has(opt.value)) seen.set(opt.value, opt);
+    });
+    const issueOptions = seen.size
+      ? [...seen.values()]
+      : [
+          { value: 'camera-offline', label: 'Camera offline' },
+          { value: 'software-issue', label: 'Software issue' },
+          { value: 'new-installation', label: 'New installation' },
+        ];
+        
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:600px">
+        <div class="modal-header">
+          <span class="modal-title">Register Service Request</span>
+          <button class="modal-close" id="req-close">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+            <div class="form-group">
+              <label>Customer Name <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="req-name" placeholder="Client's full name" required />
+            </div>
+            <div class="form-group">
+              <label>Phone Number (10 digits) <span style="color:var(--danger)">*</span></label>
+              <input type="tel" id="req-phone" placeholder="e.g. 9876543210" required />
+            </div>
+          </div>
+          
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+            <div class="form-group">
+              <label>Company <span style="color:var(--danger)">*</span></label>
+              <select id="req-company-select" style="width:100%;">
+                <option value="networking experts" selected>Networking Experts (Default)</option>
+                ${companyList.filter(c => c.name.toLowerCase() !== 'networking experts').map(c => `
+                  <option value="${c.name.replace(/"/g,'&quot;')}">${c.name}</option>
+                `).join('')}
+                <option value="Other">Other (Type manually)</option>
+              </select>
+              <input type="text" id="req-company-custom" placeholder="Type custom company name" style="display:none; margin-top:8px;" />
+            </div>
+            <div class="form-group">
+              <label>Preferred Time</label>
+              <select id="req-time" style="width:100%;">
+                <option value="As soon as possible">As soon as possible</option>
+                <option value="Morning (10 AM - 1 PM)">Morning (10 AM - 1 PM)</option>
+                <option value="Afternoon (1 PM - 4 PM)">Afternoon (1 PM - 4 PM)</option>
+                <option value="Evening (4 PM - 6 PM)">Evening (4 PM - 6 PM)</option>
+                <option value="Tomorrow Morning">Tomorrow Morning</option>
+                <option value="Flexible" selected>Flexible</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Issue Category <span style="color:var(--danger)">*</span></label>
+            <select id="req-issue-select" style="width:100%;">
+              <option value="">Select issue category…</option>
+              ${issueOptions.map(o => `<option value="${o.value.replace(/"/g,'&quot;')}">${o.label}</option>`).join('')}
+              <option value="Other">Other (Describe below)</option>
+            </select>
+            <input type="text" id="req-issue-custom" placeholder="Describe the custom issue category" style="display:none; margin-top:8px;" />
+          </div>
+
+          <div class="form-group">
+            <label>Location <span style="color:var(--danger)">*</span></label>
+            <div style="display:flex; gap:8px;">
+              <textarea id="req-location" rows="2" placeholder="Full address / landmark" style="flex:1;" required></textarea>
+              <button class="btn btn-secondary" id="req-detect-gps" title="Detect GPS location" style="padding:0 12px; display:flex; align-items:center; justify-content:center; height:38px; align-self:flex-start; margin-top:0;">
+                📍
+              </button>
+            </div>
+            <small id="req-coords-display" style="display:block; margin-top:4px; color:var(--text-dim); font-size:0.75rem;"></small>
+          </div>
+
+          <div class="form-group">
+            <label>Description <span style="color:var(--text-dim)">(optional)</span></label>
+            <textarea id="req-description" rows="3" placeholder="Provide extra details / model / serial no if any"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="req-cancel">Cancel</button>
+          <button class="btn btn-primary" id="req-submit">Register & Accept</button>
+        </div>
+      </div>
+    `;
+    
+    // Wire up events
+    const close = () => overlay.remove();
+    overlay.querySelector('#req-close').onclick = close;
+    overlay.querySelector('#req-cancel').onclick = close;
+    
+    const companySelect = overlay.querySelector('#req-company-select');
+    const companyCustom = overlay.querySelector('#req-company-custom');
+    companySelect.onchange = () => {
+      companyCustom.style.display = companySelect.value === 'Other' ? 'block' : 'none';
+      if (companySelect.value === 'Other') companyCustom.focus();
+    };
+    
+    const issueSelect = overlay.querySelector('#req-issue-select');
+    const issueCustom = overlay.querySelector('#req-issue-custom');
+    issueSelect.onchange = () => {
+      issueCustom.style.display = issueSelect.value === 'Other' ? 'block' : 'none';
+      if (issueSelect.value === 'Other') issueCustom.focus();
+    };
+    
+    // Geolocation wiring
+    let coords = null;
+    const detectBtn = overlay.querySelector('#req-detect-gps');
+    const locationInput = overlay.querySelector('#req-location');
+    const coordsDisplay = overlay.querySelector('#req-coords-display');
+    
+    detectBtn.onclick = () => {
+      if (!navigator.geolocation) {
+        toast('Geolocation is not supported by your browser', 'error');
+        return;
+      }
+      
+      const origHtml = detectBtn.innerHTML;
+      detectBtn.disabled = true;
+      detectBtn.innerHTML = '⏳';
+      
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude: lat, longitude: lng } = pos.coords;
+          coords = { lat, lng };
+          coordsDisplay.textContent = `GPS Coords: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+            const data = await res.json();
+            if (data && data.display_name) {
+              locationInput.value = data.display_name;
+            } else {
+              locationInput.value = `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            }
+          } catch (err) {
+            console.error('OSM Geocoding failed:', err);
+            locationInput.value = `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          } finally {
+            detectBtn.disabled = false;
+            detectBtn.innerHTML = origHtml;
+            toast('GPS location captured', 'success');
+          }
+        },
+        (err) => {
+          console.error('GPS error:', err);
+          detectBtn.disabled = false;
+          detectBtn.innerHTML = origHtml;
+          toast('Could not detect location. Please type manually.', 'error');
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    };
+    
+    // Submit handler
+    const submitBtn = overlay.querySelector('#req-submit');
+    submitBtn.onclick = async () => {
+      const name = overlay.querySelector('#req-name').value.trim();
+      const phoneInput = overlay.querySelector('#req-phone').value.trim();
+      const location = locationInput.value.trim();
+      const description = overlay.querySelector('#req-description').value.trim();
+      const preferredTime = overlay.querySelector('#req-time').value;
+      
+      // Validations
+      if (!name) { toast('Customer name is required', 'warning'); return; }
+      
+      const digits = phoneInput.replace(/\D/g, '');
+      if (digits.length !== 10) { toast('Please enter a valid 10-digit mobile number', 'warning'); return; }
+      const normalizedPhone = '+91' + digits;
+      
+      let companyName = companySelect.value;
+      if (companyName === 'Other') {
+        companyName = companyCustom.value.trim();
+        if (!companyName) { toast('Please type the custom company name', 'warning'); return; }
+      }
+      
+      let serviceItem = '';
+      if (issueSelect.value === 'Other') {
+        serviceItem = issueCustom.value.trim();
+        if (!serviceItem) { toast('Please describe the custom issue category', 'warning'); return; }
+      } else {
+        const selectedOpt = issueSelect.options[issueSelect.selectedIndex];
+        serviceItem = selectedOpt ? selectedOpt.text : '';
+      }
+      if (!serviceItem || issueSelect.value === '') { toast('Please select or specify an issue category', 'warning'); return; }
+      
+      if (!location) { toast('Location address is required', 'warning'); return; }
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering…';
+      
+      try {
+        // 1. Check/insert custom company
+        await ensureCompanyExists(companyName);
+        
+        // 2. Check for existing client profile
+        const { data: existingClient } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('phone', normalizedPhone)
+          .maybeSingle();
+          
+        // 3. Generate ticket number
+        const ticketNo = generateEmployeeTicketNo();
+        
+        // 4. Create ticket assigned to self
+        const ticketId = (window.crypto?.randomUUID && window.crypto.randomUUID()) || `tkt-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const { data: ticket, error: tErr } = await supabase
+          .from('tickets')
+          .insert({
+            id: ticketId,
+            title: `Service: ${serviceItem.slice(0, 30)}`,
+            description: description || `Registered by employee: ${serviceItem}`,
+            assigned_to: authUser.id,
+            client_id: existingClient ? existingClient.id : null,
+            status: 'assigned',
+            category: 'service_request'
+          })
+          .select()
+          .single();
+          
+        if (tErr) throw tErr;
+        
+        // 5. Create inquiry linked to ticket and assigned to self
+        const inquiryId = (window.crypto?.randomUUID && window.crypto.randomUUID()) || `inq-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const { error: iErr } = await supabase
+          .from('inquiries')
+          .insert({
+            id: inquiryId,
+            full_name: name,
+            phone: normalizedPhone,
+            location: location,
+            customer_lat: coords?.lat || null,
+            customer_lng: coords?.lng || null,
+            service_item: serviceItem,
+            description: description || null,
+            ticket_no: ticketNo,
+            preferred_time: preferredTime,
+            assigned_employee_id: authUser.id,
+            ticket_id: ticket.id,
+            status: 'open',
+            assignment_status: 'accepted',
+            company_name: companyName
+          });
+          
+        if (iErr) {
+          // Attempt rollback of ticket
+          await supabase.from('tickets').delete().eq('id', ticket.id);
+          throw iErr;
+        }
+        
+        // 6. Log status comment
+        await supabase.from('ticket_comments').insert({
+          ticket_id: ticket.id,
+          user_id: authUser.id,
+          content: `[Status: Assigned] Request self-registered and accepted by employee.`
+        });
+        
+        toast(`✓ Request ${ticketNo} registered and accepted!`, 'success');
+        overlay.remove();
+        onDone();
+      } catch (err) {
+        console.error('Registration failed:', err);
+        toast(err.message || 'Could not register request', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Register & Accept';
+      }
+    };
+    
+  } catch (err) {
+    console.error('Failed to initialize request modal:', err);
+    toast('Error loading registration form', 'error');
+    overlay.remove();
+  }
 }

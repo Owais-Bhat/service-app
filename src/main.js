@@ -47,6 +47,7 @@ initTheme();
 const app = document.getElementById('app');
 let currentUser = null;
 let currentRole = null;
+let canAddService = false;
 let activePage = 'dashboard';
 
 // ── NAV CONFIGS PER ROLE ──────────────────────────────
@@ -56,7 +57,7 @@ function getNavItems(role) {
     { id: 'dashboard', icon: ICONS.dashboard, label: 'Dashboard' },
   ];
   if (role === 'employee') {
-    return [...common,
+    const items = [...common,
       { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
       { type: 'section', label: 'Work' },
       { id: 'my-attendance', icon: ICONS.clock, label: 'Attendance Records' },
@@ -65,9 +66,15 @@ function getNavItems(role) {
       { id: 'my-cash', icon: ICONS.rupee, label: 'My Cash' },
       { id: 'my-salary', icon: ICONS.rupee, label: 'Salary' },
       { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
-      { type: 'section', label: 'Account' },
-      { id: 'profile', icon: ICONS.user, label: 'Profile' },
     ];
+    if (canAddService) {
+      items.push({ id: 'service-pricing', icon: ICONS.receipt, label: 'Service Pricing' });
+    }
+    items.push(
+      { type: 'section', label: 'Account' },
+      { id: 'profile', icon: ICONS.user, label: 'Profile' }
+    );
+    return items;
   }
   return [...common,
     { id: 'all-tickets', icon: ICONS.ticket, label: 'All Tickets' },
@@ -108,6 +115,7 @@ function getPageRenderer(role, page) {
       'my-cash': renderEmployeeCash,
       'my-salary': renderEmployeeSalary,
       leaderboard: renderEmployeeLeaderboard,
+      'service-pricing': renderPricingTab,
       profile: renderProfile
     },
     admin: {
@@ -157,6 +165,15 @@ function goToLanding() {
   showPWAInstallBtn();
 }
 
+async function loadCanAddService(userId) {
+  try {
+    const { data } = await supabase.from('profiles').select('can_add_service').eq('id', userId).single();
+    canAddService = data?.can_add_service === 1 || data?.can_add_service === true;
+  } catch {
+    canAddService = false;
+  }
+}
+
 function showAuth() {
   renderAuth(
     async (user, role) => {
@@ -169,6 +186,7 @@ function showAuth() {
       }
       currentUser = user;
       currentRole = role;
+      if (role === 'employee') await loadCanAddService(user.id);
       navigate('dashboard');
     },
     () => goToLanding()
@@ -193,6 +211,7 @@ async function boot() {
       return;
     }
 
+    if (currentRole === 'employee') await loadCanAddService(currentUser.id);
     navigate('dashboard');
   } else {
     // Show Landing Page if not logged in

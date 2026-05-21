@@ -178,6 +178,7 @@ const requiredColumns = {
         { name: 'address', definition: 'TEXT' },
         { name: 'phone', definition: 'VARCHAR(20)' },
         { name: 'company', definition: 'VARCHAR(100)' },
+        { name: 'can_add_service', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -273,6 +274,11 @@ const requiredTables = [
         id VARCHAR(36) PRIMARY KEY,
         name VARCHAR(150) NOT NULL UNIQUE,
         description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS companies (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(150) NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS complaints (
@@ -388,6 +394,19 @@ async function ensureRequiredColumns(connection) {
         await connection.execute(
             'INSERT INTO service_pricing (id, name, category, sub_category, sub_sub_category, cost, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [uuidv4(), service.name, service.category, service.sub_category, service.sub_sub_category, service.cost, 'Video Door Phone']
+        );
+    }
+
+    // Seed default company 'networking experts'
+    const [compRows] = await connection.execute(
+        'SELECT id FROM companies WHERE LOWER(name) = ? LIMIT 1',
+        ['networking experts']
+    );
+    if (compRows.length === 0) {
+        console.log(`[Schema] Seeding default company 'networking experts'`);
+        await connection.execute(
+            'INSERT INTO companies (id, name) VALUES (?, ?)',
+            [uuidv4(), 'networking experts']
         );
     }
 }
@@ -630,20 +649,20 @@ const ALLOWED_DATA_TABLES = new Set([
     'profiles', 'inquiries', 'tickets', 'attendance', 'ticket_comments',
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
-    'payments', 'bills', 'complaints', 'ads',
+    'payments', 'bills', 'complaints', 'ads', 'companies',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
 const EMPLOYEE_READ_TABLES = new Set([
     'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
-    'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types',
+    'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types', 'companies',
 ]);
 const EMPLOYEE_WRITE_FIELDS = {
     profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
@@ -660,6 +679,7 @@ const EMPLOYEE_WRITE_FIELDS = {
     tickets: new Set(['status']),
     ticket_comments: new Set(['id', 'ticket_id', 'user_id', 'content']),
     inquiry_services: new Set(['inquiry_id', 'service_id']),
+    companies: new Set(['id', 'name']),
 };
 
 // Identifier-safe regex for column/select tokens. Lets us reject anything that
@@ -725,7 +745,11 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             whereClauses.push('EXISTS (SELECT 1 FROM inquiries i WHERE i.id = inquiry_services.inquiry_id AND i.assigned_employee_id = ?)');
             params.push(id);
             break;
+        case 'companies':
+            if (user.role === 'client' && method !== 'GET') return { error: 'Forbidden' };
+            break;
         case 'service_pricing':
+            break;
         case 'device_types':
             if (method !== 'GET') return { error: 'Admin only' };
             break;
@@ -737,9 +761,43 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
 
 async function assertEmployeeInsertAllowed(connection, table, user, data) {
     if (user.role === 'admin' || user.role === 'public') return null;
-    const allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
-    if (allowedErr) return allowedErr;
     const id = user.id;
+
+    // Fetch profile to verify self-service request access (can_add_service)
+    const [profRows] = await connection.execute(
+        'SELECT can_add_service FROM profiles WHERE id = ? LIMIT 1',
+        [id]
+    );
+    const canAddService = profRows[0] && profRows[0].can_add_service === 1;
+
+    if (table === 'service_pricing') {
+        if (!canAddService) return 'Only users with Add Service access can modify service pricing';
+        return null;
+    }
+
+    let allowedFields = EMPLOYEE_WRITE_FIELDS[table];
+    if (canAddService) {
+        if (table === 'tickets') {
+            allowedFields = new Set([...EMPLOYEE_WRITE_FIELDS.tickets, 'id', 'client_id', 'assigned_to', 'title', 'description', 'category', 'priority']);
+            if (String(data.assigned_to) !== String(id)) {
+                return 'Cannot register a request assigned to another employee';
+            }
+        } else if (table === 'inquiries') {
+            allowedFields = new Set([
+                ...EMPLOYEE_WRITE_FIELDS.inquiries,
+                'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
+                'bill_no', 'service_item', 'description', 'ticket_no', 'preferred_time',
+                'assigned_employee_id', 'ticket_id',
+            ]);
+            if (String(data.assigned_employee_id) !== String(id)) {
+                return 'Cannot register a request assigned to another employee';
+            }
+        }
+    }
+
+    const allowedErr = assertAllowedFields(table, data, allowedFields);
+    if (allowedErr) return allowedErr;
+
     if (table === 'profiles' && String(data.id) !== String(id)) return 'Cannot write another user profile';
     if (table === 'attendance' && String(data.user_id) !== String(id)) return 'Cannot write another user attendance';
     if ((table === 'eod_reports' || table === 'leave_requests') && String(data.employee_id) !== String(id)) return 'Cannot write another employee record';
@@ -1392,8 +1450,26 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
     // Block non-admins from setting privileged columns (role, salary, password_hash).
     if (req.user.role !== 'admin') {
-        const allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
-        if (req.user.role !== 'public' && allowedErr) return res.status(403).json({ error: allowedErr });
+        let allowedErr = null;
+        if (table === 'service_pricing' && req.user.role === 'employee') {
+            try {
+                const connection = await getConn();
+                const [profRows] = await connection.execute(
+                    'SELECT can_add_service FROM profiles WHERE id = ? LIMIT 1',
+                    [req.user.id]
+                );
+                connection.release();
+                const canAddService = profRows[0] && profRows[0].can_add_service === 1;
+                if (!canAddService) {
+                    return res.status(403).json({ error: 'Only users with Add Service access can modify service pricing' });
+                }
+            } catch (err) {
+                return res.status(500).json({ error: 'Access check failed' });
+            }
+        } else {
+            allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
+            if (req.user.role !== 'public' && allowedErr) return res.status(403).json({ error: allowedErr });
+        }
         const restricted = ADMIN_ONLY_WRITE_COLUMNS[table];
         if (restricted) {
             const blocked = Object.keys(data || {}).filter(k => restricted.has(k) || restricted.has('*'));
@@ -1555,7 +1631,27 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
     if (eqErr) return res.status(400).json({ error: eqErr });
     // Only admins can delete via the generic endpoint — stops an employee from
     // wiping rows they happen to have ids for.
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    // Exception: Allow employees with can_add_service = 1 to delete service_pricing records.
+    if (req.user.role !== 'admin') {
+        if (table === 'service_pricing' && req.user.role === 'employee') {
+            try {
+                const connection = await getConn();
+                const [profRows] = await connection.execute(
+                    'SELECT can_add_service FROM profiles WHERE id = ? LIMIT 1',
+                    [req.user.id]
+                );
+                connection.release();
+                const canAddService = profRows[0] && profRows[0].can_add_service === 1;
+                if (!canAddService) {
+                    return res.status(403).json({ error: 'Only users with Add Service access can modify service pricing' });
+                }
+            } catch (err) {
+                return res.status(500).json({ error: 'Access check failed' });
+            }
+        } else {
+            return res.status(403).json({ error: 'Admin only' });
+        }
+    }
 
     try {
         const connection = await getConn();
