@@ -554,6 +554,16 @@ function getMonthKey(date = new Date()) {
   return date.toLocaleDateString('en-CA').slice(0, 7);
 }
 
+function dateKey(value) {
+  if (!value) return '';
+  const d = new Date(String(value).replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA');
+}
+
+function attendanceDateKey(row) {
+  return dateKey(row?.date || row?.clock_in);
+}
+
 function daysBetweenInclusive(start, end) {
   if (!start || !end) return 0;
   const a = new Date(`${start}T00:00:00`);
@@ -582,7 +592,7 @@ function isPastAutoClockOut(now = new Date()) {
 
 function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
   if (!row?.clock_in || row?.clock_out) return false;
-  return row.date !== today || isPastAutoClockOut();
+  return attendanceDateKey(row) !== today || isPastAutoClockOut();
 }
 
 function money(value) {

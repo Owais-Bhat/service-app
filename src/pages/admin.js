@@ -77,13 +77,17 @@ function isPastAutoClockOut(now = new Date()) {
   return now >= cutoff;
 }
 
+function attendanceDateKey(row) {
+  return dateKey(row?.date || row?.clock_in);
+}
+
 function isValidActiveAttendance(row, today = new Date().toLocaleDateString('en-CA')) {
-  return Boolean(row?.clock_in && !row?.clock_out && row?.date === today && !isPastAutoClockOut());
+  return Boolean(row?.clock_in && !row?.clock_out && attendanceDateKey(row) === today && !isPastAutoClockOut());
 }
 
 function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
   if (!row?.clock_in || row?.clock_out) return false;
-  return row.date !== today || isPastAutoClockOut();
+  return attendanceDateKey(row) !== today || isPastAutoClockOut();
 }
 
 function groupedForgottenClockouts(rows = []) {
