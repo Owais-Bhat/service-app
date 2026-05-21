@@ -437,11 +437,14 @@ export function renderLandingPage(container, onPortalClick) {
                placeholder="98765 43210" class="srf-input srf-input-cc" value="${state.phone}" />
       </div>
 
-      <label class="srf-label" for="srf-captcha">Quick check: type ${state.captcha.word}</label>
+      <label class="srf-label" for="srf-captcha">Quick check: type these letters</label>
+      <div style="display:inline-flex;gap:6px;align-items:center;margin:2px 0 8px;padding:8px 12px;border-radius:10px;background:var(--bg-soft);border:1px solid var(--border);font-size:1.05rem;font-weight:900;letter-spacing:0.22em;color:var(--primary);user-select:none;">
+        ${state.captcha.code.split('').map(ch => `<span>${ch}</span>`).join('')}
+      </div>
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.shield}</span>
         <input id="srf-captcha" type="text" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false"
-               placeholder="Enter the word" class="srf-input" />
+               placeholder="Enter the letters" class="srf-input" />
         <button type="button" class="srf-input-action" id="srf-refresh-captcha" title="New question">${ICONS.refresh}</button>
       </div>
 
@@ -866,7 +869,7 @@ export function renderLandingPage(container, onPortalClick) {
     if (sendBtn) sendBtn.onclick = async () => {
       if (!/^\d{10}$/.test(state.phone)) return toast('Enter a valid 10-digit number', 'error');
       const ans = String(capEl.value || '').trim().toLowerCase();
-      if (ans !== state.captcha.word.toLowerCase()) {
+      if (ans !== state.captcha.code.toLowerCase()) {
         toast('Captcha is incorrect', 'error');
         state.captcha = makeCaptcha();
         return render();
@@ -1368,19 +1371,9 @@ export function renderLandingPage(container, onPortalClick) {
 
 // ────────────────────────────────────────────────────────────────────
 function makeCaptcha() {
-  const words = [
-    'nest',
-    'service',
-    'network',
-    'support',
-    'repair',
-    'camera',
-    'router',
-    'secure',
-    'ticket',
-    'visit',
-  ];
-  return { word: words[Math.floor(Math.random() * words.length)] };
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const code = Array.from({ length: 5 }, () => letters[Math.floor(Math.random() * letters.length)]).join('');
+  return { code };
 }
 
 function formatPhone(p) {

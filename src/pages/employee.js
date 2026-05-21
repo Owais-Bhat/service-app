@@ -1835,6 +1835,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
                 <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
               </select>
+              <button type="button" class="btn btn-danger btn-sm" id="mark-issue-not-resolved" ${isResolvedReadOnly ? 'disabled' : ''} style="margin-top:8px;width:100%;justify-content:center;">
+                Mark Issue Not Resolved
+              </button>
             </div>
 
             <div class="form-group">
@@ -2389,6 +2392,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (lockHint) lockHint.style.display = resolving ? 'none' : 'block';
       renderPayStatus();
     };
+    const issueNotResolvedBtn = overlay.querySelector('#mark-issue-not-resolved');
+    if (issueNotResolvedBtn) {
+      issueNotResolvedBtn.onclick = () => {
+        statusSel.value = 'issue_not_resolved';
+        statusSel.onchange();
+        const detailEl = overlay.querySelector('#progress-detail');
+        if (detailEl && !detailEl.value.trim()) detailEl.focus();
+        toast('Status set to Issue Not Resolved. Add the reason, then save.', 'info');
+      };
+    }
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
 
     // Active auto-poller: asks the backend to verify Razorpay directly, then falls

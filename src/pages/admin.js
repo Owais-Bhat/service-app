@@ -756,6 +756,10 @@ async function openInquiryDetail(id, onDone) {
   // Resolve technician name for the bill view, if assigned.
   const technicianName = (employees || []).find(e => e.id === i.assigned_employee_id)?.full_name || '';
   const assignmentAwaitingResponse = Boolean(i.assigned_employee_id && i.assignment_status === 'pending');
+  const assignmentLocked = Boolean(i.assigned_employee_id && i.assignment_status !== 'declined');
+  const assignmentLockText = assignmentAwaitingResponse
+    ? `${technicianName || 'Assigned technician'} must accept or decline before admin can change this assignment.`
+    : `${technicianName || 'This technician'} is already assigned. Reassignment is locked unless the employee declines.`;
   // Items used on the bill — fetched only if a bill has been generated.
   let billServices = [];
   if (i.bill_total) {
@@ -815,10 +819,10 @@ async function openInquiryDetail(id, onDone) {
               <div class="sr-meta-label" style="color:var(--danger)">Employee Declined</div>
               <div class="sr-meta-value" style="font-size:0.85rem">${i.decline_reason || 'No reason provided'}</div>
             </div>` : ''}
-          ${assignmentAwaitingResponse ? `
+          ${assignmentLocked ? `
             <div style="padding:12px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);margin-top:10px;">
-              <div class="sr-meta-label" style="color:var(--warning)">Waiting for employee response</div>
-              <div class="sr-meta-value" style="font-size:0.85rem">${technicianName || 'Assigned technician'} must accept or decline before admin can change this assignment.</div>
+              <div class="sr-meta-label" style="color:var(--warning)">${assignmentAwaitingResponse ? 'Waiting for employee response' : 'Assignment locked'}</div>
+              <div class="sr-meta-value" style="font-size:0.85rem">${assignmentLockText}</div>
             </div>` : ''}
           ${i.feedback_rating ? `
             <div class="sr-fb-shown">
@@ -844,16 +848,16 @@ async function openInquiryDetail(id, onDone) {
 
         <div class="form-group">
           <label>Assign to Technician</label>
-          <select id="assign-to" ${assignmentAwaitingResponse ? 'disabled' : ''}>
+          <select id="assign-to" ${assignmentLocked ? 'disabled' : ''}>
             <option value="">— None —</option>
             ${availableEmployees.map(e => `<option value="${e.id}" ${i.assigned_employee_id === e.id ? 'selected' : ''} ${e._clockedIn ? '' : 'disabled'}>${e._clockedIn ? 'Online' : (restrictedEmployeeIds.has(e.id) ? 'Restricted' : 'Offline')} - ${e.full_name}</option>`).join('')}
           </select>
-          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentAwaitingResponse ? 'Assignment is locked until the employee accepts or rejects it.' : 'Only currently clocked-in employees with no strict clock-out restriction can receive new assignments.'}</small>
+          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentLocked ? 'Already assigned. Save is disabled to prevent duplicate assignment.' : 'Only currently clocked-in employees with no strict clock-out restriction can receive new assignments.'}</small>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="ci2">Close</button>
-        <button class="btn btn-primary" id="save-sr" ${assignmentAwaitingResponse ? 'disabled' : ''}>${ICONS.check}<span>${assignmentAwaitingResponse ? 'Awaiting employee response' : 'Save assignment'}</span></button>
+        <button class="btn btn-primary" id="save-sr" ${assignmentLocked ? 'disabled' : ''}>${ICONS.check}<span>${assignmentLocked ? 'Already assigned' : 'Save assignment'}</span></button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -887,8 +891,8 @@ async function openInquiryDetail(id, onDone) {
   }
 
   overlay.querySelector('#save-sr').onclick = async () => {
-    if (assignmentAwaitingResponse) {
-      toast('Wait for the employee to accept or reject this assignment first.', 'warning');
+    if (assignmentLocked) {
+      toast('This request is already assigned. It can only be reassigned if the employee declines it.', 'warning');
       return;
     }
     const empId = overlay.querySelector('#assign-to').value;
