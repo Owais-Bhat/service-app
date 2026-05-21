@@ -2778,9 +2778,16 @@ function openComplaintResponder(complaint, onChange) {
     if (status === 'resolved' && !complaint.resolved_at) {
       updates.resolved_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
-    const { error } = await supabase.from('complaints').update(updates).eq('id', complaint.id);
+    const saveBtn = overlay.querySelector('#cmp-save');
+    const restore = setButtonLoading(saveBtn, 'Saving');
+    const { data, error } = await supabase.from('complaints').update(updates).eq('id', complaint.id);
+    restore();
     if (error) { toast('Could not save: ' + (error.message || ''), 'error'); return; }
-    toast(updates.admin_response ? 'Response saved — customer will receive SMS' : 'Complaint updated', 'success');
+    if (updates.admin_response && data?.sms?.ok === false) {
+      toast(`Response saved, but SMS failed: ${data.sms.error || 'provider rejected it'}`, 'error');
+    } else {
+      toast(updates.admin_response ? 'Response saved and SMS sent' : 'Complaint updated', 'success');
+    }
     close();
     if (onChange) onChange();
   };

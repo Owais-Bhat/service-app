@@ -956,6 +956,26 @@ function smsNotify(mobile, templateEnvKey, variables) {
         .catch(e => console.error(`[SMS ${templateEnvKey}] threw:`, e.message, e.stack));
 }
 
+async function smsNotifyResult(mobile, templateEnvKey, variables) {
+    const apiKey = process.env.SMS_API;
+    const templateId = process.env[templateEnvKey];
+    const senderId = process.env.FAST2SMS_SENDER_ID || 'NTWRKE';
+    const normalized = normalizeIndianMobile(mobile);
+    if (!apiKey || !templateId || !mobile) {
+        return { ok: false, error: `Missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'}` };
+    }
+    if (!normalized) return { ok: false, error: 'Invalid mobile number' };
+
+    console.log(`[SMS ${templateEnvKey}] sending -> mobile=${normalized} templateId=${templateId} senderId=${senderId} vars(${variables.length})=${JSON.stringify(variables)}`);
+    const result = await sendDltSms({ mobile, templateId, variables, apiKey, senderId });
+    if (!result.ok) {
+        console.warn(`[SMS ${templateEnvKey}] FAILED -> status=${result.status || '?'} error=${result.error || 'unknown'} provider=${JSON.stringify(result.provider || null)}`);
+        return { ok: false, error: result.error || 'SMS failed', provider: result.provider || null };
+    }
+    console.log(`[SMS ${templateEnvKey}] sent to ${normalized} -> provider=${JSON.stringify(result.provider || null)}`);
+    return { ok: true, provider: result.provider || null };
+}
+
 function smsVar(value, fallback = 'N/A', maxLen = 80) {
     const cleaned = String(value || fallback)
         .replace(/[|\r\n\t]+/g, ' ')
@@ -1499,17 +1519,20 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
         // Complaint admin_response updated → SMS to client with ticket no and reply
         // Template variables: {ticket_no} {admin_response}
+        let smsResult = null;
         if (table === 'complaints' && data.admin_response && updatedRows.length > 0) {
             const row = updatedRows[0];
             if (row.phone) {
-                smsNotify(row.phone, 'SMS_TID_COMPLAINT', [
+                smsResult = await smsNotifyResult(row.phone, 'SMS_TID_COMPLAINT', [
                     smsVar(row.ticket_no, 'N/A', 20),
                     smsVar(data.admin_response, 'We are checking your complaint', 120),
                 ]);
+            } else {
+                smsResult = { ok: false, error: 'Complaint has no phone number' };
             }
         }
 
-        res.json({ success: true });
+        res.json({ success: true, sms: smsResult });
     } catch (error) {
         console.error('Error updating data:', error);
         res.status(500).json({ error: error.message });
