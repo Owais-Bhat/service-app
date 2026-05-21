@@ -172,6 +172,102 @@ const pool = mysql.createPool({
 });
 async function getConn() { return pool.getConnection(); }
 
+const AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
+
+function localDateKey(date = new Date()) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function dbDateKey(value) {
+    if (!value) return localDateKey();
+    if (value instanceof Date) return localDateKey(value);
+    return String(value).slice(0, 10);
+}
+
+function sqlDateTime(value) {
+    const yyyy = value.getFullYear();
+    const mm = String(value.getMonth() + 1).padStart(2, '0');
+    const dd = String(value.getDate()).padStart(2, '0');
+    const hh = String(value.getHours()).padStart(2, '0');
+    const mi = String(value.getMinutes()).padStart(2, '0');
+    const ss = String(value.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+}
+
+function parseAutoClockOutTime(value = AUTO_CLOCK_OUT_TIME) {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(value).trim());
+    if (!match) return { hour: 18, minute: 0, label: '18:00' };
+    const hour = Math.min(23, Math.max(0, Number(match[1])));
+    const minute = Math.min(59, Math.max(0, Number(match[2])));
+    return {
+        hour,
+        minute,
+        label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    };
+}
+
+function autoClockOutCutoff(now = new Date()) {
+    const { hour, minute } = parseAutoClockOutTime();
+    const cutoff = new Date(now);
+    cutoff.setHours(hour, minute, 0, 0);
+    return cutoff;
+}
+
+function clockOutValueForAuto(row, now = new Date()) {
+    const { hour, minute } = parseAutoClockOutTime();
+    const rowDate = dbDateKey(row?.date);
+    const cutoff = new Date(`${rowDate}T00:00:00`);
+    cutoff.setHours(hour, minute, 0, 0);
+
+    const clockIn = new Date(row?.clock_in || cutoff);
+    if (rowDate === localDateKey(now) && clockIn > cutoff) return sqlDateTime(now);
+    if (clockIn > cutoff) return sqlDateTime(clockIn);
+    return sqlDateTime(cutoff);
+}
+
+async function runAutoClockOut() {
+    const now = new Date();
+    const cutoff = autoClockOutCutoff(now);
+    if (now < cutoff) return;
+
+    const today = localDateKey(now);
+    let connection;
+    try {
+        connection = await getConn();
+        const [openRows] = await connection.execute(
+            'SELECT * FROM attendance WHERE date <= ? AND clock_in IS NOT NULL AND clock_out IS NULL',
+            [today]
+        );
+        if (!openRows.length) return;
+
+        for (const row of openRows) {
+            const clockOut = clockOutValueForAuto(row, now);
+            await connection.execute(
+                'UPDATE attendance SET clock_out = ? WHERE id = ? AND clock_out IS NULL',
+                [clockOut, row.id]
+            );
+            broadcastChange('UPDATE', 'attendance', { ...row, clock_out: clockOut });
+        }
+        console.log(`[attendance] Auto clocked out ${openRows.length} employee(s) at ${parseAutoClockOutTime().label}`);
+    } catch (err) {
+        console.error('[attendance] auto clock-out failed:', err.message);
+    } finally {
+        if (connection) {
+            try { connection.release(); } catch {}
+        }
+    }
+}
+
+function startAutoClockOutJob() {
+    const { label } = parseAutoClockOutTime();
+    console.log(`[attendance] Auto clock-out scheduled for ${label} server time`);
+    runAutoClockOut();
+    setInterval(runAutoClockOut, 60_000).unref();
+}
+
 const requiredColumns = {
     profiles: [
         { name: 'salary', definition: 'DECIMAL(10, 2) DEFAULT 0' },
@@ -2084,6 +2180,7 @@ async function startServer() {
         console.log('✅ Database connected successfully!');
         await ensureRequiredColumns(connection);
         connection.release();
+        startAutoClockOutJob();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
