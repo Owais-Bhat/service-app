@@ -1710,6 +1710,18 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             }
         }
 
+        if (table === 'attendance' && data.clock_out && updatedRows.length > 0) {
+            updatedRows.forEach(row => {
+                broadcastNotify({
+                    subject: 'employee_clock_out',
+                    title: 'Employee Clocked Out',
+                    body: row.location ? `Last location: ${String(row.location).slice(0, 90)}` : 'Employee is offline',
+                    audience: { role: 'admin' },
+                    data: { user_id: row.user_id, attendance_id: row.id || null },
+                });
+            });
+        }
+
         res.json({ success: true, sms: smsResult });
     } catch (error) {
         console.error('Error updating data:', error);
@@ -1886,6 +1898,15 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 body: `Ticket ${data.ticket_no} — ${String(data.complaint_text || '').slice(0, 80)}`,
                 audience: { role: 'admin' },
                 data: { complaint_id: data.id, ticket_no: data.ticket_no, inquiry_id: data.inquiry_id || null },
+            });
+        }
+        if (table === 'attendance' && data.clock_in && !data.clock_out) {
+            broadcastNotify({
+                subject: 'employee_clock_in',
+                title: 'Employee Clocked In',
+                body: data.location ? `Clock-in location: ${String(data.location).slice(0, 90)}` : 'Employee is online',
+                audience: { role: 'admin' },
+                data: { user_id: data.user_id, attendance_id: data.id || null },
             });
         }
         res.status(201).json(data);

@@ -142,6 +142,27 @@ async function preloadAds(ads) {
   await Promise.all((ads || []).map(preloadAdMedia));
 }
 
+function getHighAccuracyPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+  });
+}
+
+async function reverseGeocode(lat, lng) {
+  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+  const data = await res.json();
+  return data.display_name || '';
+}
+
+function mapLink(lat, lng) {
+  return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
 // ────────────────────────────────────────────────────────────────────
 // State + flow
 // ────────────────────────────────────────────────────────────────────
@@ -264,17 +285,7 @@ export function renderLandingPage(container, onPortalClick) {
               </button>
             </div>
 
-            ${state.mode === 'new' ? `
-              <div class="srf-stepper">
-                ${[1, 2, 3].map(n => `
-                  <div class="srf-step ${state.step === n ? 'active' : ''} ${state.step > n ? 'done' : ''}">
-                    <div class="srf-step-dot">${state.step > n ? ICONS.check : n}</div>
-                    <span>${['Verify', 'OTP', 'Details'][n - 1]}</span>
-                  </div>
-                  ${n < 3 ? `<div class="srf-step-line ${state.step > n ? 'done' : ''}"></div>` : ''}
-                `).join('')}
-              </div>
-            ` : ''}
+            <div id="srf-stepper-wrap">${stepperHtml()}</div>
 
             <div class="srf-card" id="srf-card">
               ${renderStep()}
@@ -377,6 +388,32 @@ export function renderLandingPage(container, onPortalClick) {
     }
   }
 
+  function stepperHtml() {
+    if (state.mode !== 'new') return '';
+    return `
+      <div class="srf-stepper">
+        ${[1, 2, 3].map(n => `
+          <div class="srf-step ${state.step === n ? 'active' : ''} ${state.step > n ? 'done' : ''}">
+            <div class="srf-step-dot">${state.step > n ? ICONS.check : n}</div>
+            <span>${['Verify', 'OTP', 'Details'][n - 1]}</span>
+          </div>
+          ${n < 3 ? `<div class="srf-step-line ${state.step > n ? 'done' : ''}"></div>` : ''}
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderCardOnly() {
+    container.querySelectorAll('.srf-mode-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.mode === state.mode);
+    });
+    const stepper = container.querySelector('#srf-stepper-wrap');
+    if (stepper) stepper.innerHTML = stepperHtml();
+    const card = container.querySelector('#srf-card');
+    if (card) card.innerHTML = renderStep();
+    bindStep();
+  }
+
   function renderStep() {
     if (state.mode === 'track') return stepTrack();
     if (state.mode === 'complaint') return stepComplaint();
@@ -400,11 +437,11 @@ export function renderLandingPage(container, onPortalClick) {
                placeholder="98765 43210" class="srf-input srf-input-cc" value="${state.phone}" />
       </div>
 
-      <label class="srf-label" for="srf-captcha">Quick check: ${state.captcha.a} + ${state.captcha.b} = ?</label>
+      <label class="srf-label" for="srf-captcha">Quick check: type ${state.captcha.word}</label>
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.shield}</span>
-        <input id="srf-captcha" type="number" inputmode="numeric"
-               placeholder="Enter the answer" class="srf-input" />
+        <input id="srf-captcha" type="text" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false"
+               placeholder="Enter the word" class="srf-input" />
         <button type="button" class="srf-input-action" id="srf-refresh-captcha" title="New question">${ICONS.refresh}</button>
       </div>
 
@@ -466,6 +503,13 @@ export function renderLandingPage(container, onPortalClick) {
                class="srf-input" value="${state.locationValue}" ${state.locationMode === 'gps' ? 'readonly' : ''}/>
         ${state.locationMode === 'gps' ? `<button type="button" class="srf-input-action" id="srf-detect">${ICONS.crosshair}</button>` : ''}
       </div>
+
+      ${state.coords ? `
+        <a href="${escapeAttr(mapLink(state.coords.lat, state.coords.lng))}" target="_blank" rel="noopener"
+           style="display:inline-flex;align-items:center;gap:6px;margin:6px 0 12px;color:var(--primary);font-size:0.78rem;font-weight:700;text-decoration:none;">
+          ${ICONS.pin}<span>Open exact pin (${Math.round(Number(state.coords.accuracy) || 0)}m accuracy)</span>
+        </a>
+      ` : ''}
 
       <label class="srf-label" for="srf-time">Preferred Visit Time</label>
       <div class="srf-input-wrap">
@@ -786,7 +830,7 @@ export function renderLandingPage(container, onPortalClick) {
         if (state.mode === 'complaint') {
           state.complaintSubmitted = false;
         }
-        render();
+        renderCardOnly();
       };
     });
   }
@@ -821,8 +865,8 @@ export function renderLandingPage(container, onPortalClick) {
 
     if (sendBtn) sendBtn.onclick = async () => {
       if (!/^\d{10}$/.test(state.phone)) return toast('Enter a valid 10-digit number', 'error');
-      const ans = parseInt(capEl.value, 10);
-      if (ans !== state.captcha.a + state.captcha.b) {
+      const ans = String(capEl.value || '').trim().toLowerCase();
+      if (ans !== state.captcha.word.toLowerCase()) {
         toast('Captcha is incorrect', 'error');
         state.captcha = makeCaptcha();
         return render();
@@ -900,9 +944,26 @@ export function renderLandingPage(container, onPortalClick) {
 
     const detectBtn = container.querySelector('#srf-detect');
     if (detectBtn) {
-      detectBtn.onclick = () => {
-        if (!navigator.geolocation) return toast('Geolocation not supported', 'error');
+      detectBtn.onclick = async () => {
         detectBtn.innerHTML = `<span class="srf-spin"></span>`;
+        try {
+          const pos = await getHighAccuracyPosition();
+          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+          state.coords = { lat, lng, accuracy };
+          try {
+            state.locationValue = await reverseGeocode(lat, lng) || `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          } catch (err) {
+            console.error('Reverse geocoding failed:', err);
+            state.locationValue = `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          }
+          container.querySelector('#srf-location').value = state.locationValue;
+          toast(`Location detected (${Math.round(Number(accuracy) || 0)}m accuracy)`, 'success');
+          renderCardOnly();
+        } catch {
+          toast('Could not detect location - switch to Manual', 'error');
+          detectBtn.innerHTML = ICONS.crosshair;
+        }
+        return;
         navigator.geolocation.getCurrentPosition(
           async pos => {
             const { latitude: lat, longitude: lng } = pos.coords;
@@ -1307,7 +1368,19 @@ export function renderLandingPage(container, onPortalClick) {
 
 // ────────────────────────────────────────────────────────────────────
 function makeCaptcha() {
-  return { a: 1 + Math.floor(Math.random() * 8), b: 1 + Math.floor(Math.random() * 8) };
+  const words = [
+    'nest',
+    'service',
+    'network',
+    'support',
+    'repair',
+    'camera',
+    'router',
+    'secure',
+    'ticket',
+    'visit',
+  ];
+  return { word: words[Math.floor(Math.random() * words.length)] };
 }
 
 function formatPhone(p) {

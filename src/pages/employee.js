@@ -4,6 +4,27 @@ import { ICONS } from '../icons.js';
 
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
 
+function getHighAccuracyPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+  });
+}
+
+async function reverseGeocode(lat, lng) {
+  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+  const data = await res.json();
+  return data.display_name || '';
+}
+
+function mapLink(lat, lng) {
+  return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
 function setButtonLoading(btn, label = 'Loading...') {
   if (!btn) return () => {};
   const originalHTML = btn.innerHTML;
@@ -616,6 +637,10 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
+function escapeAttr(s) {
+  return escapeHtml(s);
+}
+
 function starsHtml(n) {
   const v = Math.round(Number(n) || 0);
   return Array.from({ length: 5 }, (_, i) =>
@@ -839,17 +864,15 @@ export async function renderEmployeeDashboard(container) {
     const btn = container.querySelector('#btn-clock-in');
     btn.disabled = true; btn.textContent = 'Getting location…';
     let locationStr = 'Unknown';
-    let coords = { lat: null, lng: null };
+    let coords = { lat: null, lng: null, accuracy: null };
     try {
-      const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
-      const { latitude: lat, longitude: lng } = pos.coords;
-      coords = { lat, lng };
+      const pos = await getHighAccuracyPosition();
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      coords = { lat, lng, accuracy };
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
-        const data = await res.json();
-        locationStr = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        locationStr = await reverseGeocode(lat, lng) || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       } catch (err) {
-        locationStr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        locationStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       }
     } catch (_) {}
 
@@ -1786,6 +1809,21 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <button type="button" class="mst-tab" data-tab="device">🔧 Device Info</button>
             <button type="button" class="mst-tab" data-tab="bill">📄 Bill</button>
           </div>
+
+          ${(employeeCoords.lat != null || inquiryRow?.customer_lat != null) ? `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px;">
+              <a href="${employeeCoords.lat != null ? escapeAttr(mapLink(employeeCoords.lat, employeeCoords.lng)) : '#'}" target="_blank" rel="noopener"
+                 style="padding:10px;border-radius:10px;background:var(--bg-soft);border:1px solid var(--border);text-decoration:none;color:var(--text);font-size:0.78rem;${employeeCoords.lat == null ? 'pointer-events:none;opacity:.55;' : ''}">
+                <b style="display:block;color:var(--primary);margin-bottom:3px;">Employee pin</b>
+                <span>${escapeHtml(employeeCoords.location || 'Clock-in GPS')}</span>
+              </a>
+              <a href="${inquiryRow?.customer_lat != null ? escapeAttr(mapLink(inquiryRow.customer_lat, inquiryRow.customer_lng)) : '#'}" target="_blank" rel="noopener"
+                 style="padding:10px;border-radius:10px;background:var(--bg-soft);border:1px solid var(--border);text-decoration:none;color:var(--text);font-size:0.78rem;${inquiryRow?.customer_lat == null ? 'pointer-events:none;opacity:.55;' : ''}">
+                <b style="display:block;color:var(--primary);margin-bottom:3px;">Client pin</b>
+                <span>${escapeHtml(inquiryRow?.location || 'Customer GPS')}</span>
+              </a>
+            </div>
+          ` : ''}
 
           <!-- TAB 1: STATUS -->
           <div class="mst-pane active" data-pane="status">

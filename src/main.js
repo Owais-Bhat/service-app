@@ -143,6 +143,8 @@ function startGlobalNotifications() {
           : msg.subject === 'new_assignment' ? 'alert'
           : msg.subject === 'new_service_request' ? 'alert'
           : msg.subject === 'new_complaint' ? 'alert'
+          : msg.subject === 'employee_clock_in' ? 'alert'
+          : msg.subject === 'employee_clock_out' ? 'alert'
           : 'info',
     });
   });
