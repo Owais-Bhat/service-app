@@ -20,19 +20,40 @@ export function toast(message, type = 'info', duration = 3500) {
   setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; el.style.transition = '0.3s'; setTimeout(() => el.remove(), 300); }, duration);
 }
 
+function parseAppDate(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00\.000Z)?$/.exec(raw);
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+  }
+
+  const normalized = raw.includes(' ') ? raw.replace(' ', 'T') : raw;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const date = parseAppDate(dateStr);
+  if (!date) return '-';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function formatDateTime(dateStr) {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const date = parseAppDate(dateStr);
+  if (!date) return '-';
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 export function formatTime(dateStr) {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const date = parseAppDate(dateStr);
+  if (!date) return '-';
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 }
 
 export function debounce(fn, delay = 300) {
@@ -234,4 +255,3 @@ export function formatTimeRemaining(deadline) {
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   return `<span style="color:var(--primary);font-weight:600">${hours}h ${mins}m left</span>`;
 }
-

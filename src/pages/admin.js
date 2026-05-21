@@ -57,10 +57,13 @@ function hoursWorked(clockIn, clockOut) {
 }
 function daysBetweenInclusive(start, end) {
   if (!start || !end) return 0;
-  const a = new Date(`${start}T00:00:00`);
-  const b = new Date(`${end}T00:00:00`);
-  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return 0;
-  return Math.floor((b - a) / 86400000) + 1;
+  const a = dateKey(start);
+  const b = dateKey(end);
+  if (!a || !b) return 0;
+  const startDate = new Date(`${a}T00:00:00`);
+  const endDate = new Date(`${b}T00:00:00`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate < startDate) return 0;
+  return Math.floor((endDate - startDate) / 86400000) + 1;
 }
 function money(value) {
   const val = Math.round(Number(value) || 0);
@@ -142,7 +145,11 @@ function newestFirst(a, b) {
 
 function dateKey(value) {
   if (!value) return '';
-  const d = new Date(String(value).replace(' ', 'T'));
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : value.toLocaleDateString('en-CA');
+  const raw = String(value).trim();
+  const dateOnly = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
+  if (dateOnly) return dateOnly[1];
+  const d = new Date(raw.replace(' ', 'T'));
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA');
 }
 
