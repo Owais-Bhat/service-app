@@ -328,7 +328,7 @@ export async function renderAdminDashboard(container) {
       </div>
     </div>
 
-    <div class="grid-layout">
+    <div class="grid-layout admin-queue-grid">
       ${clockoutWarnings.length ? `
       <div class="card">
         <div class="card-header"><span class="card-title">Clock-out Warnings</span></div>
