@@ -3704,12 +3704,4 @@ input, select, textarea { max-width: 100%; }
   display: revert;
 }
 
-/* Admin Dashboard Queue Grid Override: show cards side-by-side in one row on desktop */
-@media (min-width: 1024px) {
-  .admin-queue-grid {
-    grid-auto-flow: column !important;
-    grid-auto-columns: 1fr !important;
-    grid-template-columns: none !important;
-  }
-}
 

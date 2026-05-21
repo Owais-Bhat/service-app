@@ -328,7 +328,6 @@ export async function renderAdminDashboard(container) {
       </div>
     </div>
 
-    <div class="grid-layout admin-queue-grid">
       ${clockoutWarnings.length ? `
       <div class="card">
         <div class="card-header"><span class="card-title">Clock-out Warnings</span></div>
@@ -404,11 +403,10 @@ export async function renderAdminDashboard(container) {
           </table>
         </div>
       </div>
-    </div>
 
-    <div class="card" style="margin-top:24px">
-      <div class="card-header"><span class="card-title">Resolved Services</span></div>
-      <div class="table-wrap recent-requests-scroll">
+      <div class="card" style="margin-top:24px">
+        <div class="card-header"><span class="card-title">Resolved Services</span></div>
+        <div class="table-wrap recent-requests-scroll">
         <table>
           <thead><tr><th>Ticket</th><th>Service Date</th><th>Company</th><th>Name</th><th>Status</th><th></th></tr></thead>
           <tbody>
