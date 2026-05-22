@@ -142,14 +142,46 @@ async function preloadAds(ads) {
   await Promise.all((ads || []).map(preloadAdMedia));
 }
 
-function getHighAccuracyPosition() {
+// Watches for several GPS fixes within `maxWaitMs`, returns the most accurate
+// reading seen — or short-circuits as soon as accuracy <= desiredAccuracy.
+// The cold first fix is usually 100-500m off; this keeps sampling until we
+// see a real GPS lock (typically <20m on phones).
+function getHighAccuracyPosition({ desiredAccuracy = 25, maxWaitMs = 12000 } = {}) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-    });
+    let best = null;
+    let settled = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        if (pos.coords.accuracy <= desiredAccuracy && !settled) {
+          settled = true;
+          navigator.geolocation.clearWatch(watchId);
+          clearTimeout(timer);
+          resolve(best);
+        }
+      },
+      (err) => {
+        if (settled) return;
+        if (best) {
+          settled = true;
+          navigator.geolocation.clearWatch(watchId);
+          clearTimeout(timer);
+          resolve(best);
+        } else {
+          settled = true;
+          reject(err);
+        }
+      },
+      { enableHighAccuracy: true, timeout: maxWaitMs, maximumAge: 0 }
+    );
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      if (best) resolve(best);
+      else reject(new Error('Geolocation timed out'));
+    }, maxWaitMs);
   });
 }
 

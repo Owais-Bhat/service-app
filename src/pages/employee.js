@@ -4,14 +4,46 @@ import { ICONS } from '../icons.js';
 
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
 
-function getHighAccuracyPosition() {
+// Watches for several GPS fixes within `maxWaitMs`, returns the most accurate
+// reading seen — or short-circuits as soon as accuracy <= desiredAccuracy.
+// The cold first fix is usually 100-500m off; this keeps sampling until we
+// see a real GPS lock (typically <20m on phones).
+function getHighAccuracyPosition({ desiredAccuracy = 25, maxWaitMs = 12000 } = {}) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-    });
+    let best = null;
+    let settled = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        if (pos.coords.accuracy <= desiredAccuracy && !settled) {
+          settled = true;
+          navigator.geolocation.clearWatch(watchId);
+          clearTimeout(timer);
+          resolve(best);
+        }
+      },
+      (err) => {
+        if (settled) return;
+        if (best) {
+          settled = true;
+          navigator.geolocation.clearWatch(watchId);
+          clearTimeout(timer);
+          resolve(best);
+        } else {
+          settled = true;
+          reject(err);
+        }
+      },
+      { enableHighAccuracy: true, timeout: maxWaitMs, maximumAge: 0 }
+    );
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      if (best) resolve(best);
+      else reject(new Error('Geolocation timed out'));
+    }, maxWaitMs);
   });
 }
 
@@ -1923,11 +1955,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
               <div class="form-group">
                 <label>Transport Distance (km)</label>
-                <div style="display:flex; gap:8px;">
-                  <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1"/>
-                  <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate from your clock-in location to the customer location">📍 Auto</button>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1; min-width:120px;"/>
+                  <button type="button" class="btn btn-secondary btn-sm" id="capture-loc" style="white-space:nowrap" title="Capture your precise GPS location right now (you should be at the customer site)">📍 Capture My Location</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate km from your clock-in location to the precise location">🧮 Auto km</button>
                 </div>
-                <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km · click 📍 Auto to compute from your clock-in GPS.</small>
+                <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km · capture your precise location at the customer site, then click 🧮 Auto km.</small>
+                <small id="bill-loc-status" style="display:none; margin-top:4px; color:var(--primary); font-size:0.75rem; font-weight:600;"></small>
               </div>
 
               <div class="bill-breakdown" id="bill-breakdown">
@@ -2110,34 +2144,77 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       return 2 * R * Math.asin(Math.sqrt(a));
     };
 
-    // Auto-fill km from clock-in coords → customer coords.
+    // Precise location captured at bill time (employee is at the customer site).
+    // Takes priority over inquiryRow.customer_lat/lng for the transport calc.
+    const billLoc = { lat: null, lng: null, accuracy: null };
+
     const autoKmBtn = overlay.querySelector('#auto-km');
+    const captureBtn = overlay.querySelector('#capture-loc');
     const kmHint = overlay.querySelector('#transport-km-hint');
-    const tryAutoKm = () => {
+    const locStatus = overlay.querySelector('#bill-loc-status');
+
+    const refreshAutoKmHint = () => {
       const eLat = employeeCoords.lat, eLng = employeeCoords.lng;
-      const cLat = inquiryRow?.customer_lat, cLng = inquiryRow?.customer_lng;
+      const hasBill = billLoc.lat != null;
+      const hasCust = inquiryRow?.customer_lat != null && inquiryRow?.customer_lng != null;
       if (eLat == null || eLng == null) {
         kmHint.textContent = '₹5 per km · enter manually (no clock-in GPS on record for today).';
         autoKmBtn.disabled = true; autoKmBtn.style.opacity = '0.5';
         return;
       }
-      if (cLat == null || cLng == null) {
-        kmHint.textContent = '₹5 per km · enter manually (customer location has no GPS coords).';
+      if (!hasBill && !hasCust) {
+        kmHint.textContent = '₹5 per km · capture your precise location at the customer site to enable Auto km.';
         autoKmBtn.disabled = true; autoKmBtn.style.opacity = '0.5';
         return;
       }
-      kmHint.textContent = `₹5 per km · 📍 Auto uses your clock-in GPS → customer GPS.`;
+      autoKmBtn.disabled = false; autoKmBtn.style.opacity = '1';
+      kmHint.textContent = hasBill
+        ? '₹5 per km · 🧮 Auto km uses clock-in GPS → your captured precise location.'
+        : '₹5 per km · 🧮 Auto km uses clock-in GPS → customer GPS (capture precise location for higher accuracy).';
     };
-    tryAutoKm();
+    refreshAutoKmHint();
+
+    captureBtn.onclick = async () => {
+      captureBtn.disabled = true;
+      const originalText = captureBtn.textContent;
+      captureBtn.innerHTML = '<span class="srf-spin"></span> Locating…';
+      try {
+        const pos = await getHighAccuracyPosition();
+        const { latitude, longitude, accuracy } = pos.coords;
+        billLoc.lat = latitude;
+        billLoc.lng = longitude;
+        billLoc.accuracy = accuracy;
+        locStatus.style.display = 'block';
+        locStatus.textContent = `📍 Captured: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${Math.round(accuracy)}m)`;
+        toast(`Precise location captured (±${Math.round(accuracy)}m)`, 'success');
+        refreshAutoKmHint();
+      } catch (err) {
+        toast('Could not capture location — check GPS permission', 'error');
+        console.error('Capture location failed:', err);
+      } finally {
+        captureBtn.disabled = false;
+        captureBtn.textContent = originalText;
+      }
+    };
+
     autoKmBtn.onclick = () => {
       const eLat = employeeCoords.lat, eLng = employeeCoords.lng;
-      const cLat = inquiryRow?.customer_lat, cLng = inquiryRow?.customer_lng;
-      if (eLat == null || cLat == null) return;
-      const km = haversineKm(Number(eLat), Number(eLng), Number(cLat), Number(cLng));
+      if (eLat == null || eLng == null) return;
+      // Prefer captured bill-time precise location; fall back to customer's submitted coords.
+      let dLat, dLng, source;
+      if (billLoc.lat != null && billLoc.lng != null) {
+        dLat = billLoc.lat; dLng = billLoc.lng; source = 'precise capture';
+      } else if (inquiryRow?.customer_lat != null && inquiryRow?.customer_lng != null) {
+        dLat = inquiryRow.customer_lat; dLng = inquiryRow.customer_lng; source = 'customer GPS';
+      } else {
+        return;
+      }
+      const km = haversineKm(Number(eLat), Number(eLng), Number(dLat), Number(dLng));
       kmInput.value = km.toFixed(1);
       calcTotal(); renderPayStatus();
-      toast(`Distance: ${km.toFixed(1)} km`, 'success');
+      toast(`Distance: ${km.toFixed(1)} km (from ${source})`, 'success');
     };
+
     kmInput.oninput = () => { calcTotal(); renderPayStatus(); };
     const progressDetailInput = overlay.querySelector('#progress-detail');
     if (progressDetailInput) {
@@ -2544,6 +2621,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             device_type: overlay.querySelector('#device-type')?.value.trim() || null,
             device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
             company_name: compVal || null,
+            employee_bill_lat: billLoc.lat,
+            employee_bill_lng: billLoc.lng,
           }).eq('id', inqId);
           _hasLinkBeenGenerated = true;
           renderPayStatus();
@@ -2600,6 +2679,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               device_type: billData.customer.device_type || null,
               device_serial_no: billData.customer.device_serial || null,
               company_name: getSelectedCompany() || null,
+              employee_bill_lat: billLoc.lat,
+              employee_bill_lng: billLoc.lng,
             };
             if (pdfUrl) updates.bill_pdf_url = pdfUrl;
             await supabase.from('inquiries').update(updates).eq('id', inqId);
@@ -2674,6 +2755,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             device_type: overlay.querySelector('#device-type')?.value.trim() || null,
             device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
             company_name: compVal || null,
+            employee_bill_lat: billLoc.lat,
+            employee_bill_lng: billLoc.lng,
           };
           const { error } = await supabase.from('inquiries').update(updates).eq('id', inqId);
           if (error) throw new Error(error.message);
@@ -2746,6 +2829,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         inqUpdates.discount_amount = bill.discount;
         inqUpdates.gst_amount = bill.gst;
         inqUpdates.bill_total = bill.total;
+        inqUpdates.employee_bill_lat = billLoc.lat;
+        inqUpdates.employee_bill_lng = billLoc.lng;
       }
 
       if (inqId) {
