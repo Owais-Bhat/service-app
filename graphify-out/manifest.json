@@ -1,0 +1,317 @@
+{
+  "E:\\service app\\hostinger_schema_fix.sql": {
+    "mtime": 1778672129.7300725,
+    "ast_hash": "e1dd4091c23c30a1bdd17878adea479d",
+    "semantic_hash": "e1dd4091c23c30a1bdd17878adea479d"
+  },
+  "E:\\service app\\migrations.sql": {
+    "mtime": 1778672124.4600255,
+    "ast_hash": "16c23264c7c6a751e8d09076b44d16d9",
+    "semantic_hash": "16c23264c7c6a751e8d09076b44d16d9"
+  },
+  "E:\\service app\\migrations_description.sql": {
+    "mtime": 1779271728.5169556,
+    "ast_hash": "7ef78714f00c9b2adb1287d0212aca2e",
+    "semantic_hash": "7ef78714f00c9b2adb1287d0212aca2e"
+  },
+  "E:\\service app\\migrations_leave.sql": {
+    "mtime": 1778478198.7530916,
+    "ast_hash": "2ac52731fe263d26a42990a1eaf87d67",
+    "semantic_hash": "2ac52731fe263d26a42990a1eaf87d67"
+  },
+  "E:\\service app\\migrations_payments.sql": {
+    "mtime": 1778656909.7122753,
+    "ast_hash": "10c9cd9e13d09f4e1dfa4affbe88d5b5",
+    "semantic_hash": "10c9cd9e13d09f4e1dfa4affbe88d5b5"
+  },
+  "E:\\service app\\mysql_schema.sql": {
+    "mtime": 1779271747.9118123,
+    "ast_hash": "b11db99eddf9ecf4d1fd31ffbfdda981",
+    "semantic_hash": "b11db99eddf9ecf4d1fd31ffbfdda981"
+  },
+  "E:\\service app\\package.json": {
+    "mtime": 1779087887.8610804,
+    "ast_hash": "66cbe238d114d072a6f30393a718d4c5",
+    "semantic_hash": "66cbe238d114d072a6f30393a718d4c5"
+  },
+  "E:\\service app\\vite.config.js": {
+    "mtime": 1779275548.7549524,
+    "ast_hash": "656ef45e523a1b9b1f4c15c247da56f7",
+    "semantic_hash": "656ef45e523a1b9b1f4c15c247da56f7"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\benchmark.py": {
+    "mtime": 1778055131.6892736,
+    "ast_hash": "78b02343ba9a6e7798cf10f6560eb589",
+    "semantic_hash": "78b02343ba9a6e7798cf10f6560eb589"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\cli.py": {
+    "mtime": 1778055132.130622,
+    "ast_hash": "e52ddb86f61b5d2095fa2b25f1ae73a7",
+    "semantic_hash": "e52ddb86f61b5d2095fa2b25f1ae73a7"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\compress.py": {
+    "mtime": 1778055132.5860522,
+    "ast_hash": "52630355324ce6788883c43139f992e0",
+    "semantic_hash": "52630355324ce6788883c43139f992e0"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\detect.py": {
+    "mtime": 1778055133.0599084,
+    "ast_hash": "b0fe8099be4fae2bade0de8253c950f1",
+    "semantic_hash": "b0fe8099be4fae2bade0de8253c950f1"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\validate.py": {
+    "mtime": 1778055133.5420446,
+    "ast_hash": "b4f283bc53e5d352fb0120827fd4fafa",
+    "semantic_hash": "b4f283bc53e5d352fb0120827fd4fafa"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\__init__.py": {
+    "mtime": 1778055130.7654994,
+    "ast_hash": "4bfea67395a7ba04f363df51355d1ef8",
+    "semantic_hash": "4bfea67395a7ba04f363df51355d1ef8"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\scripts\\__main__.py": {
+    "mtime": 1778055131.2243571,
+    "ast_hash": "746aff14c3a098a28fe9d01d54f174a9",
+    "semantic_hash": "746aff14c3a098a28fe9d01d54f174a9"
+  },
+  "E:\\service app\\.claude\\settings.local.json": {
+    "mtime": 1778744023.4060562,
+    "ast_hash": "ca2b4a38299ba12442c21d6db7abb74b",
+    "semantic_hash": "ca2b4a38299ba12442c21d6db7abb74b"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\benchmark.py": {
+    "mtime": 1778055131.6892736,
+    "ast_hash": "78b02343ba9a6e7798cf10f6560eb589",
+    "semantic_hash": "78b02343ba9a6e7798cf10f6560eb589"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\cli.py": {
+    "mtime": 1778055132.130622,
+    "ast_hash": "e52ddb86f61b5d2095fa2b25f1ae73a7",
+    "semantic_hash": "e52ddb86f61b5d2095fa2b25f1ae73a7"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\compress.py": {
+    "mtime": 1778055132.5860522,
+    "ast_hash": "52630355324ce6788883c43139f992e0",
+    "semantic_hash": "52630355324ce6788883c43139f992e0"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\detect.py": {
+    "mtime": 1778055133.0599084,
+    "ast_hash": "b0fe8099be4fae2bade0de8253c950f1",
+    "semantic_hash": "b0fe8099be4fae2bade0de8253c950f1"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\validate.py": {
+    "mtime": 1778055133.5420446,
+    "ast_hash": "b4f283bc53e5d352fb0120827fd4fafa",
+    "semantic_hash": "b4f283bc53e5d352fb0120827fd4fafa"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\__init__.py": {
+    "mtime": 1778055130.7654994,
+    "ast_hash": "4bfea67395a7ba04f363df51355d1ef8",
+    "semantic_hash": "4bfea67395a7ba04f363df51355d1ef8"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\scripts\\__main__.py": {
+    "mtime": 1778055131.2243571,
+    "ast_hash": "746aff14c3a098a28fe9d01d54f174a9",
+    "semantic_hash": "746aff14c3a098a28fe9d01d54f174a9"
+  },
+  "E:\\service app\\scratch\\employee_repaired.js": {
+    "mtime": 1778927572.1826952,
+    "ast_hash": "7998816c7a2003502b802b2c60af49fe",
+    "semantic_hash": "7998816c7a2003502b802b2c60af49fe"
+  },
+  "E:\\service app\\scratch\\fixed_function.js": {
+    "mtime": 1778925588.4678638,
+    "ast_hash": "489e02d24a3258fed0d5aa1dbd75c2d1",
+    "semantic_hash": "489e02d24a3258fed0d5aa1dbd75c2d1"
+  },
+  "E:\\service app\\server\\package.json": {
+    "mtime": 1778473092.1314662,
+    "ast_hash": "af0a5e91d88b145aadcedd26cf2f8121",
+    "semantic_hash": "af0a5e91d88b145aadcedd26cf2f8121"
+  },
+  "E:\\service app\\src\\auth.js": {
+    "mtime": 1778231750.9267428,
+    "ast_hash": "1994054f2933a3640422c9fda14c8ba1",
+    "semantic_hash": "1994054f2933a3640422c9fda14c8ba1"
+  },
+  "E:\\service app\\src\\counter.js": {
+    "mtime": 1777887591.4796565,
+    "ast_hash": "e912f4cce4554f6e6f95dd1029347f06",
+    "semantic_hash": "e912f4cce4554f6e6f95dd1029347f06"
+  },
+  "E:\\service app\\src\\icons.js": {
+    "mtime": 1779083049.8135858,
+    "ast_hash": "d7f9bfe252408e7caafb8013ea4212ec",
+    "semantic_hash": "d7f9bfe252408e7caafb8013ea4212ec"
+  },
+  "E:\\service app\\src\\layout.js": {
+    "mtime": 1778059420.4512677,
+    "ast_hash": "200d45bf245a7d475340d4c85ff42b7b",
+    "semantic_hash": "200d45bf245a7d475340d4c85ff42b7b"
+  },
+  "E:\\service app\\src\\main.js": {
+    "mtime": 1779365733.1054819,
+    "ast_hash": "1ebe9585fde62128ec7a0e5fa9e9e367",
+    "semantic_hash": "1ebe9585fde62128ec7a0e5fa9e9e367"
+  },
+  "E:\\service app\\src\\supabase.js": {
+    "mtime": 1778833906.2695448,
+    "ast_hash": "4b0b2e3a7a7144d93281c8b228d071e9",
+    "semantic_hash": "4b0b2e3a7a7144d93281c8b228d071e9"
+  },
+  "E:\\service app\\src\\utils.js": {
+    "mtime": 1779360554.7015388,
+    "ast_hash": "a886f79c9e23f6198c2d08f9d8317864",
+    "semantic_hash": "a886f79c9e23f6198c2d08f9d8317864"
+  },
+  "E:\\service app\\src\\pages\\admin.js": {
+    "mtime": 1779450937.7382758,
+    "ast_hash": "73b1e15c2f502e10e4e508b8ed10e4f2",
+    "semantic_hash": "73b1e15c2f502e10e4e508b8ed10e4f2"
+  },
+  "E:\\service app\\src\\pages\\client.js": {
+    "mtime": 1778833301.1670232,
+    "ast_hash": "012dca487a803d08eaf2c080490bd2d9",
+    "semantic_hash": "012dca487a803d08eaf2c080490bd2d9"
+  },
+  "E:\\service app\\src\\pages\\employee.js": {
+    "mtime": 1779450951.7608476,
+    "ast_hash": "2c2ca308d73b1263726b78e669271858",
+    "semantic_hash": "2c2ca308d73b1263726b78e669271858"
+  },
+  "E:\\service app\\src\\pages\\landing.js": {
+    "mtime": 1779432826.098032,
+    "ast_hash": "c61d875d65f8677a5b15df5bc0de22e1",
+    "semantic_hash": "c61d875d65f8677a5b15df5bc0de22e1"
+  },
+  "E:\\service app\\src\\pages\\profile.js": {
+    "mtime": 1778157234.7190242,
+    "ast_hash": "de87910600b2363d404d06293568848c",
+    "semantic_hash": "de87910600b2363d404d06293568848c"
+  },
+  "E:\\service app\\tests\\fast2sms.test.mjs": {
+    "mtime": 1779106520.296818,
+    "ast_hash": "8706c12d4c0b8fa151762577f06d4ebb",
+    "semantic_hash": "8706c12d4c0b8fa151762577f06d4ebb"
+  },
+  "E:\\service app\\tests\\pdf-rendering.test.mjs": {
+    "mtime": 1779254348.6156335,
+    "ast_hash": "8897dbfc7d975e0da1068adfea48abd5",
+    "semantic_hash": "8897dbfc7d975e0da1068adfea48abd5"
+  },
+  "E:\\service app\\DOCUMENTATION.md": {
+    "mtime": 1777894651.341236,
+    "ast_hash": "8549ab2b0f4da255f01756638093ab34",
+    "semantic_hash": "8549ab2b0f4da255f01756638093ab34"
+  },
+  "E:\\service app\\index.html": {
+    "mtime": 1778644912.7803104,
+    "ast_hash": "acc8efba613ea479880cd1e430ac1a71",
+    "semantic_hash": "acc8efba613ea479880cd1e430ac1a71"
+  },
+  "E:\\service app\\response.txt": {
+    "mtime": 1778649858.630428,
+    "ast_hash": "e06d1ba70f1331e9f9a113cc2f887d3f",
+    "semantic_hash": "e06d1ba70f1331e9f9a113cc2f887d3f"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\README.md": {
+    "mtime": 1778055115.7707803,
+    "ast_hash": "cfeaa998d7d6aeac5ee45c9bcaea8580",
+    "semantic_hash": "cfeaa998d7d6aeac5ee45c9bcaea8580"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\SECURITY.md": {
+    "mtime": 1778055116.1983354,
+    "ast_hash": "ab7d04be07bb9b8e851fb2758040432b",
+    "semantic_hash": "ab7d04be07bb9b8e851fb2758040432b"
+  },
+  "E:\\service app\\.agents\\skills\\caveman-compress\\SKILL.md": {
+    "mtime": 1778649686.6966214,
+    "ast_hash": "fa98fff0865ad25e22f84a479ecc8b34",
+    "semantic_hash": "fa98fff0865ad25e22f84a479ecc8b34"
+  },
+  "E:\\service app\\.agents\\skills\\tailored-resume-generator\\SKILL.md": {
+    "mtime": 1778649686.6976764,
+    "ast_hash": "2aad17c6a669c21f862f7d5c090c0cb4",
+    "semantic_hash": "2aad17c6a669c21f862f7d5c090c0cb4"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\README.md": {
+    "mtime": 1778055115.7707803,
+    "ast_hash": "cfeaa998d7d6aeac5ee45c9bcaea8580",
+    "semantic_hash": "cfeaa998d7d6aeac5ee45c9bcaea8580"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\SECURITY.md": {
+    "mtime": 1778055116.1983354,
+    "ast_hash": "ab7d04be07bb9b8e851fb2758040432b",
+    "semantic_hash": "ab7d04be07bb9b8e851fb2758040432b"
+  },
+  "E:\\service app\\.claude\\skills\\caveman-compress\\SKILL.md": {
+    "mtime": 1778055115.3366582,
+    "ast_hash": "da88ca3cffd9fd2bf2653ddaf17cc2ff",
+    "semantic_hash": "da88ca3cffd9fd2bf2653ddaf17cc2ff"
+  },
+  "E:\\service app\\.claude\\skills\\tailored-resume-generator\\SKILL.md": {
+    "mtime": 1777884510.1834035,
+    "ast_hash": "2aad17c6a669c21f862f7d5c090c0cb4",
+    "semantic_hash": "2aad17c6a669c21f862f7d5c090c0cb4"
+  },
+  "E:\\service app\\public\\apple-touch-icon.png": {
+    "mtime": 1778494878.4724145,
+    "ast_hash": "41ec6f46b937bdb769341527e2b8297e",
+    "semantic_hash": "41ec6f46b937bdb769341527e2b8297e"
+  },
+  "E:\\service app\\public\\favicon.svg": {
+    "mtime": 1778494878.5700107,
+    "ast_hash": "741f5ad89631ef37050457a62af086d0",
+    "semantic_hash": "741f5ad89631ef37050457a62af086d0"
+  },
+  "E:\\service app\\public\\icons.svg": {
+    "mtime": 1777887591.7741456,
+    "ast_hash": "3b4fcfcf393eca4d264dca4a4663bc37",
+    "semantic_hash": "3b4fcfcf393eca4d264dca4a4663bc37"
+  },
+  "E:\\service app\\public\\pwa-192x192.png": {
+    "mtime": 1778494878.680421,
+    "ast_hash": "fcabc06892ac897408d1e23eae4650f0",
+    "semantic_hash": "fcabc06892ac897408d1e23eae4650f0"
+  },
+  "E:\\service app\\public\\pwa-512x512.png": {
+    "mtime": 1778494878.7073917,
+    "ast_hash": "d5328390f6ee2717b0dc9857402fb037",
+    "semantic_hash": "d5328390f6ee2717b0dc9857402fb037"
+  },
+  "E:\\service app\\src\\assets\\apple-touch-icon.png": {
+    "mtime": 1778494878.4724145,
+    "ast_hash": "41ec6f46b937bdb769341527e2b8297e",
+    "semantic_hash": "41ec6f46b937bdb769341527e2b8297e"
+  },
+  "E:\\service app\\src\\assets\\favicon-96x96.png": {
+    "mtime": 1778494878.6300025,
+    "ast_hash": "09201225ca607dc9222791fbcc22fab1",
+    "semantic_hash": "09201225ca607dc9222791fbcc22fab1"
+  },
+  "E:\\service app\\src\\assets\\favicon.svg": {
+    "mtime": 1778494878.5700107,
+    "ast_hash": "741f5ad89631ef37050457a62af086d0",
+    "semantic_hash": "741f5ad89631ef37050457a62af086d0"
+  },
+  "E:\\service app\\src\\assets\\javascript.svg": {
+    "mtime": 1777887591.7864778,
+    "ast_hash": "067c459716da80af65db120e6c0404b9",
+    "semantic_hash": "067c459716da80af65db120e6c0404b9"
+  },
+  "E:\\service app\\src\\assets\\logo.png": {
+    "mtime": 1778493252.330515,
+    "ast_hash": "2b861437bf219ee79e28c687e4facb9a",
+    "semantic_hash": "2b861437bf219ee79e28c687e4facb9a"
+  },
+  "E:\\service app\\src\\assets\\web-app-manifest-192x192.png": {
+    "mtime": 1778494878.680421,
+    "ast_hash": "fcabc06892ac897408d1e23eae4650f0",
+    "semantic_hash": "fcabc06892ac897408d1e23eae4650f0"
+  },
+  "E:\\service app\\src\\assets\\web-app-manifest-512x512.png": {
+    "mtime": 1778494878.7073917,
+    "ast_hash": "d5328390f6ee2717b0dc9857402fb037",
+    "semantic_hash": "d5328390f6ee2717b0dc9857402fb037"
+  }
+}

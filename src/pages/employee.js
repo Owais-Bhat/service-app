@@ -57,6 +57,13 @@ function mapLink(lat, lng) {
   return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
 }
 
+function inquiryMapLink(inq) {
+  if (inq?.customer_lat != null && inq?.customer_lng != null) {
+    return mapLink(inq.customer_lat, inq.customer_lng);
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq?.location || '')}`;
+}
+
 function setButtonLoading(btn, label = 'Loading...') {
   if (!btn) return () => {};
   const originalHTML = btn.innerHTML;
@@ -1510,7 +1517,7 @@ export async function renderEmployeeTasks(container) {
          <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
            <span style="width:16px;height:16px;display:flex;">${ICONS.edit}</span> Update Status
          </button>
-         <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+         <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
            <span style="width:16px;height:16px;display:flex;">${ICONS.pin}</span> Open Maps
          </button>
        </div>
@@ -1574,7 +1581,7 @@ export async function renderEmployeeTasks(container) {
             <span style="width:16px;height:16px;display:flex;">${ICONS.edit}</span> Update Status
           </button>
           ${inq ? `
-            <button class="btn btn-primary btn-sm" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inq.location)}')" style="flex:1; min-width:120px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
+            <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')" style="flex:1; min-width:120px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
               <span style="width:16px;height:16px;display:flex;">${ICONS.pin}</span> Open Maps
             </button>
           ` : ''}

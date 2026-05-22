@@ -42,6 +42,51 @@ function normalizeAdminPhone(input) {
   return ten.length === 10 ? `+91${ten}` : null;
 }
 
+function getHighAccuracyPosition({ desiredAccuracy = 25, maxWaitMs = 12000 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+    let best = null;
+    let settled = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        if (pos.coords.accuracy <= desiredAccuracy && !settled) {
+          settled = true;
+          navigator.geolocation.clearWatch(watchId);
+          clearTimeout(timer);
+          resolve(best);
+        }
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        navigator.geolocation.clearWatch(watchId);
+        clearTimeout(timer);
+        if (best) resolve(best);
+        else reject(err);
+      },
+      { enableHighAccuracy: true, timeout: maxWaitMs, maximumAge: 0 }
+    );
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      if (best) resolve(best);
+      else reject(new Error('Geolocation timed out'));
+    }, maxWaitMs);
+  });
+}
+
+async function reverseGeocode(lat, lng) {
+  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+  const data = await res.json();
+  return data.display_name || '';
+}
+
+function mapLink(lat, lng) {
+  return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
 function optionFromCategory(category) {
   const label = String(category || '').trim();
   const value = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'service';
@@ -800,6 +845,10 @@ async function openInquiryDetail(id, onDone) {
           ${i.description ? `<div><div class="sr-meta-label">Customer description</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(i.description)}</div></div>` : ''}
           <div><div class="sr-meta-label">Location</div><div class="sr-meta-value">${i.location || '—'}</div></div>
           ${i.company_name ? `<div><div class="sr-meta-label">Company</div><div class="sr-meta-value">${i.company_name}</div></div>` : ''}
+          ${(i.customer_lat != null && i.customer_lng != null) ? `
+            <a href="${mapLink(i.customer_lat, i.customer_lng)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;text-decoration:none;">
+              ${ICONS.pin}<span>Open exact client pin</span>
+            </a>` : ''}
           ${(i.device_type || i.device_serial_no) ? `
             <div class="sr-meta-row">
               <div><div class="sr-meta-label">Device Type</div><div class="sr-meta-value">${i.device_type || '—'}</div></div>
@@ -1226,7 +1275,13 @@ async function openAdminRequestModal(onDone) {
         </div>
         <div class="form-group">
           <label>Location</label>
-          <textarea id="ar-location" rows="3" placeholder="Customer address / landmark"></textarea>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <textarea id="ar-location" rows="3" placeholder="Customer address / landmark" style="flex:1;"></textarea>
+            <button type="button" class="btn btn-secondary" id="ar-detect-gps" title="Detect exact client coordinates" style="height:42px;padding:0 12px;display:flex;align-items:center;justify-content:center;">
+              ${ICONS.pin}
+            </button>
+          </div>
+          <small id="ar-coords-display" style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.78rem;"></small>
         </div>
         <div class="form-group">
           <label>Description <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
@@ -1249,6 +1304,31 @@ async function openAdminRequestModal(onDone) {
   const issueEl = overlay.querySelector('#ar-issue');
   const otherWrap = overlay.querySelector('#ar-other-wrap');
   issueEl.onchange = () => { otherWrap.style.display = issueEl.value === 'other' ? '' : 'none'; };
+
+  let coords = null;
+  const detectBtn = overlay.querySelector('#ar-detect-gps');
+  const locationInput = overlay.querySelector('#ar-location');
+  const coordsDisplay = overlay.querySelector('#ar-coords-display');
+  detectBtn.onclick = async () => {
+    const restore = setButtonLoading(detectBtn, 'GPS');
+    try {
+      const pos = await getHighAccuracyPosition();
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      coords = { lat, lng, accuracy };
+      coordsDisplay.innerHTML = `Exact pin saved: <a href="${mapLink(lat, lng)}" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:none;">${lat.toFixed(6)}, ${lng.toFixed(6)}</a> (${Math.round(accuracy)}m accuracy)`;
+      try {
+        locationInput.value = await reverseGeocode(lat, lng) || `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      } catch {
+        locationInput.value = `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      }
+      toast('Exact client coordinates captured', 'success');
+    } catch (err) {
+      console.error('Admin GPS capture failed:', err);
+      toast('Could not detect GPS. Check browser location permission.', 'error');
+    } finally {
+      restore();
+    }
+  };
 
   overlay.querySelector('#ar-submit').onclick = async () => {
     const btn = overlay.querySelector('#ar-submit');
@@ -1285,6 +1365,8 @@ async function openAdminRequestModal(onDone) {
         phone,
         company_name: company_name || null,
         location,
+        customer_lat: coords?.lat ?? null,
+        customer_lng: coords?.lng ?? null,
         bill_no: bill_no || null,
         service_item,
         description: description || null,
