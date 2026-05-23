@@ -2,7 +2,7 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab } from './pages/admin.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -98,6 +98,8 @@ function getNavItems(role) {
     { id: 'feedback', icon: ICONS.star, label: 'Leaderboard' },
     { id: 'complaints', icon: ICONS.shield, label: 'Complaints' },
     { id: 'ads', icon: ICONS.box, label: 'Landing Ads' },
+    { type: 'section', label: 'Config' },
+    { id: 'settings', icon: ICONS.settings || '⚙️', label: 'Settings' },
     { type: 'section', label: 'Account' },
     { id: 'profile', icon: ICONS.user, label: 'Profile' },
   ];
@@ -123,7 +125,7 @@ function getPageRenderer(role, page) {
       inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
       payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
-      ads: renderAdsTab,
+      ads: renderAdsTab, settings: renderSettingsTab,
     }
   };
   return (map[role] || map.admin)[page];

@@ -3890,3 +3890,89 @@ function openAdEditor(ad, onChange) {
     if (onChange) onChange();
   };
 }
+
+// ── SETTINGS TAB ───────────────────────────────────────
+export async function renderSettingsTab(container) {
+  const { data: attendance } = await supabase.from('attendance').select('user_id,clock_in,clock_out,date');
+  const missedByEmployee = groupedForgottenClockouts(attendance || []);
+  const restrictedEmployees = Array.from(missedByEmployee.entries())
+    .filter(([, rows]) => rows.length >= STRICT_CLOCKOUT_LIMIT)
+    .map(([userId]) => userId);
+
+  const { data: profiles } = await supabase.from('profiles').select('id,full_name,role').eq('role', 'employee');
+  const restrictedProfiles = (profiles || []).filter(p => restrictedEmployees.includes(p.id));
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1>Settings</h1>
+        <p>Configure system preferences and manage restrictions</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="margin-top:0;margin-bottom:16px;">Auto Clock-Out Time</h3>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <input type="time" id="auto-clockout-time" value="18:00" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:1rem;">
+        <button class="btn btn-primary" id="save-clockout-time">Save Time</button>
+      </div>
+      <small style="display:block;margin-top:8px;color:var(--text-dim);">All employees not clocked out by this time will be automatically clocked out.</small>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;margin-bottom:16px;">Restricted Employees (${restrictedProfiles.length})</h3>
+      <p style="color:var(--text-dim);margin:0 0 12px 0;">Employees with 4+ missed clock-outs are restricted from clocking in.</p>
+
+      ${restrictedProfiles.length === 0
+        ? '<p style="text-align:center;padding:32px;color:var(--text-dim)">No restricted employees</p>'
+        : `<div style="display:flex; flex-direction:column; gap:8px;">
+            ${restrictedProfiles.map(p => `
+              <div style="padding:12px 16px;border-radius:8px;background:var(--bg-secondary);display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <b>${p.full_name}</b>
+                  <small style="display:block;color:var(--text-dim);">${p.id}</small>
+                </div>
+                <button class="btn btn-danger btn-sm remove-restriction" data-id="${p.id}" data-name="${p.full_name}">Remove Restriction</button>
+              </div>
+            `).join('')}
+          </div>`
+      }
+    </div>
+  `;
+
+  container.querySelector('#save-clockout-time').onclick = async () => {
+    const timeInput = container.querySelector('#auto-clockout-time');
+    const time = timeInput.value;
+    if (!time) { toast('Please select a time', 'warning'); return; }
+
+    toast('Note: Restart the server to apply the new clock-out time', 'info');
+    const msg = `Set auto clock-out time to ${time}. Please update the server .env file with AUTO_CLOCK_OUT_TIME=${time} and restart the server.`;
+    toast(msg, 'info');
+  };
+
+  container.querySelectorAll('.remove-restriction').forEach(btn => {
+    btn.onclick = async () => {
+      const userId = btn.dataset.id;
+      const name = btn.dataset.name;
+      if (!confirm(`Remove clock-out restriction for ${name}?`)) return;
+
+      const attend = (attendance || []).filter(a => a.user_id === userId);
+      const missed = attend.filter(row => isForgottenClockOut(row));
+
+      if (missed.length >= STRICT_CLOCKOUT_LIMIT) {
+        const autoResolved = missed.slice(0, missed.length - STRICT_CLOCKOUT_LIMIT + 1);
+        let fixed = 0;
+        for (const row of autoResolved) {
+          const { error } = await supabase.from('attendance')
+            .update({ clock_out: resolvedClockOutFor(row) })
+            .eq('id', row.id);
+          if (!error) fixed++;
+        }
+        toast(`Fixed ${fixed} clock-out record${fixed === 1 ? '' : 's'} for ${name}`, 'success');
+      } else {
+        toast('Employee is not restricted', 'info');
+      }
+      renderSettingsTab(container);
+    };
+  });
+}
