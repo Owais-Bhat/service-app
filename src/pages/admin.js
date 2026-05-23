@@ -3094,8 +3094,15 @@ function downloadTemplateCSV() {
 }
 
 export async function renderPricingTab(container) {
-  const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
-  const list = pricing || [];
+  try {
+    const { data: pricing, error } = await supabase.from('service_pricing').select('*').order('category');
+    if (error) {
+      console.error('[pricing tab] fetch failed:', error);
+      toast('⚠️ Failed to load service pricing: ' + (error.message || 'Server error'), 'error');
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-dim);">Error loading pricing data</div>`;
+      return;
+    }
+    const list = pricing || [];
 
   container.innerHTML = `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
@@ -3317,6 +3324,10 @@ export async function renderPricingTab(container) {
   };
 
   updateBulkActions();
+  } catch (err) {
+    console.error('[pricing tab] initialization failed:', err);
+    toast('❌ ' + (err?.message || 'Failed to load pricing'), 'error');
+  }
 }
 
 // ── FEEDBACK TAB ───────────────────────────────────────
@@ -3895,11 +3906,27 @@ function openAdEditor(ad, onChange) {
 
 // ── EMPLOYEE SERVICE PRICING TAB ────────────────────────
 export async function renderEmployeePricingTab(container) {
-  const user = (await supabase.auth.getSession()).data.session?.user;
-  if (!user) { container.innerHTML = '<p style="color:var(--danger)">Authentication required</p>'; return; }
+  try {
+    const session = await supabase.auth.getSession();
+    const user = session?.data?.session?.user;
+    if (!user) {
+      container.innerHTML = '<p style="color:var(--danger)">❌ Authentication required</p>';
+      return;
+    }
 
-  const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
-  const list = pricing || [];
+    const { data: pricing, error } = await supabase.from('service_pricing').select('*').order('category');
+    if (error) {
+      console.error('[employee pricing] fetch failed:', error);
+      container.innerHTML = `
+        <div class="card" style="padding:32px;text-align:center;">
+          <p style="color:var(--danger);margin:0;font-weight:600;">⚠️ Cannot load service pricing</p>
+          <small style="color:var(--text-dim);">${error.message || 'Permission denied or server error'}</small>
+          <p style="margin-top:16px;font-size:0.9rem;color:var(--text-dim);">Please contact your admin if this persists</p>
+        </div>
+      `;
+      return;
+    }
+    const list = pricing || [];
 
   container.innerHTML = `
     <div class="page-header">
@@ -3936,6 +3963,15 @@ export async function renderEmployeePricingTab(container) {
       </div>
     </div>
   `;
+  } catch (err) {
+    console.error('[employee pricing] initialization failed:', err);
+    container.innerHTML = `
+      <div class="card" style="padding:32px;text-align:center;">
+        <p style="color:var(--danger);margin:0;font-weight:600;">❌ Error Loading Service Pricing</p>
+        <small style="color:var(--text-dim);">${err?.message || 'An unexpected error occurred'}</small>
+      </div>
+    `;
+  }
 }
 
 // ── SETTINGS TAB ───────────────────────────────────────
