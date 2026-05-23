@@ -66,6 +66,7 @@
   mainSel.onchange = applyFilters;
   subSel.onchange = applyFilters;
   searchInput.oninput = applyFilters;
+  applyFilters();
   container.querySelector('#admin-price-reset').onclick = () => {
     mainSel.value = 'all';
     subSel.value = 'all';
