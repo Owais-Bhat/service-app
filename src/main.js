@@ -2,7 +2,7 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab, renderEmployeePricingTab } from './pages/admin.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -68,6 +68,7 @@ function getNavItems(role) {
       { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
     ];
     if (canAddService) {
+      items.push({ type: 'section', label: 'Services' });
       items.push({ id: 'service-pricing', icon: ICONS.receipt, label: 'Service Pricing' });
     }
     items.push(
@@ -117,7 +118,7 @@ function getPageRenderer(role, page) {
       'my-cash': renderEmployeeCash,
       'my-salary': renderEmployeeSalary,
       leaderboard: renderEmployeeLeaderboard,
-      'service-pricing': renderPricingTab,
+      'service-pricing': renderEmployeePricingTab,
       profile: renderProfile
     },
     admin: {

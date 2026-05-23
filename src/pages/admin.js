@@ -3025,6 +3025,7 @@ async function importServiceRows(rows) {
   }
 
   const batch = [];
+  const batchMeta = [];
   for (let i = startIdx; i < rows.length; i++) {
     const r = rows[i];
     const get = (idx) => idx >= 0 ? String(r[idx] ?? '').trim() : '';
@@ -3045,12 +3046,13 @@ async function importServiceRows(rows) {
       sub_sub_category,
       name: sub_sub_category,
       cost,
-      _rowIndex: i,
     });
+    batchMeta.push({ rowIndex: i });
   }
 
   for (let j = 0; j < batch.length; j += 10) {
     const chunk = batch.slice(j, j + 10);
+    const chunkMeta = batchMeta.slice(j, j + 10);
     let retries = 0;
     while (retries < 3) {
       const { error } = await supabase.from('service_pricing').insert(chunk);
@@ -3060,7 +3062,7 @@ async function importServiceRows(rows) {
         continue;
       }
       if (error) {
-        chunk.forEach(row => errors.push(`Row ${row._rowIndex + 1}: ${error.message}`));
+        chunkMeta.forEach(meta => errors.push(`Row ${meta.rowIndex + 1}: ${error.message}`));
         skipped += chunk.length;
       } else {
         inserted += chunk.length;
@@ -3068,7 +3070,7 @@ async function importServiceRows(rows) {
       break;
     }
     if (retries === 3) {
-      chunk.forEach(row => errors.push(`Row ${row._rowIndex + 1}: rate limited (too many requests)`));
+      chunkMeta.forEach(meta => errors.push(`Row ${meta.rowIndex + 1}: rate limited (too many requests)`));
       skipped += chunk.length;
     }
   }
@@ -3113,7 +3115,7 @@ export async function renderPricingTab(container) {
       a 3-column file (Main + Sub + Price) is also accepted; its "Sub" column will be treated as the leaf.
     </div>
     <div class="card">
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;" id="bulk-actions" style="display:none">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;" id="bulk-actions">
         <button class="btn btn-danger btn-sm" id="del-selected" style="display:none">Delete Selected</button>
         <button class="btn btn-warning btn-sm" id="remove-dupes">Remove Duplicates</button>
       </div>
@@ -3891,6 +3893,51 @@ function openAdEditor(ad, onChange) {
   };
 }
 
+// ── EMPLOYEE SERVICE PRICING TAB ────────────────────────
+export async function renderEmployeePricingTab(container) {
+  const user = (await supabase.auth.getSession()).data.session?.user;
+  if (!user) { container.innerHTML = '<p style="color:var(--danger)">Authentication required</p>'; return; }
+
+  const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
+  const list = pricing || [];
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1>📋 Service Pricing</h1>
+        <p>View and manage service pricing for your work</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px; padding:12px 16px; font-size:13px; border-left:4px solid var(--warning);">
+      <b>ℹ️ Note:</b> You can only view pricing items assigned to you by your admin.
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Main Category</th><th>Sub Category</th><th>Sub-Sub Category</th><th>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No services assigned yet</td></tr>' :
+              list.map(x => `
+              <tr>
+                <td><span class="badge badge-open">${x.category || 'Service'}</span></td>
+                <td>${x.sub_category || '<span style="color:var(--text-dim)">—</span>'}</td>
+                <td><b>${x.sub_sub_category || x.name || ''}</b></td>
+                <td>₹${Number(x.cost).toLocaleString('en-IN')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 // ── SETTINGS TAB ───────────────────────────────────────
 export async function renderSettingsTab(container) {
   const { data: attendance } = await supabase.from('attendance').select('user_id,clock_in,clock_out,date');
@@ -3905,38 +3952,78 @@ export async function renderSettingsTab(container) {
   container.innerHTML = `
     <div class="page-header">
       <div>
-        <h1>Settings</h1>
+        <h1>⚙️ Settings</h1>
         <p>Configure system preferences and manage restrictions</p>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:20px;">
-      <h3 style="margin-top:0;margin-bottom:16px;">Auto Clock-Out Time</h3>
-      <div style="display:flex; gap:12px; align-items:center;">
-        <input type="time" id="auto-clockout-time" value="18:00" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:1rem;">
-        <button class="btn btn-primary" id="save-clockout-time">Save Time</button>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px;">
+      <!-- Auto Clock-Out Time Card -->
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+          <span style="font-size:1.5rem;">⏰</span>
+          <h3 style="margin:0;">Auto Clock-Out Time</h3>
+        </div>
+
+        <div style="background:var(--bg-secondary);padding:12px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.2rem;">⚠️</span>
+          <small style="color:var(--text-dim);">Changing this affects all employees globally. Server restart required.</small>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <input type="time" id="auto-clockout-time" value="18:00" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.95rem;flex:1;min-width:120px;">
+          <button class="btn btn-primary" id="save-clockout-time" style="white-space:nowrap;">Save Time</button>
+        </div>
+
+        <small style="display:block;color:var(--text-dim);line-height:1.5;">
+          Employees clocked in after this time will be auto-clocked out. Current: <b>18:00 (6 PM)</b>
+        </small>
       </div>
-      <small style="display:block;margin-top:8px;color:var(--text-dim);">All employees not clocked out by this time will be automatically clocked out.</small>
+
+      <!-- Restricted Employees Card -->
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+          <span style="font-size:1.5rem;">🚫</span>
+          <h3 style="margin:0;">Restrictions (${restrictedProfiles.length})</h3>
+        </div>
+
+        <div style="background:var(--bg-secondary);padding:12px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.2rem;">ℹ️</span>
+          <small style="color:var(--text-dim);">Employees with 4+ missed clock-outs cannot clock in.</small>
+        </div>
+
+        ${restrictedProfiles.length === 0
+          ? '<p style="text-align:center;padding:24px 0;color:var(--text-dim);font-size:0.95rem;">✓ No restricted employees</p>'
+          : `<div style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;">
+              ${restrictedProfiles.map(p => `
+                <div style="padding:10px 12px;border-radius:6px;background:var(--danger);color:white;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <div style="min-width:150px;">
+                    <b style="display:block;">${p.full_name}</b>
+                    <small style="opacity:0.9;">${p.id.slice(0,8)}...</small>
+                  </div>
+                  <button class="btn btn-light btn-sm remove-restriction" data-id="${p.id}" data-name="${p.full_name}" style="white-space:nowrap;flex-shrink:0;">
+                    Unlock
+                  </button>
+                </div>
+              `).join('')}
+            </div>`
+        }
+      </div>
     </div>
 
-    <div class="card">
-      <h3 style="margin-top:0;margin-bottom:16px;">Restricted Employees (${restrictedProfiles.length})</h3>
-      <p style="color:var(--text-dim);margin:0 0 12px 0;">Employees with 4+ missed clock-outs are restricted from clocking in.</p>
-
-      ${restrictedProfiles.length === 0
-        ? '<p style="text-align:center;padding:32px;color:var(--text-dim)">No restricted employees</p>'
-        : `<div style="display:flex; flex-direction:column; gap:8px;">
-            ${restrictedProfiles.map(p => `
-              <div style="padding:12px 16px;border-radius:8px;background:var(--bg-secondary);display:flex;justify-content:space-between;align-items:center;">
-                <div>
-                  <b>${p.full_name}</b>
-                  <small style="display:block;color:var(--text-dim);">${p.id}</small>
-                </div>
-                <button class="btn btn-danger btn-sm remove-restriction" data-id="${p.id}" data-name="${p.full_name}">Remove Restriction</button>
-              </div>
-            `).join('')}
-          </div>`
-      }
+    <!-- Bottom Info Section -->
+    <div style="margin-top:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;border-left:4px solid var(--warning);">
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        <span style="font-size:1.3rem;flex-shrink:0;">⚠️</span>
+        <div>
+          <b style="display:block;margin-bottom:4px;">Important Notes</b>
+          <ul style="margin:8px 0;padding-left:20px;color:var(--text-dim);font-size:0.9rem;">
+            <li>Auto clock-out time changes require server restart to take effect</li>
+            <li>Unlocking employees automatically fixes their oldest missed clock-outs</li>
+            <li>Changes are immediate but server must be running for them to apply</li>
+          </ul>
+        </div>
+      </div>
     </div>
   `;
 
@@ -3945,9 +4032,15 @@ export async function renderSettingsTab(container) {
     const time = timeInput.value;
     if (!time) { toast('Please select a time', 'warning'); return; }
 
-    toast('Note: Restart the server to apply the new clock-out time', 'info');
-    const msg = `Set auto clock-out time to ${time}. Please update the server .env file with AUTO_CLOCK_OUT_TIME=${time} and restart the server.`;
-    toast(msg, 'info');
+    const [hours, mins] = time.split(':');
+    const envValue = `AUTO_CLOCK_OUT_TIME=${hours}:${mins}`;
+
+    const msg = `✓ To set auto clock-out to ${time}:\n\n1. Edit server/.env file\n2. Change: ${envValue}\n3. Restart the server\n\nCopied to clipboard!`;
+    toast('Configuration copied to clipboard', 'success');
+
+    navigator.clipboard.writeText(envValue).catch(() => {
+      toast(`Update server/.env: ${envValue}`, 'info');
+    });
   };
 
   container.querySelectorAll('.remove-restriction').forEach(btn => {
