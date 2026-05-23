@@ -1723,19 +1723,50 @@ export async function renderEmployeeTasks(container) {
     </div>
 
     ${pendingInquiries.length > 0 ? `
-      <div class="card" style="border: 2px solid var(--primary); background: rgba(16, 185, 129, 0.05); margin-bottom:24px;">
-        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.alert}<span>New Assignments Pending</span></span></div>
-        <div class="card-body">
+      <div style="margin-bottom:24px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+          <span style="width:24px;height:24px;color:var(--primary);display:flex;">${ICONS.alert}</span>
+          <h2 style="margin:0; color:var(--primary); font-size:1.3rem;">New Assignments Pending</h2>
+          <span style="background:var(--primary);color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;">${pendingInquiries.length}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
           ${pendingInquiries.map(pi => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:14px; background:var(--bg-soft); border-radius:14px; margin-bottom:10px; box-shadow:var(--neu-sm);">
-              <div>
-                <div style="font-weight:700">${pi.full_name} — ${pi.service_item}</div>
-                <div style="font-size:0.82rem; color:var(--text-dim)">Created: ${formatDateTime(pi.created_at)}</div>
-                <div style="font-size:0.82rem; color:var(--text-soft)">Preferred: ${pi.preferred_time || 'Flexible'}</div>
+            <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%); border:2px solid var(--primary); border-radius:16px; padding:20px; box-shadow:0 4px 12px rgba(16, 185, 129, 0.1);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+                <div>
+                  <div style="font-size:0.75rem; color:var(--primary); font-weight:800; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Service Request</div>
+                  <div style="font-size:1.1rem; font-weight:800; color:var(--text);">${escapeHtml(pi.full_name)}</div>
+                </div>
+                <span style="background:var(--primary); color:white; padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700;">${escapeHtml(pi.service_item)}</span>
               </div>
+
+              <div style="background:rgba(16, 185, 129, 0.08); border-left:3px solid var(--primary); padding:12px; border-radius:8px; margin-bottom:14px;">
+                <div style="font-size:0.72rem; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Ticket</div>
+                <div style="font-size:0.95rem; font-weight:700; color:var(--primary);">${escapeHtml(pi.ticket_no || 'NE-' + Math.random().toString(36).substring(2, 10).toUpperCase())}</div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                <div>
+                  <div style="font-size:0.7rem; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Created</div>
+                  <div style="font-size:0.85rem; font-weight:600;">${formatDateTime(pi.created_at)}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.7rem; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Preferred Time</div>
+                  <div style="font-size:0.85rem; font-weight:600; color:var(--primary);">${escapeHtml(pi.preferred_time || 'Flexible')}</div>
+                </div>
+              </div>
+
+              <div style="margin-bottom:14px;">
+                <div style="font-size:0.7rem; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Location</div>
+                <div style="font-size:0.85rem; font-weight:600; display:flex; align-items:flex-start; gap:6px;">
+                  <span style="color:var(--primary); flex-shrink:0; margin-top:2px; width:14px; height:14px; display:flex;">${ICONS.pin}</span>
+                  <span>${escapeHtml(pi.location || 'Not specified')}</span>
+                </div>
+              </div>
+
               <div style="display:flex; gap:8px;">
-                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}" data-ticket-id="${pi.ticket_id || ''}">${ICONS.check} Accept</button>
-                <button class="btn btn-danger btn-sm decline-btn" data-id="${pi.id}">${ICONS.close} Decline</button>
+                <button class="btn btn-primary btn-sm accept-btn" data-id="${pi.id}" data-ticket-id="${pi.ticket_id || ''}" style="flex:1; height:40px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">${ICONS.check}<span>Accept</span></button>
+                <button class="btn btn-danger btn-sm decline-btn" data-id="${pi.id}" style="flex:1; height:40px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">${ICONS.close}<span>Decline</span></button>
               </div>
             </div>
           `).join('')}
