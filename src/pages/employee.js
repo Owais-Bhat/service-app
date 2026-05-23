@@ -704,7 +704,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], canAddService = false;
+  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
 
   try {
     const res = await Promise.all([
@@ -757,11 +757,6 @@ export async function renderEmployeeDashboard(container) {
         </h1>
         <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
       </div>
-      ${canAddService ? `
-        <button class="btn btn-primary" id="btn-register-request" style="display:inline-flex; align-items:center; gap:8px;">
-          ${ICONS.plus}<span>Register Request</span>
-        </button>
-      ` : ''}
     </div>
 
     ${missedClockOuts.length ? `
@@ -887,12 +882,6 @@ export async function renderEmployeeDashboard(container) {
     const el = container.querySelector(sel);
     if (el) el.onclick = cb;
   };
-
-  if (canAddService) {
-    bind('#btn-register-request', () => {
-      openEmployeeRequestModal(user, () => renderEmployeeDashboard(container));
-    });
-  }
 
   // Clock In
   bind('#btn-clock-in', async () => {
