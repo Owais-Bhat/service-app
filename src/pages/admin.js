@@ -3904,13 +3904,13 @@ export async function renderEmployeePricingTab(container) {
   container.innerHTML = `
     <div class="page-header">
       <div>
-        <h1>📋 Service Pricing</h1>
+        <h1>${ICONS.receipt || '📋'} Service Pricing</h1>
         <p>View and manage service pricing for your work</p>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:12px; padding:12px 16px; font-size:13px; border-left:4px solid var(--warning);">
-      <b>ℹ️ Note:</b> You can only view pricing items assigned to you by your admin.
+    <div class="card" style="margin-bottom:12px; padding:12px 16px; font-size:13px; border-left:4px solid var(--info);">
+      <b>ℹ Note:</b> You can only view pricing items assigned to you by your admin.
     </div>
 
     <div class="card">
@@ -3952,7 +3952,7 @@ export async function renderSettingsTab(container) {
   container.innerHTML = `
     <div class="page-header">
       <div>
-        <h1>⚙️ Settings</h1>
+        <h1>${ICONS.settings || '⚙️'} Settings</h1>
         <p>Configure system preferences and manage restrictions</p>
       </div>
     </div>
@@ -3961,12 +3961,12 @@ export async function renderSettingsTab(container) {
       <!-- Auto Clock-Out Time Card -->
       <div class="card">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
-          <span style="font-size:1.5rem;">⏰</span>
+          <span style="font-size:1.3rem;">${ICONS.clock || '⏰'}</span>
           <h3 style="margin:0;">Auto Clock-Out Time</h3>
         </div>
 
-        <div style="background:var(--bg-secondary);padding:12px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-          <span style="font-size:1.2rem;">⚠️</span>
+        <div style="background:var(--bg-secondary);padding:12px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;border-left:4px solid var(--danger);">
+          <span style="font-size:1.2rem;color:var(--danger);">⚠</span>
           <small style="color:var(--text-dim);">Changing this affects all employees globally. Server restart required.</small>
         </div>
 
@@ -3983,12 +3983,12 @@ export async function renderSettingsTab(container) {
       <!-- Restricted Employees Card -->
       <div class="card">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
-          <span style="font-size:1.5rem;">🚫</span>
+          <span style="font-size:1.3rem;">${ICONS.block || '🚫'}</span>
           <h3 style="margin:0;">Restrictions (${restrictedProfiles.length})</h3>
         </div>
 
-        <div style="background:var(--bg-secondary);padding:12px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-          <span style="font-size:1.2rem;">ℹ️</span>
+        <div style="background:var(--bg-secondary);padding:12px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;border-left:4px solid var(--info);">
+          <span style="font-size:1.2rem;">ℹ</span>
           <small style="color:var(--text-dim);">Employees with 4+ missed clock-outs cannot clock in.</small>
         </div>
 
@@ -4014,7 +4014,7 @@ export async function renderSettingsTab(container) {
     <!-- Bottom Info Section -->
     <div style="margin-top:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;border-left:4px solid var(--warning);">
       <div style="display:flex;gap:8px;align-items:flex-start;">
-        <span style="font-size:1.3rem;flex-shrink:0;">⚠️</span>
+        <span style="font-size:1.3rem;flex-shrink:0;color:var(--warning);">⚠</span>
         <div>
           <b style="display:block;margin-bottom:4px;">Important Notes</b>
           <ul style="margin:8px 0;padding-left:20px;color:var(--text-dim);font-size:0.9rem;">
