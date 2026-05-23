@@ -3130,17 +3130,20 @@ export async function renderEmployeePricingTab(container) {
         `).join('');
 
     container.innerHTML = `
-      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h1>${ICONS.receipt || ''} Service Pricing</h1>
-          <p>Manage and filter service rates</p>
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+        <div style="flex:1;min-width:250px;">
+          <h1 style="display:flex;align-items:center;gap:12px;margin:0 0 8px;">
+            <span style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:1.4rem;flex-shrink:0;">${ICONS.receipt || ''}</span>
+            <span>Service Pricing</span>
+          </h1>
+          <p style="margin:0;font-size:0.95rem;">Manage and filter service rates</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-secondary" id="dl-template">${ICONS.download || ''}<span>Download Template</span></button>
-          <button class="btn btn-secondary" id="upload-price">${ICONS.upload || ''}<span>Upload Excel/CSV</span></button>
-          <button class="btn btn-primary" id="add-price">${ICONS.plus}<span>Add New Service</span></button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-secondary" id="dl-template" style="white-space:nowrap;">${ICONS.download || ''}<span>Template</span></button>
+          <button class="btn btn-secondary" id="upload-price" style="white-space:nowrap;">${ICONS.upload || ''}<span>Upload</span></button>
+          <button class="btn btn-primary" id="add-price" style="white-space:nowrap;">${ICONS.plus}<span>Add</span></button>
           <input type="file" id="upload-price-file" accept=".xlsx,.xls,.csv" style="display:none">
-          <button class="btn btn-primary" id="emp-pricing-export">${ICONS.download || ''}<span>Export</span></button>
+          <button class="btn btn-primary" id="emp-pricing-export" style="white-space:nowrap;">${ICONS.download || ''}<span>Export</span></button>
         </div>
       </div>
 
