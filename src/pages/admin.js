@@ -3024,6 +3024,7 @@ async function importServiceRows(rows) {
     subIdx = -1;
   }
 
+  const batch = [];
   for (let i = startIdx; i < rows.length; i++) {
     const r = rows[i];
     const get = (idx) => idx >= 0 ? String(r[idx] ?? '').trim() : '';
@@ -3037,16 +3038,39 @@ async function importServiceRows(rows) {
     if (!sub_sub_category) { errors.push(`Row ${i + 1}: missing leaf service name`); skipped++; continue; }
     if (!Number.isFinite(cost) || cost < 0) { errors.push(`Row ${i + 1}: invalid price`); skipped++; continue; }
 
-    const { error } = await supabase.from('service_pricing').insert({
+    batch.push({
       id: crypto.randomUUID(),
       category: category || 'Uncategorized',
       sub_category: sub_category || null,
       sub_sub_category,
-      name: sub_sub_category, // legacy NOT NULL `name` column = leaf
+      name: sub_sub_category,
       cost,
+      _rowIndex: i,
     });
-    if (error) { errors.push(`Row ${i + 1}: ${error.message}`); skipped++; }
-    else inserted++;
+  }
+
+  for (let j = 0; j < batch.length; j += 10) {
+    const chunk = batch.slice(j, j + 10);
+    let retries = 0;
+    while (retries < 3) {
+      const { error } = await supabase.from('service_pricing').insert(chunk);
+      if (error?.status === 429) {
+        retries++;
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, retries)));
+        continue;
+      }
+      if (error) {
+        chunk.forEach(row => errors.push(`Row ${row._rowIndex + 1}: ${error.message}`));
+        skipped += chunk.length;
+      } else {
+        inserted += chunk.length;
+      }
+      break;
+    }
+    if (retries === 3) {
+      chunk.forEach(row => errors.push(`Row ${row._rowIndex + 1}: rate limited (too many requests)`));
+      skipped += chunk.length;
+    }
   }
   return { inserted, skipped, errors };
 }
@@ -3089,15 +3113,23 @@ export async function renderPricingTab(container) {
       a 3-column file (Main + Sub + Price) is also accepted; its "Sub" column will be treated as the leaf.
     </div>
     <div class="card">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;" id="bulk-actions" style="display:none">
+        <button class="btn btn-danger btn-sm" id="del-selected" style="display:none">Delete Selected</button>
+        <button class="btn btn-warning btn-sm" id="remove-dupes">Remove Duplicates</button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Main Category</th><th>Sub Category</th><th>Sub-Sub Category</th><th>Price</th><th>Actions</th></tr>
+            <tr>
+              <th style="width:30px;"><input type="checkbox" id="select-all" title="Select all"></th>
+              <th>Main Category</th><th>Sub Category</th><th>Sub-Sub Category</th><th>Price</th><th>Actions</th>
+            </tr>
           </thead>
           <tbody>
-            ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' :
+            ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No services defined yet</td></tr>' :
               list.map(x => `
               <tr>
+                <td><input type="checkbox" class="service-checkbox" data-id="${x.id}"></td>
                 <td><span class="badge badge-open">${x.category || 'Service'}</span></td>
                 <td>${x.sub_category || '<span style="color:var(--text-dim)">—</span>'}</td>
                 <td><b>${x.sub_sub_category || x.name || ''}</b></td>
@@ -3114,7 +3146,9 @@ export async function renderPricingTab(container) {
     </div>
   `;
 
+  let addPriceLocked = false;
   container.querySelector('#add-price').onclick = () => {
+    if (addPriceLocked) return;
     const category = prompt('Enter Main Category:');
     if (category === null) return;
     const sub_category = prompt('Enter Sub Category (optional — group/level 2):');
@@ -3124,27 +3158,44 @@ export async function renderPricingTab(container) {
     const costStr = prompt('Enter Price (₹):');
     const cost = parsePrice(costStr);
     if (!Number.isFinite(cost) || cost < 0) { toast('Invalid price', 'error'); return; }
+    addPriceLocked = true;
     (async () => {
-      await supabase.from('service_pricing').insert({
-        id: crypto.randomUUID(),
-        category: category || 'Uncategorized',
-        sub_category: sub_category.trim() || null,
-        sub_sub_category,
-        name: sub_sub_category,
-        cost,
-      });
-      toast('Service added', 'success');
-      renderPricingTab(container);
+      try {
+        const { error } = await supabase.from('service_pricing').insert({
+          id: crypto.randomUUID(),
+          category: category || 'Uncategorized',
+          sub_category: sub_category.trim() || null,
+          sub_sub_category,
+          name: sub_sub_category,
+          cost,
+        });
+        if (error?.status === 429) {
+          toast('Server is busy — please try again in a few seconds', 'error');
+        } else if (error) {
+          toast(error.message || 'Failed to add service', 'error');
+        } else {
+          toast('Service added', 'success');
+          renderPricingTab(container);
+        }
+      } finally {
+        addPriceLocked = false;
+      }
     })();
   };
 
   container.querySelector('#dl-template').onclick = downloadTemplateCSV;
 
   const fileInput = container.querySelector('#upload-price-file');
-  container.querySelector('#upload-price').onclick = () => fileInput.click();
+  let uploadLocked = false;
+  container.querySelector('#upload-price').onclick = () => {
+    if (uploadLocked) { toast('Upload in progress…', 'info'); return; }
+    fileInput.click();
+  };
   fileInput.onchange = async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
+    if (uploadLocked) { toast('Upload already in progress', 'warning'); return; }
+    uploadLocked = true;
     fileInput.value = '';
     toast(`Reading ${file.name}…`, 'info');
     try {
@@ -3158,6 +3209,8 @@ export async function renderPricingTab(container) {
     } catch (err) {
       console.error('[pricing import] failed', err);
       toast(err.message || 'Failed to read file', 'error');
+    } finally {
+      uploadLocked = false;
     }
   };
 
@@ -3199,6 +3252,69 @@ export async function renderPricingTab(container) {
       renderPricingTab(container);
     };
   });
+
+  const selectAllCheckbox = container.querySelector('#select-all');
+  const serviceCheckboxes = container.querySelectorAll('.service-checkbox');
+  const delSelectedBtn = container.querySelector('#del-selected');
+  const removeDupesBtn = container.querySelector('#remove-dupes');
+
+  const updateBulkActions = () => {
+    const selected = container.querySelectorAll('.service-checkbox:checked').length;
+    delSelectedBtn.style.display = selected > 0 ? 'block' : 'none';
+    const allChecked = serviceCheckboxes.length > 0 && selected === serviceCheckboxes.length;
+    selectAllCheckbox.checked = allChecked;
+    selectAllCheckbox.indeterminate = selected > 0 && !allChecked;
+  };
+
+  selectAllCheckbox.onchange = () => {
+    serviceCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    updateBulkActions();
+  };
+
+  serviceCheckboxes.forEach(checkbox => {
+    checkbox.onchange = updateBulkActions;
+  });
+
+  delSelectedBtn.onclick = async () => {
+    const selected = Array.from(container.querySelectorAll('.service-checkbox:checked')).map(cb => cb.dataset.id);
+    if (!selected.length) return;
+    if (!confirm(`Delete ${selected.length} service${selected.length === 1 ? '' : 's'}?`)) return;
+
+    let deleted = 0;
+    for (const id of selected) {
+      const { error } = await supabase.from('service_pricing').delete().eq('id', id);
+      if (!error) deleted++;
+    }
+    toast(`Deleted ${deleted} service${deleted === 1 ? '' : 's'}`, 'success');
+    renderPricingTab(container);
+  };
+
+  removeDupesBtn.onclick = async () => {
+    const seen = new Map();
+    const dupeIds = [];
+
+    list.forEach(item => {
+      const key = `${item.category}||${item.sub_category}||${item.sub_sub_category}`;
+      if (seen.has(key)) {
+        dupeIds.push(item.id);
+      } else {
+        seen.set(key, item.id);
+      }
+    });
+
+    if (!dupeIds.length) { toast('No duplicates found', 'info'); return; }
+    if (!confirm(`Found ${dupeIds.length} duplicate service${dupeIds.length === 1 ? '' : 's'}. Delete them?`)) return;
+
+    let deleted = 0;
+    for (const id of dupeIds) {
+      const { error } = await supabase.from('service_pricing').delete().eq('id', id);
+      if (!error) deleted++;
+    }
+    toast(`Removed ${deleted} duplicate${deleted === 1 ? '' : 's'}`, 'success');
+    renderPricingTab(container);
+  };
+
+  updateBulkActions();
 }
 
 // ── FEEDBACK TAB ───────────────────────────────────────
