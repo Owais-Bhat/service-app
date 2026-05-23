@@ -714,11 +714,13 @@ async function getEmployeeContext() {
 }
 
 async function readSheetAsRows(file) {
-  const { read } = await import('https://cdn.sheetjs.com/xlsx-0.18.5/package/xlsx.mjs');
+  const { read, utils } = await import('https://cdn.sheetjs.com/xlsx-0.18.5/package/xlsx.mjs');
   const buffer = await file.arrayBuffer();
   const workbook = read(buffer);
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return sheet ? sheet['!data'] || [] : [];
+  if (!sheet) return [];
+  const rows = utils.sheet_to_json(sheet, { header: 1 });
+  return rows.length > 1 ? rows.slice(1) : [];
 }
 
 async function importServiceRows(rows) {
