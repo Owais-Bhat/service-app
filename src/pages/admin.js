@@ -102,6 +102,18 @@ function escapeAttr(s) {
     const delSelectedBtn = container.querySelector('#del-selected');
     let visibleRows = [...list];
 
+    const updateSubCategories = () => {
+      const main = mainSel.value;
+      const filteredSubs = main === 'all' 
+        ? subCategories 
+        : [...new Set(list.filter(x => x.category === main).map(x => x.sub_category || '').filter(Boolean))].sort();
+      
+      subSel.innerHTML = '<option value="all">All sub categories</option>' + 
+        filteredSubs.map(c => `<option value="${c}">${c}</option>`).join('');
+      subSel.value = 'all';
+      applyFilters();
+    };
+
     const applyFilters = () => {
       const main = mainSel.value;
       const sub = subSel.value;
@@ -163,7 +175,7 @@ function escapeAttr(s) {
       });
     };
 
-    mainSel.onchange = applyFilters;
+    mainSel.onchange = updateSubCategories;
     subSel.onchange = applyFilters;
     searchInput.oninput = applyFilters;
     selectAllCheckbox.onchange = () => {
