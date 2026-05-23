@@ -29,14 +29,10 @@
   const mainSel = container.querySelector('#admin-price-main');
   const subSel = container.querySelector('#admin-price-sub');
   const searchInput = container.querySelector('#admin-price-search');
+  const tableBody = container.querySelector('tbody');
+  const countDisplay = container.querySelector('[id*="price-count"]');
   let visibleRows = [...list];
-  const populateSelects = () => {
-    const opts = mainCategories.map(c => `<option value="${c}">${c}</option>`).join('');
-    mainSel.innerHTML = '<option value="all">All categories</option>' + opts;
-    const subOpts = subCategories.map(c => `<option value="${c}">${c}</option>`).join('');
-    subSel.innerHTML = '<option value="all">All sub categories</option>' + subOpts;
-  };
-  populateSelects();
+
   const applyFilters = () => {
     const main = mainSel.value;
     const sub = subSel.value;
@@ -44,25 +40,22 @@
     visibleRows = list.filter(x => {
       const mainValue = x.category || 'Service';
       const subValue = x.sub_category || '';
-      const haystack = (x.category || '') + ' ' + (x.sub_category || '') + ' ' + (x.sub_sub_category || '') + ' ' + (x.name || '');
+      const haystack = `${x.category || ''} ${x.sub_category || ''} ${x.sub_sub_category || ''} ${x.name || ''}`.toLowerCase();
       return (main === 'all' || mainValue === main)
         && (sub === 'all' || subValue === sub)
-        && (!query || haystack.toLowerCase().includes(query));
+        && (!query || haystack.includes(query));
     });
-    const tbody = container.querySelector('tbody');
-    if (tbody) {
-      const rows = tbody.querySelectorAll('tr');
-      rows.forEach(row => {
-        const rowCat = row.getAttribute('data-main') || '';
-        const rowSub = row.getAttribute('data-sub') || '';
-        const rowSearch = row.getAttribute('data-search') || '';
-        const mainMatch = main === 'all' || rowCat === main;
-        const subMatch = sub === 'all' || rowSub === sub;
-        const searchMatch = !query || rowSearch.includes(query);
-        row.style.display = (mainMatch && subMatch && searchMatch) ? '' : 'none';
-      });
+    if (tableBody) {
+      tableBody.innerHTML = visibleRows.length === 0 
+        ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No services match this filter</td></tr>'
+        : visibleRows.map(x => `<tr data-main="${x.category || 'Service'}" data-sub="${x.sub_category || ''}" data-search="${((x.category || '') + ' ' + (x.sub_category || '') + ' ' + (x.sub_sub_category || '') + ' ' + (x.name || '')).toLowerCase()}"><td><input type="checkbox" class="service-checkbox" data-id="${x.id}"></td><td><span class="badge badge-open">${x.category || 'Service'}</span></td><td>${x.sub_category || '<span style="color:var(--text-dim)">-</span>'}</td><td><b>${x.sub_sub_category || x.name || ''}</b></td><td>${x.cost}</td><td style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm edit-price" data-id="${x.id}" title="Edit">Edit</button><button class="btn btn-danger btn-sm del-price" data-id="${x.id}" title="Delete">×</button></td></tr>`).join('');
+      setupRowHandlers();
+    }
+    if (countDisplay) {
+      countDisplay.textContent = `${visibleRows.length} item${visibleRows.length === 1 ? '' : 's'}`;
     }
   };
+
   mainSel.onchange = applyFilters;
   subSel.onchange = applyFilters;
   searchInput.oninput = applyFilters;
