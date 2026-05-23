@@ -33,7 +33,8 @@
       "Bash(npm run *)",
       "Bash(node -c src/pages/employee.js)",
       "Bash(python3)",
-      "Bash(node -c src/pages/admin.js)"
+      "Bash(node -c src/pages/admin.js)",
+      "Bash(node -c src/utils.js)"
     ]
   }
 }

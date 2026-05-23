@@ -4014,4 +4014,13 @@ input, select, textarea { max-width: 100%; }
   display: revert;
 }
 
+/* Loader spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loader-spinner {
+  animation: spin 1s linear infinite;
+}
 

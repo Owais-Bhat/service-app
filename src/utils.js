@@ -255,3 +255,31 @@ export function formatTimeRemaining(deadline) {
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   return `<span style="color:var(--primary);font-weight:600">${hours}h ${mins}m left</span>`;
 }
+
+export function formatSLADeadline(deadline) {
+  if (!deadline) return '-';
+  const d = new Date(deadline);
+  const now = new Date();
+  const isOverdue = d.getTime() < now.getTime();
+
+  const day = d.getDate();
+  const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+
+  const formattedDate = `${day} ${dayName} ${time}`;
+  const color = isOverdue ? 'var(--danger)' : 'var(--success)';
+
+  return `<span style="color:${color};font-weight:600;">${formattedDate}</span>`;
+}
+
+export function showLoader(container) {
+  if (!container) return;
+  container.innerHTML = `
+    <div style="display:flex;justify-content:center;align-items:center;min-height:300px;">
+      <div style="text-align:center;">
+        <div style="width:50px;height:50px;border:4px solid var(--border);border-top:4px solid var(--primary);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;" class="loader-spinner"></div>
+        <p style="color:var(--text-dim);font-weight:600;">Loading...</p>
+      </div>
+    </div>
+  `;
+}

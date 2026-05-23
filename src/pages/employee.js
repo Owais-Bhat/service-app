@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, formatTimeRemaining, exportToCSV } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, formatTimeRemaining, formatSLADeadline, exportToCSV, showLoader } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
@@ -765,6 +765,7 @@ function downloadTemplateCSV() {
 }
 
 export async function renderEmployeeDashboard(container) {
+  showLoader(container);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
@@ -1115,6 +1116,7 @@ export async function renderEmployeeDashboard(container) {
 }
 
 export async function renderEmployeeAttendanceRecords(container) {
+  showLoader(container);
   const { user, attendance } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
@@ -1163,6 +1165,7 @@ export async function renderEmployeeAttendanceRecords(container) {
 }
 
 export async function renderEmployeeLeaveRequests(container) {
+  showLoader(container);
   const { user, leaves } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
@@ -1203,6 +1206,7 @@ export async function renderEmployeeLeaveRequests(container) {
 }
 
 export async function renderEmployeeEODReports(container) {
+  showLoader(container);
   const { user, reports } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
   const today = new Date().toLocaleDateString('en-CA');
@@ -1267,6 +1271,7 @@ export async function renderEmployeeEODReports(container) {
 // submission in their Cash Collections tab, the row moves to "Submitted"
 // and the pending total drops.
 export async function renderEmployeeCash(container) {
+  showLoader(container);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
@@ -1372,6 +1377,7 @@ export async function renderEmployeeCash(container) {
 }
 
 export async function renderEmployeeSalary(container) {
+  showLoader(container);
   const { user, profile, attendance, leaves } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
@@ -1412,6 +1418,7 @@ export async function renderEmployeeSalary(container) {
 
 // ── EMPLOYEE: MY TASKS (dedicated page) ──────────────────
 export async function renderEmployeeLeaderboard(container) {
+  showLoader(container);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
@@ -1975,8 +1982,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                   <div style="font-size:0.88rem;font-weight:600;color:var(--primary);">${escapeHtml(inquiryRow.preferred_time || 'Flexible')}</div>
                 </div>
                 <div>
-                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Timer</div>
-                  <div style="font-size:0.88rem;font-weight:600;color:${serviceDeadline && new Date(serviceDeadline) < new Date() ? 'var(--danger)' : 'var(--success)'};">${serviceResolvedTime || (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-')}</div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Deadline</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${['resolved', 'closed'].includes(inquiryRow?.status) ? 'Service Completed' : (serviceDeadline ? formatSLADeadline(serviceDeadline) : '-')}</div>
                 </div>
               </div>
             </div>
@@ -3069,6 +3076,7 @@ function openLeaveModal(employeeId, onDone) {
 }
 
 export async function renderEmployeePricingTab(container) {
+  showLoader(container);
   try {
     const { data: pricing, error } = await supabase.from('service_pricing').select('*').order('category');
     if (error) throw error;
