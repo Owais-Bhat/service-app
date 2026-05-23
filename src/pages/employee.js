@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatDateTime, formatTime, showNotification } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, formatTimeRemaining, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
 
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
@@ -663,13 +663,27 @@ function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')
 }
 
 function money(value) {
-  return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
+  return `\u20B9${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 }
 
 function byNewestCreated(a, b) {
   const aDate = a?.created_at || a?.inquiries?.[0]?.created_at || 0;
   const bDate = b?.created_at || b?.inquiries?.[0]?.created_at || 0;
   return new Date(bDate) - new Date(aDate);
+}
+
+function elapsedTime(start, end = new Date()) {
+  if (!start) return '-';
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return '-';
+  const diff = Math.max(0, endDate.getTime() - startDate.getTime());
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${mins}m`;
+  return `${mins}m`;
 }
 
 function escapeHtml(s) {
@@ -704,7 +718,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], canAddService = false;
+  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
 
   try {
     const res = await Promise.all([
@@ -713,13 +727,10 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
-      supabase.from('profiles').select('can_add_service').eq('id', user.id).maybeSingle(),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     attendanceHistory = res[4].data || [];
     const allInquiries = res[3].data || [];
-    const profile = res[5].data;
-    canAddService = profile && profile.can_add_service === 1;
     const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
     // Build phone → company map for labelling service jobs
@@ -784,9 +795,16 @@ export async function renderEmployeeDashboard(container) {
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:var(--warning)">
           <span style="width:24px; height:24px; display:flex;">${ICONS.wrench}</span>
-          <span>${activeTasks.length + acceptedInquiries.length}</span>
+          <span>${activeTasks.length}</span>
         </div>
         <div class="stat-label">Active Tasks</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-value-inline" style="color:var(--primary)">
+          <span style="width:24px; height:24px; display:flex;">${ICONS.ticket}</span>
+          <span>${acceptedInquiries.length}</span>
+        </div>
+        <div class="stat-label">Accepted Requests</div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:var(--success)">
@@ -796,6 +814,34 @@ export async function renderEmployeeDashboard(container) {
         <div class="stat-label">Completed</div>
       </div>
     </div>
+
+    ${acceptedInquiries.length ? `
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-header">
+          <span class="card-title sr-icon-title">${ICONS.ticket}<span>Accepted Requests</span></span>
+        </div>
+        <div class="card-body">
+          ${acceptedInquiries.map(inq => `
+            <div class="emp-job-card" data-status="${displayStatus(inq.status)}" style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);">
+              <div style="min-width:0;">
+                <div style="font-weight:800;color:var(--primary);">${inq.full_name || 'Client'}</div>
+                <div style="font-size:0.86rem;color:var(--text-soft);margin-top:3px;">${inq.service_item || 'Service request'}</div>
+                <div style="font-size:0.78rem;color:var(--text-dim);margin-top:3px;">${inq.ticket_no || 'No ticket'} &bull; ${formatDateTime(inq.created_at)}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                <span class="badge badge-${displayStatus(inq.status)}">${statusText(inq.status)}</span>
+                <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id || ''}" data-inq-id="${inq.id}" data-status="${inq.status}">
+                  ${ICONS.edit}<span>Update</span>
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')">
+                  ${ICONS.pin}<span>Map</span>
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     <div class="employee-work-grid">
       <!-- Attendance Card -->
@@ -1420,17 +1466,14 @@ export async function renderEmployeeTasks(container) {
     </div>
   `;
 
-  let tasks, pendingInquiries, acceptedInquiries, canAddService = false;
+  let tasks, pendingInquiries, acceptedInquiries;
   try {
-    const [ticketsRes, inquiriesRes, profileRes] = await Promise.all([
+    const [ticketsRes, inquiriesRes] = await Promise.all([
       supabase.from('tickets').select('*, inquiries(*)').eq('assigned_to', user.id).order('created_at', { ascending: false }),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
-      supabase.from('profiles').select('can_add_service').eq('id', user.id).maybeSingle(),
     ]);
     tasks = ticketsRes.data || [];
     const allInquiries = inquiriesRes.data || [];
-    const profile = profileRes.data;
-    canAddService = profile && profile.can_add_service === 1;
     const taskInquiryIds = new Set(tasks.map(task => task.inquiries?.[0]?.id).filter(Boolean));
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
@@ -1598,11 +1641,6 @@ export async function renderEmployeeTasks(container) {
         <p>All your assigned tasks, service jobs, and pending assignments</p>
       </div>
       <div style="display:flex; gap:10px; align-items:center;">
-        ${canAddService ? `
-          <button class="btn btn-primary" id="btn-register-request" style="display:inline-flex; align-items:center; gap:8px;">
-            ${ICONS.plus}<span>Register Request</span>
-          </button>
-        ` : ''}
         <button class="btn btn-secondary" id="tasks-refresh">${ICONS.refresh}<span>Refresh</span></button>
       </div>
     </div>
@@ -1693,15 +1731,6 @@ export async function renderEmployeeTasks(container) {
       restore();
     }
   };
-
-  if (canAddService) {
-    const reqBtn = container.querySelector('#btn-register-request');
-    if (reqBtn) {
-      reqBtn.onclick = () => {
-        openEmployeeRequestModal(user, () => renderEmployeeTasks(container));
-      };
-    }
-  }
 
   // Filter tabs
   let activeFilter = 'all';
@@ -1823,10 +1852,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const normalizedCurrentStatus = displayStatus(currentStatus);
     const isResolvedReadOnly = normalizedCurrentStatus === 'resolved';
     const isResolving = normalizedCurrentStatus === 'resolved';
+    const serviceDeadline = inquiryRow?.created_at ? calculateSLA(inquiryRow.created_at) : null;
+    const serviceElapsed = elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || new Date());
+    const serviceResolvedTime = ['resolved', 'closed'].includes(displayStatus(inquiryRow?.status))
+      ? elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || inquiryRow?.bill_generated_at || new Date())
+      : null;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal" style="max-width:480px">
+      <div class="modal" style="max-width:720px">
         <div class="modal-header">
           <span class="modal-title">Manage Service</span>
           <button class="modal-close" id="cm">✕</button>
@@ -1837,6 +1871,28 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <button type="button" class="mst-tab" data-tab="device">🔧 Device Info</button>
             <button type="button" class="mst-tab" data-tab="bill">📄 Bill</button>
           </div>
+
+          ${inquiryRow ? `
+            <div style="margin:0 0 14px;padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+                <div style="min-width:0;">
+                  <div style="font-size:0.76rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.04em;">Service Details</div>
+                  <div style="font-size:1rem;font-weight:900;color:var(--primary);margin-top:3px;">${escapeHtml(inquiryRow.ticket_no || 'No ticket')}</div>
+                  <div style="font-size:0.86rem;color:var(--text-soft);margin-top:3px;">${escapeHtml(inquiryRow.service_item || 'Service request')}</div>
+                </div>
+                <span class="badge badge-${displayStatus(inquiryRow.status)}">${statusText(inquiryRow.status)}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;">
+                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Customer</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${escapeHtml(inquiryRow.full_name || 'Client')}</div></div>
+                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Phone</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${escapeHtml(inquiryRow.phone || '-')}</div></div>
+                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Created</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${formatDateTime(inquiryRow.created_at)}</div></div>
+                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Preferred</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${escapeHtml(inquiryRow.preferred_time || 'Flexible')}</div></div>
+                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Time Open</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${serviceElapsed}</div></div>
+                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Time To Resolve</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${serviceResolvedTime || (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-')}</div></div>
+              </div>
+              <div style="margin-top:10px;font-size:0.82rem;color:var(--text-soft);line-height:1.45;"><b>Location:</b> ${escapeHtml(inquiryRow.location || '-')}</div>
+            </div>
+          ` : ''}
 
           ${(employeeCoords.lat != null || inquiryRow?.customer_lat != null) ? `
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px;">
@@ -1868,11 +1924,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <option value="open" ${normalizedCurrentStatus==='open'?'selected':''}>Received</option>
                 <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                 <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
-                <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
               </select>
-              <button type="button" class="btn btn-danger btn-sm" id="mark-issue-not-resolved" ${isResolvedReadOnly ? 'disabled' : ''} style="margin-top:8px;width:100%;justify-content:center;">
-                Mark Issue Not Resolved
-              </button>
             </div>
 
             <div class="form-group">
@@ -2472,16 +2524,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (lockHint) lockHint.style.display = resolving ? 'none' : 'block';
       renderPayStatus();
     };
-    const issueNotResolvedBtn = overlay.querySelector('#mark-issue-not-resolved');
-    if (issueNotResolvedBtn) {
-      issueNotResolvedBtn.onclick = () => {
-        statusSel.value = 'issue_not_resolved';
-        statusSel.onchange();
-        const detailEl = overlay.querySelector('#progress-detail');
-        if (detailEl && !detailEl.value.trim()) detailEl.focus();
-        toast('Status set to Issue Not Resolved. Add the reason, then save.', 'info');
-      };
-    }
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
 
     // Active auto-poller: asks the backend to verify Razorpay directly, then falls
@@ -2936,6 +2978,131 @@ function openLeaveModal(employeeId, onDone) {
     if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = 'Submit Request'; }
     else { toast('Leave request submitted!', 'success'); overlay.remove(); onDone(); }
   };
+}
+
+export async function renderEmployeePricingTab(container) {
+  try {
+    const { data: pricing, error } = await supabase.from('service_pricing').select('*').order('category');
+    if (error) throw error;
+
+    const list = pricing || [];
+    const mainCategories = [...new Set(list.map(x => x.category || 'Service'))].sort();
+    const subCategories = [...new Set(list.map(x => x.sub_category || '').filter(Boolean))].sort();
+
+    const rowHtml = (rows) => rows.length === 0
+      ? '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No services match this filter</td></tr>'
+      : rows.map(x => `
+          <tr data-main="${escapeAttr(x.category || 'Service')}" data-sub="${escapeAttr(x.sub_category || '')}" data-search="${escapeAttr(`${x.category || ''} ${x.sub_category || ''} ${x.sub_sub_category || ''} ${x.name || ''}`.toLowerCase())}">
+            <td><span class="badge badge-open">${escapeHtml(x.category || 'Service')}</span></td>
+            <td>${x.sub_category ? escapeHtml(x.sub_category) : '<span style="color:var(--text-dim)">-</span>'}</td>
+            <td><b>${escapeHtml(x.sub_sub_category || x.name || '')}</b></td>
+            <td>${money(x.cost)}</td>
+          </tr>
+        `).join('');
+
+    container.innerHTML = `
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+        <div>
+          <h1>${ICONS.receipt || ''} Service Pricing</h1>
+          <p>Filter service rates by main category and export the visible list</p>
+        </div>
+        <button class="btn btn-primary" id="emp-pricing-export">${ICONS.download || ''}<span>Export</span></button>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end;">
+          <div class="form-group" style="margin:0;">
+            <label>Main Category</label>
+            <select id="emp-price-main">
+              <option value="all">All categories</option>
+              ${mainCategories.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Sub Category</label>
+            <select id="emp-price-sub">
+              <option value="all">All sub categories</option>
+              ${subCategories.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Search</label>
+            <input id="emp-price-search" type="search" placeholder="Search service or issue"/>
+          </div>
+          <button class="btn btn-secondary" id="emp-price-reset">${ICONS.refresh || ''}<span>Reset</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Services</span>
+          <span id="emp-price-count" style="font-size:0.82rem;color:var(--text-dim);font-weight:700;">${list.length} item${list.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Main Category</th><th>Sub Category</th><th>Service / Issue</th><th>Price</th></tr>
+            </thead>
+            <tbody id="emp-price-body">${rowHtml(list)}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const mainSel = container.querySelector('#emp-price-main');
+    const subSel = container.querySelector('#emp-price-sub');
+    const searchInput = container.querySelector('#emp-price-search');
+    const body = container.querySelector('#emp-price-body');
+    const count = container.querySelector('#emp-price-count');
+    let visibleRows = [...list];
+
+    const applyFilters = () => {
+      const main = mainSel.value;
+      const sub = subSel.value;
+      const query = searchInput.value.trim().toLowerCase();
+      visibleRows = list.filter(x => {
+        const mainValue = x.category || 'Service';
+        const subValue = x.sub_category || '';
+        const haystack = `${x.category || ''} ${x.sub_category || ''} ${x.sub_sub_category || ''} ${x.name || ''}`.toLowerCase();
+        return (main === 'all' || mainValue === main)
+          && (sub === 'all' || subValue === sub)
+          && (!query || haystack.includes(query));
+      });
+      body.innerHTML = rowHtml(visibleRows);
+      count.textContent = `${visibleRows.length} item${visibleRows.length === 1 ? '' : 's'}`;
+    };
+
+    mainSel.onchange = applyFilters;
+    subSel.onchange = applyFilters;
+    searchInput.oninput = applyFilters;
+    container.querySelector('#emp-price-reset').onclick = () => {
+      mainSel.value = 'all';
+      subSel.value = 'all';
+      searchInput.value = '';
+      applyFilters();
+    };
+    container.querySelector('#emp-pricing-export').onclick = () => {
+      if (!visibleRows.length) {
+        toast('No services to export', 'warning');
+        return;
+      }
+      const main = mainSel.value === 'all' ? 'all-main-categories' : mainSel.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      exportToCSV(`service-pricing-${main}.csv`, visibleRows.map(x => ({
+        main_category: x.category || 'Service',
+        sub_category: x.sub_category || '',
+        service: x.sub_sub_category || x.name || '',
+        price: Number(x.cost) || 0,
+      })));
+    };
+  } catch (err) {
+    console.error('[employee pricing] initialization failed:', err);
+    container.innerHTML = `
+      <div class="card" style="padding:32px;text-align:center;">
+        <p style="color:var(--danger);margin:0;font-weight:600;">Could not load service pricing</p>
+        <small style="color:var(--text-dim);">${escapeHtml(err?.message || 'An unexpected error occurred')}</small>
+      </div>
+    `;
+  }
 }
 
 async function ensureCompanyExists(companyName) {
