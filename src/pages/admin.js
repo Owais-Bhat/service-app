@@ -53,12 +53,12 @@
     if (tbody) {
       const rows = tbody.querySelectorAll('tr');
       rows.forEach(row => {
-        const cat = row.getAttribute('data-main') || '';
-        const sub = row.getAttribute('data-sub') || '';
-        const search = row.getAttribute('data-search') || '';
-        const mainMatch = main === 'all' || cat === main;
+        const rowCat = row.getAttribute('data-main') || '';
+        const rowSub = row.getAttribute('data-sub') || '';
+        const rowSearch = row.getAttribute('data-search') || '';
+        const mainMatch = main === 'all' || rowCat === main;
         const subMatch = sub === 'all' || rowSub === sub;
-        const searchMatch = !query || search.includes(query);
+        const searchMatch = !query || rowSearch.includes(query);
         row.style.display = (mainMatch && subMatch && searchMatch) ? '' : 'none';
       });
     }
