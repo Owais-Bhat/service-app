@@ -101,7 +101,12 @@ class QueryBuilder {
       const response = await fetch(`${API_URL}/data/${this.table}${queryString}`, options);
       const data = await response.json();
 
-      if (!response.ok) return resolve({ data: null, error: { message: data.error || 'Request failed' } });
+      if (!response.ok) {
+        return resolve({
+          data: null,
+          error: { message: data.error || 'Request failed', status: response.status }
+        });
+      }
 
       const result = this.isSingle ? (Array.isArray(data) ? data[0] : data) : data;
       resolve({ data: result, error: null });

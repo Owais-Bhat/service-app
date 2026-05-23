@@ -1798,11 +1798,21 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
 
 app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-post' }), dataAuth, async (req, res) => {
     const { table } = req.params;
-    const data = req.body;
-    if (!data.id) data.id = uuidv4();
-    const keyErr = assertSafeObjectKeys(data);
-    if (keyErr) return res.status(400).json({ error: keyErr });
+    const input = req.body;
+    const rowsToInsert = Array.isArray(input) ? input : [input];
+    if (!rowsToInsert.length) return res.status(400).json({ error: 'No rows provided' });
+    for (const row of rowsToInsert) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+            return res.status(400).json({ error: 'Invalid row payload' });
+        }
+        if (!row.id) row.id = uuidv4();
+        const keyErr = assertSafeObjectKeys(row);
+        if (keyErr) return res.status(400).json({ error: keyErr });
+    }
+
+    const data = rowsToInsert[0];
     if (req.user?.role === 'public') {
+        if (rowsToInsert.length > 1) return res.status(400).json({ error: 'Bulk public inserts are not supported' });
         if (table === 'inquiries') {
             const blocked = Object.keys(data || {}).filter(k => !PUBLIC_INQUIRY_CREATE_FIELDS.has(k));
             if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
@@ -1847,7 +1857,9 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
     if (req.user.role !== 'admin') {
         const restricted = ADMIN_ONLY_WRITE_COLUMNS[table];
         if (restricted) {
-            const blocked = Object.keys(data || {}).filter(k => restricted.has(k) || restricted.has('*'));
+            const blocked = [...new Set(rowsToInsert.flatMap(row =>
+                Object.keys(row || {}).filter(k => restricted.has(k) || restricted.has('*'))
+            ))];
             if (blocked.length) {
                 return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
             }
@@ -1856,25 +1868,27 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
 
     try {
         const connection = await getConn();
-        const authErr = await assertEmployeeInsertAllowed(connection, table, req.user, data);
-        if (authErr) {
-            connection.release();
-            return res.status(403).json({ error: authErr });
+        for (const row of rowsToInsert) {
+            const authErr = await assertEmployeeInsertAllowed(connection, table, req.user, row);
+            if (authErr) {
+                connection.release();
+                return res.status(403).json({ error: authErr });
+            }
+            const keys = Object.keys(row);
+            const values = Object.values(row);
+            const placeholders = keys.map(() => '?').join(', ');
+
+            // Build ON DUPLICATE KEY UPDATE clause
+            const updateClause = keys.map(k => `?? = VALUES(??)`).join(', ');
+            const updateParams = keys.flatMap(k => [k, k]);
+
+            const query = `INSERT INTO ?? (??) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateClause}`;
+            const params = [table, keys, ...values, ...updateParams];
+
+            await connection.query(query, params);
         }
-        const keys = Object.keys(data);
-        const values = Object.values(data);
-        const placeholders = keys.map(() => '?').join(', ');
-
-        // Build ON DUPLICATE KEY UPDATE clause
-        const updateClause = keys.map(k => `?? = VALUES(??)`).join(', ');
-        const updateParams = keys.flatMap(k => [k, k]);
-
-        const query = `INSERT INTO ?? (??) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateClause}`;
-        const params = [table, keys, ...values, ...updateParams];
-
-        await connection.query(query, params);
         connection.release();
-        broadcastChange('INSERT', table, data);
+        rowsToInsert.forEach(row => broadcastChange('INSERT', table, row));
         if (table === 'inquiries') {
             broadcastNotify({
                 subject: 'new_service_request',
@@ -1912,7 +1926,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 data: { user_id: data.user_id, attendance_id: data.id || null },
             });
         }
-        res.status(201).json(data);
+        res.status(201).json(Array.isArray(input) ? rowsToInsert : data);
     } catch (error) {
         console.error('Error inserting/upserting data:', error);
         res.status(500).json({ error: error.message });
