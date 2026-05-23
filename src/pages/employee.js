@@ -713,6 +713,57 @@ async function getEmployeeContext() {
   return { user, profile: profile || user, attendance: attendance || [], leaves: leaves || [], reports: reports || [] };
 }
 
+async function readSheetAsRows(file) {
+  const { read } = await import('https://cdn.sheetjs.com/xlsx-0.18.5/package/xlsx.mjs');
+  const buffer = await file.arrayBuffer();
+  const workbook = read(buffer);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return sheet ? sheet['!data'] || [] : [];
+}
+
+async function importServiceRows(rows) {
+  let inserted = 0, skipped = 0, errors = [];
+  for (const row of rows) {
+    try {
+      const [category, sub_category, sub_sub_category, cost] = Array.isArray(row) ? row : [row.category, row.sub_category, row.sub_sub_category, row.cost];
+      if (!category || !sub_sub_category) { skipped++; continue; }
+      const numCost = parseFloat(cost) || 0;
+      if (numCost < 0) { skipped++; continue; }
+      const { error } = await supabase.from('service_pricing').insert({
+        id: crypto.randomUUID?.() || `svc-${Date.now()}-${Math.random()}`,
+        category: String(category).trim(),
+        sub_category: sub_category ? String(sub_category).trim() : null,
+        sub_sub_category: String(sub_sub_category).trim(),
+        name: String(sub_sub_category).trim(),
+        cost: numCost,
+      });
+      if (error) { errors.push(error.message); skipped++; }
+      else inserted++;
+    } catch (err) {
+      errors.push(err.message);
+      skipped++;
+    }
+  }
+  return { inserted, skipped, errors };
+}
+
+function downloadTemplateCSV() {
+  const template = [
+    ['Main Category', 'Sub Category', 'Sub-Sub Category', 'Price'],
+    ['Network Installation', 'Setup', 'Basic Setup', '500'],
+    ['Network Installation', 'Setup', 'Advanced Setup', '1000'],
+    ['Repair', 'Hardware', 'Cable Replacement', '300'],
+  ];
+  const csv = template.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'service-pricing-template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function renderEmployeeDashboard(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
@@ -3027,23 +3078,35 @@ export async function renderEmployeePricingTab(container) {
     const subCategories = [...new Set(list.map(x => x.sub_category || '').filter(Boolean))].sort();
 
     const rowHtml = (rows) => rows.length === 0
-      ? '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No services match this filter</td></tr>'
+      ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No services match this filter</td></tr>'
       : rows.map(x => `
           <tr data-main="${escapeAttr(x.category || 'Service')}" data-sub="${escapeAttr(x.sub_category || '')}" data-search="${escapeAttr(`${x.category || ''} ${x.sub_category || ''} ${x.sub_sub_category || ''} ${x.name || ''}`.toLowerCase())}">
+            <td><input type="checkbox" class="service-checkbox" data-id="${x.id}"></td>
             <td><span class="badge badge-open">${escapeHtml(x.category || 'Service')}</span></td>
             <td>${x.sub_category ? escapeHtml(x.sub_category) : '<span style="color:var(--text-dim)">-</span>'}</td>
             <td><b>${escapeHtml(x.sub_sub_category || x.name || '')}</b></td>
             <td>${money(x.cost)}</td>
+            <td style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm edit-price" data-id="${x.id}" title="Edit">${ICONS.edit || 'Edit'}</button><button class="btn btn-danger btn-sm del-price" data-id="${x.id}" title="Delete">${ICONS.close}</button></td>
           </tr>
         `).join('');
 
     container.innerHTML = `
-      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
         <div>
           <h1>${ICONS.receipt || ''} Service Pricing</h1>
-          <p>Filter service rates by main category and export the visible list</p>
+          <p>Manage and filter service rates</p>
         </div>
-        <button class="btn btn-primary" id="emp-pricing-export">${ICONS.download || ''}<span>Export</span></button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" id="dl-template">${ICONS.download || ''}<span>Download Template</span></button>
+          <button class="btn btn-secondary" id="upload-price">${ICONS.upload || ''}<span>Upload Excel/CSV</span></button>
+          <button class="btn btn-primary" id="add-price">${ICONS.plus}<span>Add New Service</span></button>
+          <input type="file" id="upload-price-file" accept=".xlsx,.xls,.csv" style="display:none">
+          <button class="btn btn-primary" id="emp-pricing-export">${ICONS.download || ''}<span>Export</span></button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;padding:12px 16px;font-size:13px;color:var(--text-dim);">
+        Excel/CSV columns: <b>Main Category</b>, <b>Sub Category</b>, <b>Sub-Sub Category</b>, <b>Price</b>. Sub Category is optional — a 3-column file is also accepted.
       </div>
 
       <div class="card" style="margin-bottom:14px;">
@@ -3071,6 +3134,10 @@ export async function renderEmployeePricingTab(container) {
       </div>
 
       <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" id="bulk-actions">
+          <button class="btn btn-danger btn-sm" id="del-selected" style="display:none;">Delete Selected</button>
+          <button class="btn btn-warning btn-sm" id="remove-dupes">Remove Duplicates</button>
+        </div>
         <div class="card-header">
           <span class="card-title">Services</span>
           <span id="emp-price-count" style="font-size:0.82rem;color:var(--text-dim);font-weight:700;">${list.length} item${list.length === 1 ? '' : 's'}</span>
@@ -3078,7 +3145,7 @@ export async function renderEmployeePricingTab(container) {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Main Category</th><th>Sub Category</th><th>Service / Issue</th><th>Price</th></tr>
+              <tr><th style="width:30px;"><input type="checkbox" id="select-all" title="Select all"></th><th>Main Category</th><th>Sub Category</th><th>Service / Issue</th><th>Price</th><th>Actions</th></tr>
             </thead>
             <tbody id="emp-price-body">${rowHtml(list)}</tbody>
           </table>
@@ -3091,6 +3158,8 @@ export async function renderEmployeePricingTab(container) {
     const searchInput = container.querySelector('#emp-price-search');
     const body = container.querySelector('#emp-price-body');
     const count = container.querySelector('#emp-price-count');
+    const selectAllCheckbox = container.querySelector('#select-all');
+    const delSelectedBtn = container.querySelector('#del-selected');
     let visibleRows = [...list];
 
     const applyFilters = () => {
@@ -3107,17 +3176,167 @@ export async function renderEmployeePricingTab(container) {
       });
       body.innerHTML = rowHtml(visibleRows);
       count.textContent = `${visibleRows.length} item${visibleRows.length === 1 ? '' : 's'}`;
+      setupRowHandlers();
+      updateBulkActions();
+    };
+
+    const updateBulkActions = () => {
+      const checkedCount = container.querySelectorAll('.service-checkbox:checked').length;
+      delSelectedBtn.style.display = checkedCount > 0 ? '' : 'none';
+    };
+
+    const setupRowHandlers = () => {
+      container.querySelectorAll('.service-checkbox').forEach(cb => {
+        cb.onchange = updateBulkActions;
+      });
+      container.querySelectorAll('.edit-price').forEach(btn => {
+        btn.onclick = async () => {
+          const service = list.find(x => x.id === btn.dataset.id);
+          if (!service) return;
+          const category = prompt('Main Category:', service.category || 'Service');
+          if (category === null) return;
+          const sub_category = prompt('Sub Category:', service.sub_category || '');
+          if (sub_category === null) return;
+          const sub_sub_category = prompt('Sub-Sub Category:', service.sub_sub_category || service.name || '');
+          if (!sub_sub_category) return;
+          const costStr = prompt('Price (₹):', String(service.cost || 0));
+          const cost = parseFloat(costStr);
+          if (!Number.isFinite(cost) || cost < 0) { toast('Invalid price', 'error'); return; }
+          const { error } = await supabase.from('service_pricing').update({
+            category: category || 'Uncategorized',
+            sub_category: sub_category.trim() || null,
+            sub_sub_category,
+            name: sub_sub_category,
+            cost,
+          }).eq('id', service.id);
+          if (error) toast(error.message, 'error');
+          else { toast('Service updated', 'success'); renderEmployeePricingTab(container); }
+        };
+      });
+      container.querySelectorAll('.del-price').forEach(btn => {
+        btn.onclick = async () => {
+          if (!confirm('Delete this service?')) return;
+          const { error } = await supabase.from('service_pricing').delete().eq('id', btn.dataset.id);
+          if (error) toast(error.message, 'error');
+          else { toast('Service deleted', 'success'); renderEmployeePricingTab(container); }
+        };
+      });
     };
 
     mainSel.onchange = applyFilters;
     subSel.onchange = applyFilters;
     searchInput.oninput = applyFilters;
+    selectAllCheckbox.onchange = () => {
+      container.querySelectorAll('.service-checkbox').forEach(cb => cb.checked = selectAllCheckbox.checked);
+      updateBulkActions();
+    };
+
     container.querySelector('#emp-price-reset').onclick = () => {
       mainSel.value = 'all';
       subSel.value = 'all';
       searchInput.value = '';
       applyFilters();
     };
+
+    delSelectedBtn.onclick = async () => {
+      const selected = Array.from(container.querySelectorAll('.service-checkbox:checked')).map(cb => cb.dataset.id);
+      if (!selected.length) return;
+      if (!confirm(`Delete ${selected.length} service${selected.length === 1 ? '' : 's'}?`)) return;
+      let deleted = 0;
+      for (const id of selected) {
+        const { error } = await supabase.from('service_pricing').delete().eq('id', id);
+        if (!error) deleted++;
+      }
+      toast(`Deleted ${deleted} service${deleted === 1 ? '' : 's'}`, 'success');
+      renderEmployeePricingTab(container);
+    };
+
+    container.querySelector('#remove-dupes').onclick = async () => {
+      const seen = new Map();
+      const dupeIds = [];
+      list.forEach(item => {
+        const key = `${item.category}||${item.sub_category}||${item.sub_sub_category}`;
+        if (seen.has(key)) dupeIds.push(item.id);
+        else seen.set(key, item.id);
+      });
+      if (!dupeIds.length) { toast('No duplicates found', 'info'); return; }
+      if (!confirm(`Found ${dupeIds.length} duplicate service${dupeIds.length === 1 ? '' : 's'}. Delete them?`)) return;
+      let deleted = 0;
+      for (const id of dupeIds) {
+        const { error } = await supabase.from('service_pricing').delete().eq('id', id);
+        if (!error) deleted++;
+      }
+      toast(`Removed ${deleted} duplicate${deleted === 1 ? '' : 's'}`, 'success');
+      renderEmployeePricingTab(container);
+    };
+
+    let addPriceLocked = false;
+    container.querySelector('#add-price').onclick = () => {
+      if (addPriceLocked) return;
+      const category = prompt('Enter Main Category:');
+      if (category === null) return;
+      const sub_category = prompt('Enter Sub Category (optional):');
+      if (sub_category === null) return;
+      const sub_sub_category = prompt('Enter Sub-Sub Category (specific issue):');
+      if (!sub_sub_category) return;
+      const costStr = prompt('Enter Price (₹):');
+      const cost = parseFloat(costStr);
+      if (!Number.isFinite(cost) || cost < 0) { toast('Invalid price', 'error'); return; }
+      addPriceLocked = true;
+      (async () => {
+        try {
+          const { error } = await supabase.from('service_pricing').insert({
+            id: crypto.randomUUID?.() || `svc-${Date.now()}`,
+            category: category || 'Uncategorized',
+            sub_category: sub_category.trim() || null,
+            sub_sub_category,
+            name: sub_sub_category,
+            cost,
+          });
+          if (error?.status === 429) {
+            toast('Server is busy — please try again in a few seconds', 'error');
+          } else if (error) {
+            toast(error.message || 'Failed to add service', 'error');
+          } else {
+            toast('Service added', 'success');
+            renderEmployeePricingTab(container);
+          }
+        } finally {
+          addPriceLocked = false;
+        }
+      })();
+    };
+
+    const fileInput = container.querySelector('#upload-price-file');
+    let uploadLocked = false;
+    container.querySelector('#upload-price').onclick = () => {
+      if (uploadLocked) { toast('Upload in progress...', 'info'); return; }
+      fileInput.click();
+    };
+
+    fileInput.onchange = async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      if (uploadLocked) { toast('Upload already in progress', 'warning'); return; }
+      uploadLocked = true;
+      fileInput.value = '';
+      toast(`Reading ${file.name}...`, 'info');
+      try {
+        const rows = await readSheetAsRows(file);
+        if (!rows.length) { toast('File is empty', 'warning'); return; }
+        const { inserted, skipped } = await importServiceRows(rows);
+        if (inserted) toast(`Imported ${inserted} service${inserted === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+        else toast(`No rows imported${skipped ? ` — ${skipped} skipped` : ''}`, 'warning');
+        renderEmployeePricingTab(container);
+      } catch (err) {
+        console.error('[pricing import] failed', err);
+        toast(err.message || 'Failed to read file', 'error');
+      } finally {
+        uploadLocked = false;
+      }
+    };
+
+    container.querySelector('#dl-template').onclick = downloadTemplateCSV;
     container.querySelector('#emp-pricing-export').onclick = () => {
       if (!visibleRows.length) {
         toast('No services to export', 'warning');
@@ -3131,6 +3350,9 @@ export async function renderEmployeePricingTab(container) {
         price: Number(x.cost) || 0,
       })));
     };
+
+    setupRowHandlers();
+    updateBulkActions();
   } catch (err) {
     console.error('[employee pricing] initialization failed:', err);
     container.innerHTML = `
