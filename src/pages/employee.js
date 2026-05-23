@@ -704,7 +704,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
+  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], canAddService = false;
 
   try {
     const res = await Promise.all([
@@ -1850,6 +1850,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <b style="display:block;color:var(--primary);margin-bottom:3px;">Client pin</b>
                 <span>${escapeHtml(inquiryRow?.location || 'Customer GPS')}</span>
               </a>
+            </div>
+          ` : ''}
+
+          ${inquiryRow?.description ? `
+            <div style="margin:0 0 14px;padding:12px;border-radius:10px;background:var(--bg-soft);border:1px solid var(--border);">
+              <div style="font-size:0.72rem;font-weight:700;color:var(--primary);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px;">Client's reported issue</div>
+              <div style="white-space:pre-wrap;line-height:1.45;font-size:0.86rem;">${escapeHtml(inquiryRow.description)}</div>
             </div>
           ` : ''}
 
