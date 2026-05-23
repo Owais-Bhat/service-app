@@ -725,26 +725,36 @@ async function readSheetAsRows(file) {
 
 async function importServiceRows(rows) {
   let inserted = 0, skipped = 0, errors = [];
+  const batch = [];
   for (const row of rows) {
-    try {
-      const [category, sub_category, sub_sub_category, cost] = Array.isArray(row) ? row : [row.category, row.sub_category, row.sub_sub_category, row.cost];
-      if (!category || !sub_sub_category) { skipped++; continue; }
-      const numCost = parseFloat(cost) || 0;
-      if (numCost < 0) { skipped++; continue; }
-      const { error } = await supabase.from('service_pricing').insert({
-        id: crypto.randomUUID?.() || `svc-${Date.now()}-${Math.random()}`,
-        category: String(category).trim(),
-        sub_category: sub_category ? String(sub_category).trim() : null,
-        sub_sub_category: String(sub_sub_category).trim(),
-        name: String(sub_sub_category).trim(),
-        cost: numCost,
-      });
-      if (error) { errors.push(error.message); skipped++; }
-      else inserted++;
-    } catch (err) {
-      errors.push(err.message);
-      skipped++;
+    const [category, sub_category, sub_sub_category, cost] = Array.isArray(row) ? row : [row.category, row.sub_category, row.sub_sub_category, row.cost];
+    if (!category || !sub_sub_category) { skipped++; continue; }
+    const numCost = parseFloat(cost) || 0;
+    if (numCost < 0) { skipped++; continue; }
+    batch.push({
+      id: crypto.randomUUID?.() || `svc-${Date.now()}-${Math.random()}`,
+      category: String(category).trim(),
+      sub_category: sub_category ? String(sub_category).trim() : null,
+      sub_sub_category: String(sub_sub_category).trim(),
+      name: String(sub_sub_category).trim(),
+      cost: numCost,
+    });
+  }
+  for (let j = 0; j < batch.length; j += 10) {
+    const chunk = batch.slice(j, j + 10);
+    let retries = 0;
+    while (retries < 3) {
+      const { error } = await supabase.from('service_pricing').insert(chunk);
+      if (error?.status === 429) {
+        retries++;
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, retries)));
+        continue;
+      }
+      if (error) { errors.push(error.message); skipped += chunk.length; }
+      else inserted += chunk.length;
+      break;
     }
+    if (retries === 3) { errors.push('Rate limited - batch skipped'); skipped += chunk.length; }
   }
   return { inserted, skipped, errors };
 }
