@@ -1873,24 +1873,61 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           </div>
 
           ${inquiryRow ? `
-            <div style="margin:0 0 14px;padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
-                <div style="min-width:0;">
-                  <div style="font-size:0.76rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.04em;">Service Details</div>
-                  <div style="font-size:1rem;font-weight:900;color:var(--primary);margin-top:3px;">${escapeHtml(inquiryRow.ticket_no || 'No ticket')}</div>
-                  <div style="font-size:0.86rem;color:var(--text-soft);margin-top:3px;">${escapeHtml(inquiryRow.service_item || 'Service request')}</div>
+            <div style="margin:0 0 16px;padding:16px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px;">
+                <div>
+                  <div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ticket</div>
+                  <div style="font-size:0.95rem;font-weight:700;color:var(--primary);">${escapeHtml(inquiryRow.ticket_no || 'No ticket')}</div>
                 </div>
                 <span class="badge badge-${displayStatus(inquiryRow.status)}">${statusText(inquiryRow.status)}</span>
               </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;">
-                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Customer</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${escapeHtml(inquiryRow.full_name || 'Client')}</div></div>
-                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Phone</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${escapeHtml(inquiryRow.phone || '-')}</div></div>
-                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Created</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${formatDateTime(inquiryRow.created_at)}</div></div>
-                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Preferred</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${escapeHtml(inquiryRow.preferred_time || 'Flexible')}</div></div>
-                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Time Open</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${serviceElapsed}</div></div>
-                <div><div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;">Time To Resolve</div><div style="font-size:0.88rem;font-weight:700;margin-top:3px;">${serviceResolvedTime || (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-')}</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(16,185,129,0.1);">
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Service Created</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${formatDateTime(inquiryRow.created_at)}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Last Updated</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${inquiryRow.updated_at ? formatDateTime(inquiryRow.updated_at) : formatDateTime(inquiryRow.created_at)}</div>
+                </div>
               </div>
-              <div style="margin-top:10px;font-size:0.82rem;color:var(--text-soft);line-height:1.45;"><b>Location:</b> ${escapeHtml(inquiryRow.location || '-')}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Name</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${escapeHtml(inquiryRow.full_name || 'Client')}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Phone</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${escapeHtml(inquiryRow.phone || '-')}</div>
+                </div>
+              </div>
+              <div style="margin-bottom:14px;">
+                <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Service Item</div>
+                <div style="font-size:0.88rem;font-weight:600;">${escapeHtml(inquiryRow.service_item || 'Service request')}</div>
+              </div>
+              ${inquiryRow.description ? `
+                <div style="margin-bottom:14px;padding:10px;background:rgba(16,185,129,0.05);border-radius:10px;border-left:3px solid var(--primary);">
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Customer Description</div>
+                  <div style="font-size:0.82rem;line-height:1.4;color:var(--text);">${escapeHtml(inquiryRow.description)}</div>
+                </div>
+              ` : ''}
+              <div style="margin-bottom:14px;">
+                <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Location</div>
+                <div style="font-size:0.88rem;font-weight:600;display:flex;align-items:flex-start;gap:6px;">
+                  <span style="color:var(--primary);flex-shrink:0;margin-top:2px;width:16px;height:16px;display:flex;">${ICONS.pin}</span>
+                  <span style="line-height:1.4;">${escapeHtml(inquiryRow.location || '-')}</span>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Preferred Time</div>
+                  <div style="font-size:0.88rem;font-weight:600;color:var(--primary);">${escapeHtml(inquiryRow.preferred_time || 'Flexible')}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Timer</div>
+                  <div style="font-size:0.88rem;font-weight:600;color:${serviceDeadline && new Date(serviceDeadline) < new Date() ? 'var(--danger)' : 'var(--success)'};">${serviceResolvedTime || (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-')}</div>
+                </div>
+              </div>
             </div>
           ` : ''}
 
