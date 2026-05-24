@@ -172,7 +172,10 @@ const pool = mysql.createPool({
 });
 async function getConn() { return pool.getConnection(); }
 
-const AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
+const DEFAULT_AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
+const appSettings = {
+    autoClockOutTime: DEFAULT_AUTO_CLOCK_OUT_TIME,
+};
 
 function localDateKey(date = new Date()) {
     const yyyy = date.getFullYear();
@@ -197,7 +200,7 @@ function sqlDateTime(value) {
     return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
-function parseAutoClockOutTime(value = AUTO_CLOCK_OUT_TIME) {
+function parseAutoClockOutTime(value = appSettings.autoClockOutTime || DEFAULT_AUTO_CLOCK_OUT_TIME) {
     const match = /^(\d{1,2}):(\d{2})$/.exec(String(value).trim());
     if (!match) return { hour: 18, minute: 0, label: '18:00' };
     const hour = Math.min(23, Math.max(0, Number(match[1])));
@@ -207,6 +210,37 @@ function parseAutoClockOutTime(value = AUTO_CLOCK_OUT_TIME) {
         minute,
         label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
     };
+}
+
+function isValidClockOutTime(value) {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+    if (!match) return false;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+async function loadAppSettings(connection) {
+    const [rows] = await connection.execute(
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key = ?',
+        ['auto_clock_out_time']
+    );
+    const autoClockOut = rows.find(row => row.setting_key === 'auto_clock_out_time')?.setting_value;
+    appSettings.autoClockOutTime = parseAutoClockOutTime(autoClockOut || DEFAULT_AUTO_CLOCK_OUT_TIME).label;
+}
+
+async function saveAppSetting(key, value) {
+    const connection = await getConn();
+    try {
+        await connection.execute(
+            `INSERT INTO app_settings (setting_key, setting_value)
+             VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = CURRENT_TIMESTAMP`,
+            [key, value]
+        );
+    } finally {
+        connection.release();
+    }
 }
 
 function autoClockOutCutoff(now = new Date()) {
@@ -405,6 +439,11 @@ const requiredTables = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_ads_active (active),
         INDEX idx_ads_position (position)
+    )`,
+    `CREATE TABLE IF NOT EXISTS app_settings (
+        setting_key VARCHAR(100) PRIMARY KEY,
+        setting_value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
 ];
 
@@ -1369,6 +1408,27 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/settings/attendance', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    res.json({ autoClockOutTime: parseAutoClockOutTime().label });
+});
+
+app.put('/api/settings/attendance', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    if (!isValidClockOutTime(req.body?.autoClockOutTime)) {
+        return res.status(400).json({ error: 'Invalid clock-out time' });
+    }
+    const parsed = parseAutoClockOutTime(req.body?.autoClockOutTime);
+    try {
+        await saveAppSetting('auto_clock_out_time', parsed.label);
+        appSettings.autoClockOutTime = parsed.label;
+        res.json({ autoClockOutTime: parsed.label });
+    } catch (error) {
+        console.error('Settings update error:', error);
+        res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
 // Update password
 app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
     const { password } = req.body;
@@ -2217,6 +2277,7 @@ async function startServer() {
         const connection = await getConn();
         console.log('✅ Database connected successfully!');
         await ensureRequiredColumns(connection);
+        await loadAppSettings(connection);
         connection.release();
         startAutoClockOutJob();
 
