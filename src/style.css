@@ -4213,6 +4213,32 @@ input, select, textarea { max-width: 100%; }
   overflow: auto !important;
 }
 
+.premium-bill-modal .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-soft);
+}
+
+.premium-bill-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--danger);
+  background: var(--bg);
+}
+
+.premium-bill-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.premium-bill-close:hover {
+  color: #fff;
+  background: var(--danger);
+}
+
 @media (max-width: 768px) {
   .premium-bill-modal {
     align-items: flex-end;

@@ -516,7 +516,7 @@ export function openPremiumBillModal(data, opts = {}) {
     <div class="modal-card modal-large">
       <div class="modal-header">
         <h3>${title}</h3>
-        <button class="btn-icon" id="pb-close">${ICONS.close}</button>
+        <button type="button" class="modal-close premium-bill-close" id="pb-close" title="Close bill" aria-label="Close bill">${ICONS.close}</button>
       </div>
       <div class="modal-body" style="background:#F8FAFC; padding:20px; overflow-x:auto;">
         <div id="bill-preview-stage" style="width:100%; display:flex; justify-content:center;">
@@ -534,18 +534,23 @@ export function openPremiumBillModal(data, opts = {}) {
     </div>`;
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
-  overlay.querySelector('#pb-close').onclick = close;
-  overlay.querySelector('#pb-cancel').onclick = close;
   requestAnimationFrame(() => fitBillPreview(overlay));
   const onResize = () => fitBillPreview(overlay);
   window.addEventListener('resize', onResize);
+  const onKeydown = (e) => {
+    if (e.key === 'Escape') closeBillModal();
+  };
   const closeBillModal = () => {
     window.removeEventListener('resize', onResize);
-    close();
+    window.removeEventListener('keydown', onKeydown);
+    overlay.remove();
   };
+  window.addEventListener('keydown', onKeydown);
   overlay.querySelector('#pb-close').onclick = closeBillModal;
   overlay.querySelector('#pb-cancel').onclick = closeBillModal;
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeBillModal();
+  });
 
   const filename = `Invoice-${data.customer?.ticket_no || 'service'}.pdf`;
 
