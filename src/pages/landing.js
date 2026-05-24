@@ -8,6 +8,11 @@ const API_URL = (window.location.hostname !== 'localhost' && window.location.hos
   ? '/api'
   : 'http://localhost:5000/api';
 
+const SERVICE_CONTACT_PHONE = '8899133144';
+const SERVICE_CONTACT_DISPLAY = '+91 88991 33144';
+const SERVICE_CONTACT_TEL = `tel:+91${SERVICE_CONTACT_PHONE}`;
+const SERVICE_CONTACT_WHATSAPP = `https://wa.me/91${SERVICE_CONTACT_PHONE}?text=${encodeURIComponent('Hello Networking Experts, I need help with a service request.')}`;
+
 async function postPublicApi(path, body) {
   try {
     const res = await fetch(`${API_URL}${path}`, {
@@ -281,6 +286,22 @@ export function renderLandingPage(container, onPortalClick) {
           <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
           <h1 class="srf-title" style="text-align:center; margin-bottom:18px;">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
           <p class="srf-sub" style="margin: 0 auto 32px; text-align:center; max-width:600px;">Raise a service request in three quick steps. We'll send a one-time code by SMS, take your details, and dispatch the right technician.</p>
+          <div class="srf-contact-card" aria-label="Contact Networking Experts">
+            <div class="srf-contact-copy">
+              <span class="srf-contact-kicker">Need urgent support?</span>
+              <a class="srf-contact-number" href="${SERVICE_CONTACT_TEL}">${SERVICE_CONTACT_DISPLAY}</a>
+            </div>
+            <div class="srf-contact-actions">
+              <a class="srf-contact-action srf-contact-call" href="${SERVICE_CONTACT_TEL}" aria-label="Call Networking Experts at ${SERVICE_CONTACT_DISPLAY}">
+                <span class="srf-contact-icon">${ICONS.phone}</span>
+                <span>Call</span>
+              </a>
+              <a class="srf-contact-action srf-contact-whatsapp" href="${SERVICE_CONTACT_WHATSAPP}" target="_blank" rel="noopener" aria-label="Message Networking Experts on WhatsApp">
+                <span class="srf-contact-icon">${ICONS.whatsapp}</span>
+                <span>WhatsApp</span>
+              </a>
+            </div>
+          </div>
           
         
         </section>

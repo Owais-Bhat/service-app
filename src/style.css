@@ -2509,6 +2509,80 @@ tr:hover td {
   line-height: 1.6;
   max-width: 520px;
 }
+.srf-contact-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border-radius: 20px;
+  background: var(--bg-soft);
+  box-shadow: var(--neu-sm);
+}
+.srf-contact-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0 4px;
+  min-width: 160px;
+}
+.srf-contact-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.srf-contact-number {
+  color: var(--text);
+  font-size: 1.08rem;
+  font-weight: 800;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.srf-contact-number:hover { color: var(--primary); }
+.srf-contact-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.srf-contact-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: var(--neu-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.88rem;
+  transition: all 0.2s ease;
+}
+.srf-contact-action:hover {
+  box-shadow: var(--neu-in);
+  transform: translateY(1px);
+}
+.srf-contact-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: 0 0 30px;
+}
+.srf-contact-icon svg { width: 16px; height: 16px; }
+.srf-contact-call .srf-contact-icon { background: linear-gradient(135deg, var(--primary), var(--accent)); }
+.srf-contact-whatsapp .srf-contact-icon { background: linear-gradient(135deg, #25D366, #128C7E); }
+.srf-contact-whatsapp:hover { color: #128C7E; }
 .srf-perks {
   list-style: none;
   display: flex;
