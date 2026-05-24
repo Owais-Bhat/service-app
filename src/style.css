@@ -1405,6 +1405,69 @@ body {
   cursor: pointer;
 }
 
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field input {
+  padding-right: 54px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.08);
+  outline: none;
+}
+
+.password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.access-lock-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 14px;
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.access-lock-note span {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.access-lock-note small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-soft);
+  line-height: 1.35;
+}
+
 /* ─── BUTTONS ─── */
 .btn {
   display: inline-flex;

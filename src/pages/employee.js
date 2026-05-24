@@ -648,12 +648,37 @@ function hoursWorked(clockIn, clockOut) {
   return `${h}h ${m}m`;
 }
 
-const AUTO_CLOCK_OUT_HOUR = 18;
+let employeeAutoClockOutTime = '18:00';
 const STRICT_CLOCKOUT_LIMIT = 4;
 
+function parseClockOutTime(value = employeeAutoClockOutTime) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return { hour: 18, minute: 0, label: '18:00' };
+  const hour = Math.min(23, Math.max(0, Number(match[1])));
+  const minute = Math.min(59, Math.max(0, Number(match[2])));
+  return { hour, minute, label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` };
+}
+
+async function loadEmployeeClockOutTime() {
+  const apiBase = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ? '/api' : 'http://localhost:5000/api';
+  try {
+    const res = await fetch(`${apiBase}/settings/attendance`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      employeeAutoClockOutTime = parseClockOutTime(data.autoClockOutTime).label;
+    }
+  } catch (err) {
+    console.warn('[employee] could not load clock-out settings', err);
+  }
+  return parseClockOutTime();
+}
+
 function isPastAutoClockOut(now = new Date()) {
+  const { hour, minute } = parseClockOutTime();
   const cutoff = new Date(now);
-  cutoff.setHours(AUTO_CLOCK_OUT_HOUR, 0, 0, 0);
+  cutoff.setHours(hour, minute, 0, 0);
   return now >= cutoff;
 }
 
@@ -782,6 +807,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
+  const clockOutSetting = await loadEmployeeClockOutTime();
   let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [];
 
   try {
@@ -823,6 +849,7 @@ export async function renderEmployeeDashboard(container) {
   });
   const isClockedIn = !!attendance?.clock_in;
   const isClockedOut = !!attendance?.clock_out;
+  const clockInClosed = isPastAutoClockOut();
   const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
   const missedClockOuts = attendanceHistory.filter(row => isForgottenClockOut(row, today));
   const strictClockoutBlock = missedClockOuts.length >= STRICT_CLOCKOUT_LIMIT;
@@ -862,7 +889,7 @@ export async function renderEmployeeDashboard(container) {
           <span style="width:24px; height:24px; display:flex;">${isClockedIn ? ICONS.check : ICONS.pause}</span>
           <span>${isClockedIn ? 'Clocked In' : 'Not Started'}</span>
         </div>
-        <div class="stat-label">${isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : 'Tap Clock In to start'}</div>
+        <div class="stat-label">${isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : clockInClosed ? `Closed after ${clockOutSetting.label}` : 'Tap Clock In to start'}</div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-value-inline" style="color:var(--warning)">
@@ -997,7 +1024,7 @@ export async function renderEmployeeDashboard(container) {
         <div class="card-body attendance-card-body">
           <div id="live-clock" class="live-clock">--:--:--</div>
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn || strictClockoutBlock ? 'disabled' : ''}>
+            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn || strictClockoutBlock || clockInClosed ? 'disabled' : ''}>
               ${ICONS.play}<span>Clock In</span>
             </button>
             <button class="btn btn-secondary" id="btn-clock-out" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
@@ -1005,6 +1032,7 @@ export async function renderEmployeeDashboard(container) {
             </button>
           </div>
           ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Submit today's EOD report to enable Clock Out.</span></p>` : ''}
+          ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note">${ICONS.clock}<span>Clock-in is closed after ${clockOutSetting.label}. Please contact admin.</span></p>` : ''}
           ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
           ${isClockedOut ? `<div style="margin-top:20px;padding:14px;border-radius:14px;box-shadow:var(--neu-in);background:var(--bg);font-size:.88rem;color:var(--success);font-weight:600;display:inline-flex;align-items:center;gap:8px;">
             ${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span>
@@ -1080,6 +1108,10 @@ export async function renderEmployeeDashboard(container) {
   bind('#btn-clock-in', async () => {
     if (strictClockoutBlock) {
       toast('Clock-in is restricted because you have 4 or more missed clock-outs. Contact admin.', 'error');
+      return;
+    }
+    if (isPastAutoClockOut()) {
+      toast(`Clock-in is closed after ${parseClockOutTime().label}. Please contact admin.`, 'error');
       return;
     }
     const btn = container.querySelector('#btn-clock-in');

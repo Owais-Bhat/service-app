@@ -40,7 +40,10 @@ export function renderAuth(onLogin, onBack) {
               </div>
               <div class="form-group">
                 <label>Staff / Admin Access Key</label>
-                <input type="password" id="reg_key" placeholder="Enter staff or admin secret key" required />
+                <div class="password-field">
+                  <input type="password" id="reg_key" placeholder="Enter staff or admin secret key" required />
+                  <button type="button" class="password-toggle" data-target="reg_key" title="Show access key" aria-label="Show access key">${ICONS.eye}</button>
+                </div>
               </div>` : ''}
             <div class="form-group">
               <label>Email Address</label>
@@ -48,7 +51,10 @@ export function renderAuth(onLogin, onBack) {
             </div>
             <div class="form-group">
               <label>Password</label>
-              <input type="password" id="password" placeholder="••••••••" required autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"/>
+              <div class="password-field">
+                <input type="password" id="password" placeholder="Password" required autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"/>
+                <button type="button" class="password-toggle" data-target="password" title="Show password" aria-label="Show password">${ICONS.eye}</button>
+              </div>
             </div>
             <button type="submit" class="btn btn-primary btn-wide" id="submit-btn">
               ${mode === 'login' ? 'Sign In →' : 'Create Account →'}
@@ -70,6 +76,18 @@ export function renderAuth(onLogin, onBack) {
 
     const backBtn = document.getElementById('auth-back-btn');
     if (backBtn) backBtn.onclick = onBack;
+
+    app.querySelectorAll('.password-toggle').forEach(btn => {
+      btn.onclick = () => {
+        const input = document.getElementById(btn.dataset.target);
+        const showing = input.type === 'text';
+        input.type = showing ? 'password' : 'text';
+        btn.innerHTML = showing ? ICONS.eye : ICONS.eyeOff;
+        const isKey = btn.dataset.target === 'reg_key';
+        btn.title = showing ? (isKey ? 'Show access key' : 'Show password') : (isKey ? 'Hide access key' : 'Hide password');
+        btn.setAttribute('aria-label', btn.title);
+      };
+    });
 
     document.getElementById('toggle-mode').onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'signup' : 'login'; render(); };
 

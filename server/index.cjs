@@ -250,6 +250,10 @@ function autoClockOutCutoff(now = new Date()) {
     return cutoff;
 }
 
+function isAfterAutoClockOutCutoff(now = new Date()) {
+    return now >= autoClockOutCutoff(now);
+}
+
 function clockOutValueForAuto(row, now = new Date()) {
     const { hour, minute } = parseAutoClockOutTime();
     const rowDate = dbDateKey(row?.date);
@@ -309,6 +313,7 @@ const requiredColumns = {
         { name: 'phone', definition: 'VARCHAR(20)' },
         { name: 'company', definition: 'VARCHAR(100)' },
         { name: 'can_add_service', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'can_update_profile', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -826,7 +831,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -946,16 +951,21 @@ async function assertEmployeeInsertAllowed(connection, table, user, data) {
     if (user.role === 'admin' || user.role === 'public') return null;
     const id = user.id;
 
-    // Fetch profile to verify self-service request access (can_add_service)
+    // Fetch profile to verify employee self-service permissions.
     const [profRows] = await connection.execute(
-        'SELECT can_add_service FROM profiles WHERE id = ? LIMIT 1',
+        'SELECT can_add_service, can_update_profile FROM profiles WHERE id = ? LIMIT 1',
         [id]
     );
     const canAddService = profRows[0] && profRows[0].can_add_service === 1;
+    const canUpdateProfile = profRows[0] && profRows[0].can_update_profile === 1;
 
     if (table === 'service_pricing') {
         if (!canAddService) return 'Only users with Add Service access can modify service pricing';
         return null;
+    }
+
+    if (table === 'profiles' && !canUpdateProfile) {
+        return 'Profile updates require admin access';
     }
 
     let allowedFields = EMPLOYEE_WRITE_FIELDS[table];
@@ -1671,6 +1681,23 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             } catch (err) {
                 return res.status(500).json({ error: 'Access check failed' });
             }
+        } else if (table === 'profiles' && req.user.role === 'employee') {
+            try {
+                const connection = await getConn();
+                const [profRows] = await connection.execute(
+                    'SELECT can_update_profile FROM profiles WHERE id = ? LIMIT 1',
+                    [req.user.id]
+                );
+                connection.release();
+                const canUpdateProfile = profRows[0] && profRows[0].can_update_profile === 1;
+                if (!canUpdateProfile) {
+                    return res.status(403).json({ error: 'Profile updates require admin access' });
+                }
+            } catch (err) {
+                return res.status(500).json({ error: 'Access check failed' });
+            }
+            allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
+            if (allowedErr) return res.status(403).json({ error: allowedErr });
         } else {
             allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
             if (req.user.role !== 'public' && allowedErr) return res.status(403).json({ error: allowedErr });
@@ -1979,6 +2006,23 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
             if (authErr) {
                 connection.release();
                 return res.status(403).json({ error: authErr });
+            }
+            if (table === 'attendance' && req.user.role === 'employee' && row.clock_in && !row.clock_out) {
+                const now = new Date();
+                const cutoffLabel = parseAutoClockOutTime().label;
+                if (isAfterAutoClockOutCutoff(now)) {
+                    connection.release();
+                    return res.status(403).json({ error: `Clock-in is closed after ${cutoffLabel}. Please contact admin.` });
+                }
+                const rowDate = dbDateKey(row.date || now);
+                const [existingRows] = await connection.execute(
+                    'SELECT id, clock_out FROM attendance WHERE user_id = ? AND date = ? AND clock_in IS NOT NULL LIMIT 1',
+                    [row.user_id, rowDate]
+                );
+                if (existingRows.length > 0) {
+                    connection.release();
+                    return res.status(403).json({ error: 'You have already clocked in today. A second clock-in is not allowed after clock-out.' });
+                }
             }
             const keys = Object.keys(row);
             const values = Object.values(row);
