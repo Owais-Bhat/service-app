@@ -343,6 +343,9 @@ const requiredColumns = {
         { name: 'transport_fee', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'platform_fee', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'discount_amount', definition: 'DECIMAL(10, 2) DEFAULT 0' },
+        { name: 'discount_reason', definition: 'TEXT' },
+        { name: 'discount_label', definition: 'VARCHAR(160)' },
+        { name: 'discount_preset_id', definition: 'VARCHAR(36)' },
         { name: 'gst_amount', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'bill_total', definition: 'DECIMAL(10, 2)' },
         { name: 'bill_generated_at', definition: 'TIMESTAMP NULL' },
@@ -372,6 +375,10 @@ const requiredColumns = {
         { name: 'priority', definition: "VARCHAR(20) DEFAULT 'normal'" },
         { name: 'active', definition: 'TINYINT(1) DEFAULT 1' },
         { name: 'expires_at', definition: 'TIMESTAMP NULL' },
+    ],
+    discount_presets: [
+        { name: 'description', definition: 'TEXT' },
+        { name: 'active', definition: 'TINYINT(1) DEFAULT 1' },
     ],
 };
 
@@ -456,6 +463,15 @@ const requiredTables = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_notices_active (active),
         INDEX idx_notices_created (created_at)
+    )`,
+    `CREATE TABLE IF NOT EXISTS discount_presets (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(160) NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        description TEXT,
+        active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_discount_presets_active (active)
     )`,
     `CREATE TABLE IF NOT EXISTS app_settings (
         setting_key VARCHAR(100) PRIMARY KEY,
@@ -803,7 +819,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'profiles', 'inquiries', 'tickets', 'attendance', 'ticket_comments',
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
-    'payments', 'bills', 'complaints', 'ads', 'companies', 'notices',
+    'payments', 'bills', 'complaints', 'ads', 'companies', 'notices', 'discount_presets',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -817,7 +833,7 @@ const ADMIN_ONLY_WRITE_COLUMNS = {
 const EMPLOYEE_READ_TABLES = new Set([
     'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
     'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types', 'companies',
-    'notices',
+    'notices', 'discount_presets',
 ]);
 const EMPLOYEE_WRITE_FIELDS = {
     profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
@@ -829,6 +845,7 @@ const EMPLOYEE_WRITE_FIELDS = {
         'payment_link', 'payment_link_id', 'payment_status', 'payment_method', 'payment_received_at',
         'cash_collected_at', 'bill_amount', 'extra_cost', 'extra_cost_reason', 'transport_km',
         'transport_fee', 'platform_fee', 'discount_amount', 'gst_amount', 'bill_total',
+        'discount_reason', 'discount_label', 'discount_preset_id',
         'bill_generated_at', 'bill_pdf_url',
         'employee_bill_lat', 'employee_bill_lng',
     ]),
@@ -914,6 +931,11 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             whereClauses.push('?? = ?');
             params.push('active', 1);
             break;
+        case 'discount_presets':
+            if (method !== 'GET') return { error: 'Admin only' };
+            whereClauses.push('?? = ?');
+            params.push('active', 1);
+            break;
         default:
             return { error: 'Forbidden' };
     }
@@ -949,6 +971,7 @@ async function assertEmployeeInsertAllowed(connection, table, user, data) {
                 'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
                 'bill_no', 'service_item', 'description', 'ticket_no', 'preferred_time',
                 'assigned_employee_id', 'ticket_id',
+                'discount_reason', 'discount_label', 'discount_preset_id',
             ]);
             if (String(data.assigned_employee_id) !== String(id)) {
                 return 'Cannot register a request assigned to another employee';

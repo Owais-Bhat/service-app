@@ -262,7 +262,7 @@ export function renderPremiumBillHTML(data) {
         ${Number(data.extra) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Extra charges</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
         <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Platform fee</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
         <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Transport</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
-        ${Number(data.discount) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0; color:#059669;">Discount</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
+        ${Number(data.discount) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0; color:#059669;">${esc(data.discountLabel || 'Discount')}</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
         <tr style="display:table-row !important; border-top:1px solid #eee !important;"><td style="display:table-cell !important; padding:6px 0; font-weight:700;">Taxable</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
         <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">GST (18%)</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
         <tr style="display:table-row !important; border-top:2px solid #10B981 !important; font-size:16px !important;"><td style="display:table-cell !important; padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="display:table-cell !important; text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
@@ -1989,10 +1989,12 @@ export async function renderEmployeeTasks(container) {
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   return (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
+    const { data: discountPresets } = await supabase.from('discount_presets').select('*').eq('active', 1).order('created_at', { ascending: false });
     const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
     const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];
     const { data: companies } = await supabase.from('companies').select('*').order('name');
     const companyList = Array.isArray(companies) ? companies : [];
+    const discountPresetList = Array.isArray(discountPresets) ? discountPresets : [];
     // Snapshot current payment state so we can gate the resolved submit button.
     let paymentState = { status: 'unpaid', received_at: null };
     let inquiryRow = null;
@@ -2230,6 +2232,19 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               </div>
 
               <div class="form-group">
+                <label>Discount</label>
+                <select id="admin-discount-preset" class="svc-picker" style="margin-bottom:8px;">
+                  <option value="">No admin discount</option>
+                  ${discountPresetList.map(d => `<option value="${escapeAttr(d.id)}" data-amount="${Number(d.amount) || 0}" data-name="${escapeAttr(d.name || 'Discount')}">${escapeHtml(d.name || 'Discount')} - Rs.${Math.round(Number(d.amount) || 0).toLocaleString('en-IN')}</option>`).join('')}
+                </select>
+                <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;">
+                  <input type="number" id="manual-discount" min="0" step="1" placeholder="Employee discount Rs.0"/>
+                  <input type="text" id="discount-reason" placeholder="Reason required for employee discount"/>
+                </div>
+                <small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.75rem;">Admin dropdown discounts do not need a reason. Employee/manual discount requires a reason and appears in Admin Discount Details.</small>
+              </div>
+
+              <div class="form-group">
                 <label>Transport Distance (km)</label>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                   <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1; min-width:120px;"/>
@@ -2327,6 +2342,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const pricingSec = overlay.querySelector('#pricing-section');
     const totalDisplay = overlay.querySelector('#total-bill-display');
     const extraInput = overlay.querySelector('#extra-cost');
+    const discountPresetInput = overlay.querySelector('#admin-discount-preset');
+    const manualDiscountInput = overlay.querySelector('#manual-discount');
+    const discountReasonInput = overlay.querySelector('#discount-reason');
     const kmInput = overlay.querySelector('#transport-km');
     const saveBtn = overlay.querySelector('#save-update');
 
@@ -2380,7 +2398,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     // Live breakdown — also stored on a closure object so the bill modal can read it.
     const bill = {
       servicesSubtotal: 0, extra: 0, platform: getPlatformFee(),
-      km: 0, transport: 0, discount: 0, taxable: 0, gst: 0, total: 0,
+      km: 0, transport: 0, autoDiscount: 0, presetDiscount: 0, manualDiscount: 0,
+      discount: 0, discountLabel: '', discountReason: '', discountPresetId: null,
+      taxable: 0, gst: 0, total: 0,
     };
 
     const calcTotal = () => {
@@ -2390,7 +2410,18 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
       bill.platform = getPlatformFee();
       const preDiscount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
-      bill.discount = preDiscount > DISCOUNT_THRESHOLD ? DISCOUNT_AMOUNT : 0;
+      bill.autoDiscount = preDiscount > DISCOUNT_THRESHOLD ? DISCOUNT_AMOUNT : 0;
+      const selectedPreset = discountPresetInput?.selectedOptions?.[0];
+      bill.discountPresetId = discountPresetInput?.value || null;
+      bill.presetDiscount = bill.discountPresetId ? (Number(selectedPreset?.dataset.amount) || 0) : 0;
+      bill.manualDiscount = Math.max(0, Number(manualDiscountInput?.value) || 0);
+      bill.discount = Math.min(preDiscount, bill.autoDiscount + bill.presetDiscount + bill.manualDiscount);
+      const labels = [];
+      if (bill.autoDiscount) labels.push('Loyalty discount');
+      if (bill.presetDiscount) labels.push(selectedPreset?.dataset.name || 'Admin discount');
+      if (bill.manualDiscount) labels.push('Employee discount');
+      bill.discountLabel = labels.join(' + ') || '';
+      bill.discountReason = discountReasonInput?.value.trim() || '';
       bill.taxable = preDiscount - bill.discount;
       bill.gst = Math.round(bill.taxable * GST_RATE);
       bill.total = bill.taxable + bill.gst;
@@ -2402,12 +2433,22 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       overlay.querySelector('#br-transport').textContent = inr(bill.transport);
       const discRow = overlay.querySelector('#br-discount-row');
       discRow.style.display = bill.discount > 0 ? 'flex' : 'none';
+      discRow.querySelector('span').textContent = bill.discountLabel || 'Discount';
       overlay.querySelector('#br-discount').textContent = `−${inr(bill.discount)}`;
       overlay.querySelector('#br-gst').textContent = inr(bill.gst);
       overlay.querySelector('#br-total').textContent = inr(bill.total);
       totalDisplay.value = String(bill.total);
       const cashDisplay = overlay.querySelector('#cash-amount-display');
       if (cashDisplay) cashDisplay.textContent = inr(bill.total);
+    };
+
+    const validateDiscount = () => {
+      calcTotal();
+      if (bill.manualDiscount > 0 && !bill.discountReason) {
+        toast('Please enter reason for employee discount', 'warning');
+        return false;
+      }
+      return true;
     };
 
     // Haversine distance in km between two lat/lng pairs.
@@ -2746,6 +2787,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       renderPayStatus();
     };
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
+    if (discountPresetInput) discountPresetInput.onchange = () => { calcTotal(); renderPayStatus(); };
+    if (manualDiscountInput) manualDiscountInput.oninput = () => { calcTotal(); renderPayStatus(); };
+    if (discountReasonInput) discountReasonInput.oninput = () => { calcTotal(); renderPayStatus(); };
 
     // Active auto-poller: asks the backend to verify Razorpay directly, then falls
     // back to the saved DB state if the gateway cannot be reached.
@@ -2849,6 +2893,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       genBtn.onclick = async () => {
         const total = Number(totalDisplay.value) || 0;
         if (!total) { toast('Select services or enter a bill amount first', 'warning'); return; }
+        if (!validateDiscount()) return;
 
         const { data: inqData } = await supabase.from('inquiries').select('full_name,phone,service_item,ticket_no').eq('id', inqId).single();
         if (!inqData) { toast('Could not load inquiry details', 'error'); return; }
@@ -2881,6 +2926,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             transport_fee: bill.transport,
             platform_fee: bill.platform,
             discount_amount: bill.discount,
+            discount_label: bill.discountLabel || null,
+            discount_reason: bill.manualDiscount > 0 ? bill.discountReason : null,
+            discount_preset_id: bill.discountPresetId || null,
             gst_amount: bill.gst,
             bill_total: bill.total,
             bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
@@ -2906,6 +2954,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     if (openBillBtn) {
       openBillBtn.onclick = async () => {
         if (bill.total <= 0) { toast('Add services or charges first to generate a bill', 'warning'); return; }
+        if (!validateDiscount()) return;
         // Snapshot inquiry first so we send fresh data to the bill template.
         const { data: latestInq } = inqId
           ? await supabase.from('inquiries').select('*').eq('id', inqId).single()
@@ -2926,6 +2975,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           technician: empProfile?.full_name || 'Technician',
           services: selectedServices.map(s => ({ name: `${s.main}${s.sub ? ' › '+s.sub : ''} › ${s.leaf}`, cost: s.cost })),
           extraReason: overlay.querySelector('#extra-reason')?.value.trim() || '',
+          discountLabel: bill.discountLabel,
+          discountReason: bill.manualDiscount > 0 ? bill.discountReason : '',
           paymentLink: _payLink || customer.payment_link || '',
         };
         openPremiumBillModal(billData, {
@@ -2939,6 +2990,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               transport_fee: bill.transport,
               platform_fee: bill.platform,
               discount_amount: bill.discount,
+              discount_label: bill.discountLabel || null,
+              discount_reason: bill.manualDiscount > 0 ? bill.discountReason : null,
+              discount_preset_id: bill.discountPresetId || null,
               gst_amount: bill.gst,
               bill_total: bill.total,
               bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
@@ -2996,6 +3050,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       markCashBtn.onclick = async () => {
         if (!inqId) { toast('Cannot mark cash on a task without an inquiry record', 'error'); return; }
         if (bill.total <= 0) { toast('Add services or charges first', 'warning'); return; }
+        if (!validateDiscount()) return;
         const compVal = getSelectedCompany();
         markCashBtn.disabled = true;
         const orig = markCashBtn.innerHTML;
@@ -3015,6 +3070,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             transport_fee: bill.transport,
             platform_fee: bill.platform,
             discount_amount: bill.discount,
+            discount_label: bill.discountLabel || null,
+            discount_reason: bill.manualDiscount > 0 ? bill.discountReason : null,
+            discount_preset_id: bill.discountPresetId || null,
             gst_amount: bill.gst,
             bill_total: bill.total,
             bill_generated_at: nowIso,
@@ -3060,6 +3118,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       
       if (!detail) { toast('Please provide details of your work', 'warning'); return; }
       if (!companyName) { toast('Please provide the company name', 'warning'); return; }
+      if (!validateDiscount()) return;
 
       const btn = overlay.querySelector('#save-update');
       btn.disabled = true; btn.textContent = 'Saving...';
@@ -3093,6 +3152,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         inqUpdates.transport_fee = bill.transport;
         inqUpdates.platform_fee = bill.platform;
         inqUpdates.discount_amount = bill.discount;
+        inqUpdates.discount_label = bill.discountLabel || null;
+        inqUpdates.discount_reason = bill.manualDiscount > 0 ? bill.discountReason : null;
+        inqUpdates.discount_preset_id = bill.discountPresetId || null;
         inqUpdates.gst_amount = bill.gst;
         inqUpdates.bill_total = bill.total;
         inqUpdates.employee_bill_lat = billLoc.lat;

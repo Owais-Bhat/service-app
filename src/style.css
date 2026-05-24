@@ -537,6 +537,38 @@ body {
   font-size: 0.9rem;
 }
 
+.collection-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.collection-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 20px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--neu-sm);
+}
+
+.collection-filters input,
+.collection-filters select {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: inherit;
+}
+
 .attendance-card-body {
   text-align: center;
   padding: 32px;
