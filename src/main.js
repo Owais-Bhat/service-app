@@ -2,7 +2,7 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderClients, renderUsers, renderAttendance, renderInquiries, renderStocks, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab } from './pages/admin.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeePricingTab } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -82,9 +82,7 @@ function getNavItems(role) {
     { type: 'section', label: 'Operations' },
     { id: 'attendance', icon: ICONS.clock, label: 'Attendance' },
     { id: 'inquiries', icon: ICONS.inbox, label: 'Service Requests' },
-    { id: 'stocks', icon: ICONS.box, label: 'Stocks' },
     { type: 'section', label: 'Management' },
-    { id: 'clients', icon: ICONS.building, label: 'Clients' },
     { id: 'contacts', icon: ICONS.phone, label: 'Contacts' },
     { id: 'users', icon: ICONS.users, label: 'Users' },
     { type: 'section', label: 'Reports' },
@@ -123,7 +121,7 @@ function getPageRenderer(role, page) {
     },
     admin: {
       dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
-      inquiries: renderInquiries, stocks: renderStocks, clients: renderClients, contacts: renderContacts, users: renderUsers, profile: renderProfile,
+      inquiries: renderInquiries, contacts: renderContacts, users: renderUsers, profile: renderProfile,
       payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
       ads: renderAdsTab, settings: renderSettingsTab,
