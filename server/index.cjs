@@ -368,6 +368,11 @@ const requiredColumns = {
         { name: 'starts_at', definition: 'TIMESTAMP NULL' },
         { name: 'expires_at', definition: 'TIMESTAMP NULL' },
     ],
+    notices: [
+        { name: 'priority', definition: "VARCHAR(20) DEFAULT 'normal'" },
+        { name: 'active', definition: 'TINYINT(1) DEFAULT 1' },
+        { name: 'expires_at', definition: 'TIMESTAMP NULL' },
+    ],
 };
 
 const requiredTables = [
@@ -439,6 +444,18 @@ const requiredTables = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_ads_active (active),
         INDEX idx_ads_position (position)
+    )`,
+    `CREATE TABLE IF NOT EXISTS notices (
+        id VARCHAR(36) PRIMARY KEY,
+        title VARCHAR(160) NOT NULL,
+        body TEXT NOT NULL,
+        priority VARCHAR(20) DEFAULT 'normal',
+        active TINYINT(1) DEFAULT 1,
+        expires_at TIMESTAMP NULL,
+        created_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_notices_active (active),
+        INDEX idx_notices_created (created_at)
     )`,
     `CREATE TABLE IF NOT EXISTS app_settings (
         setting_key VARCHAR(100) PRIMARY KEY,
@@ -786,7 +803,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'profiles', 'inquiries', 'tickets', 'attendance', 'ticket_comments',
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
-    'payments', 'bills', 'complaints', 'ads', 'companies',
+    'payments', 'bills', 'complaints', 'ads', 'companies', 'notices',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -800,6 +817,7 @@ const ADMIN_ONLY_WRITE_COLUMNS = {
 const EMPLOYEE_READ_TABLES = new Set([
     'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
     'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types', 'companies',
+    'notices',
 ]);
 const EMPLOYEE_WRITE_FIELDS = {
     profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
@@ -890,6 +908,11 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             break;
         case 'device_types':
             if (method !== 'GET') return { error: 'Admin only' };
+            break;
+        case 'notices':
+            if (method !== 'GET') return { error: 'Admin only' };
+            whereClauses.push('?? = ?');
+            params.push('active', 1);
             break;
         default:
             return { error: 'Forbidden' };

@@ -782,7 +782,7 @@ export async function renderEmployeeDashboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const today = new Date().toLocaleDateString('en-CA');
-  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [];
+  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [];
 
   try {
     const res = await Promise.all([
@@ -791,9 +791,13 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
+      supabase.from('notices').select('*').eq('active', 1).order('created_at', { ascending: false }),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     attendanceHistory = res[4].data || [];
+    notices = (res[5].data || [])
+      .filter(n => !n.expires_at || new Date(n.expires_at) >= new Date())
+      .slice(0, 4);
     const allInquiries = res[3].data || [];
     const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
@@ -822,6 +826,10 @@ export async function renderEmployeeDashboard(container) {
   const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
   const missedClockOuts = attendanceHistory.filter(row => isForgottenClockOut(row, today));
   const strictClockoutBlock = missedClockOuts.length >= STRICT_CLOCKOUT_LIMIT;
+  const todayTasks = [
+    ...activeTasks.filter(task => dateKey(task.inquiries?.[0]?.created_at || task.created_at) === today),
+    ...acceptedInquiries.filter(inq => dateKey(inq.created_at) === today),
+  ].sort(byNewestCreated).slice(0, 5);
 
   container.innerHTML = `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -878,6 +886,81 @@ export async function renderEmployeeDashboard(container) {
         <div class="stat-label">Completed</div>
       </div>
     </div>
+
+    <div class="employee-dash-band">
+      <section class="notice-board">
+        <div class="notice-board-head">
+          <span class="notice-board-icon">${ICONS.clipboard}</span>
+          <div>
+            <h2>Notice Board</h2>
+            <p>Latest updates from admin</p>
+          </div>
+        </div>
+        <div class="notice-list">
+          ${notices.length === 0 ? `
+            <div class="notice-empty">${ICONS.check}<span>No active notices right now.</span></div>
+          ` : notices.map(n => `
+            <article class="notice-item notice-${escapeAttr(n.priority || 'normal')}">
+              <div class="notice-pin">${n.priority === 'urgent' ? ICONS.alert : n.priority === 'high' ? ICONS.star : ICONS.clipboard}</div>
+              <div>
+                <div class="notice-title">${escapeHtml(n.title)}</div>
+                <p>${escapeHtml(n.body)}</p>
+                <small>${formatDateTime(n.created_at)}${n.expires_at ? ` · Until ${formatDateTime(n.expires_at)}` : ''}</small>
+              </div>
+            </article>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="employee-today-panel">
+        <div class="employee-panel-head">
+          <span>${ICONS.wrench}</span>
+          <div>
+            <h2>Today's Tasks</h2>
+            <p>${todayTasks.length} assigned today</p>
+          </div>
+        </div>
+        <div class="employee-mini-list">
+          ${todayTasks.length === 0 ? `<div class="employee-mini-empty">${ICONS.check}<span>No new task assigned today.</span></div>` : todayTasks.map(item => {
+            const inq = item.inquiries?.[0] || item;
+            const id = item.inquiries ? item.id : (inq.ticket_id || '');
+            return `
+              <div class="employee-mini-row">
+                <div>
+                  <b>${escapeHtml(inq.full_name || item.title || 'Service task')}</b>
+                  <span>${escapeHtml(inq.service_item || item.description || 'Service request')}</span>
+                  <small>${escapeHtml(inq.ticket_no || 'No ticket')} · ${formatDateTime(inq.created_at || item.created_at)}</small>
+                </div>
+                <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </section>
+    </div>
+
+    ${pendingInquiries.length ? `
+      <div class="card" style="margin-bottom:18px;border:1px solid rgba(245,158,11,0.28);">
+        <div class="card-header">
+          <span class="card-title sr-icon-title">${ICONS.alert}<span>Requests Waiting For Accept</span></span>
+        </div>
+        <div class="card-body">
+          ${pendingInquiries.map(inq => `
+            <div class="employee-request-row">
+              <div>
+                <div class="employee-request-title">${escapeHtml(inq.full_name || 'Client')}</div>
+                <div class="employee-request-sub">${escapeHtml(inq.service_item || 'Service request')}</div>
+                <small>${escapeHtml(inq.ticket_no || 'No ticket')} · ${formatDateTime(inq.created_at)}</small>
+              </div>
+              <div class="employee-request-actions">
+                <button class="btn btn-primary btn-sm accept-btn" data-id="${escapeAttr(inq.id)}" data-ticket-id="${escapeAttr(inq.ticket_id || '')}">${ICONS.check}<span>Accept</span></button>
+                <button class="btn btn-secondary btn-sm decline-btn" data-id="${escapeAttr(inq.id)}">${ICONS.close}<span>Decline</span></button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     ${acceptedInquiries.length ? `
       <div class="card" style="margin-bottom:18px;">

@@ -3,6 +3,7 @@ import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
 import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab } from './pages/admin.js';
+import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeePricingTab } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -97,6 +98,7 @@ function getNavItems(role) {
     { id: 'feedback', icon: ICONS.star, label: 'Leaderboard' },
     { id: 'complaints', icon: ICONS.shield, label: 'Complaints' },
     { id: 'ads', icon: ICONS.box, label: 'Landing Ads' },
+    { id: 'notices', icon: ICONS.clipboard, label: 'Notices' },
     { type: 'section', label: 'Config' },
     { id: 'settings', icon: ICONS.settings || '⚙️', label: 'Settings' },
     { type: 'section', label: 'Account' },
@@ -124,7 +126,7 @@ function getPageRenderer(role, page) {
       inquiries: renderInquiries, contacts: renderContacts, users: renderUsers, profile: renderProfile,
       payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
-      ads: renderAdsTab, settings: renderSettingsTab,
+      ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
     }
   };
   return (map[role] || map.admin)[page];
