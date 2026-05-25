@@ -92,7 +92,7 @@ async function openTaskModalWithLoader(btn, taskId, inqId, currentStatus, onDone
 // Business info shown on every premium bill.
 const BUSINESS = {
   name: 'Networking Experts',
-  tagline: 'Service  ?  Installation  ?  Support',
+  tagline: 'Service | Installation | Support',
   address: 'Srinagar, J&K, India',
   phone: '+91 8899133144',
   email: 'support@networkingexperts.in',
@@ -279,9 +279,9 @@ export function renderPremiumBillHTML(data) {
     <div style="margin-top:30px; padding-top:20px; border-top:1px dashed #eee; text-align:center;">
       <div style="font-weight:800; color:#10B981; font-size:14px;">Thank you for your business!</div>
       <div style="font-size:11px; color:#6B7280; margin-top:5px;">
-        ${BUSINESS.address}  ?  ${BUSINESS.phone}  ?  ${BUSINESS.email}
+        ${BUSINESS.address} | ${BUSINESS.phone} | ${BUSINESS.email}
       </div>
-      <div style="font-size:10px; color:#9CA3AF; margin-top:5px;">GSTIN: ${BUSINESS.gstin}  ?  Computer Generated Invoice</div>
+      <div style="font-size:10px; color:#9CA3AF; margin-top:5px;">GSTIN: ${BUSINESS.gstin} | Computer Generated Invoice</div>
     </div>
   </div>`;
 }
@@ -2319,7 +2319,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <div id="bill-pdf-actions" style="display:${inquiryRow?.bill_pdf_url ? 'block' : 'none'}; margin-bottom:14px; padding:14px; border-radius:14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.35);">
                 <div style="font-weight:800; color:var(--success); font-size:0.88rem; margin-bottom:8px;">Saved bill PDF ready</div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                  <a class="btn btn-secondary btn-sm" id="bill-pdf-download" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" target="_blank" rel="noopener" download style="text-decoration:none;">${ICONS.download}<span>Download PDF</span></a>
+                  <a class="btn btn-secondary btn-sm" id="bill-pdf-view" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">${ICONS.receipt}<span>View PDF</span></a>
+                  <a class="btn btn-secondary btn-sm" id="bill-pdf-download" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" download style="text-decoration:none;">${ICONS.download}<span>Download PDF</span></a>
                   <button type="button" class="btn btn-primary btn-sm" id="bill-pdf-whatsapp">${ICONS.whatsapp}<span>Send to Customer</span></button>
                 </div>
               </div>
@@ -2462,9 +2463,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     const updateBillPdfActions = () => {
       const box = overlay.querySelector('#bill-pdf-actions');
+      const view = overlay.querySelector('#bill-pdf-view');
       const download = overlay.querySelector('#bill-pdf-download');
       if (!box || !download) return;
       box.style.display = billPdfUrl ? 'block' : 'none';
+      if (billPdfUrl && view) view.href = billPdfUrl;
       if (billPdfUrl) download.href = billPdfUrl;
     };
 
