@@ -100,7 +100,7 @@ function getCachedAds() {
     const cached = JSON.parse(localStorage.getItem(AD_CACHE_KEY) || 'null');
     if (!cached || !Array.isArray(cached.ads) || !cached.ads.length) return [];
     if (Date.now() - Number(cached.savedAt || 0) > AD_CACHE_TTL_MS) return [];
-    return cached.ads;
+    return cached.ads.map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => a.url);
   } catch {
     return [];
   }
@@ -112,6 +112,16 @@ function cacheAds(ads) {
   } catch {
     // Storage can be disabled or full; ads still render from memory.
   }
+}
+
+function normalizeAdUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith('/')) return value;
+  if (/^[A-Za-z0-9._-]+\.(png|jpe?g|gif|webp|mp4|webm|ogg)$/i.test(value)) {
+    return `/uploads/${value}`;
+  }
+  return '';
 }
 
 function preloadAdMedia(ad) {
@@ -421,7 +431,7 @@ export function renderLandingPage(container, onPortalClick) {
         .order('position', { ascending: true });
 
       const now = new Date().getTime();
-      const ads = (data || []).filter(a => {
+      const ads = (data || []).map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => {
         if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
         if (a.starts_at && new Date(a.starts_at).getTime() > now) return false;
         if (a.expires_at && new Date(a.expires_at).getTime() <= now) return false;
@@ -1074,7 +1084,7 @@ export function renderLandingPage(container, onPortalClick) {
       submitBtn.innerHTML = `<span class="srf-spin"></span><span>Submitting…</span>`;
 
       const ticket_no = generateTicketNo();
-      const { error } = await supabase.from('inquiries').insert({
+      const booking = await postPublicApi('/data/inquiries', {
         full_name: name,
         phone: '+91' + state.phone,
         location: state.locationValue,
@@ -1089,11 +1099,9 @@ export function renderLandingPage(container, onPortalClick) {
         preferred_time
       });
 
-      if (error) {
-        toast(error.code === '42501'
-          ? 'Submission blocked by database policy. Ask admin to run migrations.sql.'
-          : 'Could not submit — please try again', 'error');
-        console.error(error);
+      if (!booking.ok) {
+        toast(booking.error || 'Could not submit - please try again', 'error');
+        console.error(booking);
         render();
         return;
       }

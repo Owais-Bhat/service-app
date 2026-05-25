@@ -10,10 +10,9 @@ const API_URL = isProd
 // Helper to get headers with JWT
 const getHeaders = () => {
   const token = localStorage.getItem('auth_token');
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token}` : ''
-  };
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 };
 
 // Chainable query builder to mimic Supabase
