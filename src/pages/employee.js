@@ -654,7 +654,7 @@ function hoursWorked(clockIn, clockOut) {
 }
 
 let employeeAutoClockOutTime = '18:00';
-const STRICT_CLOCKOUT_LIMIT = 4;
+const STRICT_EOD_LIMIT = 4;
 
 function parseClockOutTime(value = employeeAutoClockOutTime) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
@@ -690,6 +690,15 @@ function isPastAutoClockOut(now = new Date()) {
 function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
   if (!row?.clock_in || row?.clock_out) return false;
   return attendanceDateKey(row) !== today || isPastAutoClockOut();
+}
+
+function getMissedEodRows(attendanceRows = [], reports = [], today = new Date().toLocaleDateString('en-CA')) {
+  const reportDates = new Set((reports || []).map(report => dateKey(report.date || report.created_at)).filter(Boolean));
+  return (attendanceRows || []).filter(row => {
+    const rowDate = attendanceDateKey(row);
+    if (!row?.clock_in || !rowDate || reportDates.has(rowDate)) return false;
+    return rowDate !== today || isPastAutoClockOut();
+  });
 }
 
 function money(value) {
@@ -813,7 +822,7 @@ export async function renderEmployeeDashboard(container) {
 
   const today = new Date().toLocaleDateString('en-CA');
   const clockOutSetting = await loadEmployeeClockOutTime();
-  let attendance, attendanceHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [];
+  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [];
 
   try {
     const res = await Promise.all([
@@ -823,12 +832,14 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).in('assignment_status', ['pending', 'accepted']).order('created_at', { ascending: false }),
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
       supabase.from('notices').select('*').eq('active', 1).order('created_at', { ascending: false }),
+      supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     attendanceHistory = res[4].data || [];
     notices = (res[5].data || [])
       .filter(n => !n.expires_at || new Date(n.expires_at) >= new Date())
       .slice(0, 4);
+    eodHistory = res[6].data || [];
     const allInquiries = res[3].data || [];
     const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
@@ -856,8 +867,8 @@ export async function renderEmployeeDashboard(container) {
   const isClockedOut = !!attendance?.clock_out;
   const clockInClosed = isPastAutoClockOut();
   const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
-  const missedClockOuts = attendanceHistory.filter(row => isForgottenClockOut(row, today));
-  const strictClockoutBlock = missedClockOuts.length >= STRICT_CLOCKOUT_LIMIT;
+  const missedEods = getMissedEodRows(attendanceHistory, eodHistory, today);
+  const strictEodBlock = missedEods.length >= STRICT_EOD_LIMIT;
   const todayTasks = [
     ...activeTasks.filter(task => dateKey(task.inquiries?.[0]?.created_at || task.created_at) === today),
     ...acceptedInquiries.filter(inq => dateKey(inq.created_at) === today),
@@ -874,14 +885,14 @@ export async function renderEmployeeDashboard(container) {
       </div>
     </div>
 
-    ${missedClockOuts.length ? `
-      <div class="card" style="margin-bottom:18px;border:1px solid ${strictClockoutBlock ? 'var(--danger)' : 'rgba(245,158,11,0.45)'};">
+    ${missedEods.length ? `
+      <div class="card" style="margin-bottom:18px;border:1px solid ${strictEodBlock ? 'var(--danger)' : 'rgba(245,158,11,0.45)'};">
         <div class="card-body" style="display:flex;gap:14px;align-items:flex-start;">
-          <span style="width:24px;height:24px;color:${strictClockoutBlock ? 'var(--danger)' : 'var(--warning)'};display:flex;">${ICONS.alert}</span>
+          <span style="width:24px;height:24px;color:${strictEodBlock ? 'var(--danger)' : 'var(--warning)'};display:flex;">${ICONS.alert}</span>
           <div>
-            <div style="font-weight:800;color:${strictClockoutBlock ? 'var(--danger)' : 'var(--warning)'};">${strictClockoutBlock ? 'Clock-in restricted' : 'Clock-out warning'}</div>
+            <div style="font-weight:800;color:${strictEodBlock ? 'var(--danger)' : 'var(--warning)'};">${strictEodBlock ? 'Clock-in restricted' : 'EOD warning'}</div>
             <div style="color:var(--text-soft);font-size:0.88rem;line-height:1.45;margin-top:4px;">
-              You have ${missedClockOuts.length} missed clock-out record${missedClockOuts.length === 1 ? '' : 's'}. ${strictClockoutBlock ? 'Please contact admin to fix attendance before starting a new shift.' : 'Please avoid repeated missed clock-outs.'}
+              You have ${missedEods.length} missed EOD report${missedEods.length === 1 ? '' : 's'}. ${strictEodBlock ? 'Please contact admin before starting a new shift.' : 'Please submit your EOD before the day closes.'}
             </div>
           </div>
         </div>
@@ -1029,7 +1040,7 @@ export async function renderEmployeeDashboard(container) {
         <div class="card-body attendance-card-body">
           <div id="live-clock" class="live-clock">--:--:--</div>
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn || strictClockoutBlock || clockInClosed ? 'disabled' : ''}>
+            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn || strictEodBlock || clockInClosed ? 'disabled' : ''}>
               ${ICONS.play}<span>Clock In</span>
             </button>
             <button class="btn btn-secondary" id="btn-clock-out" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
@@ -1111,8 +1122,8 @@ export async function renderEmployeeDashboard(container) {
 
   // Clock In
   bind('#btn-clock-in', async () => {
-    if (strictClockoutBlock) {
-      toast('Clock-in is restricted because you have 4 or more missed clock-outs. Contact admin.', 'error');
+    if (strictEodBlock) {
+      toast('Clock-in is restricted because you have 4 or more missed EOD reports. Contact admin.', 'error');
       return;
     }
     if (isPastAutoClockOut()) {
@@ -1249,15 +1260,15 @@ export async function renderEmployeeDashboard(container) {
 
 export async function renderEmployeeAttendanceRecords(container) {
   showLoader(container);
-  const { user, attendance } = await getEmployeeContext();
+  const { user, attendance, reports } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const monthKey = getMonthKey();
   const monthRows = attendance.filter(x => String(x.date || '').startsWith(monthKey));
   const presentDays = new Set(monthRows.map(x => x.date)).size;
   const completed = monthRows.filter(x => x.clock_in && x.clock_out);
-  const forgottenRows = attendance.filter(x => isForgottenClockOut(x));
-  const strictClockoutBlock = forgottenRows.length >= STRICT_CLOCKOUT_LIMIT;
+  const missedEodRows = getMissedEodRows(attendance, reports);
+  const strictEodBlock = missedEodRows.length >= STRICT_EOD_LIMIT;
   const totalMins = completed.reduce((sum, x) => sum + Math.max(0, new Date(x.clock_out) - new Date(x.clock_in)) / 60000, 0);
   const totalHours = `${Math.floor(totalMins / 60)}h ${Math.round(totalMins % 60)}m`;
 
@@ -1269,7 +1280,7 @@ export async function renderEmployeeAttendanceRecords(container) {
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-value">${presentDays}</div><div class="stat-label">Days Present This Month</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--success)">${monthRows.filter(x => x.clock_in && !x.clock_out && !isForgottenClockOut(x)).length}</div><div class="stat-label">Active Sessions</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:${forgottenRows.length ? 'var(--danger)' : 'var(--success)'}">${forgottenRows.length}</div><div class="stat-label">${strictClockoutBlock ? 'Strict Warning' : 'Missed Clock-outs'}</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:${missedEodRows.length ? 'var(--danger)' : 'var(--success)'}">${missedEodRows.length}</div><div class="stat-label">${strictEodBlock ? 'Strict Warning' : 'Missed EOD'}</div></div>
       <div class="stat-card"><div class="stat-value" style="font-size:1.7rem;color:var(--warning)">${totalHours}</div><div class="stat-label">Logged Hours This Month</div></div>
     </div>
     <div class="card">
@@ -1284,7 +1295,7 @@ export async function renderEmployeeAttendanceRecords(container) {
                 <td>${x.clock_out
                   ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>`
                   : isForgottenClockOut(x)
-                    ? '<span class="badge badge-danger">Forgot clock-out</span>'
+                    ? '<span class="badge badge-open">Auto clock-out pending</span>'
                     : '<span class="badge badge-open">Active</span>'}</td>
                 <td>${hoursWorked(x.clock_in, x.clock_out) || '-'}</td>
                 <td><small>${x.location || '-'}</small></td>
