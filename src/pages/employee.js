@@ -5,7 +5,7 @@ import { ICONS } from '../icons.js';
 const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
 
 // Watches for several GPS fixes within `maxWaitMs`, returns the most accurate
-// reading seen — or short-circuits as soon as accuracy <= desiredAccuracy.
+// reading seen - or short-circuits as soon as accuracy <= desiredAccuracy.
 // The cold first fix is usually 100-500m off; this keeps sampling until we
 // see a real GPS lock (typically <20m on phones).
 function getHighAccuracyPosition({ desiredAccuracy = 25, maxWaitMs = 12000 } = {}) {
@@ -92,11 +92,11 @@ async function openTaskModalWithLoader(btn, taskId, inqId, currentStatus, onDone
 // Business info shown on every premium bill.
 const BUSINESS = {
   name: 'Networking Experts',
-  tagline: 'Service · Installation · Support',
+  tagline: 'Service  ?  Installation  ?  Support',
   address: 'Srinagar, J&K, India',
   phone: '+91 8899133144',
   email: 'support@networkingexperts.in',
-  gstin: '—',
+  gstin: '-',
 };
 
 function displayStatus(status) {
@@ -185,7 +185,7 @@ function loadHtml2Pdf() {
 
 // Premium printable bill template, used by employee + admin.
 export function renderPremiumBillHTML(data) {
-  // Ultra-robust currency formatter — avoids toLocaleString to prevent potential JS errors in older browsers.
+  // Ultra-robust currency formatter - avoids toLocaleString to prevent potential JS errors in older browsers.
   const inr = (n) => {
     const val = Math.round(Number(n) || 0);
     return '₹' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -230,15 +230,15 @@ export function renderPremiumBillHTML(data) {
     <div class="pb-parties" style="display:grid !important; grid-template-columns:1fr 1fr !important; gap:30px !important; margin-bottom:20px !important; border-bottom:1px dashed #eee !important; padding-bottom:20px !important;">
       <div>
         <div style="font-size:10px; font-weight:800; color:#10B981; text-transform:uppercase; margin-bottom:6px;">Billed To</div>
-        <div style="font-size:16px; font-weight:800; color:#0F172A;">${esc(data.customer?.name || '—')}</div>
+        <div style="font-size:16px; font-weight:800; color:#0F172A;">${esc(data.customer?.name || '-')}</div>
         <div style="font-size:13px; color:#4B5563;">${esc(data.customer?.phone || '')}</div>
         ${data.customer?.company ? `<div style="font-size:13px; color:#4B5563;">${esc(data.customer.company)}</div>` : ''}
         <div style="font-size:13px; color:#6B7280; font-style:italic;">${esc(data.customer?.location || '')}</div>
       </div>
       <div>
         <div style="font-size:10px; font-weight:800; color:#10B981; text-transform:uppercase; margin-bottom:6px;">Service Details</div>
-        <div style="font-size:13px; color:#4B5563;"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '—')}</div>
-        <div style="font-size:13px; color:#4B5563;"><b>Service:</b> ${esc(data.customer?.service_item || '—')}</div>
+        <div style="font-size:13px; color:#4B5563;"><b>Ticket:</b> ${esc(data.customer?.ticket_no || '-')}</div>
+        <div style="font-size:13px; color:#4B5563;"><b>Service:</b> ${esc(data.customer?.service_item || '-')}</div>
         ${data.customer?.device_type ? `<div style="font-size:13px; color:#4B5563;"><b>Device:</b> ${esc(data.customer.device_type)}</div>` : ''}
         ${data.technician ? `<div style="font-size:13px; color:#4B5563;"><b>Technician:</b> ${esc(data.technician)}</div>` : ''}
       </div>
@@ -262,7 +262,7 @@ export function renderPremiumBillHTML(data) {
         ${Number(data.extra) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Extra charges</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
         <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Platform fee</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
         <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Transport</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
-        ${Number(data.discount) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0; color:#059669;">${esc(data.discountLabel || 'Discount')}</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#059669;">−${inr(data.discount)}</td></tr>` : ''}
+        ${Number(data.discount) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0; color:#059669;">${esc(data.discountLabel || 'Discount')}</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#059669;">-${inr(data.discount)}</td></tr>` : ''}
         <tr style="display:table-row !important; border-top:1px solid #eee !important;"><td style="display:table-cell !important; padding:6px 0; font-weight:700;">Taxable</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
         <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">GST (18%)</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
         <tr style="display:table-row !important; border-top:2px solid #10B981 !important; font-size:16px !important;"><td style="display:table-cell !important; padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="display:table-cell !important; text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
@@ -271,7 +271,7 @@ export function renderPremiumBillHTML(data) {
 
     ${data.paymentLink ? `
       <div style="margin-top:20px; padding:20px; border:1px dashed #10B981; border-radius:12px; text-align:center; background:rgba(16,185,129,0.02);">
-        <div style="font-weight:800; font-size:11px; color:#064E3B; text-transform:uppercase; margin-bottom:10px;">💳 Secure Payment</div>
+        <div style="font-weight:800; font-size:11px; color:#064E3B; text-transform:uppercase; margin-bottom:10px;">Secure Payment</div>
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(data.paymentLink)}" style="width:120px; height:120px; margin:0 auto 10px; display:block; border-radius:8px;"/>
         <div style="font-size:11px; color:#2563EB; word-break:break-all;">${esc(data.paymentLink)}</div>
       </div>` : ''}
@@ -279,9 +279,9 @@ export function renderPremiumBillHTML(data) {
     <div style="margin-top:30px; padding-top:20px; border-top:1px dashed #eee; text-align:center;">
       <div style="font-weight:800; color:#10B981; font-size:14px;">Thank you for your business!</div>
       <div style="font-size:11px; color:#6B7280; margin-top:5px;">
-        ${BUSINESS.address} · ${BUSINESS.phone} · ${BUSINESS.email}
+        ${BUSINESS.address}  ?  ${BUSINESS.phone}  ?  ${BUSINESS.email}
       </div>
-      <div style="font-size:10px; color:#9CA3AF; margin-top:5px;">GSTIN: ${BUSINESS.gstin} · Computer Generated Invoice</div>
+      <div style="font-size:10px; color:#9CA3AF; margin-top:5px;">GSTIN: ${BUSINESS.gstin}  ?  Computer Generated Invoice</div>
     </div>
   </div>`;
 }
@@ -497,18 +497,18 @@ function downloadBlob(blob, filename) {
 function billShortCaption(data, pdfUrl) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const lines = [
-    `Hi ${data.customer?.name || ''}! 👋`,
+    `Hi ${data.customer?.name || ''}! `,
     `Your service invoice from *${BUSINESS.name}* is ready.`,
-    `Ticket: *${data.customer?.ticket_no || '—'}* · Total: *${inr(data.total)}*`,
+    `Ticket: *${data.customer?.ticket_no || '-'}* - Total: *${inr(data.total)}*`,
   ];
-  if (pdfUrl) lines.push('', `📄 View / download bill PDF:`, pdfUrl);
-  if (data.paymentLink) lines.push('', `💳 Pay here: ${data.paymentLink}`);
-  lines.push('', `— ${BUSINESS.name}`);
+  if (pdfUrl) lines.push('', `View / download bill PDF:`, pdfUrl);
+  if (data.paymentLink) lines.push('', `Pay here: ${data.paymentLink}`);
+  lines.push('', `- ${BUSINESS.name}`);
   return lines.join('\n');
 }
 
 export function openPremiumBillModal(data, opts = {}) {
-  const { onSent, allowShare = true, title = '📄 Service Invoice Preview', inquiryId = null } = opts;
+  const { onSent, allowShare = true, title = 'Service Invoice Preview', inquiryId = null } = opts;
   const billHTML = renderPremiumBillHTML(data);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay premium-bill-modal';
@@ -528,8 +528,8 @@ export function openPremiumBillModal(data, opts = {}) {
       <div class="modal-footer" style="gap:12px;">
         <button class="btn btn-secondary" id="pb-cancel">Close</button>
         <button class="btn btn-secondary" id="pb-print">Print / Save PDF</button>
-        <button class="btn btn-secondary" id="pb-download">📥 Download PDF</button>
-        ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp"><span>📱 Send via WhatsApp</span></button>` : ''}
+        <button class="btn btn-secondary" id="pb-download">${ICONS.download}<span>Download PDF</span></button>
+        ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp">${ICONS.whatsapp}<span>Send via WhatsApp</span></button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -565,7 +565,7 @@ export function openPremiumBillModal(data, opts = {}) {
 
   overlay.querySelector('#pb-download').onclick = async () => {
     const btn = overlay.querySelector('#pb-download');
-    btn.disabled = true; btn.textContent = '… preparing PDF';
+    btn.disabled = true; btn.innerHTML = `<span class="btn-spinner"></span><span>Preparing PDF...</span>`;
     try {
       const { blob } = await renderBillToPdfBlob(billHTML, filename);
       downloadBlob(blob, filename);
@@ -574,7 +574,7 @@ export function openPremiumBillModal(data, opts = {}) {
       console.error(err);
       toast(err.message || 'Could not generate PDF', 'error');
     } finally {
-      btn.disabled = false; btn.textContent = '📥 Download PDF';
+      btn.disabled = false; btn.innerHTML = `${ICONS.download}<span>Download PDF</span>`;
     }
   };
 
@@ -591,17 +591,17 @@ export function openPremiumBillModal(data, opts = {}) {
       }
 
       try {
-        btn.innerHTML = `<span>… preparing PDF</span>`;
+        btn.innerHTML = `<span>... preparing PDF</span>`;
         const { blob } = await renderBillToPdfBlob(billHTML, filename);
 
-        btn.innerHTML = `<span>… uploading bill</span>`;
+        btn.innerHTML = `<span>... uploading bill</span>`;
         const pdfUrl = await uploadBillPdf(blob, filename, inquiryId);
 
         const caption = billShortCaption(data, pdfUrl);
         const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
         window.open(waUrl, '_blank');
 
-        toast('WhatsApp opened with PDF link — send the message to the client.', 'success');
+        toast('WhatsApp opened with PDF link - send the message to the client.', 'success');
         if (typeof onSent === 'function') {
           try { await onSent(pdfUrl); } catch { }
         }
@@ -937,7 +937,7 @@ export async function renderEmployeeDashboard(container) {
               <div>
                 <div class="notice-title">${escapeHtml(n.title)}</div>
                 <p>${escapeHtml(n.body)}</p>
-                <small>${formatDateTime(n.created_at)}${n.expires_at ? ` · Until ${formatDateTime(n.expires_at)}` : ''}</small>
+                <small>${formatDateTime(n.created_at)}${n.expires_at ? `  ?  Until ${formatDateTime(n.expires_at)}` : ''}</small>
               </div>
             </article>
           `).join('')}
@@ -961,7 +961,7 @@ export async function renderEmployeeDashboard(container) {
                 <div>
                   <b>${escapeHtml(inq.full_name || item.title || 'Service task')}</b>
                   <span>${escapeHtml(inq.service_item || item.description || 'Service request')}</span>
-                  <small>${escapeHtml(inq.ticket_no || 'No ticket')} · ${formatDateTime(inq.created_at || item.created_at)}</small>
+                  <small>${escapeHtml(inq.ticket_no || 'No ticket')}  ?  ${formatDateTime(inq.created_at || item.created_at)}</small>
                 </div>
                 <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
               </div>
@@ -982,7 +982,7 @@ export async function renderEmployeeDashboard(container) {
               <div>
                 <div class="employee-request-title">${escapeHtml(inq.full_name || 'Client')}</div>
                 <div class="employee-request-sub">${escapeHtml(inq.service_item || 'Service request')}</div>
-                <small>${escapeHtml(inq.ticket_no || 'No ticket')} · ${formatDateTime(inq.created_at)}</small>
+                <small>${escapeHtml(inq.ticket_no || 'No ticket')}  ?  ${formatDateTime(inq.created_at)}</small>
               </div>
               <div class="employee-request-actions">
                 <button class="btn btn-primary btn-sm accept-btn" data-id="${escapeAttr(inq.id)}" data-ticket-id="${escapeAttr(inq.ticket_id || '')}">${ICONS.check}<span>Accept</span></button>
@@ -1060,7 +1060,7 @@ export async function renderEmployeeDashboard(container) {
             <div class="form-group">
               <label class="sr-icon-label">${ICONS.edit}<span>Today's progress</span></label>
               <textarea id="eod-content" rows="6"
-                placeholder="What did you achieve today? Break it down briefly…"></textarea>
+                placeholder="What did you achieve today? Break it down briefly..."></textarea>
             </div>
             <button class="btn btn-primary btn-wide" id="btn-submit-eod" style="display:flex; align-items:center; justify-content:center; gap:10px;">
               <span>Submit Daily Report</span>
@@ -1120,7 +1120,7 @@ export async function renderEmployeeDashboard(container) {
       return;
     }
     const btn = container.querySelector('#btn-clock-in');
-    btn.disabled = true; btn.textContent = 'Getting location…';
+    btn.disabled = true; btn.textContent = 'Getting location...';
     let locationStr = 'Unknown';
     let coords = { lat: null, lng: null, accuracy: null };
     try {
@@ -1138,7 +1138,7 @@ export async function renderEmployeeDashboard(container) {
       user_id: user.id, clock_in: new Date().toISOString(), date: today, location: locationStr,
       latitude: coords.lat, longitude: coords.lng, status: 'present'
     });
-    if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = '✅ Clock In'; }
+    if (error) { toast(error.message, 'error'); btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`; }
     else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
   });
 
@@ -1157,7 +1157,7 @@ export async function renderEmployeeDashboard(container) {
       const content = container.querySelector('#eod-content').value.trim();
       if (!content) { toast('Please write your report', 'warning'); return; }
       const eodBtnActual = container.querySelector('#btn-submit-eod');
-      eodBtnActual.disabled = true; eodBtnActual.textContent = 'Submitting…';
+      eodBtnActual.disabled = true; eodBtnActual.textContent = 'Submitting...';
       const { error } = await supabase.from('eod_reports').insert({ employee_id: user.id, content, date: today });
       if (error) { toast(error.message, 'error'); eodBtnActual.disabled = false; eodBtnActual.textContent = 'Submit Report →'; }
       else { toast('EOD Report submitted!', 'success'); renderEmployeeDashboard(container); }
@@ -1210,7 +1210,7 @@ export async function renderEmployeeDashboard(container) {
     };
   });
 
-  // Real-time listener for new assignments + payments — fires sound + browser notification.
+  // Real-time listener for new assignments + payments - fires sound + browser notification.
   const channel = supabase.channel(`employee-jobs-${user.id}`)
     .on('postgres_changes', {
       event: '*',
@@ -1222,7 +1222,7 @@ export async function renderEmployeeDashboard(container) {
       if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && row?.assignment_status === 'pending')) {
         showNotification({
           title: '🔔 New Job Assigned',
-          body: `${row?.full_name || 'A client'} — ${row?.service_item || 'new service'}`,
+          body: `${row?.full_name || 'A client'} - ${row?.service_item || 'new service'}`,
           type: 'alert',
           tag: `assign-${row?.id || ''}`,
         });
@@ -1286,8 +1286,8 @@ export async function renderEmployeeAttendanceRecords(container) {
                   : isForgottenClockOut(x)
                     ? '<span class="badge badge-danger">Forgot clock-out</span>'
                     : '<span class="badge badge-open">Active</span>'}</td>
-                <td>${hoursWorked(x.clock_in, x.clock_out) || '—'}</td>
-                <td><small>${x.location || '—'}</small></td>
+                <td>${hoursWorked(x.clock_in, x.clock_out) || '-'}</td>
+                <td><small>${x.location || '-'}</small></td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -1423,7 +1423,7 @@ export async function renderEmployeeCash(container) {
   const totalEver = totalPending + totalSubmitted;
 
   const dateOf = (d) => {
-    if (!d) return '—';
+    if (!d) return '-';
     try {
       const dt = new Date(String(d).replace(' ', 'T'));
       return Number.isNaN(dt.getTime()) ? d : dt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
@@ -1436,8 +1436,8 @@ export async function renderEmployeeCash(container) {
       <tr>
         <td><small style="color:var(--text-dim)">${dateOf(x.cash_collected_at)}</small></td>
         <td><code style="font-size:0.75rem;">${x.ticket_no || (x.id || '').slice(0,8)}</code></td>
-        <td><b>${x.full_name || '—'}</b><br/><small style="color:var(--text-dim)">${x.phone || ''}</small></td>
-        <td><small>${x.service_item || '—'}</small></td>
+        <td><b>${x.full_name || '-'}</b><br/><small style="color:var(--text-dim)">${x.phone || ''}</small></td>
+        <td><small>${x.service_item || '-'}</small></td>
         <td><b>₹${Math.round(Number(x.bill_total) || 0).toLocaleString('en-IN')}</b></td>
         <td>${x.cash_submitted_at
           ? `<span class="badge badge-resolved">Submitted</span><br/><small style="color:var(--text-dim)">${dateOf(x.cash_submitted_at)}</small>`
@@ -1474,7 +1474,7 @@ export async function renderEmployeeCash(container) {
 
     ${totalPending > 0 ? `
       <div style="padding:14px 16px; border-radius:14px; background:rgba(245,158,11,0.08); border:1px dashed var(--warning); margin-bottom:18px; font-size:0.88rem; color:var(--text);">
-        💵 You have <b>₹${Math.round(totalPending).toLocaleString('en-IN')}</b> in cash to hand over to admin. Once admin records the submission in their Cash Collections tab, these entries will move to <b>Submitted</b>.
+        You have <b>₹${Math.round(totalPending).toLocaleString('en-IN')}</b> in cash to hand over to admin. Once admin records the submission in their Cash Collections tab, these entries will move to <b>Submitted</b>.
       </div>` : ''}
 
     <div class="filter-bar" style="margin-bottom:16px;">
@@ -1700,7 +1700,7 @@ export async function renderEmployeeTasks(container) {
          <div>
            <div style="font-weight:800; font-size:1.15rem; color:var(--primary)">${inq.full_name}</div>
            ${inq._company ? `<div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px">${inq._company}</div>` : ''}
-           <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '—'}</div>
+           <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '-'}</div>
            <div style="font-size:0.82rem; color:var(--text-dim); margin-top:4px;"><b>Created:</b> ${formatDateTime(inq.created_at)}</div>
            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
          </div>
@@ -1726,7 +1726,7 @@ export async function renderEmployeeTasks(container) {
            <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service Location</div>
            <div style="font-size:0.88rem; font-weight:600; margin-top:8px; display:flex; align-items:flex-start; gap:6px;">
              <span style="width:18px;height:18px;display:flex;flex-shrink:0;color:var(--primary)">${ICONS.pin}</span>
-             <span style="line-height:1.4">${inq.location || '—'}</span>
+             <span style="line-height:1.4">${inq.location || '-'}</span>
            </div>
          </div>
          <div>
@@ -1773,7 +1773,7 @@ export async function renderEmployeeTasks(container) {
               </div>
               <div>
                 <div style="font-size:0.7rem; color:var(--text-dim)">Ticket</div>
-                <div style="font-size:0.9rem; font-weight:700; color:var(--primary)">${inq.ticket_no || '—'}</div>
+                <div style="font-size:0.9rem; font-weight:700; color:var(--primary)">${inq.ticket_no || '-'}</div>
               </div>
               <div>
                 <div style="font-size:0.7rem; color:var(--text-dim)">Contact</div>
@@ -1785,13 +1785,13 @@ export async function renderEmployeeTasks(container) {
               </div>
               <div>
                 <div style="font-size:0.7rem; color:var(--text-dim)">Service</div>
-                <div style="font-size:0.9rem; font-weight:600">${inq.service_item || '—'}</div>
+                <div style="font-size:0.9rem; font-weight:600">${inq.service_item || '-'}</div>
               </div>
               <div style="grid-column: span 2">
                 <div style="font-size:0.7rem; color:var(--text-dim)">Location</div>
                 <div style="font-size:0.88rem; font-weight:600; display:flex; align-items:flex-start; gap:6px;">
                   <span style="width:14px;height:14px;display:flex;flex-shrink:0;color:var(--primary);margin-top:2px;">${ICONS.pin}</span>
-                  ${inq.location || '—'}
+                  ${inq.location || '-'}
                 </div>
               </div>
             </div>
@@ -1914,14 +1914,14 @@ export async function renderEmployeeTasks(container) {
         <button class="sr-filter" data-filter="issues"><span>Issues</span><span class="sr-filter-count">${filterCounts.issues}</span></button>
       </div>
       <div class="search-input-wrap" style="flex:1; min-width:200px;">
-        <span>${ICONS.search || '🔍'}</span>
-        <input class="search-input" id="task-search" placeholder="Search tasks by title, client, or ticket…"/>
+        <span>${ICONS.search}</span>
+        <input class="search-input" id="task-search" placeholder="Search tasks by title, client, or ticket..."/>
       </div>
     </div>
 
     <div id="task-list">
       ${(tasks.length === 0 && acceptedInquiries.length === 0)
-        ? '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:2rem;margin-bottom:12px;">📋</div><p style="font-weight:600;">No tasks assigned yet</p><p style="font-size:0.85rem;">Tasks will appear here once admin assigns service requests to you.</p></div></div>'
+        ? '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:2rem;margin-bottom:12px;"></div><p style="font-weight:600;">No tasks assigned yet</p><p style="font-size:0.85rem;">Tasks will appear here once admin assigns service requests to you.</p></div></div>'
         : `
           <div class="card">
             <div class="card-header"><span class="card-title">Active Services</span></div>
@@ -2059,7 +2059,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     }
     // Build a tree: Main → Sub → leaves (each leaf = priced row). When a row
     // has no sub_category we group it under a synthetic '' key, surfaced as
-    // "—" in the picker so the cascade still works for 2-level catalogs.
+    // "-" in the picker so the cascade still works for 2-level catalogs.
     const tree = {};
     (pricing || []).forEach(p => {
       const main = p.category || 'Uncategorized';
@@ -2086,13 +2086,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       <div class="modal" style="max-width:720px">
         <div class="modal-header">
           <span class="modal-title">Manage Service</span>
-          <button class="modal-close" id="cm">✕</button>
+          <button class="modal-close" id="cm">&times;</button>
         </div>
         <div class="modal-body" style="padding-top:14px;">
           <div class="mst-tabs" role="tablist">
-            <button type="button" class="mst-tab active" data-tab="status">📌 Status</button>
-            <button type="button" class="mst-tab" data-tab="device">🔧 Device Info</button>
-            <button type="button" class="mst-tab" data-tab="bill">📄 Bill</button>
+            <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
+            <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device Info</span></button>
+            <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
           ${inquiryRow ? `
@@ -2193,7 +2193,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
 
             <div id="feedback-link-box" style="display:none; padding:12px; border-radius:12px; background:rgba(16,185,129,0.07); border:1px solid var(--primary);">
-              <div style="font-size:0.78rem; font-weight:700; color:var(--primary); margin-bottom:6px;">📋 Feedback Link for Client</div>
+              <div style="font-size:0.78rem; font-weight:700; color:var(--primary); margin-bottom:6px;"> Feedback Link for Client</div>
               <div style="display:flex; gap:8px;">
                 <input id="feedback-url" type="text" readonly style="flex:1; font-size:0.78rem; background:var(--bg);"/>
                 <button class="btn btn-secondary btn-sm" id="copy-feedback-url">Copy</button>
@@ -2209,7 +2209,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <div class="form-group">
               <label>Company Name <span style="color:var(--danger)">*</span></label>
               <select id="resolve-company" style="margin-bottom:8px;">
-                <option value="">Select Company…</option>
+                <option value="">Select Company...</option>
                 ${companyList.map(c => {
                   const isSel = (inquiryRow?.company_name || 'networking experts').toLowerCase() === c.name.toLowerCase();
                   return `<option value="${c.name.replace(/"/g,'&quot;')}" ${isSel ? 'selected' : ''}>${c.name}</option>`;
@@ -2220,7 +2220,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
             <div class="form-group">
               <label>Device Type</label>
-              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick…' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type ?? '').replace(/"/g,'&quot;')}"/>
+              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick...' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type || '').replace(/"/g,'&quot;')}"/>
               <datalist id="emp-device-types">
                 ${deviceTypeList.map(d => `<option value="${(d.name || '').replace(/"/g,'&quot;')}"></option>`).join('')}
               </datalist>
@@ -2228,9 +2228,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
             <div class="form-group">
               <label>Device Serial No</label>
-              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no ?? '').replace(/"/g,'&quot;')}"/>
+              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no || '').replace(/"/g,'&quot;')}"/>
             </div>
-            <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes — and they appear on the bill template.</small>
+            <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes - and they appear on the bill template.</small>
           </div>
 
           <!-- TAB 3: BILL -->
@@ -2245,14 +2245,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               ` : `
                 <div class="svc-picker-wrap">
                   <select id="svc-main" class="svc-picker">
-                    <option value="">Select Main Category…</option>
+                    <option value="">Select Main Category...</option>
                     ${mainOptions.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('')}
                   </select>
                   <select id="svc-sub" class="svc-picker" disabled>
-                    <option value="">Select Sub Category…</option>
+                    <option value="">Select Sub Category...</option>
                   </select>
                   <select id="svc-sub-sub" class="svc-picker" disabled>
-                    <option value="">Select Specific Issue…</option>
+                    <option value="">Select Specific Issue...</option>
                   </select>
                   <div class="svc-picker-actions">
                     <div class="svc-preview-text" id="svc-preview">Pick an issue to see the price.</div>
@@ -2288,7 +2288,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                   <button type="button" class="btn btn-secondary btn-sm" id="capture-loc" style="white-space:nowrap" title="Capture your precise GPS location right now (you should be at the customer site)">📍 Capture My Location</button>
                   <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate km from your clock-in location to the precise location">🧮 Auto km</button>
                 </div>
-                <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km · capture your precise location at the customer site, then click 🧮 Auto km.</small>
+                <small id="transport-km-hint" style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">₹5 per km  ?  capture your precise location at the customer site, then click 🧮 Auto km.</small>
                 <small id="bill-loc-status" style="display:none; margin-top:4px; color:var(--primary); font-size:0.75rem; font-weight:600;"></small>
               </div>
 
@@ -2296,44 +2296,44 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <div class="bill-row"><span>Services subtotal</span><b id="br-services">₹0</b></div>
                 <div class="bill-row"><span>Additional charges</span><b id="br-extra">₹0</b></div>
                 <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
-                <div class="bill-row"><span>Transport (<span id="br-km">0</span> km × ₹5)</span><b id="br-transport">₹0</b></div>
-                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">−₹30</b></div>
+                <div class="bill-row"><span>Transport (<span id="br-km">0</span> km x ₹5)</span><b id="br-transport">₹0</b></div>
+                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">-₹30</b></div>
                 <div class="bill-row"><span>GST (18%)</span><b id="br-gst">₹0</b></div>
                 <div class="bill-row bill-row-total"><span>Final total</span><b id="br-total">₹0</b></div>
                 <input type="hidden" id="total-bill-display" value="0"/>
               </div>
 
-              <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">📄 Generate &amp; Send Premium Bill</button>
+              <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">${ICONS.receipt}<span>Generate &amp; Send Premium Bill</span></button>
 
               <!-- Payment Method choice -->
               <div class="form-group" style="margin-bottom:14px;">
                 <label>How will the client pay?</label>
                 <div class="pay-method-toggle" id="pay-method-toggle">
-                  <button type="button" class="pay-method-btn active" data-method="online">💳 Online (Razorpay)</button>
-                  <button type="button" class="pay-method-btn" data-method="cash">💵 Cash on Service</button>
+                  <button type="button" class="pay-method-btn active" data-method="online">${ICONS.card}<span>Online (Razorpay)</span></button>
+                  <button type="button" class="pay-method-btn" data-method="cash">${ICONS.rupee}<span>Cash on Service</span></button>
                 </div>
               </div>
 
               <!-- Cash collection section (hidden until method=cash) -->
               <div id="cash-section" style="display:none; padding:14px; background:rgba(245,158,11,0.06); border-radius:14px; border:1px solid var(--warning); margin-bottom:14px;">
-                <div style="font-weight:700; font-size:0.9rem; color:var(--text); margin-bottom:8px;">💵 Cash Collection</div>
+                <div style="font-weight:700; font-size:0.9rem; color:var(--text); margin-bottom:8px;">Cash Collection</div>
                 <div style="font-size:0.82rem; color:var(--text-soft); margin-bottom:12px;">
                   Mark this once you have <b>physically received</b> the cash from the client. The amount will appear in your <b>My Cash</b> tab as <i>pending submission</i> until you hand it to admin.
                 </div>
                 <button type="button" class="btn btn-primary btn-wide" id="mark-cash-btn" style="background:var(--warning); box-shadow:0 8px 24px rgba(245,158,11,0.32);">
-                  ✓ Mark Cash Collected — <span id="cash-amount-display">₹0</span>
+                  Mark Cash Collected - <span id="cash-amount-display">₹0</span>
                 </button>
                 <div id="cash-collected-banner" style="display:none; margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(16,185,129,0.08); border:1px solid var(--success); font-size:0.85rem; color:var(--success); font-weight:700;">
-                  ✓ Cash collected — appears in your My Cash tab.
+                  Cash collected - appears in your My Cash tab.
                 </div>
               </div>
 
               <!-- Payment Link + QR -->
               <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
-                <div style="font-weight:700; font-size:0.85rem; margin-bottom:10px; color:var(--text)">💳 Payment Link & QR</div>
+                <div class="icon-text-label" style="font-weight:700; font-size:0.85rem; margin-bottom:10px; color:var(--text)">${ICONS.card}<span>Payment Link & QR</span></div>
                 <div style="display:flex; gap:8px; margin-bottom:10px;">
-                  <input id="emp-pay-link" type="url" placeholder="Payment link will appear here…" style="flex:1; font-size:0.82rem;" readonly/>
-                  <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap">✨ Generate</button>
+                  <input id="emp-pay-link" type="url" placeholder="Payment link will appear here..." style="flex:1; font-size:0.82rem;" readonly/>
+                  <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap">${ICONS.link}<span>Generate</span></button>
                 </div>
                 <div id="emp-qr-wrap" style="display:none; text-align:center; margin-bottom:10px;">
                   <img id="emp-qr-img" src="" alt="QR Code" style="width:160px; height:160px; border-radius:12px; border:2px solid var(--primary);"/>
@@ -2362,7 +2362,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       </div>`;
     document.body.appendChild(overlay);
 
-    // Tab switcher — also drives the footer button label (Next → on intermediate tabs, Save on the last).
+    // Tab switcher - also drives the footer button label (Next → on intermediate tabs, Save on the last).
     const TAB_ORDER = ['status', 'device', 'bill'];
     const getActiveTab = () => overlay.querySelector('.mst-tab.active')?.dataset.tab || TAB_ORDER[0];
     const isLastTab = () => getActiveTab() === TAB_ORDER[TAB_ORDER.length - 1];
@@ -2432,7 +2432,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     // { id, main, sub, leaf, cost }.
     const selectedServices = [];
 
-    // Live breakdown — also stored on a closure object so the bill modal can read it.
+    // Live breakdown - also stored on a closure object so the bill modal can read it.
     const bill = {
       servicesSubtotal: 0, extra: 0, platform: getPlatformFee(),
       km: 0, transport: 0, autoDiscount: 0, presetDiscount: 0, manualDiscount: 0,
@@ -2471,7 +2471,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const discRow = overlay.querySelector('#br-discount-row');
       discRow.style.display = bill.discount > 0 ? 'flex' : 'none';
       discRow.querySelector('span').textContent = bill.discountLabel || 'Discount';
-      overlay.querySelector('#br-discount').textContent = `−${inr(bill.discount)}`;
+      overlay.querySelector('#br-discount').textContent = `-${inr(bill.discount)}`;
       overlay.querySelector('#br-gst').textContent = inr(bill.gst);
       overlay.querySelector('#br-total').textContent = inr(bill.total);
       totalDisplay.value = String(bill.total);
@@ -2512,26 +2512,26 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const hasBill = billLoc.lat != null;
       const hasCust = inquiryRow?.customer_lat != null && inquiryRow?.customer_lng != null;
       if (eLat == null || eLng == null) {
-        kmHint.textContent = '₹5 per km · enter manually (no clock-in GPS on record for today).';
+        kmHint.textContent = '₹5 per km  ?  enter manually (no clock-in GPS on record for today).';
         autoKmBtn.disabled = true; autoKmBtn.style.opacity = '0.5';
         return;
       }
       if (!hasBill && !hasCust) {
-        kmHint.textContent = '₹5 per km · capture your precise location at the customer site to enable Auto km.';
+        kmHint.textContent = '₹5 per km  ?  capture your precise location at the customer site to enable Auto km.';
         autoKmBtn.disabled = true; autoKmBtn.style.opacity = '0.5';
         return;
       }
       autoKmBtn.disabled = false; autoKmBtn.style.opacity = '1';
       kmHint.textContent = hasBill
-        ? '₹5 per km · 🧮 Auto km uses clock-in GPS → your captured precise location.'
-        : '₹5 per km · 🧮 Auto km uses clock-in GPS → customer GPS (capture precise location for higher accuracy).';
+        ? '₹5 per km  ?  🧮 Auto km uses clock-in GPS → your captured precise location.'
+        : '₹5 per km  ?  🧮 Auto km uses clock-in GPS → customer GPS (capture precise location for higher accuracy).';
     };
     refreshAutoKmHint();
 
     captureBtn.onclick = async () => {
       captureBtn.disabled = true;
       const originalText = captureBtn.textContent;
-      captureBtn.innerHTML = '<span class="srf-spin"></span> Locating…';
+      captureBtn.innerHTML = '<span class="srf-spin"></span> Locating...';
       try {
         const pos = await getHighAccuracyPosition();
         const { latitude, longitude, accuracy } = pos.coords;
@@ -2543,7 +2543,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         toast(`Precise location captured (±${Math.round(accuracy)}m)`, 'success');
         refreshAutoKmHint();
       } catch (err) {
-        toast('Could not capture location — check GPS permission', 'error');
+        toast('Could not capture location - check GPS permission', 'error');
         console.error('Capture location failed:', err);
       } finally {
         captureBtn.disabled = false;
@@ -2645,8 +2645,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const fillSubs = () => {
       if (!subSel) return;
       const main = mainSel.value;
-      subSel.innerHTML = '<option value="">Select Sub Category…</option>';
-      subSubSel.innerHTML = '<option value="">Select Specific Issue…</option>';
+      subSel.innerHTML = '<option value="">Select Sub Category...</option>';
+      subSubSel.innerHTML = '<option value="">Select Specific Issue...</option>';
       subSubSel.disabled = true;
       svcPreview.textContent = 'Pick an issue to see the price.';
       svcAddBtn.disabled = true;
@@ -2655,7 +2655,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       subs.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s;
-        opt.textContent = s || '— (no sub-group)';
+        opt.textContent = s || '- (no sub-group)';
         subSel.appendChild(opt);
       });
       subSel.disabled = false;
@@ -2667,7 +2667,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (!subSubSel) return;
       const main = mainSel.value;
       const sub = subSel.value;
-      subSubSel.innerHTML = '<option value="">Select Specific Issue…</option>';
+      subSubSel.innerHTML = '<option value="">Select Specific Issue...</option>';
       svcPreview.textContent = 'Pick an issue to see the price.';
       svcAddBtn.disabled = true;
       if (!main || !tree[main] || tree[main][sub] === undefined) { subSubSel.disabled = true; return; }
@@ -2736,7 +2736,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         payStatusTitle.textContent = '✓ Payment Received';
         payStatusTitle.style.color = 'var(--success)';
         payStatusSub.textContent = paymentState.received_at
-          ? `Received at ${formatTime(paymentState.received_at)} — you can now submit.`
+          ? `Received at ${formatTime(paymentState.received_at)} - you can now submit.`
           : 'You can now submit the resolution.';
       } else if (_hasLinkBeenGenerated) {
         payStatusBox.style.borderColor = 'var(--warning)';
@@ -2745,7 +2745,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         payStatusIcon.style.color = 'var(--warning)';
         payStatusTitle.textContent = '⏳ Waiting for Payment';
         payStatusTitle.style.color = 'var(--warning)';
-        payStatusSub.textContent = 'Auto-checking every 3s — Save unlocks the moment Razorpay confirms.';
+        payStatusSub.textContent = 'Auto-checking every 3s - Save unlocks the moment Razorpay confirms.';
       } else {
         payStatusBox.style.borderColor = 'var(--border)';
         payStatusBox.style.background = 'var(--bg)';
@@ -2803,7 +2803,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         saveBtn.title = 'Resolved tasks are read-only.';
       } else if (requiresPayment && !paid) {
         saveBtn.disabled = true;
-        saveBtn.textContent = 'Awaiting Payment…';
+        saveBtn.textContent = 'Awaiting Payment...';
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
         saveBtn.title = 'Payment must be detected automatically, or marked paid by admin, before you can submit a resolution.';
@@ -2853,7 +2853,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         _paymentJustReceived = true;
         showNotification({ title: '💰 Payment Received', body: 'You can now submit the resolution.', type: 'payment', tag: `pay-${inqId}` });
       } else if (showToastOnChange) {
-        toast(paymentState.status === 'paid' ? 'Payment confirmed' : 'Still waiting for client to pay…', paymentState.status === 'paid' ? 'success' : 'info');
+        toast(paymentState.status === 'paid' ? 'Payment confirmed' : 'Still waiting for client to pay...', paymentState.status === 'paid' ? 'success' : 'info');
       }
       renderPayStatus();
     };
@@ -2935,7 +2935,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         const { data: inqData } = await supabase.from('inquiries').select('full_name,phone,service_item,ticket_no').eq('id', inqId).single();
         if (!inqData) { toast('Could not load inquiry details', 'error'); return; }
 
-        genBtn.disabled = true; genBtn.textContent = '…';
+        genBtn.disabled = true; genBtn.textContent = '...';
         try {
           const compVal = getSelectedCompany();
           await ensureCompanyExists(compVal);
@@ -2977,11 +2977,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           }).eq('id', inqId);
           _hasLinkBeenGenerated = true;
           renderPayStatus();
-          toast('Payment link generated! Waiting for client to pay…', 'success');
+          toast('Payment link generated! Waiting for client to pay...', 'success');
         } catch (err) {
           toast(err.message, 'error');
         } finally {
-          genBtn.disabled = false; genBtn.textContent = '✨ Generate';
+          genBtn.disabled = false; genBtn.innerHTML = `${ICONS.link}<span>Generate</span>`;
         }
       };
     }
@@ -3019,7 +3019,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         openPremiumBillModal(billData, {
           inquiryId: inqId || null,
           onSent: async (pdfUrl) => {
-            // After share — persist breakdown so admin sees it too.
+            // After share - persist breakdown so admin sees it too.
             if (!inqId) return;
             const updates = {
               bill_amount: bill.servicesSubtotal + bill.extra,
@@ -3080,7 +3080,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     });
     renderPayMethod();
 
-    // Mark Cash Collected — sets payment_status=paid + payment_method=cash +
+    // Mark Cash Collected - sets payment_status=paid + payment_method=cash +
     // cash_collected_at=NOW so it shows up in the employee's My Cash tab as
     // pending submission. Also persists the full bill breakdown.
     if (markCashBtn) {
@@ -3091,7 +3091,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         const compVal = getSelectedCompany();
         markCashBtn.disabled = true;
         const orig = markCashBtn.innerHTML;
-        markCashBtn.innerHTML = '<span>Saving…</span>';
+        markCashBtn.innerHTML = '<span>Saving...</span>';
         try {
           await ensureCompanyExists(compVal);
           const nowIso = new Date().toISOString().slice(0,19).replace('T',' ');
@@ -3127,7 +3127,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           _paymentJustReceived = true;
           renderPayStatus();
           renderPayMethod();
-          toast('✓ Cash recorded — visible in My Cash as pending submission', 'success');
+          toast('✓ Cash recorded - visible in My Cash as pending submission', 'success');
         } catch (err) {
           toast(err.message || 'Could not mark cash', 'error');
           markCashBtn.disabled = false;
@@ -3342,7 +3342,7 @@ export async function renderEmployeePricingTab(container) {
       </div>
 
       <div class="card" style="margin-bottom:12px;padding:12px 16px;font-size:13px;color:var(--text-dim);">
-        Excel/CSV columns: <b>Main Category</b>, <b>Sub Category</b>, <b>Sub-Sub Category</b>, <b>Price</b>. Sub Category is optional — a 3-column file is also accepted.
+        Excel/CSV columns: <b>Main Category</b>, <b>Sub Category</b>, <b>Sub-Sub Category</b>, <b>Price</b>. Sub Category is optional - a 3-column file is also accepted.
       </div>
 
       <div class="card" style="margin-bottom:14px;">
@@ -3542,7 +3542,7 @@ export async function renderEmployeePricingTab(container) {
             cost,
           });
           if (error?.status === 429) {
-            toast('Server is busy — please try again in a few seconds', 'error');
+            toast('Server is busy - please try again in a few seconds', 'error');
           } else if (error) {
             toast(error.message || 'Failed to add service', 'error');
           } else {
@@ -3574,7 +3574,7 @@ export async function renderEmployeePricingTab(container) {
         if (!rows.length) { toast('File is empty', 'warning'); return; }
         const { inserted, skipped } = await importServiceRows(rows);
         if (inserted) toast(`Imported ${inserted} service${inserted === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
-        else toast(`No rows imported${skipped ? ` — ${skipped} skipped` : ''}`, 'warning');
+        else toast(`No rows imported${skipped ? ` - ${skipped} skipped` : ''}`, 'warning');
         renderEmployeePricingTab(container);
       } catch (err) {
         console.error('[pricing import] failed', err);
@@ -3651,7 +3651,7 @@ export async function openEmployeeRequestModal(authUser, onDone) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:550px">
       <div class="modal-body" style="text-align:center; padding:32px;">
-        <span style="font-size:1.5rem;">Loading registration form…</span>
+        <span style="font-size:1.5rem;">Loading registration form...</span>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -3728,7 +3728,7 @@ export async function openEmployeeRequestModal(authUser, onDone) {
           <div class="form-group">
             <label>Issue Category <span style="color:var(--danger)">*</span></label>
             <select id="req-issue-select" style="width:100%;">
-              <option value="">Select issue category…</option>
+              <option value="">Select issue category...</option>
               ${issueOptions.map(o => `<option value="${o.value.replace(/"/g,'&quot;')}">${o.label}</option>`).join('')}
               <option value="Other">Other (Describe below)</option>
             </select>
@@ -3861,7 +3861,7 @@ export async function openEmployeeRequestModal(authUser, onDone) {
       if (!location) { toast('Location address is required', 'warning'); return; }
       
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Registering…';
+      submitBtn.textContent = 'Registering...';
       
       try {
         // 1. Check/insert custom company

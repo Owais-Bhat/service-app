@@ -209,9 +209,27 @@ body {
 .card-title svg,
 .card-header svg,
 .form-group label svg,
+.icon-text-label svg,
+.icon-text-success svg,
+.modal-title-inline svg,
+.mst-tab svg,
+.pay-method-btn svg,
 .sr-icon-title svg,
 .sr-icon-label svg,
 .stat-value-inline svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+.icon-text-label,
+.icon-text-success,
+.modal-title-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-text-success {
+  color: var(--success);
+  font-weight: 800;
+}
 
 .sr-icon-title {
   display: inline-flex;
