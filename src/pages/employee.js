@@ -508,7 +508,7 @@ function billShortCaption(data, pdfUrl) {
 }
 
 export function openPremiumBillModal(data, opts = {}) {
-  const { onSent, allowShare = true, title = 'Service Invoice Preview', inquiryId = null } = opts;
+  const { onSent, allowShare = true, title = 'Service Invoice Preview', inquiryId = null, existingPdfUrl = null } = opts;
   const billHTML = renderPremiumBillHTML(data);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay premium-bill-modal';
@@ -592,10 +592,11 @@ export function openPremiumBillModal(data, opts = {}) {
 
       try {
         btn.innerHTML = `<span>... preparing PDF</span>`;
-        const { blob } = await renderBillToPdfBlob(billHTML, filename);
-
-        btn.innerHTML = `<span>... uploading bill</span>`;
-        const pdfUrl = await uploadBillPdf(blob, filename, inquiryId);
+        const pdfUrl = existingPdfUrl || await (async () => {
+          const { blob } = await renderBillToPdfBlob(billHTML, filename);
+          btn.innerHTML = `<span>... uploading bill</span>`;
+          return uploadBillPdf(blob, filename, inquiryId);
+        })();
 
         const caption = billShortCaption(data, pdfUrl);
         const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
@@ -2315,6 +2316,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               </div>
 
               <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">${ICONS.receipt}<span>Generate &amp; Send Premium Bill</span></button>
+              <div id="bill-pdf-actions" style="display:${inquiryRow?.bill_pdf_url ? 'block' : 'none'}; margin-bottom:14px; padding:14px; border-radius:14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.35);">
+                <div style="font-weight:800; color:var(--success); font-size:0.88rem; margin-bottom:8px;">Saved bill PDF ready</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <a class="btn btn-secondary btn-sm" id="bill-pdf-download" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" target="_blank" rel="noopener" download style="text-decoration:none;">${ICONS.download}<span>Download PDF</span></a>
+                  <button type="button" class="btn btn-primary btn-sm" id="bill-pdf-whatsapp">${ICONS.whatsapp}<span>Send to Customer</span></button>
+                </div>
+              </div>
 
               <!-- Payment Method choice -->
               <div class="form-group" style="margin-bottom:14px;">
@@ -2450,6 +2458,35 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       discount: 0, discountLabel: '', discountReason: '', discountPresetId: null,
       taxable: 0, gst: 0, total: 0,
     };
+    let billPdfUrl = inquiryRow?.bill_pdf_url || '';
+
+    const updateBillPdfActions = () => {
+      const box = overlay.querySelector('#bill-pdf-actions');
+      const download = overlay.querySelector('#bill-pdf-download');
+      if (!box || !download) return;
+      box.style.display = billPdfUrl ? 'block' : 'none';
+      if (billPdfUrl) download.href = billPdfUrl;
+    };
+
+    const buildCurrentBillData = (customer = inquiryRow || {}) => ({
+      ...bill,
+      customer: {
+        name: customer.full_name || '',
+        phone: customer.phone || '',
+        location: customer.location || '',
+        company: getSelectedCompany() || customer.company_name || '',
+        device_type: overlay.querySelector('#device-type')?.value.trim() || customer.device_type || '',
+        device_serial: overlay.querySelector('#device-serial')?.value.trim() || customer.device_serial_no || '',
+        service_item: customer.service_item || '',
+        ticket_no: customer.ticket_no || '',
+      },
+      technician: empProfile?.full_name || 'Technician',
+      services: selectedServices.map(s => ({ name: `${s.main}${s.sub ? ' > '+s.sub : ''} > ${s.leaf}`, cost: s.cost })),
+      extraReason: overlay.querySelector('#extra-reason')?.value.trim() || '',
+      discountLabel: bill.discountLabel,
+      discountReason: bill.manualDiscount > 0 ? bill.discountReason : '',
+      paymentLink: _payLink || customer.payment_link || '',
+    });
 
     const calcTotal = () => {
       bill.servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
@@ -3003,35 +3040,24 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       openBillBtn.onclick = async () => {
         if (bill.total <= 0) { toast('Add services or charges first to generate a bill', 'warning'); return; }
         if (!validateDiscount()) return;
-        // Snapshot inquiry first so we send fresh data to the bill template.
-        const { data: latestInq } = inqId
-          ? await supabase.from('inquiries').select('*').eq('id', inqId).single()
-          : { data: inquiryRow };
-        const customer = latestInq || inquiryRow || {};
-        const billData = {
-          ...bill,
-          customer: {
-            name: customer.full_name || '',
-            phone: customer.phone || '',
-            location: customer.location || '',
-            company: getSelectedCompany() || customer.company_name || '',
-            device_type: overlay.querySelector('#device-type')?.value.trim() || customer.device_type || '',
-            device_serial: overlay.querySelector('#device-serial')?.value.trim() || customer.device_serial_no || '',
-            service_item: customer.service_item || '',
-            ticket_no: customer.ticket_no || '',
-          },
-          technician: empProfile?.full_name || 'Technician',
-          services: selectedServices.map(s => ({ name: `${s.main}${s.sub ? ' › '+s.sub : ''} › ${s.leaf}`, cost: s.cost })),
-          extraReason: overlay.querySelector('#extra-reason')?.value.trim() || '',
-          discountLabel: bill.discountLabel,
-          discountReason: bill.manualDiscount > 0 ? bill.discountReason : '',
-          paymentLink: _payLink || customer.payment_link || '',
-        };
-        openPremiumBillModal(billData, {
-          inquiryId: inqId || null,
-          onSent: async (pdfUrl) => {
-            // After share - persist breakdown so admin sees it too.
-            if (!inqId) return;
+
+        const originalHTML = openBillBtn.innerHTML;
+        openBillBtn.disabled = true;
+        openBillBtn.innerHTML = '<span class="btn-spinner"></span><span>Saving PDF...</span>';
+
+        try {
+          const compVal = getSelectedCompany();
+          await ensureCompanyExists(compVal);
+
+          const { data: latestInq } = inqId
+            ? await supabase.from('inquiries').select('*').eq('id', inqId).single()
+            : { data: inquiryRow };
+          const customer = latestInq || inquiryRow || {};
+          const billData = buildCurrentBillData(customer);
+          const pdfUrl = await shareBillToPublicLink(billData, { inquiryId: inqId || null });
+          billPdfUrl = pdfUrl;
+
+          if (inqId) {
             const updates = {
               bill_amount: bill.servicesSubtotal + bill.extra,
               transport_km: bill.km,
@@ -3044,18 +3070,52 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               gst_amount: bill.gst,
               bill_total: bill.total,
               bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
+              bill_pdf_url: pdfUrl,
               device_type: billData.customer.device_type || null,
               device_serial_no: billData.customer.device_serial || null,
-              company_name: getSelectedCompany() || null,
+              company_name: compVal || null,
               employee_bill_lat: billLoc.lat,
               employee_bill_lng: billLoc.lng,
             };
-            if (pdfUrl) updates.bill_pdf_url = pdfUrl;
-            await supabase.from('inquiries').update(updates).eq('id', inqId);
-          },
-        });
+            const { error } = await supabase.from('inquiries').update(updates).eq('id', inqId);
+            if (error) throw new Error(error.message);
+            inquiryRow = { ...(inquiryRow || {}), ...updates };
+          }
+
+          updateBillPdfActions();
+          toast('Bill PDF saved. You can download or send it from this tab.', 'success');
+          openPremiumBillModal(billData, {
+            inquiryId: inqId || null,
+            existingPdfUrl: pdfUrl,
+            onSent: async (sentUrl) => {
+              if (sentUrl) {
+                billPdfUrl = sentUrl;
+                updateBillPdfActions();
+              }
+            },
+          });
+        } catch (err) {
+          console.error(err);
+          toast(err.message || 'Could not save bill PDF', 'error');
+        } finally {
+          openBillBtn.disabled = false;
+          openBillBtn.innerHTML = originalHTML;
+        }
       };
     }
+
+    const billPdfWhatsappBtn = overlay.querySelector('#bill-pdf-whatsapp');
+    if (billPdfWhatsappBtn) {
+      billPdfWhatsappBtn.onclick = () => {
+        if (!billPdfUrl) { toast('Generate the bill PDF first', 'warning'); return; }
+        const data = buildCurrentBillData(inquiryRow || {});
+        const phone = (data.customer?.phone || '').replace(/\D/g, '');
+        if (!phone) { toast('Client phone number is missing on this inquiry', 'error'); return; }
+        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(billShortCaption(data, billPdfUrl))}`;
+        window.open(waUrl, '_blank');
+      };
+    }
+    updateBillPdfActions();
 
     if (shareWaBtn) {
       shareWaBtn.onclick = () => {
