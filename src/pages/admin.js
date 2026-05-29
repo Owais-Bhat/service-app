@@ -543,3 +543,83 @@ function generateEmployeeTicketNo() {
   `;
 
   container.querySelector('#save-clockout-time').onclick = async () => {    const timeInput = container.querySelector('#auto-clockout-time');    const time = timeInput.value;    if (!time) { toast('Please select a time', 'warning'); return; }    const btn = container.querySelector('#save-clockout-time');    const restore = setButtonLoading(btn, 'Saving');    try {      const res = await fetch(`${settingsApiBase}/settings/attendance`, {        method: 'PUT',        headers: authHeaders(),        body: JSON.stringify({ autoClockOutTime: time }),      });      const data = await res.json().catch(() => ({}));      if (!res.ok) throw new Error(data.error || 'Could not save clock-out time');      autoClockOutTime = data.autoClockOutTime || time;      timeInput.value = autoClockOutTime;      const current = container.querySelector('#current-clockout-time');      if (current) current.textContent = autoClockOutTime;      toast(`Auto clock-out time saved: ${autoClockOutTime}`, 'success');    } catch (err) {      toast(err.message || 'Could not save clock-out time', 'error');    } finally {      restore();    }  };  container.querySelectorAll('.remove-restriction').forEach(btn => {    btn.onclick = async () => {      const userId = btn.dataset.id;      const name = btn.dataset.name;      if (!confirm(`Remove EOD restriction for ${name}?`)) return;      const attend = (attendance || []).filter(a => a.user_id === userId);      const missed = getMissedEodRows(attend, eodReports || []);      if (missed.length >= STRICT_EOD_LIMIT) {        const autoResolved = missed.slice(0, missed.length - STRICT_EOD_LIMIT + 1);        let fixed = 0;        for (const row of autoResolved) {          const { error } = await supabase.from('eod_reports')            .insert({ employee_id: userId, content: 'Admin cleared missed EOD warning', date: attendanceDateKey(row) });          if (!error) fixed++;        }        toast(`Cleared ${fixed} missed EOD warning${fixed === 1 ? '' : 's'} for ${name}`, 'success');      } else {        toast('Employee is not restricted', 'info');      }      renderSettingsTab(container);    };  });}
+export async function renderAutoAssignmentTab(container) {
+  showLoader(container);
+  const apiBase = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ? '/api' : 'http://localhost:5000/api';
+  const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` });
+  const dateOf = (value) => {
+    if (!value) return '-';
+    const dt = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(dt.getTime()) ? String(value) : dt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  try {
+    const [statusRes, logsRes] = await Promise.all([
+      fetch(`${apiBase}/auto-assignment/status`, { headers: authHeaders() }),
+      fetch(`${apiBase}/auto-assignment/logs?limit=50`, { headers: authHeaders() }),
+    ]);
+    const status = await statusRes.json();
+    const logsData = await logsRes.json();
+    if (!statusRes.ok) throw new Error(status.error || 'Could not load auto-assignment status');
+    if (!logsRes.ok) throw new Error(logsData.error || 'Could not load auto-assignment logs');
+
+    const queue = status.queue || [];
+    const logs = logsData.logs || [];
+    const queueHtml = queue.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">No employees are clocked in right now.</td></tr>'
+      : queue.map(emp => `<tr>
+          <td><span class="badge ${emp.is_next ? 'badge-resolved' : 'badge-open'}">#${emp.queue_position}</span></td>
+          <td><b>${escapeHtml(emp.full_name || 'Employee')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(emp.id)}</small></td>
+          <td>${dateOf(emp.clock_in)}</td>
+          <td><b>${emp.assignments_today || 0}</b></td>
+          <td>${emp.is_next ? '<span class="badge badge-resolved">Next</span>' : '<span style="color:var(--text-dim)">-</span>'}</td>
+        </tr>`).join('');
+    const logsHtml = logs.length === 0
+      ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-dim)">No auto-assignment history yet.</td></tr>'
+      : logs.map(log => `<tr>
+          <td><small style="color:var(--text-dim)">${dateOf(log.assigned_at)}</small></td>
+          <td><code style="font-size:0.78rem;color:var(--primary)">${escapeHtml(log.ticket_no || (log.inquiry_id || '').slice(0, 8))}</code></td>
+          <td><b>${escapeHtml(log.customer_name || 'Customer')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(log.service_item || '')}</small></td>
+          <td>${escapeHtml(log.employee_name || 'Employee')}</td>
+          <td>#${log.queue_position}</td>
+          <td><span class="badge badge-open">${escapeHtml(log.inquiry_status || 'open')}</span></td>
+        </tr>`).join('');
+
+    container.innerHTML = `
+      <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div>
+          <h1>Auto Assignment</h1>
+          <p>Round-robin queue based on employees clocked in today</p>
+        </div>
+        <button class="btn btn-secondary" id="auto-assign-refresh">${ICONS.refresh}<span>Refresh</span></button>
+      </div>
+      <div class="stats-grid" style="margin-bottom:24px;">
+        <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${queue.length}</div><div class="stat-label">Clocked In</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--success)">${status.total_today || 0}</div><div class="stat-label">Assigned Today</div></div>
+        <div class="stat-card"><div class="stat-value" style="font-size:1.5rem;color:var(--warning)">${escapeHtml(queue.find(e => e.is_next)?.full_name || '-')}</div><div class="stat-label">Next Employee</div></div>
+      </div>
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header"><span class="card-title">Current Queue</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Position</th><th>Employee</th><th>Clock In</th><th>Assignments Today</th><th>Status</th></tr></thead>
+            <tbody>${queueHtml}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Recent Assignments</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Assigned</th><th>Ticket</th><th>Customer</th><th>Employee</th><th>Queue Pos</th><th>Status</th></tr></thead>
+            <tbody>${logsHtml}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    container.querySelector('#auto-assign-refresh').onclick = () => renderAutoAssignmentTab(container);
+  } catch (err) {
+    container.innerHTML = `<div class="page-header"><h1>Auto Assignment</h1><p style="color:var(--danger)">${escapeHtml(err.message || 'Could not load auto assignment')}</p></div>`;
+    toast(err.message || 'Could not load auto assignment', 'error');
+  }
+}

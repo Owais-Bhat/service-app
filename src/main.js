@@ -2,7 +2,7 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab } from './pages/admin.js';
+import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab, renderAutoAssignmentTab } from './pages/admin.js';
 import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
@@ -86,6 +86,7 @@ function getNavItems(role) {
     { type: 'section', label: 'Operations' },
     { id: 'attendance', icon: ICONS.clock, label: 'Attendance' },
     { id: 'inquiries', icon: ICONS.inbox, label: 'Service Requests' },
+    { id: 'auto-assignment', icon: ICONS.refresh, label: 'Auto Assignment' },
     { type: 'section', label: 'Management' },
     { id: 'contacts', icon: ICONS.phone, label: 'Contacts' },
     { id: 'users', icon: ICONS.users, label: 'Users' },
@@ -135,6 +136,7 @@ function getPageRenderer(role, page) {
       collections: renderAdminCollections, discounts: renderDiscountsTab, 'discount-details': renderDiscountRequestsTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
       ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
+      'auto-assignment': renderAutoAssignmentTab,
     }
   };
   return (map[role] || map.admin)[page];

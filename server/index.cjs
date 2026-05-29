@@ -358,6 +358,7 @@ const requiredColumns = {
         { name: 'cash_collected_at', definition: 'TIMESTAMP NULL' },
         { name: 'cash_submitted_at', definition: 'TIMESTAMP NULL' },
         { name: 'cash_submitted_by', definition: 'VARCHAR(36)' },
+        { name: 'auto_assigned', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Set to 1 when assigned via round-robin automation'" },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -482,6 +483,16 @@ const requiredTables = [
         setting_key VARCHAR(100) PRIMARY KEY,
         setting_value TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS auto_assignment_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        queue_position INT NOT NULL COMMENT 'Position in the clocked-in queue (1-based)',
+        INDEX idx_aal_assigned_at (assigned_at),
+        INDEX idx_aal_employee (employee_id),
+        INDEX idx_aal_inquiry (inquiry_id)
     )`,
 ];
 
@@ -634,6 +645,111 @@ function broadcastNotify(payload) {
     sseClients.forEach(c => {
         if (audienceAllows(audience, c)) sseSend(c, event);
     });
+}
+
+async function getTodayQueue(connection) {
+    const today = dbDateKey(new Date());
+    const [rows] = await connection.execute(
+        `SELECT a.user_id AS id, p.full_name, a.clock_in
+           FROM attendance a
+           JOIN profiles p ON p.id = a.user_id
+          WHERE a.date = ?
+            AND a.clock_in IS NOT NULL
+            AND a.clock_out IS NULL
+            AND p.role = 'employee'
+          ORDER BY a.clock_in ASC`,
+        [today]
+    );
+    return rows;
+}
+
+async function autoAssignInquiry(inquiryId) {
+    let connection;
+    try {
+        connection = await getConn();
+        const queue = await getTodayQueue(connection);
+        if (!queue.length) {
+            console.log('[AutoAssign] No clocked-in employees; skipping auto-assign');
+            return;
+        }
+
+        const today = dbDateKey(new Date());
+        const [countRows] = await connection.execute(
+            `SELECT employee_id, COUNT(*) AS cnt
+               FROM auto_assignment_logs
+              WHERE DATE(assigned_at) = ?
+                AND employee_id IN (${queue.map(() => '?').join(',')})
+              GROUP BY employee_id`,
+            [today, ...queue.map(e => e.id)]
+        );
+        const countMap = {};
+        countRows.forEach(r => { countMap[r.employee_id] = Number(r.cnt); });
+
+        let chosen = queue[0];
+        let minCount = countMap[queue[0].id] ?? 0;
+        for (let i = 1; i < queue.length; i++) {
+            const c = countMap[queue[i].id] ?? 0;
+            if (c < minCount) {
+                minCount = c;
+                chosen = queue[i];
+            }
+        }
+        const queuePosition = queue.findIndex(e => e.id === chosen.id) + 1;
+
+        const [updateResult] = await connection.execute(
+            `UPDATE inquiries
+                SET assigned_employee_id = ?,
+                    assignment_status = 'pending',
+                    auto_assigned = 1
+              WHERE id = ?
+                AND (assigned_employee_id IS NULL OR assigned_employee_id = '')`,
+            [chosen.id, inquiryId]
+        );
+        if (!updateResult.affectedRows) {
+            console.log(`[AutoAssign] Inquiry ${inquiryId} already assigned; skipping`);
+            return;
+        }
+
+        await connection.execute(
+            `INSERT INTO auto_assignment_logs (id, inquiry_id, employee_id, queue_position)
+             VALUES (?, ?, ?, ?)`,
+            [uuidv4(), inquiryId, chosen.id, queuePosition]
+        );
+
+        const [inqRows] = await connection.execute('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [inquiryId]);
+        const inq = inqRows[0];
+        if (inq) broadcastChange('UPDATE', 'inquiries', inq);
+
+        broadcastNotify({
+            subject: 'new_assignment',
+            title: 'New Assignment',
+            body: 'You have been auto-assigned a new service request.',
+            audience: { userId: chosen.id },
+            data: { inquiry_id: inquiryId },
+        });
+
+        if (inq) {
+            const [empRows] = await connection.execute('SELECT phone FROM profiles WHERE id = ? LIMIT 1', [chosen.id]);
+            const emp = empRows[0];
+            if (emp?.phone) {
+                smsNotify(emp.phone, 'SMS_TID_ASSIGN_EMP', [
+                    smsVar(inq.ticket_no, 'N/A', 20),
+                    smsVar(inq.service_item, 'General Service', 80),
+                    smsVar(inq.full_name, 'Customer', 60),
+                    smsPhoneVar(inq.phone),
+                    smsVar(inq.location, 'See app', 100),
+                ]);
+            }
+        }
+
+        console.log(`[AutoAssign] Inquiry ${inquiryId} -> employee ${chosen.full_name} (pos ${queuePosition}, ${minCount + 1} assignments today)`);
+    } catch (err) {
+        console.error('[AutoAssign] Error:', err.message);
+    } finally {
+        if (connection) {
+            try { connection.release(); } catch {}
+        }
+    }
 }
 
 async function markTicketPaid(connection, ticket_no, amountPaise = null) {
@@ -2057,6 +2173,9 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                     smsVar(data.preferred_time, 'As soon as possible', 60),
                 ]);
             }
+            if (!data.assigned_employee_id) {
+                autoAssignInquiry(data.id);
+            }
         }
         if (table === 'complaints') {
             broadcastNotify({
@@ -2080,6 +2199,103 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
     } catch (error) {
         console.error('Error inserting/upserting data:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/auto-assignment/status', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    let connection;
+    try {
+        connection = await getConn();
+        const queue = await getTodayQueue(connection);
+        const today = dbDateKey(new Date());
+
+        let countMap = {};
+        if (queue.length) {
+            const [countRows] = await connection.execute(
+                `SELECT employee_id, COUNT(*) AS cnt
+                   FROM auto_assignment_logs
+                  WHERE DATE(assigned_at) = ?
+                    AND employee_id IN (${queue.map(() => '?').join(',')})
+                  GROUP BY employee_id`,
+                [today, ...queue.map(e => e.id)]
+            );
+            countRows.forEach(r => { countMap[r.employee_id] = Number(r.cnt); });
+        }
+
+        const [totals] = await connection.execute(
+            `SELECT COUNT(*) AS total FROM auto_assignment_logs WHERE DATE(assigned_at) = ?`,
+            [today]
+        );
+
+        let nextEmployee = null;
+        if (queue.length) {
+            let chosen = queue[0];
+            let minCount = countMap[queue[0].id] ?? 0;
+            for (let i = 1; i < queue.length; i++) {
+                const c = countMap[queue[i].id] ?? 0;
+                if (c < minCount) {
+                    minCount = c;
+                    chosen = queue[i];
+                }
+            }
+            nextEmployee = chosen;
+        }
+
+        res.json({
+            queue: queue.map((e, i) => ({
+                ...e,
+                queue_position: i + 1,
+                assignments_today: countMap[e.id] ?? 0,
+                is_next: nextEmployee?.id === e.id,
+            })),
+            total_today: Number(totals[0].total),
+            next_employee_id: nextEmployee?.id || null,
+        });
+    } catch (err) {
+        console.error('[AutoAssign status]', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/auto-assignment/logs', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    let connection;
+    try {
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        const offset = parseInt(req.query.offset, 10) || 0;
+        const dateFilter = req.query.date;
+        connection = await getConn();
+        let where = '';
+        const params = [];
+        if (dateFilter) {
+            where = 'WHERE DATE(l.assigned_at) = ?';
+            params.push(dateFilter);
+        }
+        const [rows] = await connection.execute(
+            `SELECT l.id, l.inquiry_id, l.employee_id, l.assigned_at, l.queue_position,
+                    p.full_name AS employee_name,
+                    i.ticket_no, i.full_name AS customer_name, i.service_item, i.status AS inquiry_status
+               FROM auto_assignment_logs l
+               JOIN profiles p ON p.id = l.employee_id
+               JOIN inquiries i ON i.id = l.inquiry_id
+             ${where}
+             ORDER BY l.assigned_at DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
+        const [totalRows] = await connection.execute(
+            `SELECT COUNT(*) AS total FROM auto_assignment_logs l ${where}`,
+            params
+        );
+        res.json({ logs: rows, total: Number(totalRows[0].total), limit, offset });
+    } catch (err) {
+        console.error('[AutoAssign logs]', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
