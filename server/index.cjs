@@ -176,6 +176,10 @@ const DEFAULT_AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
 const appSettings = {
     autoClockOutTime: DEFAULT_AUTO_CLOCK_OUT_TIME,
 };
+const REG_KEY_SETTINGS = {
+    admin: 'admin_reg_key',
+    employee: 'staff_reg_key',
+};
 
 function localDateKey(date = new Date()) {
     const yyyy = date.getFullYear();
@@ -241,6 +245,27 @@ async function saveAppSetting(key, value) {
     } finally {
         connection.release();
     }
+}
+
+function generateRegistrationKey(role) {
+    const prefix = role === 'admin' ? 'ADM' : 'EMP';
+    const token = crypto.randomBytes(18).toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+    return `${prefix}-${token}`;
+}
+
+async function getRegistrationKeys(connection) {
+    const [rows] = await connection.execute(
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?)',
+        [REG_KEY_SETTINGS.admin, REG_KEY_SETTINGS.employee]
+    );
+    const byKey = new Map(rows.map(row => [row.setting_key, row.setting_value]));
+    return {
+        admin: byKey.get(REG_KEY_SETTINGS.admin) || process.env.ADMIN_REG_KEY || '',
+        employee: byKey.get(REG_KEY_SETTINGS.employee) || process.env.STAFF_REG_KEY || '',
+    };
 }
 
 function autoClockOutCutoff(now = new Date()) {
@@ -1462,14 +1487,6 @@ app.post('/api/auth/signup', rateLimit({ windowMs: 60_000, max: 5, key: 'signup'
 
     // Role is derived server-side from the access key — never trust a `role` from the client.
     // Keys live in env so leaking the bundle (which used to embed them) can't grant admin.
-    if (!process.env.ADMIN_REG_KEY || !process.env.STAFF_REG_KEY) {
-        return res.status(503).json({ error: 'Staff registration is not configured on this server.' });
-    }
-    let role;
-    if (accessKey === process.env.ADMIN_REG_KEY) role = 'admin';
-    else if (accessKey === process.env.STAFF_REG_KEY) role = 'employee';
-    else return res.status(400).json({ error: 'Invalid access key. Only staff and admin can register here.' });
-
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
     }
@@ -1482,6 +1499,18 @@ app.post('/api/auth/signup', rateLimit({ windowMs: 60_000, max: 5, key: 'signup'
 
     try {
         const connection = await getConn();
+        const registrationKeys = await getRegistrationKeys(connection);
+        if (!registrationKeys.admin || !registrationKeys.employee) {
+            connection.release();
+            return res.status(503).json({ error: 'Staff registration is not configured on this server.' });
+        }
+        let role;
+        if (accessKey === registrationKeys.admin) role = 'admin';
+        else if (accessKey === registrationKeys.employee) role = 'employee';
+        else {
+            connection.release();
+            return res.status(400).json({ error: 'Invalid access key. Only staff and admin can register here.' });
+        }
 
         // Check if user exists
         const [users] = await connection.execute('SELECT * FROM auth_users WHERE email = ?', [email]);
@@ -1598,6 +1627,37 @@ app.put('/api/settings/attendance', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Settings update error:', error);
         res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+app.get('/api/settings/registration-keys', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const keys = await getRegistrationKeys(connection);
+        res.json(keys);
+    } catch (error) {
+        console.error('Registration key load error:', error);
+        res.status(500).json({ error: error.message || 'Could not load registration keys' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/settings/registration-keys/regenerate', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const role = req.body?.role;
+    if (!['admin', 'employee'].includes(role)) {
+        return res.status(400).json({ error: 'Role must be admin or employee' });
+    }
+    const key = generateRegistrationKey(role);
+    try {
+        await saveAppSetting(REG_KEY_SETTINGS[role], key);
+        res.json({ role, key });
+    } catch (error) {
+        console.error('Registration key regenerate error:', error);
+        res.status(500).json({ error: error.message || 'Could not regenerate key' });
     }
 });
 

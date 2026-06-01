@@ -4519,6 +4519,47 @@ input, select, textarea { max-width: 100%; }
   animation: spin 1s linear infinite;
 }
 
+.reg-key-list {
+  display: grid;
+  gap: 14px;
+}
+
+.reg-key-row label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.reg-key-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.reg-key-control input {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 0.86rem;
+}
+
+.reg-key-control .btn {
+  justify-content: center;
+  min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  .reg-key-control {
+    grid-template-columns: 1fr 44px;
+  }
+  .reg-key-control .reg-key-copy,
+  .reg-key-control .reg-key-regenerate {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
 /* Employee estimator */
 .estimator-layout {
   display: grid;
