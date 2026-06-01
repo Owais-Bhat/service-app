@@ -6,7 +6,7 @@ import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, 
 import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
-import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeePricingTab } from './pages/employee.js';
+import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeeEstimatorTab, renderEmployeePricingTab } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
@@ -71,8 +71,9 @@ function getNavItems(role) {
       { id: 'my-salary', icon: ICONS.rupee, label: 'Salary' },
       { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
     ];
+    items.push({ type: 'section', label: 'Services' });
+    items.push({ id: 'estimator', icon: ICONS.receipt, label: 'Estimator' });
     if (canAddService) {
-      items.push({ type: 'section', label: 'Services' });
       items.push({ id: 'service-pricing', icon: ICONS.receipt, label: 'Service Pricing' });
     }
     items.push(
@@ -126,6 +127,7 @@ function getPageRenderer(role, page) {
       'my-collections': renderEmployeeCollections,
       'my-salary': renderEmployeeSalary,
       leaderboard: renderEmployeeLeaderboard,
+      estimator: renderEmployeeEstimatorTab,
       'service-pricing': renderEmployeePricingTab,
       profile: renderProfile
     },

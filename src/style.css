@@ -4519,3 +4519,183 @@ input, select, textarea { max-width: 100%; }
   animation: spin 1s linear infinite;
 }
 
+/* Employee estimator */
+.estimator-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.estimator-form-card {
+  grid-column: 1;
+}
+
+.estimator-preview-card {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  position: sticky;
+  top: 82px;
+}
+
+.estimator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.est-selected-services {
+  margin-top: 14px;
+}
+
+.est-empty {
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-dim);
+  background: var(--bg-soft);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.est-selected-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  margin-bottom: 8px;
+}
+
+.est-selected-row b,
+.est-selected-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.est-selected-row small {
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.est-selected-row > span {
+  color: var(--primary);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.estimate-slip {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  padding: 16px;
+  box-shadow: var(--neu-sm);
+}
+
+.estimate-slip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.estimate-slip-head b {
+  display: block;
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+
+.estimate-slip-head small,
+.estimate-slip-head span,
+.estimate-client small {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.estimate-client {
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.estimate-client b,
+.estimate-client small {
+  display: block;
+}
+
+.estimate-items {
+  padding: 10px 0;
+}
+
+.estimate-items > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.estimate-items b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.estimate-breakdown {
+  margin: 6px 0 0;
+  box-shadow: none;
+}
+
+.estimate-note {
+  margin-top: 12px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.estimator-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.estimator-actions .btn {
+  justify-content: center;
+}
+
+@media (max-width: 1024px) {
+  .estimator-layout {
+    grid-template-columns: 1fr;
+  }
+  .estimator-form-card,
+  .estimator-preview-card {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .estimator-preview-card {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .estimator-grid,
+  .estimator-actions {
+    grid-template-columns: 1fr;
+  }
+  .est-selected-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .est-selected-row .est-remove {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+}
+

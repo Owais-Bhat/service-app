@@ -1652,6 +1652,362 @@ export async function renderEmployeeLeaderboard(container) {
   `;
 }
 
+export async function renderEmployeeEstimatorTab(container) {
+  showLoader(container);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  try {
+    const [{ data: pricing }, { data: discountPresets }, { data: companies }] = await Promise.all([
+      supabase.from('service_pricing').select('*').order('category'),
+      supabase.from('discount_presets').select('*').eq('active', 1).order('created_at', { ascending: false }),
+      supabase.from('companies').select('*').order('name'),
+    ]);
+
+    const tree = {};
+    (pricing || []).forEach(p => {
+      const main = p.category || 'Uncategorized';
+      const sub = (p.sub_category && p.sub_category.trim()) || '';
+      const leaf = p.sub_sub_category || p.name || '';
+      if (!leaf) return;
+      tree[main] ??= {};
+      tree[main][sub] ??= [];
+      tree[main][sub].push({ id: p.id, leaf, cost: Number(p.cost) || 0 });
+    });
+    const mainOptions = Object.keys(tree).sort();
+    const companyList = Array.isArray(companies) ? companies : [];
+    const discountPresetList = Array.isArray(discountPresets) ? discountPresets : [];
+
+    container.innerHTML = `
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <div>
+          <h1>Estimator</h1>
+          <p>Prepare a complete service cost estimate and send it to the client on WhatsApp.</p>
+        </div>
+        <button class="btn btn-secondary" id="est-reset">${ICONS.refresh}<span>Reset</span></button>
+      </div>
+
+      <div class="estimator-layout">
+        <div class="card estimator-form-card">
+          <div class="card-header"><span class="card-title sr-icon-title">${ICONS.user}<span>Client Details</span></span></div>
+          <div class="card-body">
+            <div class="estimator-grid">
+              <div class="form-group"><label>Client Name</label><input id="est-client-name" type="text" placeholder="Client name"></div>
+              <div class="form-group"><label>WhatsApp Number</label><input id="est-client-phone" type="tel" placeholder="10 digit mobile number"></div>
+              <div class="form-group"><label>Service / Project</label><input id="est-service-title" type="text" placeholder="e.g. CCTV service visit"></div>
+              <div class="form-group"><label>Location</label><input id="est-location" type="text" placeholder="Client location"></div>
+              <div class="form-group">
+                <label>Company</label>
+                <select id="est-company">
+                  <option value="Networking Experts">Networking Experts</option>
+                  ${companyList.map(c => `<option value="${escapeAttr(c.name || '')}">${escapeHtml(c.name || '')}</option>`).join('')}
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Custom Company</label><input id="est-company-custom" type="text" placeholder="Company name" disabled></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card estimator-form-card">
+          <div class="card-header"><span class="card-title sr-icon-title">${ICONS.wrench}<span>Services</span></span></div>
+          <div class="card-body">
+            ${mainOptions.length === 0 ? `
+              <div style="padding:14px;border-radius:12px;background:var(--bg-soft);color:var(--text-dim);font-size:0.9rem;">No service pricing is available yet.</div>
+            ` : `
+              <div class="svc-picker-wrap">
+                <select id="est-svc-main" class="svc-picker">
+                  <option value="">Select Main Category...</option>
+                  ${mainOptions.map(m => `<option value="${escapeAttr(m)}">${escapeHtml(m)}</option>`).join('')}
+                </select>
+                <select id="est-svc-sub" class="svc-picker" disabled><option value="">Select Sub Category...</option></select>
+                <select id="est-svc-leaf" class="svc-picker" disabled><option value="">Select Specific Issue...</option></select>
+                <div class="svc-picker-actions">
+                  <div class="svc-preview-text" id="est-svc-preview">Pick an issue to see the price.</div>
+                  <button type="button" class="btn btn-primary btn-sm" id="est-svc-add" disabled>${ICONS.plus}<span>Add</span></button>
+                </div>
+              </div>
+              <div id="est-selected-services" class="est-selected-services"></div>
+            `}
+          </div>
+        </div>
+
+        <div class="card estimator-form-card">
+          <div class="card-header"><span class="card-title sr-icon-title">${ICONS.receipt}<span>Fees & Discount</span></span></div>
+          <div class="card-body">
+            <div class="estimator-grid">
+              <div class="form-group"><label>Extra Charge</label><input id="est-extra" type="number" min="0" step="1" placeholder="0"></div>
+              <div class="form-group"><label>Extra Reason</label><input id="est-extra-reason" type="text" placeholder="Material, labour, etc."></div>
+              <div class="form-group"><label>Platform Fee</label><input id="est-platform" type="number" min="0" step="1" value="50"></div>
+              <div class="form-group"><label>Travel Distance (km)</label><input id="est-km" type="number" min="0" step="0.1" placeholder="0"></div>
+              <div class="form-group"><label>Travel Rate / km</label><input id="est-km-rate" type="number" min="0" step="1" value="5"></div>
+              <div class="form-group"><label>GST %</label><input id="est-gst-rate" type="number" min="0" step="0.1" value="18"></div>
+            </div>
+            <div class="form-group">
+              <label>Admin Discount</label>
+              <select id="est-discount-preset">
+                <option value="">No admin discount</option>
+                ${discountPresetList.map(d => `<option value="${escapeAttr(d.id)}" data-amount="${Number(d.amount) || 0}" data-name="${escapeAttr(d.name || 'Discount')}">${escapeHtml(d.name || 'Discount')} - ${money(d.amount)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="estimator-grid">
+              <div class="form-group"><label>Manual Discount</label><input id="est-manual-discount" type="number" min="0" step="1" placeholder="0"></div>
+              <div class="form-group"><label>Discount Reason</label><input id="est-discount-reason" type="text" placeholder="Required for manual discount"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card estimator-preview-card">
+          <div class="card-header">
+            <span class="card-title sr-icon-title">${ICONS.receipt}<span>Estimate Preview</span></span>
+          </div>
+          <div class="card-body">
+            <div class="estimate-slip" id="estimate-slip"></div>
+            <div class="estimator-actions">
+              <button class="btn btn-secondary" id="est-copy">${ICONS.clipboard}<span>Copy Text</span></button>
+              <button class="btn btn-primary" id="est-whatsapp">${ICONS.whatsapp}<span>Send WhatsApp</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const selectedServices = [];
+    const get = (id) => container.querySelector(id);
+    const inr = money;
+    const selectedBox = get('#est-selected-services');
+    const slip = get('#estimate-slip');
+    const mainSel = get('#est-svc-main');
+    const subSel = get('#est-svc-sub');
+    const leafSel = get('#est-svc-leaf');
+    const preview = get('#est-svc-preview');
+    const addBtn = get('#est-svc-add');
+    const companySel = get('#est-company');
+    const companyCustom = get('#est-company-custom');
+
+    const getCompanyName = () => companySel.value === 'Other'
+      ? companyCustom.value.trim()
+      : companySel.value.trim();
+
+    const calc = () => {
+      const servicesSubtotal = selectedServices.reduce((sum, item) => sum + Number(item.cost || 0), 0);
+      const extra = Math.max(0, Number(get('#est-extra').value) || 0);
+      const platform = Math.max(0, Number(get('#est-platform').value) || 0);
+      const km = Math.max(0, Number(get('#est-km').value) || 0);
+      const kmRate = Math.max(0, Number(get('#est-km-rate').value) || 0);
+      const transport = Math.round(km * kmRate);
+      const presetOption = get('#est-discount-preset')?.selectedOptions?.[0];
+      const presetDiscount = get('#est-discount-preset').value ? Number(presetOption?.dataset.amount || 0) : 0;
+      const manualDiscount = Math.max(0, Number(get('#est-manual-discount').value) || 0);
+      const preDiscount = servicesSubtotal + extra + platform + transport;
+      const discount = Math.min(preDiscount, presetDiscount + manualDiscount);
+      const gstRate = Math.max(0, Number(get('#est-gst-rate').value) || 0);
+      const taxable = Math.max(0, preDiscount - discount);
+      const gst = Math.round(taxable * gstRate / 100);
+      const total = taxable + gst;
+      const discountLabels = [];
+      if (presetDiscount) discountLabels.push(presetOption?.dataset.name || 'Admin discount');
+      if (manualDiscount) discountLabels.push('Manual discount');
+      return {
+        servicesSubtotal, extra, platform, km, kmRate, transport, presetDiscount,
+        manualDiscount, discount, discountLabel: discountLabels.join(' + '),
+        taxable, gstRate, gst, total,
+      };
+    };
+
+    const renderSelected = () => {
+      if (!selectedServices.length) {
+        selectedBox.innerHTML = '<div class="est-empty">No services added yet</div>';
+        return;
+      }
+      selectedBox.innerHTML = selectedServices.map((s, i) => `
+        <div class="est-selected-row">
+          <div><b>${escapeHtml(s.leaf)}</b><small>${escapeHtml([s.main, s.sub].filter(Boolean).join(' > '))}</small></div>
+          <span>${inr(s.cost)}</span>
+          <button type="button" class="btn btn-secondary btn-sm est-remove" data-idx="${i}" title="Remove">${ICONS.close}</button>
+        </div>
+      `).join('');
+      selectedBox.querySelectorAll('.est-remove').forEach(btn => {
+        btn.onclick = () => {
+          selectedServices.splice(Number(btn.dataset.idx), 1);
+          renderSelected();
+          renderSlip();
+        };
+      });
+    };
+
+    const buildMessage = () => {
+      const b = calc();
+      const name = get('#est-client-name').value.trim() || 'Client';
+      const serviceTitle = get('#est-service-title').value.trim() || 'Service estimate';
+      const location = get('#est-location').value.trim();
+      const lines = [
+        `Hi ${name},`,
+        `Here is your estimated cost from ${BUSINESS.name}.`,
+        '',
+        `Service: ${serviceTitle}`,
+      ];
+      if (location) lines.push(`Location: ${location}`);
+      if (getCompanyName()) lines.push(`Company: ${getCompanyName()}`);
+      lines.push('', 'Items:');
+      if (selectedServices.length) {
+        selectedServices.forEach((s, i) => lines.push(`${i + 1}. ${s.leaf} - ${inr(s.cost)}`));
+      } else {
+        lines.push('No itemised service selected');
+      }
+      if (b.extra > 0) lines.push(`Extra charge${get('#est-extra-reason').value.trim() ? ` (${get('#est-extra-reason').value.trim()})` : ''}: ${inr(b.extra)}`);
+      lines.push('', `Services subtotal: ${inr(b.servicesSubtotal)}`);
+      lines.push(`Platform fee: ${inr(b.platform)}`);
+      lines.push(`Travel: ${b.km} km x ${inr(b.kmRate)} = ${inr(b.transport)}`);
+      if (b.discount > 0) lines.push(`Discount${b.discountLabel ? ` (${b.discountLabel})` : ''}: -${inr(b.discount)}`);
+      lines.push(`Taxable amount: ${inr(b.taxable)}`);
+      lines.push(`GST (${b.gstRate}%): ${inr(b.gst)}`);
+      lines.push(`Estimated total: ${inr(b.total)}`);
+      lines.push('', 'Final bill may change if extra work or material is required.');
+      lines.push(`- ${BUSINESS.name}`);
+      return lines.join('\n');
+    };
+
+    const renderSlip = () => {
+      const b = calc();
+      const name = get('#est-client-name').value.trim() || 'Client';
+      const serviceTitle = get('#est-service-title').value.trim() || 'Service estimate';
+      slip.innerHTML = `
+        <div class="estimate-slip-head">
+          <div>
+            <b>${BUSINESS.name}</b>
+            <small>Cost Estimate</small>
+          </div>
+          <span>${new Date().toLocaleDateString('en-IN')}</span>
+        </div>
+        <div class="estimate-client">
+          <b>${escapeHtml(name)}</b>
+          <small>${escapeHtml(serviceTitle)}${get('#est-location').value.trim() ? ` - ${escapeHtml(get('#est-location').value.trim())}` : ''}</small>
+        </div>
+        <div class="estimate-items">
+          ${selectedServices.length ? selectedServices.map(s => `<div><span>${escapeHtml(s.leaf)}</span><b>${inr(s.cost)}</b></div>`).join('') : '<div><span>No service selected</span><b>Rs.0</b></div>'}
+          ${b.extra > 0 ? `<div><span>Extra charge</span><b>${inr(b.extra)}</b></div>` : ''}
+        </div>
+        <div class="bill-breakdown estimate-breakdown">
+          <div class="bill-row"><span>Services subtotal</span><b>${inr(b.servicesSubtotal)}</b></div>
+          <div class="bill-row"><span>Platform fee</span><b>${inr(b.platform)}</b></div>
+          <div class="bill-row"><span>Travel (${b.km} km x ${inr(b.kmRate)})</span><b>${inr(b.transport)}</b></div>
+          ${b.discount > 0 ? `<div class="bill-row bill-row-discount"><span>${escapeHtml(b.discountLabel || 'Discount')}</span><b>-${inr(b.discount)}</b></div>` : ''}
+          <div class="bill-row"><span>Taxable amount</span><b>${inr(b.taxable)}</b></div>
+          <div class="bill-row"><span>GST (${b.gstRate}%)</span><b>${inr(b.gst)}</b></div>
+          <div class="bill-row bill-row-total"><span>Estimated total</span><b>${inr(b.total)}</b></div>
+        </div>
+        <div class="estimate-note">Final bill may change if extra work or material is required.</div>
+      `;
+    };
+
+    const fillSubs = () => {
+      const main = mainSel.value;
+      subSel.innerHTML = '<option value="">Select Sub Category...</option>';
+      leafSel.innerHTML = '<option value="">Select Specific Issue...</option>';
+      leafSel.disabled = true;
+      preview.textContent = 'Pick an issue to see the price.';
+      addBtn.disabled = true;
+      if (!main || !tree[main]) { subSel.disabled = true; return; }
+      const subs = Object.keys(tree[main]).sort();
+      subs.forEach(sub => {
+        const opt = document.createElement('option');
+        opt.value = sub;
+        opt.textContent = sub || '- (no sub-group)';
+        subSel.appendChild(opt);
+      });
+      subSel.disabled = false;
+      if (subs.length === 1) { subSel.value = subs[0]; fillLeaves(); }
+    };
+
+    const fillLeaves = () => {
+      const main = mainSel.value;
+      const sub = subSel.value;
+      leafSel.innerHTML = '<option value="">Select Specific Issue...</option>';
+      preview.textContent = 'Pick an issue to see the price.';
+      addBtn.disabled = true;
+      if (!main || !tree[main]?.[sub]) { leafSel.disabled = true; return; }
+      tree[main][sub].forEach((leaf, idx) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = `${leaf.leaf} (${money(leaf.cost)})`;
+        leafSel.appendChild(opt);
+      });
+      leafSel.disabled = false;
+    };
+
+    const onLeafChange = () => {
+      const leaf = tree[mainSel.value]?.[subSel.value]?.[Number(leafSel.value)];
+      if (!leaf) {
+        preview.textContent = 'Pick an issue to see the price.';
+        addBtn.disabled = true;
+        return;
+      }
+      preview.innerHTML = `Price: <b style="color:var(--primary)">${money(leaf.cost)}</b>`;
+      addBtn.disabled = false;
+    };
+
+    if (mainSel) {
+      mainSel.onchange = fillSubs;
+      subSel.onchange = fillLeaves;
+      leafSel.onchange = onLeafChange;
+      addBtn.onclick = () => {
+        const leaf = tree[mainSel.value]?.[subSel.value]?.[Number(leafSel.value)];
+        if (!leaf) return;
+        selectedServices.push({ ...leaf, main: mainSel.value, sub: subSel.value });
+        renderSelected();
+        renderSlip();
+      };
+    }
+
+    companySel.onchange = () => {
+      const isOther = companySel.value === 'Other';
+      companyCustom.disabled = !isOther;
+      if (!isOther) companyCustom.value = '';
+      const normalized = getCompanyName().toLowerCase().replace(/\s+/g, ' ');
+      get('#est-platform').value = normalized === 'networking experts' ? '50' : '100';
+      renderSlip();
+    };
+
+    container.querySelectorAll('input, select').forEach(el => {
+      if (!['est-svc-main', 'est-svc-sub', 'est-svc-leaf'].includes(el.id)) {
+        el.addEventListener('input', renderSlip);
+        el.addEventListener('change', renderSlip);
+      }
+    });
+
+    get('#est-copy').onclick = async () => {
+      await navigator.clipboard.writeText(buildMessage());
+      toast('Estimate copied', 'success');
+    };
+
+    get('#est-whatsapp').onclick = () => {
+      const b = calc();
+      if (b.total <= 0) { toast('Add at least one service or charge', 'warning'); return; }
+      if (b.manualDiscount > 0 && !get('#est-discount-reason').value.trim()) {
+        toast('Enter reason for manual discount', 'warning');
+        return;
+      }
+      const digits = get('#est-client-phone').value.replace(/\D/g, '');
+      const phone = digits.length > 10 ? digits.slice(-10) : digits;
+      if (phone.length !== 10) { toast('Enter a valid 10 digit WhatsApp number', 'warning'); return; }
+      window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(buildMessage())}`, '_blank');
+    };
+
+    get('#est-reset').onclick = () => renderEmployeeEstimatorTab(container);
+    renderSelected();
+    renderSlip();
+  } catch (err) {
+    console.error('[employee estimator] initialization failed:', err);
+    container.innerHTML = `
+      <div class="card" style="padding:32px;text-align:center;">
+        <p style="color:var(--danger);margin:0;font-weight:600;">Could not load estimator</p>
+        <small style="color:var(--text-dim);">${escapeHtml(err?.message || 'An unexpected error occurred')}</small>
+      </div>
+    `;
+  }
+}
+
 export async function renderEmployeeTasks(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
