@@ -3392,7 +3392,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         #svc-add,
         #capture-loc,
         #auto-km,
-        #open-bill-modal,
         .pay-method-btn,
         #mark-cash-btn,
         #emp-gen-link,
