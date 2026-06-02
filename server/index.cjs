@@ -786,6 +786,31 @@ async function autoAssignInquiry(inquiryId) {
     }
 }
 
+async function autoAssignUnassignedInquiries() {
+    if (!appSettings.autoAssignmentEnabled) return;
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(
+            `SELECT id FROM inquiries
+              WHERE (assigned_employee_id IS NULL OR assigned_employee_id = '')
+                AND status IN ('pending', 'open')
+              ORDER BY created_at ASC`
+        );
+        connection.release();
+        connection = null;
+        for (const row of rows) {
+            await autoAssignInquiry(row.id);
+        }
+    } catch (err) {
+        console.error('[AutoAssign] Error auto-assigning unassigned inquiries:', err);
+    } finally {
+        if (connection) {
+            try { connection.release(); } catch {}
+        }
+    }
+}
+
 async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     await connection.execute(
         `UPDATE inquiries
@@ -2594,6 +2619,9 @@ app.put('/api/auto-assignment/status', authenticateToken, async (req, res) => {
     try {
         await saveAppSetting('auto_assignment_enabled', isEnabled ? '1' : '0');
         appSettings.autoAssignmentEnabled = isEnabled;
+        if (isEnabled) {
+            autoAssignUnassignedInquiries().catch(err => console.error('[AutoAssign] background error:', err));
+        }
         res.json({ auto_assignment_enabled: appSettings.autoAssignmentEnabled });
     } catch (error) {
         console.error('[AutoAssign toggle]', error);

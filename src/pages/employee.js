@@ -853,7 +853,7 @@ export async function renderEmployeeDashboard(container) {
 
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
-      .filter(x => x.assignment_status === 'accepted' && !taskInquiryIds.has(x.id) && !['resolved', 'closed'].includes(x.status))
+      .filter(x => x.assignment_status === 'accepted' && !taskInquiryIds.has(x.id) && !['resolved', 'closed', 'issue_not_resolved'].includes(x.status))
       .sort(byNewestCreated)
       .map(x => ({ ...x, _company: x.company_name || null }));
   } catch (err) {
@@ -2057,8 +2057,8 @@ export async function renderEmployeeTasks(container) {
   });
   const completedTasks = tasks.filter(x => displayStatus(x.status) === 'resolved');
   const issueTasks = tasks.filter(x => displayStatus(x.status) === 'issue_not_resolved');
-  const activeAcceptedInquiries = acceptedInquiries.filter(x => !['resolved', 'closed'].includes(x.status));
-  const resolvedAcceptedInquiries = acceptedInquiries.filter(x => ['resolved', 'closed'].includes(x.status));
+  const activeAcceptedInquiries = acceptedInquiries.filter(x => !['resolved', 'closed', 'issue_not_resolved'].includes(x.status));
+  const resolvedAcceptedInquiries = acceptedInquiries.filter(x => ['resolved', 'closed', 'issue_not_resolved'].includes(x.status));
 
   const filterCounts = {
     all: tasks.length + acceptedInquiries.length,
@@ -2458,7 +2458,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const isResolving = normalizedCurrentStatus === 'resolved';
     const serviceDeadline = inquiryRow?.created_at ? calculateSLA(inquiryRow.created_at) : null;
     const serviceElapsed = elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || new Date());
-    const serviceResolvedTime = ['resolved', 'closed'].includes(displayStatus(inquiryRow?.status))
+    const serviceResolvedTime = ['resolved', 'closed', 'issue_not_resolved'].includes(displayStatus(inquiryRow?.status))
       ? elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || inquiryRow?.bill_generated_at || new Date())
       : null;
     // Selected services chosen via the cascading picker. Each entry:
@@ -2580,7 +2580,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 </div>
                 <div>
                   <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Deadline</div>
-                  <div style="font-size:0.88rem;font-weight:600;">${['resolved', 'closed'].includes(inquiryRow?.status) ? 'Service Completed' : (serviceDeadline ? formatSLADeadline(serviceDeadline) : '-')}</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${['resolved', 'closed', 'issue_not_resolved'].includes(inquiryRow?.status) ? 'Service Completed' : (serviceDeadline ? formatSLADeadline(serviceDeadline) : '-')}</div>
                 </div>
               </div>
             </div>
@@ -2616,6 +2616,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <option value="open" ${normalizedCurrentStatus==='open'?'selected':''}>Received</option>
                 <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                 <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
               </select>
             </div>
 
@@ -3245,6 +3246,21 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
         saveBtn.title = 'Resolved tasks are read-only.';
+      } else if (!resolving) {
+        // If the task is not resolved, the employee can save immediately on the first tab
+        if (!isStatusTabValid) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Save Changes';
+          saveBtn.style.opacity = '0.6';
+          saveBtn.style.cursor = 'not-allowed';
+          saveBtn.title = 'Please fill out the Work Details / Progress Update first.';
+        } else {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save Changes';
+          saveBtn.style.opacity = '1';
+          saveBtn.style.cursor = 'pointer';
+          saveBtn.title = '';
+        }
       } else if (!isLastTab()) {
         const currentTab = getActiveTab();
         let tabValid = true;
@@ -3276,12 +3292,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
         saveBtn.title = 'Please fill out all mandatory fields in previous tabs (Status and Device Info).';
-      } else if (isResolvedReadOnly) {
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Resolved';
-        saveBtn.style.opacity = '0.6';
-        saveBtn.style.cursor = 'not-allowed';
-        saveBtn.title = 'Resolved tasks are read-only.';
       } else if (requiresPayment && !paid) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Awaiting Payment...';
@@ -3660,8 +3670,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const closeOverlay = () => { stopPolling(); try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
     overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = closeOverlay;
     overlay.querySelector('#save-update').onclick = async () => {
-      // Wizard mode: on Status / Device Info tabs this button advances to the next tab instead of saving.
-      if (!isLastTab()) {
+      const newStatus = statusSel.value;
+      const resolving = newStatus === 'resolved';
+      // Wizard mode: if resolving, on Status / Device Info tabs this button advances to the next tab instead of saving.
+      // If NOT resolving, we can save and close immediately.
+      if (resolving && !isLastTab()) {
         const idx = TAB_ORDER.indexOf(getActiveTab());
         goToTab(TAB_ORDER[idx + 1]);
         return;
@@ -3670,25 +3683,27 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         toast('Resolved tasks are read-only', 'info');
         return;
       }
-      const newStatus = statusSel.value;
       const detail = overlay.querySelector('#progress-detail').value.trim();
       const companyName = getSelectedCompany();
       
       if (!detail) { toast('Please provide details of your work', 'warning'); return; }
-      if (!companyName) { toast('Please provide the company name', 'warning'); return; }
-      if (!validateDiscount()) return;
+      if (resolving) {
+        if (!companyName) { toast('Please provide the company name', 'warning'); return; }
+        if (!validateDiscount()) return;
+      }
 
       const btn = overlay.querySelector('#save-update');
       btn.disabled = true; btn.textContent = 'Saving...';
 
       try {
-        await ensureCompanyExists(companyName);
+        if (resolving && companyName) {
+          await ensureCompanyExists(companyName);
+        }
       } catch (err) {
         console.error('Failed to ensure company:', err);
       }
 
       const selectedServiceIds = [];
-      const resolving = newStatus === 'resolved';
       if (resolving) {
         selectedServices.forEach(s => { selectedServiceIds.push(s.id); });
       }

@@ -1658,6 +1658,11 @@ tr:hover td {
   color: var(--danger);
 }
 
+.badge-issue_not_resolved {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
+
 .badge-high {
   background: rgba(249, 115, 22, 0.12);
   color: #F97316;
