@@ -1609,6 +1609,254 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     }
 });
 
+// --- ADMIN USER MANAGEMENT CRUD ENDPOINTS ---
+
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    try {
+        const connection = await getConn();
+        const [users] = await connection.execute(
+            'SELECT p.*, a.email FROM profiles p LEFT JOIN auth_users a ON p.id = a.id ORDER BY p.created_at DESC'
+        );
+        connection.release();
+        res.json(users);
+    } catch (error) {
+        console.error('GET admin users error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/admin/users', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile } = req.body;
+
+    if (!email || typeof email !== 'string' || email.length > 254) {
+        return res.status(400).json({ error: 'Valid email is required' });
+    }
+    if (!password || typeof password !== 'string' || password.length < 8 || password.length > 200) {
+        return res.status(400).json({ error: 'Password must be 8-200 characters' });
+    }
+    if (!fullName || typeof fullName !== 'string' || fullName.length > 120) {
+        return res.status(400).json({ error: 'Valid full name is required' });
+    }
+
+    try {
+        const connection = await getConn();
+
+        // Check if user exists in auth_users
+        const [existing] = await connection.execute('SELECT * FROM auth_users WHERE email = ?', [email]);
+        if (existing.length > 0) {
+            connection.release();
+            return res.status(400).json({ error: 'User already exists' });
+        }
+
+        const userId = uuidv4();
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        await connection.beginTransaction();
+        try {
+            await connection.execute(
+                'INSERT INTO auth_users (id, email, password_hash) VALUES (?, ?, ?)',
+                [userId, email, hashedPassword]
+            );
+
+            await connection.execute(
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    userId,
+                    fullName,
+                    role || 'client',
+                    phone || null,
+                    Number(salary) || 0,
+                    address || null,
+                    company || null,
+                    can_add_service ? 1 : 0,
+                    can_update_profile ? 1 : 0
+                ]
+            );
+
+            await connection.commit();
+            res.status(201).json({ message: 'User created successfully', userId });
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error('POST admin user error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const userId = req.params.id;
+    const {
+        email,
+        password,
+        fullName,
+        role,
+        phone,
+        salary,
+        address,
+        company,
+        can_add_service,
+        can_update_profile
+    } = req.body;
+
+    try {
+        const connection = await getConn();
+
+        // Check if user exists
+        const [existing] = await connection.execute('SELECT id FROM profiles WHERE id = ?', [userId]);
+        if (existing.length === 0) {
+            connection.release();
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // If email is provided, check if it's already used by someone else
+        if (email) {
+            if (typeof email !== 'string' || email.length > 254) {
+                connection.release();
+                return res.status(400).json({ error: 'Valid email is required' });
+            }
+            const [emailCheck] = await connection.execute('SELECT id FROM auth_users WHERE email = ? AND id != ?', [email, userId]);
+            if (emailCheck.length > 0) {
+                connection.release();
+                return res.status(400).json({ error: 'Email is already in use by another user' });
+            }
+        }
+
+        // Validate password if provided
+        if (password) {
+            if (typeof password !== 'string' || password.length < 8 || password.length > 200) {
+                connection.release();
+                return res.status(400).json({ error: 'Password must be 8-200 characters' });
+            }
+        }
+
+        await connection.beginTransaction();
+        try {
+            // 1. Update auth_users if email or password is changing
+            if (email || password) {
+                const authUpdates = [];
+                const authParams = [];
+                if (email) {
+                    authUpdates.push('email = ?');
+                    authParams.push(email);
+                }
+                if (password) {
+                    const hashedPassword = await bcrypt.hash(password, 10);
+                    authUpdates.push('password_hash = ?');
+                    authParams.push(hashedPassword);
+                }
+                authParams.push(userId);
+                await connection.execute(
+                    `UPDATE auth_users SET ${authUpdates.join(', ')} WHERE id = ?`,
+                    authParams
+                );
+            }
+
+            // 2. Update profiles
+            const profileUpdates = [];
+            const profileParams = [];
+
+            if (fullName !== undefined) {
+                if (typeof fullName !== 'string' || fullName.length > 120) {
+                    throw new Error('Valid full name is required');
+                }
+                profileUpdates.push('full_name = ?');
+                profileParams.push(fullName);
+            }
+            if (role !== undefined) {
+                profileUpdates.push('role = ?');
+                profileParams.push(role);
+            }
+            if (phone !== undefined) {
+                profileUpdates.push('phone = ?');
+                profileParams.push(phone || null);
+            }
+            if (salary !== undefined) {
+                profileUpdates.push('salary = ?');
+                profileParams.push(Number(salary) || 0);
+            }
+            if (address !== undefined) {
+                profileUpdates.push('address = ?');
+                profileParams.push(address || null);
+            }
+            if (company !== undefined) {
+                profileUpdates.push('company = ?');
+                profileParams.push(company || null);
+            }
+            if (can_add_service !== undefined) {
+                profileUpdates.push('can_add_service = ?');
+                profileParams.push(can_add_service ? 1 : 0);
+            }
+            if (can_update_profile !== undefined) {
+                profileUpdates.push('can_update_profile = ?');
+                profileParams.push(can_update_profile ? 1 : 0);
+            }
+
+            if (profileUpdates.length > 0) {
+                profileParams.push(userId);
+                await connection.execute(
+                    `UPDATE profiles SET ${profileUpdates.join(', ')} WHERE id = ?`,
+                    profileParams
+                );
+            }
+
+            await connection.commit();
+            res.json({ message: 'User updated successfully' });
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error('PATCH admin user error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const userId = req.params.id;
+
+    if (userId === req.user.id) {
+        return res.status(400).json({ error: 'You cannot delete your own admin account.' });
+    }
+
+    try {
+        const connection = await getConn();
+
+        // Check if user exists
+        const [existing] = await connection.execute('SELECT id FROM profiles WHERE id = ?', [userId]);
+        if (existing.length === 0) {
+            connection.release();
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await connection.beginTransaction();
+        try {
+            await connection.execute('DELETE FROM profiles WHERE id = ?', [userId]);
+            await connection.execute('DELETE FROM auth_users WHERE id = ?', [userId]);
+
+            await connection.commit();
+            res.json({ message: 'User deleted successfully' });
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error('DELETE admin user error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/settings/attendance', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     res.json({ autoClockOutTime: parseAutoClockOutTime().label });
