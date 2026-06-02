@@ -2461,6 +2461,51 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const serviceResolvedTime = ['resolved', 'closed'].includes(displayStatus(inquiryRow?.status))
       ? elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || inquiryRow?.bill_generated_at || new Date())
       : null;
+    // Selected services chosen via the cascading picker. Each entry:
+    // { id, main, sub, leaf, cost }.
+    const selectedServices = [];
+    if (inqId) {
+      const { data: links } = await supabase.from('inquiry_services')
+        .select('service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)')
+        .eq('inquiry_id', inqId);
+      if (Array.isArray(links)) {
+        const seenIds = new Set();
+        links.forEach(link => {
+          if (!link.service_id || seenIds.has(link.service_id)) return;
+          seenIds.add(link.service_id);
+          const p = link.service_pricing || {};
+          selectedServices.push({
+            id: link.service_id,
+            main: p.category || 'Service',
+            sub: p.sub_category || '',
+            leaf: p.sub_sub_category || p.name || '',
+            cost: Number(p.cost) || 0
+          });
+        });
+      }
+    }
+
+    let initialManualDiscount = 0;
+    if (inquiryRow) {
+      const servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
+      const extra = Number(inquiryRow.extra_cost) || 0;
+      const km = Number(inquiryRow.transport_km) || 0;
+      const transport = Math.round(km * 5);
+      const companyName = inquiryRow.company_name || 'networking experts';
+      const isNetworkingExperts = companyName.toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
+      const platform = isNetworkingExperts ? 50 : 100;
+
+      const preDiscount = servicesSubtotal + extra + platform + transport;
+      const autoDiscount = preDiscount > 250 ? 30 : 0;
+
+      const presetId = inquiryRow.discount_preset_id;
+      const preset = discountPresetList.find(d => d.id === presetId);
+      const presetDiscount = preset ? (Number(preset.amount) || 0) : 0;
+
+      const totalDiscount = Number(inquiryRow.discount_amount) || 0;
+      initialManualDiscount = Math.max(0, totalDiscount - autoDiscount - presetDiscount);
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
@@ -2818,51 +2863,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         companyList.push({ name: nameClean });
       }
     };
-
-    // Selected services chosen via the cascading picker. Each entry:
-    // { id, main, sub, leaf, cost }.
-    const selectedServices = [];
-    if (inqId) {
-      const { data: links } = await supabase.from('inquiry_services')
-        .select('service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)')
-        .eq('inquiry_id', inqId);
-      if (Array.isArray(links)) {
-        const seenIds = new Set();
-        links.forEach(link => {
-          if (!link.service_id || seenIds.has(link.service_id)) return;
-          seenIds.add(link.service_id);
-          const p = link.service_pricing || {};
-          selectedServices.push({
-            id: link.service_id,
-            main: p.category || 'Service',
-            sub: p.sub_category || '',
-            leaf: p.sub_sub_category || p.name || '',
-            cost: Number(p.cost) || 0
-          });
-        });
-      }
-    }
-
-    let initialManualDiscount = 0;
-    if (inquiryRow) {
-      const servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
-      const extra = Number(inquiryRow.extra_cost) || 0;
-      const km = Number(inquiryRow.transport_km) || 0;
-      const transport = Math.round(km * 5);
-      const companyName = inquiryRow.company_name || 'networking experts';
-      const isNetworkingExperts = companyName.toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
-      const platform = isNetworkingExperts ? 50 : 100;
-      
-      const preDiscount = servicesSubtotal + extra + platform + transport;
-      const autoDiscount = preDiscount > 250 ? 30 : 0;
-      
-      const presetId = inquiryRow.discount_preset_id;
-      const preset = discountPresetList.find(d => d.id === presetId);
-      const presetDiscount = preset ? (Number(preset.amount) || 0) : 0;
-      
-      const totalDiscount = Number(inquiryRow.discount_amount) || 0;
-      initialManualDiscount = Math.max(0, totalDiscount - autoDiscount - presetDiscount);
-    }
 
     // Live breakdown - also stored on a closure object so the bill modal can read it.
     const bill = {
