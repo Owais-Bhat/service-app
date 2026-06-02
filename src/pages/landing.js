@@ -230,6 +230,10 @@ export function renderLandingPage(container, onPortalClick) {
     locationMode: 'gps',
     locationValue: '',
     coords: null,
+    customerName: '',
+    billNo: '',
+    preferredTime: 'Morning (10 AM - 1 PM)',
+    otherIssue: '',
     description: '',
     ticketNo: '',
     trackTicketNo: urlTicket,
@@ -549,7 +553,7 @@ export function renderLandingPage(container, onPortalClick) {
       <label class="srf-label" for="srf-name">Your name</label>
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.user}</span>
-        <input id="srf-name" type="text" placeholder="Full name" class="srf-input" />
+        <input id="srf-name" type="text" placeholder="Full name" class="srf-input" value="${escapeAttr(state.customerName)}" />
       </div>
 
       <label class="srf-label">Location</label>
@@ -581,18 +585,20 @@ export function renderLandingPage(container, onPortalClick) {
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.clock}</span>
         <select id="srf-time" class="srf-input srf-select">
-          <option value="Morning (10 AM - 1 PM)">Morning (10 AM - 1 PM)</option>
-          <option value="Afternoon (1 PM - 4 PM)">Afternoon (1 PM - 4 PM)</option>
-          <option value="Evening (4 PM - 6 PM)">Evening (4 PM - 6 PM)</option>
-          <option value="Tomorrow Morning">Tomorrow Morning</option>
-          <option value="Flexible">I'm Flexible</option>
+          ${[
+            'Morning (10 AM - 1 PM)',
+            'Afternoon (1 PM - 4 PM)',
+            'Evening (4 PM - 6 PM)',
+            'Tomorrow Morning',
+            "I'm Flexible",
+          ].map(t => `<option value="${escapeAttr(t)}" ${state.preferredTime === t ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('')}
         </select>
       </div>
 
       <label class="srf-label" for="srf-bill">Device bill number <span class="srf-optional">(optional)</span></label>
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.receipt}</span>
-        <input id="srf-bill" type="text" placeholder="e.g. INV-2024-001" class="srf-input" />
+        <input id="srf-bill" type="text" placeholder="e.g. INV-2024-001" class="srf-input" value="${escapeAttr(state.billNo)}" />
       </div>
 
       <label class="srf-label" for="srf-issue">What's the issue?</label>
@@ -610,7 +616,7 @@ export function renderLandingPage(container, onPortalClick) {
 
       <div class="srf-input-wrap srf-other-wrap" id="srf-other-wrap" style="display:none;">
         <span class="srf-input-icon">${ICONS.edit}</span>
-        <input id="srf-other" type="text" placeholder="Describe your issue briefly" class="srf-input" />
+        <input id="srf-other" type="text" placeholder="Describe your issue briefly" class="srf-input" value="${escapeAttr(state.otherIssue)}" />
       </div>
 
       <label class="srf-label" for="srf-desc">Describe the problem <span class="srf-optional">(optional)</span></label>
@@ -993,6 +999,15 @@ export function renderLandingPage(container, onPortalClick) {
   function bindForm() {
     const issueEl = container.querySelector('#srf-issue');
     const otherWrap = container.querySelector('#srf-other-wrap');
+    const syncFormState = () => {
+      state.customerName = container.querySelector('#srf-name')?.value || state.customerName;
+      state.billNo = container.querySelector('#srf-bill')?.value || '';
+      state.preferredTime = container.querySelector('#srf-time')?.value || state.preferredTime;
+      state.issueValue = issueEl?.value || state.issueValue;
+      state.otherIssue = container.querySelector('#srf-other')?.value || '';
+      state.description = container.querySelector('#srf-desc')?.value || '';
+      state.locationValue = container.querySelector('#srf-location')?.value || state.locationValue;
+    };
     otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
     issueEl.onchange = () => {
       state.issueValue = issueEl.value;
@@ -1001,6 +1016,7 @@ export function renderLandingPage(container, onPortalClick) {
 
     container.querySelectorAll('.srf-seg').forEach(seg => {
       seg.onclick = () => {
+        syncFormState();
         state.locationMode = seg.dataset.mode;
         state.locationValue = '';
         state.coords = null;
@@ -1011,6 +1027,7 @@ export function renderLandingPage(container, onPortalClick) {
     const detectBtn = container.querySelector('#srf-detect');
     if (detectBtn) {
       detectBtn.onclick = async () => {
+        syncFormState();
         detectBtn.innerHTML = `<span class="srf-spin"></span>`;
         try {
           const pos = await getHighAccuracyPosition();
@@ -1060,10 +1077,23 @@ export function renderLandingPage(container, onPortalClick) {
     const locEl = container.querySelector('#srf-location');
     locEl.addEventListener('input', e => { state.locationValue = e.target.value; });
 
+    const nameEl = container.querySelector('#srf-name');
+    if (nameEl) nameEl.addEventListener('input', e => { state.customerName = e.target.value; });
+
+    const billEl = container.querySelector('#srf-bill');
+    if (billEl) billEl.addEventListener('input', e => { state.billNo = e.target.value; });
+
+    const timeEl = container.querySelector('#srf-time');
+    if (timeEl) timeEl.addEventListener('change', e => { state.preferredTime = e.target.value; });
+
+    const otherEl = container.querySelector('#srf-other');
+    if (otherEl) otherEl.addEventListener('input', e => { state.otherIssue = e.target.value; });
+
     const descEl = container.querySelector('#srf-desc');
     if (descEl) descEl.addEventListener('input', e => { state.description = e.target.value; });
 
     bind('#srf-submit', async () => {
+      syncFormState();
       const name = container.querySelector('#srf-name').value.trim();
       const bill = container.querySelector('#srf-bill').value.trim();
       const preferred_time = container.querySelector('#srf-time').value;
@@ -1149,6 +1179,12 @@ export function renderLandingPage(container, onPortalClick) {
       state.locationMode = 'gps';
       state.locationValue = '';
       state.coords = null;
+      state.customerName = '';
+      state.billNo = '';
+      state.preferredTime = 'Morning (10 AM - 1 PM)';
+      state.otherIssue = '';
+      state.description = '';
+      state.issueValue = '';
       render();
     });
   }
