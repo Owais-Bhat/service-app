@@ -522,9 +522,6 @@ function billShortCaption(data, pdfUrl) {
     `------------------------------`,
     `Payment Status: *${String(data.paymentStatus || 'unpaid').toUpperCase()}*`
   );
-  if (pdfUrl) {
-    lines.push('', `View / download bill PDF:`, pdfUrl);
-  }
   if (data.paymentStatus !== 'paid' && data.paymentLink) {
     lines.push('', `Pay here:`, data.paymentLink);
   }
@@ -553,7 +550,6 @@ export function openPremiumBillModal(data, opts = {}) {
       <div class="modal-footer" style="gap:12px;">
         <button class="btn btn-secondary" id="pb-cancel">Close</button>
         <button class="btn btn-secondary" id="pb-print">Print / Save PDF</button>
-        <button class="btn btn-secondary" id="pb-download">${ICONS.download}<span>Download PDF</span></button>
         ${allowShare ? `<button class="btn btn-primary" id="pb-whatsapp">${ICONS.whatsapp}<span>Send via WhatsApp</span></button>` : ''}
       </div>
     </div>`;
@@ -585,21 +581,6 @@ export function openPremiumBillModal(data, opts = {}) {
     } catch (err) {
       console.error(err);
       toast(err.message || 'Could not open print window', 'error');
-    }
-  };
-
-  overlay.querySelector('#pb-download').onclick = async () => {
-    const btn = overlay.querySelector('#pb-download');
-    btn.disabled = true; btn.innerHTML = `<span class="btn-spinner"></span><span>Preparing PDF...</span>`;
-    try {
-      const { blob } = await renderBillToPdfBlob(billHTML, filename);
-      downloadBlob(blob, filename);
-      toast('Bill PDF downloaded', 'success');
-    } catch (err) {
-      console.error(err);
-      toast(err.message || 'Could not generate PDF', 'error');
-    } finally {
-      btn.disabled = false; btn.innerHTML = `${ICONS.download}<span>Download PDF</span>`;
     }
   };
 
@@ -2435,6 +2416,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
       }
     }
+    if (!inquiryRow && taskId) {
+      const { data: inqSnap } = await supabase.from('inquiries').select('*').eq('ticket_id', taskId).maybeSingle();
+      if (inqSnap) {
+        inquiryRow = inqSnap;
+        inqId = inqSnap.id;
+        paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
+      }
+    }
     // Employee profile + most recent attendance (for technician name and clock-in coords).
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const empProfile = authUser ? (await supabase.from('profiles').select('*').eq('id', authUser.id).single()).data : null;
@@ -2657,19 +2646,22 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
               <div class="form-group">
                 <label>Additional Charges (Optional)</label>
-                <input type="number" id="extra-cost" placeholder="₹0" style="margin-bottom:8px;"/>
-                <input type="text" id="extra-reason" placeholder="Reason for extra charge..."/>
+                <input type="number" id="extra-cost" placeholder="₹0" value="${inquiryRow?.extra_cost || ''}" style="margin-bottom:8px;"/>
+                <input type="text" id="extra-reason" placeholder="Reason for extra charge..." value="${escapeHtml(inquiryRow?.extra_cost_reason || '')}"/>
               </div>
 
               <div class="form-group">
                 <label>Discount</label>
                 <select id="admin-discount-preset" class="svc-picker" style="margin-bottom:8px;">
                   <option value="">No admin discount</option>
-                  ${discountPresetList.map(d => `<option value="${escapeAttr(d.id)}" data-amount="${Number(d.amount) || 0}" data-name="${escapeAttr(d.name || 'Discount')}">${escapeHtml(d.name || 'Discount')} - Rs.${Math.round(Number(d.amount) || 0).toLocaleString('en-IN')}</option>`).join('')}
+                  ${discountPresetList.map(d => {
+                    const isSel = inquiryRow?.discount_preset_id === d.id;
+                    return `<option value="${escapeAttr(d.id)}" data-amount="${Number(d.amount) || 0}" data-name="${escapeAttr(d.name || 'Discount')}" ${isSel ? 'selected' : ''}>${escapeHtml(d.name || 'Discount')} - Rs.${Math.round(Number(d.amount) || 0).toLocaleString('en-IN')}</option>`;
+                  }).join('')}
                 </select>
                 <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;">
-                  <input type="number" id="manual-discount" min="0" step="1" placeholder="Employee discount Rs.0"/>
-                  <input type="text" id="discount-reason" placeholder="Reason required for employee discount"/>
+                  <input type="number" id="manual-discount" min="0" step="1" placeholder="Employee discount Rs.0" value="${initialManualDiscount || ''}"/>
+                  <input type="text" id="discount-reason" placeholder="Reason required for employee discount" value="${escapeHtml(inquiryRow?.discount_reason || '')}"/>
                 </div>
                 <small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.75rem;">Admin dropdown discounts do not need a reason. Employee/manual discount requires a reason and appears in Admin Discount Details.</small>
               </div>
@@ -2677,7 +2669,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <div class="form-group">
                 <label>Transport Distance (km)</label>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                  <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" style="flex:1; min-width:120px;"/>
+                  <input type="number" id="transport-km" min="0" step="0.1" placeholder="0" value="${inquiryRow?.transport_km || ''}" style="flex:1; min-width:120px;"/>
                   <button type="button" class="btn btn-secondary btn-sm" id="capture-loc" style="white-space:nowrap" title="Capture your precise GPS location right now (you should be at the customer site)">📍 Capture My Location</button>
                   <button type="button" class="btn btn-secondary btn-sm" id="auto-km" style="white-space:nowrap" title="Calculate km from your clock-in location to the precise location">🧮 Auto km</button>
                 </div>
@@ -2698,11 +2690,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
               <button type="button" class="btn btn-primary btn-wide" id="open-bill-modal" style="margin-bottom:14px;">${ICONS.receipt}<span>Generate &amp; Send Premium Bill</span></button>
               <div id="bill-pdf-actions" style="display:${inquiryRow?.bill_pdf_url ? 'block' : 'none'}; margin-bottom:14px; padding:14px; border-radius:14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.35);">
-                <div style="font-weight:800; color:var(--success); font-size:0.88rem; margin-bottom:8px;">Saved bill PDF ready</div>
+                <div style="font-weight:800; color:var(--success); font-size:0.88rem; margin-bottom:8px;">Saved bill ready</div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                   <a class="btn btn-secondary btn-sm" id="bill-pdf-view" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">${ICONS.receipt}<span>View PDF</span></a>
-                  <button type="button" class="btn btn-secondary btn-sm" id="bill-details-whatsapp">${ICONS.whatsapp}<span>Send Details</span></button>
-                  <button type="button" class="btn btn-primary btn-sm" id="bill-pdf-whatsapp">${ICONS.whatsapp}<span>Send to Customer</span></button>
+                  <button type="button" class="btn btn-primary btn-sm" id="bill-details-whatsapp">${ICONS.whatsapp}<span>Send via WhatsApp</span></button>
                 </div>
               </div>
 
@@ -2832,6 +2823,47 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     // Selected services chosen via the cascading picker. Each entry:
     // { id, main, sub, leaf, cost }.
     const selectedServices = [];
+    if (inqId) {
+      const { data: links } = await supabase.from('inquiry_services')
+        .select('service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)')
+        .eq('inquiry_id', inqId);
+      if (Array.isArray(links)) {
+        const seenIds = new Set();
+        links.forEach(link => {
+          if (!link.service_id || seenIds.has(link.service_id)) return;
+          seenIds.add(link.service_id);
+          const p = link.service_pricing || {};
+          selectedServices.push({
+            id: link.service_id,
+            main: p.category || 'Service',
+            sub: p.sub_category || '',
+            leaf: p.sub_sub_category || p.name || '',
+            cost: Number(p.cost) || 0
+          });
+        });
+      }
+    }
+
+    let initialManualDiscount = 0;
+    if (inquiryRow) {
+      const servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
+      const extra = Number(inquiryRow.extra_cost) || 0;
+      const km = Number(inquiryRow.transport_km) || 0;
+      const transport = Math.round(km * 5);
+      const companyName = inquiryRow.company_name || 'networking experts';
+      const isNetworkingExperts = companyName.toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
+      const platform = isNetworkingExperts ? 50 : 100;
+      
+      const preDiscount = servicesSubtotal + extra + platform + transport;
+      const autoDiscount = preDiscount > 250 ? 30 : 0;
+      
+      const presetId = inquiryRow.discount_preset_id;
+      const preset = discountPresetList.find(d => d.id === presetId);
+      const presetDiscount = preset ? (Number(preset.amount) || 0) : 0;
+      
+      const totalDiscount = Number(inquiryRow.discount_amount) || 0;
+      initialManualDiscount = Math.max(0, totalDiscount - autoDiscount - presetDiscount);
+    }
 
     // Live breakdown - also stored on a closure object so the bill modal can read it.
     const bill = {
@@ -3061,7 +3093,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <b>${escHtml(s.main)}</b>${s.sub ? ` › ${escHtml(s.sub)}` : ''} › ${escHtml(s.leaf)}
             </div>
             <span style="font-weight:700; color:var(--primary);">₹${Number(s.cost).toLocaleString('en-IN')}</span>
-            <button type="button" class="btn btn-danger btn-sm svc-remove" data-idx="${i}" title="Remove">✕</button>
+            <button type="button" class="btn btn-danger btn-sm svc-remove" data-idx="${i}" title="Remove" ${isResolvedReadOnly ? 'style="display:none;" disabled' : ''}>✕</button>
           </div>
         `).join('')}
       `;
@@ -3336,6 +3368,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       .subscribe();
 
     // Initial paint.
+    renderSelectedList();
     calcTotal();
     renderPayStatus();
     if (isResolvedReadOnly) {
@@ -3498,17 +3531,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       };
     }
 
-    const billPdfWhatsappBtn = overlay.querySelector('#bill-pdf-whatsapp');
-    if (billPdfWhatsappBtn) {
-      billPdfWhatsappBtn.onclick = () => {
-        if (!billPdfUrl) { toast('Generate the bill PDF first', 'warning'); return; }
-        const data = buildCurrentBillData(inquiryRow || {});
-        const phone = (data.customer?.phone || '').replace(/\D/g, '');
-        if (!phone) { toast('Client phone number is missing on this inquiry', 'error'); return; }
-        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(billShortCaption(data, billPdfUrl))}`;
-        window.open(waUrl, '_blank');
-      };
-    }
+
 
     const billDetailsWhatsappBtn = overlay.querySelector('#bill-details-whatsapp');
     if (billDetailsWhatsappBtn) {
@@ -3680,11 +3703,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         ops.push(supabase.from('inquiries').update(inqUpdates).eq('ticket_id', taskId));
       }
 
-      // Add services linking
-      if (inqId && selectedServiceIds.length > 0) {
-        ops.push(supabase.from('inquiry_services').insert(
-          selectedServiceIds.map(sid => ({ inquiry_id: inqId, service_id: sid }))
-        ));
+      // Add services linking (delete old ones first to prevent duplication)
+      if (inqId) {
+        await supabase.from('inquiry_services').delete().eq('inquiry_id', inqId);
+        if (selectedServiceIds.length > 0) {
+          ops.push(supabase.from('inquiry_services').insert(
+            selectedServiceIds.map(sid => ({ inquiry_id: inqId, service_id: sid }))
+          ));
+        }
       }
 
       // Add progress detail as a comment
