@@ -2484,10 +2484,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         });
       }
     }
+    const linkedServicesSubtotal = () => selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
+    const savedServicesSubtotal = () => Math.max(0, Number(inquiryRow?.bill_amount) || 0);
+    const billServicesSubtotal = () => {
+      const linkedSubtotal = linkedServicesSubtotal();
+      return linkedSubtotal > 0 ? linkedSubtotal : savedServicesSubtotal();
+    };
 
     let initialManualDiscount = 0;
     if (inquiryRow) {
-      const servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
+      const servicesSubtotal = billServicesSubtotal();
       const extra = Number(inquiryRow.extra_cost) || 0;
       const km = Number(inquiryRow.transport_km) || 0;
       const transport = Math.round(km * 5);
@@ -2882,29 +2888,35 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (billPdfUrl && view) view.href = billPdfUrl;
     };
 
-    const buildCurrentBillData = (customer = inquiryRow || {}) => ({
-      ...bill,
-      customer: {
-        name: customer.full_name || '',
-        phone: customer.phone || '',
-        location: customer.location || '',
-        company: getSelectedCompany() || customer.company_name || '',
-        device_type: overlay.querySelector('#device-type')?.value.trim() || customer.device_type || '',
-        device_serial: overlay.querySelector('#device-serial')?.value.trim() || customer.device_serial_no || '',
-        service_item: customer.service_item || '',
-        ticket_no: customer.ticket_no || '',
-      },
-      technician: empProfile?.full_name || 'Technician',
-      services: selectedServices.map(s => ({ name: `${s.main}${s.sub ? ' > '+s.sub : ''} > ${s.leaf}`, cost: s.cost })),
-      extraReason: overlay.querySelector('#extra-reason')?.value.trim() || '',
-      discountLabel: bill.discountLabel,
-      discountReason: bill.manualDiscount > 0 ? bill.discountReason : '',
-      paymentLink: _payLink || customer.payment_link || '',
-      paymentStatus: customer.payment_status || 'unpaid',
-    });
+    const buildCurrentBillData = (customer = inquiryRow || {}) => {
+      const services = selectedServices.length
+        ? selectedServices.map(s => ({ name: `${s.main}${s.sub ? ' > '+s.sub : ''} > ${s.leaf}`, cost: s.cost }))
+        : (bill.servicesSubtotal > 0 ? [{ name: customer.service_item || 'Service', cost: bill.servicesSubtotal }] : []);
+
+      return {
+        ...bill,
+        customer: {
+          name: customer.full_name || '',
+          phone: customer.phone || '',
+          location: customer.location || '',
+          company: getSelectedCompany() || customer.company_name || '',
+          device_type: overlay.querySelector('#device-type')?.value.trim() || customer.device_type || '',
+          device_serial: overlay.querySelector('#device-serial')?.value.trim() || customer.device_serial_no || '',
+          service_item: customer.service_item || '',
+          ticket_no: customer.ticket_no || '',
+        },
+        technician: empProfile?.full_name || 'Technician',
+        services,
+        extraReason: overlay.querySelector('#extra-reason')?.value.trim() || '',
+        discountLabel: bill.discountLabel,
+        discountReason: bill.manualDiscount > 0 ? bill.discountReason : '',
+        paymentLink: _payLink || customer.payment_link || '',
+        paymentStatus: customer.payment_status || 'unpaid',
+      };
+    };
 
     const calcTotal = () => {
-      bill.servicesSubtotal = selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
+      bill.servicesSubtotal = billServicesSubtotal();
       bill.extra = Number(extraInput.value) || 0;
       bill.km = Math.max(0, Number(kmInput.value) || 0);
       bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
