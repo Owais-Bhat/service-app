@@ -105,6 +105,24 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.5;
+  cursor: default;
+  caret-color: transparent;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+  caret-color: auto;
+}
+
+select,
+button,
+a,
+[role="button"],
+.btn,
+.nav-item {
+  caret-color: transparent;
 }
 
 /* ─── SCROLLBAR ─── */

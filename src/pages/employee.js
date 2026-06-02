@@ -2872,6 +2872,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       taxable: 0, gst: 0, total: 0,
     };
     let billPdfUrl = inquiryRow?.bill_pdf_url || '';
+    let _payLink = inquiryRow?.payment_link || '';
 
     const updateBillPdfActions = () => {
       const box = overlay.querySelector('#bill-pdf-actions');
@@ -3385,7 +3386,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     }
 
     // Payment link generation + QR
-    let _payLink = '';
     const genBtn = overlay.querySelector('#emp-gen-link');
     const payLinkInput = overlay.querySelector('#emp-pay-link');
     const qrWrap = overlay.querySelector('#emp-qr-wrap');
