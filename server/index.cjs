@@ -345,6 +345,7 @@ const requiredColumns = {
         { name: 'company', definition: 'VARCHAR(100)' },
         { name: 'can_add_service', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'can_update_profile', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'always_assign', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -681,14 +682,12 @@ function broadcastNotify(payload) {
 async function getTodayQueue(connection) {
     const today = dbDateKey(new Date());
     const [rows] = await connection.execute(
-        `SELECT a.user_id AS id, p.full_name, a.clock_in
-           FROM attendance a
-           JOIN profiles p ON p.id = a.user_id
-          WHERE a.date = ?
-            AND a.clock_in IS NOT NULL
-            AND a.clock_out IS NULL
-            AND p.role = 'employee'
-          ORDER BY a.clock_in ASC`,
+        `SELECT DISTINCT p.id, p.full_name, a.clock_in, p.always_assign
+           FROM profiles p
+           LEFT JOIN attendance a ON p.id = a.user_id AND a.date = ? AND a.clock_out IS NULL
+          WHERE p.role = 'employee'
+            AND (a.id IS NOT NULL OR p.always_assign = 1)
+          ORDER BY p.always_assign DESC, a.clock_in ASC`,
         [today]
     );
     return rows;
@@ -982,7 +981,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -1638,7 +1637,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -1671,7 +1670,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -1681,7 +1680,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     address || null,
                     company || null,
                     can_add_service ? 1 : 0,
-                    can_update_profile ? 1 : 0
+                    can_update_profile ? 1 : 0,
+                    alwaysAssign ? 1 : 0
                 ]
             );
 
@@ -1712,7 +1712,8 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         address,
         company,
         can_add_service,
-        can_update_profile
+        can_update_profile,
+        alwaysAssign
     } = req.body;
 
     try {
@@ -1806,6 +1807,10 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (can_update_profile !== undefined) {
                 profileUpdates.push('can_update_profile = ?');
                 profileParams.push(can_update_profile ? 1 : 0);
+            }
+            if (alwaysAssign !== undefined) {
+                profileUpdates.push('always_assign = ?');
+                profileParams.push(alwaysAssign ? 1 : 0);
             }
 
             if (profileUpdates.length > 0) {
