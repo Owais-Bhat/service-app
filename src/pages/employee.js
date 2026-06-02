@@ -497,12 +497,37 @@ function downloadBlob(blob, filename) {
 function billShortCaption(data, pdfUrl) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
   const lines = [
-    `Hi ${data.customer?.name || ''}! `,
+    `Hi ${data.customer?.name || 'Customer'}!`,
     `Your service invoice from *${BUSINESS.name}* is ready.`,
-    `Ticket: *${data.customer?.ticket_no || '-'}* - Total: *${inr(data.total)}*`,
+    `Ticket: *${data.customer?.ticket_no || '-'}*`,
+    `Device: *${data.customer?.device_type || 'General Service'}*`,
+    '',
+    `*Bill Breakdown:*`,
+    `- Services Subtotal: *${inr(data.servicesSubtotal)}*`,
   ];
-  if (pdfUrl) lines.push('', `View / download bill PDF:`, pdfUrl);
-  if (data.paymentLink) lines.push('', `Pay here: ${data.paymentLink}`);
+  if (data.extra > 0) {
+    lines.push(`- Additional Charges: *${inr(data.extra)}*${data.extraReason ? ` (${data.extraReason})` : ''}`);
+  }
+  lines.push(`- Platform Fee: *${inr(data.platform)}*`);
+  if (data.km > 0) {
+    lines.push(`- Transport (${data.km} km): *${inr(data.transport)}*`);
+  }
+  if (data.discount > 0) {
+    lines.push(`- Discount: *-${inr(data.discount)}*${data.discountLabel ? ` (${data.discountLabel})` : ''}`);
+  }
+  lines.push(
+    `- GST (18%): *${inr(data.gst)}*`,
+    `------------------------------`,
+    `*Total Payable: ${inr(data.total)}*`,
+    `------------------------------`,
+    `Payment Status: *${String(data.paymentStatus || 'unpaid').toUpperCase()}*`
+  );
+  if (pdfUrl) {
+    lines.push('', `View / download bill PDF:`, pdfUrl);
+  }
+  if (data.paymentStatus !== 'paid' && data.paymentLink) {
+    lines.push('', `Pay here:`, data.paymentLink);
+  }
   lines.push('', `- ${BUSINESS.name}`);
   return lines.join('\n');
 }
@@ -2576,7 +2601,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <div class="mst-pane" data-pane="device">
             <div class="form-group">
               <label>Company Name <span style="color:var(--danger)">*</span></label>
-              <select id="resolve-company" style="margin-bottom:8px;">
+              <select id="resolve-company" style="margin-bottom:8px;" ${isResolvedReadOnly ? 'disabled' : ''}>
                 <option value="">Select Company...</option>
                 ${companyList.map(c => {
                   const isSel = (inquiryRow?.company_name || 'networking experts').toLowerCase() === c.name.toLowerCase();
@@ -2584,11 +2609,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 }).join('')}
                 <option value="Other">Other (Type manually)</option>
               </select>
-              <input type="text" id="resolve-company-custom" placeholder="Type custom company name (Mandatory)" style="display:none;"/>
+              <input type="text" id="resolve-company-custom" placeholder="Type custom company name (Mandatory)" style="display:none;" ${isResolvedReadOnly ? 'disabled' : ''}/>
             </div>
             <div class="form-group">
               <label>Device Type</label>
-              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick...' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type || '').replace(/"/g,'&quot;')}"/>
+              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick...' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
               <datalist id="emp-device-types">
                 ${deviceTypeList.map(d => `<option value="${(d.name || '').replace(/"/g,'&quot;')}"></option>`).join('')}
               </datalist>
@@ -2596,7 +2621,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
             <div class="form-group">
               <label>Device Serial No</label>
-              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no || '').replace(/"/g,'&quot;')}"/>
+              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
             </div>
             <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes - and they appear on the bill template.</small>
           </div>
@@ -2676,7 +2701,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <div style="font-weight:800; color:var(--success); font-size:0.88rem; margin-bottom:8px;">Saved bill PDF ready</div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                   <a class="btn btn-secondary btn-sm" id="bill-pdf-view" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">${ICONS.receipt}<span>View PDF</span></a>
-                  <a class="btn btn-secondary btn-sm" id="bill-pdf-download" href="${escapeAttr(inquiryRow?.bill_pdf_url || '#')}" download style="text-decoration:none;">${ICONS.download}<span>Download PDF</span></a>
+                  <button type="button" class="btn btn-secondary btn-sm" id="bill-details-whatsapp">${ICONS.whatsapp}<span>Send Details</span></button>
                   <button type="button" class="btn btn-primary btn-sm" id="bill-pdf-whatsapp">${ICONS.whatsapp}<span>Send to Customer</span></button>
                 </div>
               </div>
@@ -2820,11 +2845,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const updateBillPdfActions = () => {
       const box = overlay.querySelector('#bill-pdf-actions');
       const view = overlay.querySelector('#bill-pdf-view');
-      const download = overlay.querySelector('#bill-pdf-download');
-      if (!box || !download) return;
+      if (!box) return;
       box.style.display = billPdfUrl ? 'block' : 'none';
       if (billPdfUrl && view) view.href = billPdfUrl;
-      if (billPdfUrl) download.href = billPdfUrl;
     };
 
     const buildCurrentBillData = (customer = inquiryRow || {}) => ({
@@ -2845,6 +2868,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       discountLabel: bill.discountLabel,
       discountReason: bill.manualDiscount > 0 ? bill.discountReason : '',
       paymentLink: _payLink || customer.payment_link || '',
+      paymentStatus: customer.payment_status || 'unpaid',
     });
 
     const calcTotal = () => {
@@ -3171,7 +3195,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const isStatusTabValid = progressDetail.length > 0;
       const isDeviceTabValid = companyName.length > 0;
 
-      if (!isLastTab()) {
+      if (isResolvedReadOnly) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = isLastTab() ? 'Resolved' : 'Next →';
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.title = 'Resolved tasks are read-only.';
+      } else if (!isLastTab()) {
         const currentTab = getActiveTab();
         let tabValid = true;
         let missingFieldMsg = '';
@@ -3311,6 +3341,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     if (isResolvedReadOnly) {
       overlay.querySelector('#progress-detail').disabled = true;
       overlay.querySelectorAll('#pricing-section input, #pricing-section select, #pricing-section textarea, #pricing-section button').forEach(el => {
+        el.disabled = true;
+        el.style.opacity = '0.6';
+        el.style.cursor = 'not-allowed';
+      });
+      overlay.querySelectorAll('.mst-pane[data-pane="device"] input, .mst-pane[data-pane="device"] select').forEach(el => {
         el.disabled = true;
         el.style.opacity = '0.6';
         el.style.cursor = 'not-allowed';
@@ -3471,6 +3506,17 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         const phone = (data.customer?.phone || '').replace(/\D/g, '');
         if (!phone) { toast('Client phone number is missing on this inquiry', 'error'); return; }
         const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(billShortCaption(data, billPdfUrl))}`;
+        window.open(waUrl, '_blank');
+      };
+    }
+
+    const billDetailsWhatsappBtn = overlay.querySelector('#bill-details-whatsapp');
+    if (billDetailsWhatsappBtn) {
+      billDetailsWhatsappBtn.onclick = () => {
+        const data = buildCurrentBillData(inquiryRow || {});
+        const phone = (data.customer?.phone || '').replace(/\D/g, '');
+        if (!phone) { toast('Client phone number is missing on this inquiry', 'error'); return; }
+        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(billShortCaption(data, null))}`;
         window.open(waUrl, '_blank');
       };
     }
