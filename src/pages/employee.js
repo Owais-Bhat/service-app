@@ -3385,7 +3385,19 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     renderPayStatus();
     if (isResolvedReadOnly) {
       overlay.querySelector('#progress-detail').disabled = true;
-      overlay.querySelectorAll('#pricing-section input, #pricing-section select, #pricing-section textarea, #pricing-section button').forEach(el => {
+      overlay.querySelectorAll(`
+        #pricing-section input:not(#total-bill-display),
+        #pricing-section select,
+        #pricing-section textarea,
+        #svc-add,
+        #capture-loc,
+        #auto-km,
+        #open-bill-modal,
+        .pay-method-btn,
+        #mark-cash-btn,
+        #emp-gen-link,
+        #emp-pay-check
+      `).forEach(el => {
         el.disabled = true;
         el.style.opacity = '0.6';
         el.style.cursor = 'not-allowed';
