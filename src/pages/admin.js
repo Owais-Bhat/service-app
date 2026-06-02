@@ -821,7 +821,19 @@ export async function renderAutoAssignmentTab(container) {
           <h1>Auto Assignment</h1>
           <p>Round-robin queue based on employees clocked in today</p>
         </div>
-        <button class="btn btn-secondary" id="auto-assign-refresh">${ICONS.refresh}<span>Refresh</span></button>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+          <div style="display:inline-flex;align-items:center;gap:10px;padding:6px 14px;border-radius:100px;background:var(--bg-soft);box-shadow:var(--neu-sm);">
+            <span style="font-size:0.82rem;font-weight:700;color:var(--text-dim);">Auto Assign:</span>
+            <label class="switch-container" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+              <div class="switch-outer" id="auto-assign-switch-outer" style="position:relative;width:44px;height:22px;background:${status.auto_assignment_enabled ? 'var(--success)' : 'var(--border)'};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);">
+                <div class="switch-inner" id="auto-assign-switch-inner" style="position:absolute;top:2px;left:${status.auto_assignment_enabled ? '24px' : '2px'};width:18px;height:18px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+              </div>
+              <span style="font-size:0.85rem;font-weight:700;color:${status.auto_assignment_enabled ? 'var(--success)' : 'var(--text-dim)'};" id="auto-assign-status-text">${status.auto_assignment_enabled ? 'ON' : 'OFF'}</span>
+              <input type="checkbox" id="auto-assign-toggle-input" style="display:none;" ${status.auto_assignment_enabled ? 'checked' : ''} />
+            </label>
+          </div>
+          <button class="btn btn-secondary" id="auto-assign-refresh">${ICONS.refresh}<span>Refresh</span></button>
+        </div>
       </div>
       <div class="stats-grid" style="margin-bottom:24px;">
         <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${queue.length}</div><div class="stat-label">Clocked In</div></div>
@@ -847,6 +859,50 @@ export async function renderAutoAssignmentTab(container) {
         </div>
       </div>
     `;
+
+    const toggleInput = container.querySelector('#auto-assign-toggle-input');
+    const switchOuter = container.querySelector('#auto-assign-switch-outer');
+    const switchInner = container.querySelector('#auto-assign-switch-inner');
+    const statusText = container.querySelector('#auto-assign-status-text');
+
+    if (toggleInput && switchOuter && switchInner && statusText) {
+      toggleInput.onchange = async () => {
+        const enabled = toggleInput.checked;
+        switchOuter.style.background = enabled ? 'var(--success)' : 'var(--border)';
+        switchInner.style.left = enabled ? '24px' : '2px';
+        statusText.textContent = enabled ? 'ON' : 'OFF';
+        statusText.style.color = enabled ? 'var(--success)' : 'var(--text-dim)';
+        
+        try {
+          const res = await fetch(`${apiBase}/auto-assignment/status`, {
+            method: 'PUT',
+            headers: {
+              ...authHeaders(),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ enabled })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Failed to update auto-assignment status');
+          
+          toast(`Auto assignment turned ${enabled ? 'on' : 'off'}`, 'success');
+        } catch (err) {
+          toast(err.message || 'Could not update status', 'error');
+          toggleInput.checked = !enabled;
+          switchOuter.style.background = !enabled ? 'var(--success)' : 'var(--border)';
+          switchInner.style.left = !enabled ? '24px' : '2px';
+          statusText.textContent = !enabled ? 'ON' : 'OFF';
+          statusText.style.color = !enabled ? 'var(--success)' : 'var(--text-dim)';
+        }
+      };
+      
+      switchOuter.onclick = (e) => {
+        e.preventDefault();
+        toggleInput.checked = !toggleInput.checked;
+        toggleInput.dispatchEvent(new Event('change'));
+      };
+    }
+
     container.querySelector('#auto-assign-refresh').onclick = () => renderAutoAssignmentTab(container);
   } catch (err) {
     container.innerHTML = `<div class="page-header"><h1>Auto Assignment</h1><p style="color:var(--danger)">${escapeHtml(err.message || 'Could not load auto assignment')}</p></div>`;

@@ -175,6 +175,7 @@ async function getConn() { return pool.getConnection(); }
 const DEFAULT_AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
 const appSettings = {
     autoClockOutTime: DEFAULT_AUTO_CLOCK_OUT_TIME,
+    autoAssignmentEnabled: true,
 };
 const REG_KEY_SETTINGS = {
     admin: 'admin_reg_key',
@@ -226,11 +227,16 @@ function isValidClockOutTime(value) {
 
 async function loadAppSettings(connection) {
     const [rows] = await connection.execute(
-        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key = ?',
-        ['auto_clock_out_time']
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?)',
+        ['auto_clock_out_time', 'auto_assignment_enabled']
     );
     const autoClockOut = rows.find(row => row.setting_key === 'auto_clock_out_time')?.setting_value;
     appSettings.autoClockOutTime = parseAutoClockOutTime(autoClockOut || DEFAULT_AUTO_CLOCK_OUT_TIME).label;
+
+    const autoAssign = rows.find(row => row.setting_key === 'auto_assignment_enabled')?.setting_value;
+    if (autoAssign !== undefined) {
+        appSettings.autoAssignmentEnabled = autoAssign === '1' || autoAssign === 'true';
+    }
 }
 
 async function saveAppSetting(key, value) {
@@ -689,6 +695,10 @@ async function getTodayQueue(connection) {
 }
 
 async function autoAssignInquiry(inquiryId) {
+    if (!appSettings.autoAssignmentEnabled) {
+        console.log('[AutoAssign] Auto-assignment is disabled globally; skipping inquiry:', inquiryId);
+        return;
+    }
     let connection;
     try {
         connection = await getConn();
@@ -2559,12 +2569,30 @@ app.get('/api/auto-assignment/status', authenticateToken, async (req, res) => {
             })),
             total_today: Number(totals[0].total),
             next_employee_id: nextEmployee?.id || null,
+            auto_assignment_enabled: appSettings.autoAssignmentEnabled,
         });
     } catch (err) {
         console.error('[AutoAssign status]', err);
         res.status(500).json({ error: err.message });
     } finally {
         if (connection) connection.release();
+    }
+});
+
+app.put('/api/auto-assignment/status', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const { enabled } = req.body;
+    if (enabled === undefined) {
+        return res.status(400).json({ error: 'Field "enabled" is required' });
+    }
+    const isEnabled = enabled === true || enabled === 1 || enabled === '1' || enabled === 'true';
+    try {
+        await saveAppSetting('auto_assignment_enabled', isEnabled ? '1' : '0');
+        appSettings.autoAssignmentEnabled = isEnabled;
+        res.json({ auto_assignment_enabled: appSettings.autoAssignmentEnabled });
+    } catch (error) {
+        console.error('[AutoAssign toggle]', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
