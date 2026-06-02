@@ -1873,7 +1873,7 @@ app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
 });
 
 app.get('/api/settings/attendance', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
+    if (req.user.role !== 'admin' && req.user.role !== 'employee') return res.sendStatus(403);
     res.json({ autoClockOutTime: parseAutoClockOutTime().label });
 });
 

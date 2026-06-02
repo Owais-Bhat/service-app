@@ -2,8 +2,6 @@ import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, formatTimeRemaining, formatSLADeadline, exportToCSV, showLoader } from '../utils.js';
 import { ICONS } from '../icons.js';
 
-const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
-
 // Watches for several GPS fixes within `maxWaitMs`, returns the most accurate
 // reading seen - or short-circuits as soon as accuracy <= desiredAccuracy.
 // The cold first fix is usually 100-500m off; this keeps sampling until we
@@ -185,6 +183,7 @@ function loadHtml2Pdf() {
 
 // Premium printable bill template, used by employee + admin.
 export function renderPremiumBillHTML(data) {
+  const LOGO_URL = new URL('../assets/logo.png', import.meta.url).href;
   // Ultra-robust currency formatter - avoids toLocaleString to prevent potential JS errors in older browsers.
   const inr = (n) => {
     const val = Math.round(Number(n) || 0);
