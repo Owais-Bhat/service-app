@@ -3742,7 +3742,40 @@ export async function renderAdsTab(container) {
       </div>
       <p style="margin:12px 0 0;color:var(--text-soft);font-size:0.9rem;">Inline ads now crop to the container. Keep important text and faces in the center area.</p>
     </div>
-  `;  container.querySelector(".stats-grid")?.before(guide);
+  `;
+  guide.innerHTML = `
+    <div class="card-header"><span class="card-title">Landing Page Ad Space Template</span></div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;align-items:start;">
+        <div>
+          <div style="font-weight:900;color:var(--primary);margin-bottom:8px;">Desktop visible ad space</div>
+          <div style="aspect-ratio:16/9;border:2px dashed var(--primary);border-radius:12px;background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(255,255,255,0.86));display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;">
+            <div>
+              <div style="font-size:1.3rem;font-weight:950;color:var(--text);">1600px x 900px</div>
+              <div style="font-size:0.86rem;color:var(--text-soft);margin-top:6px;">16:9 banner for desktop</div>
+            </div>
+          </div>
+          <small style="display:block;color:var(--text-dim);margin-top:8px;">This is the left ad box shown beside the request form on desktop.</small>
+        </div>
+        <div>
+          <div style="font-weight:900;color:var(--primary);margin-bottom:8px;">Mobile visible ad space</div>
+          <div style="aspect-ratio:4/5;border:2px dashed var(--primary);border-radius:12px;background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(255,255,255,0.86));display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;">
+            <div>
+              <div style="font-size:1.18rem;font-weight:950;color:var(--text);">1080px x 1350px</div>
+              <div style="font-size:0.84rem;color:var(--text-soft);margin-top:6px;">4:5 banner for phone</div>
+            </div>
+          </div>
+          <small style="display:block;color:var(--text-dim);margin-top:8px;">This is the ad box shown below the request tabs on mobile.</small>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px;">
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);"><b>Square/logo</b><br/><span style="font-weight:900;color:var(--text);">512px x 512px</span></div>
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);"><b>Popup ads</b><br/><span style="font-weight:900;color:var(--text);">1200px x 800px</span></div>
+      </div>
+      <p style="margin:12px 0 0;color:var(--text-soft);font-size:0.9rem;">Inline landing ads fill this space and crop at the edges. Keep logo, face, and main text inside the center safe area.</p>
+    </div>
+  `;
+  container.querySelector(".stats-grid")?.before(guide);
   const refresh = () => renderAdsTab(container);
   container.querySelector("#ad-add-btn").onclick = () =>
     openAdEditor(null, refresh);
@@ -4388,5 +4421,3 @@ export async function renderAutoAssignmentTab(container) {
     toast(err.message || "Could not load auto assignment", "error");
   }
 }
-
-
