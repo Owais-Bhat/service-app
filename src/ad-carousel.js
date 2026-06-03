@@ -9,7 +9,16 @@ export class AdCarousel {
     this.container = document.getElementById(containerId);
     if (!this.container) throw new Error(`Container #${containerId} not found`);
 
-    this.ads = ads.filter(ad => ad && ad.url);
+    // Filter ads by device target (desktop-only or mobile-only)
+    const isMobileView = window.matchMedia('(max-width: 767px)').matches;
+    this.ads = ads.filter(ad => {
+      if (!ad || !ad.url) return false;
+      const target = ad.device_target || 'both';
+      if (target === 'mobile' && !isMobileView) return false;
+      if (target === 'desktop' && isMobileView) return false;
+      return true;
+    });
+
     this.currentIndex = 0;
     this.autoRotateMs = options.autoRotateMs ?? 5000;
     this.rotateTimer = null;
@@ -182,7 +191,14 @@ export class AdCarousel {
   }
 
   updateAds(newAds) {
-    this.ads = newAds.filter(ad => ad && ad.url);
+    const isMobileView = window.matchMedia('(max-width: 767px)').matches;
+    this.ads = newAds.filter(ad => {
+      if (!ad || !ad.url) return false;
+      const target = ad.device_target || 'both';
+      if (target === 'mobile' && !isMobileView) return false;
+      if (target === 'desktop' && isMobileView) return false;
+      return true;
+    });
     this.currentIndex = 0;
     this.render();
     this.setupEventListeners();
