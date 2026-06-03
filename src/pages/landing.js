@@ -31,7 +31,7 @@ const sendSmsOTP = (phone) => postPublicApi('/otp/send', { phone });
 const verifySmsOTP = (phone, otp) => postPublicApi('/otp/verify', { phone, otp });
 const resendSmsOTP = (phone) => postPublicApi('/otp/resend', { phone });
 
-const AD_CACHE_KEY = 'nest_landing_ads_v1';
+const AD_CACHE_KEY = 'nest_landing_ads_v2';
 const AD_CACHE_TTL_MS = 10 * 60 * 1000;
 
 function generateTicketNo() {
@@ -250,6 +250,7 @@ export function renderLandingPage(container, onPortalClick) {
     // Ads carousel state
     ads: cachedAds,
     adsLoading: cachedAds.length === 0,
+    popupAds: [],
     adIndex: 0,
     _adTimer: null,
     issueOptions: FALLBACK_ISSUE_OPTIONS,
@@ -300,24 +301,6 @@ export function renderLandingPage(container, onPortalClick) {
           <div class="srf-badge" style="margin: 0 auto 16px;">${ICONS.shield}<span>Verified Service Request</span></div>
           <h1 class="srf-title" style="text-align:center; margin-bottom:18px;">Need help?<br/><span class="srf-grad">We'll be there in minutes.</span></h1>
           <p class="srf-sub" style="margin: 0 auto 32px; text-align:center; max-width:600px;">Raise a service request in three quick steps. We'll send a one-time code by SMS, take your details, and dispatch the right technician.</p>
-          <div class="srf-contact-card" aria-label="Contact Networking Experts">
-            <div class="srf-contact-copy">
-              <span class="srf-contact-kicker">Need urgent support?</span>
-              <a class="srf-contact-number" href="${SERVICE_CONTACT_TEL}">${SERVICE_CONTACT_DISPLAY}</a>
-            </div>
-            <div class="srf-contact-actions">
-              <a class="srf-contact-action srf-contact-call" href="${SERVICE_CONTACT_TEL}" aria-label="Call Networking Experts at ${SERVICE_CONTACT_DISPLAY}">
-                <span class="srf-contact-icon">${ICONS.phone}</span>
-                <span>Call</span>
-              </a>
-              <a class="srf-contact-action srf-contact-whatsapp" href="${SERVICE_CONTACT_WHATSAPP}" target="_blank" rel="noopener" aria-label="Message Networking Experts on WhatsApp">
-                <span class="srf-contact-icon">${ICONS.whatsapp}</span>
-                <span>WhatsApp</span>
-              </a>
-            </div>
-          </div>
-          
-        
         </section>
 
         <main class="srf-main">
@@ -359,12 +342,60 @@ export function renderLandingPage(container, onPortalClick) {
             </div>
           </section>
         </main>
+        <section class="srf-contact-section">
+          <div class="srf-contact-card" aria-label="Contact Networking Experts">
+            <div class="srf-contact-copy">
+              <span class="srf-contact-kicker">Need urgent support?</span>
+              <a class="srf-contact-number" href="${SERVICE_CONTACT_TEL}">${SERVICE_CONTACT_DISPLAY}</a>
+              <span class="srf-contact-note">Direct support for service requests, billing, and technician updates.</span>
+            </div>
+            <div class="srf-contact-actions">
+              <a class="srf-contact-action srf-contact-call" href="${SERVICE_CONTACT_TEL}" aria-label="Call Networking Experts at ${SERVICE_CONTACT_DISPLAY}">
+                <span class="srf-contact-icon">${ICONS.phone}</span>
+                <span>Call</span>
+              </a>
+              <a class="srf-contact-action srf-contact-whatsapp" href="${SERVICE_CONTACT_WHATSAPP}" target="_blank" rel="noopener" aria-label="Message Networking Experts on WhatsApp">
+                <span class="srf-contact-icon">${ICONS.whatsapp}</span>
+                <span>WhatsApp</span>
+              </a>
+            </div>
+          </div>
+        </section>
       </div>
     `;
 
     bindCommon();
     bindStep();
     mountAdCarousel();
+    maybeShowLandingPopup();
+  }
+
+  function showPopupAd(item) {
+    if (!item?.url || sessionStorage.getItem(`landing-popup-${item.id}`) === '1') return;
+    sessionStorage.setItem(`landing-popup-${item.id}`, '1');
+    const isVideo = (item.kind || 'image').toLowerCase() === 'video';
+    const overlay = document.createElement('div');
+    overlay.className = 'media-popup-overlay';
+    overlay.innerHTML = `
+      <div class="media-popup-dialog" role="dialog" aria-modal="true">
+        <button type="button" class="media-popup-close" aria-label="Close">${ICONS.close}</button>
+        <div class="media-popup-frame">
+          ${isVideo
+            ? `<video src="${escapeAttr(item.url)}" controls autoplay muted playsinline></video>`
+            : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.caption || 'Advertisement')}"/>`}
+        </div>
+        ${item.caption ? `<div class="media-popup-caption">${escapeHTML(item.caption)}</div>` : ''}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('.media-popup-close').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  }
+
+  function maybeShowLandingPopup() {
+    const item = state.popupAds.find(Boolean);
+    if (item) setTimeout(() => showPopupAd(item), 500);
   }
 
   function mountAdCarousel() {
@@ -432,12 +463,11 @@ export function renderLandingPage(container, onPortalClick) {
       const { data } = await supabase.from('ads')
         .select('*')
         .eq('active', 1)
-        .eq('placement', 'landing')
         .order('position', { ascending: true });
 
       const now = new Date().getTime();
       const isMobileView = window.matchMedia('(max-width: 767px)').matches;
-      const ads = (data || []).map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => {
+      const allAds = (data || []).map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => {
         if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
         const target = a.device_target || 'both';
         if (target === 'mobile' && !isMobileView) return false;
@@ -446,12 +476,15 @@ export function renderLandingPage(container, onPortalClick) {
         if (a.expires_at && new Date(a.expires_at).getTime() <= now) return false;
         return true;
       });
+      const ads = allAds.filter(a => (a.placement || 'landing') === 'landing');
+      state.popupAds = allAds.filter(a => a.placement === 'popup_landing');
 
       if (ads.length) {
         await preloadAds(ads);
         cacheAds(ads);
         state.ads = ads;
       }
+      maybeShowLandingPopup();
     } catch (err) {
       console.warn('Could not load ads:', err);
     } finally {

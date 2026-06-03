@@ -3721,7 +3721,7 @@ export async function renderAdsTab(container) {
     container.innerHTML = `<div class="page-header"><h1>Landing Page Ads</h1><p style="color:var(--danger)">Could not load ads: ${escapeHtml(error.message || "")}</p></div>`;
     return;
   }
-  const ads = data || [];
+  const ads = (data || []).filter((a) => !a.placement || a.placement === "landing");
   const activeCount = ads.filter((a) => a.active).length;
   container.innerHTML = `    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">      <div>        <h1>Landing Page Ads</h1>        <p>Slides shown in the rotating carousel on the public service portal</p>      </div>      <button class="btn btn-primary" id="ad-add-btn">+ Add slide</button>    </div>    <div class="stats-grid">      <div class="stat-card"><div class="stat-value">${ads.length}</div><div class="stat-label">Total Slides</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${activeCount}</div><div class="stat-label">Active</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--text-dim)">${ads.length - activeCount}</div><div class="stat-label">Hidden</div></div>    </div>    <div class="card" style="margin-top:24px">      <div class="card-header"><span class="card-title">Slides (drag order via Position field)</span></div>      <div class="table-wrap">        <table>          <thead><tr><th style="width:60px">Pos</th><th>Preview</th><th>Kind</th><th>Caption</th><th>Duration</th><th>Status</th><th style="width:200px">Actions</th></tr></thead>          <tbody>            ${ads.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No ads yet — click "Add slide" to create your first one</td></tr>` : ads.map((a) => `                <tr>                  <td><b>${a.position ?? 0}</b></td>                  <td>                    ${a.kind === "video" ? `<video src="${escapeHtml(a.url)}" muted style="width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--bg-soft);" onmouseover="this.play()" onmouseout="this.pause()"></video>` : `<img src="${escapeHtml(a.url)}" alt="" style="width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--bg-soft);" loading="lazy"/>`}                  </td>                  <td><span class="badge ${a.kind === "video" ? "badge-in_progress" : "badge-resolved"}">${a.kind}</span></td>                  <td style="max-width:240px;white-space:normal;font-size:0.85rem;color:var(--text-soft)">${escapeHtml(a.caption || "")}</td>                  <td><small>${((Number(a.duration_ms) || 6000) / 1000).toFixed(1)}s</small></td>                  <td>                    <div style="font-size:0.75rem; color:var(--text-soft)">                      <div><b>Start:</b> ${a.starts_at ? new Date(a.starts_at).toLocaleString() : "Now"}</div>                      <div><b>End:</b> ${a.expires_at ? new Date(a.expires_at).toLocaleString() : "Never"}</div>                    </div>                  </td>                  <td>${a.active ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-danger">Hidden</span>'}</td>                  <td>                    <button class="btn btn-secondary btn-sm ad-edit-btn" data-id="${a.id}">Edit</button>                    <button class="btn btn-secondary btn-sm ad-toggle-btn" data-id="${a.id}">${a.active ? "Hide" : "Show"}</button>                    <button class="btn btn-secondary btn-sm ad-delete-btn" data-id="${a.id}" style="color:var(--danger)">Delete</button>                  </td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
   const guide = document.createElement("div");
@@ -3733,29 +3733,28 @@ export async function renderAdsTab(container) {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
         <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
           <div style="font-weight:800;color:var(--primary);">Square logo/icon</div>
-          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">512px × 512px</div>
-          <small style="color:var(--text-dim);">Use for small popup/logo style images.</small>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">512px x 512px</div>
+          <small style="color:var(--text-dim);">Use for small logo or square popup images.</small>
         </div>
         <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
-          <div style="font-weight:800;color:var(--primary);">Desktop banner</div>
-          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1920px × 900px</div>
-          <small style="color:var(--text-dim);">Best for laptop and desktop landing carousel.</small>
+          <div style="font-weight:800;color:var(--primary);">Desktop banner container</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1600px x 900px</div>
+          <small style="color:var(--text-dim);">This matches the visible desktop ad box.</small>
         </div>
         <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
-          <div style="font-weight:800;color:var(--primary);">Mobile banner</div>
-          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1080px × 1440px</div>
-          <small style="color:var(--text-dim);">Best for phone screens and PWA view.</small>
+          <div style="font-weight:800;color:var(--primary);">Mobile banner container</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1080px x 1350px</div>
+          <small style="color:var(--text-dim);">This matches the visible mobile ad box.</small>
         </div>
         <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
-          <div style="font-weight:800;color:var(--primary);">Video ads</div>
-          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1920px × 1080px MP4</div>
-          <small style="color:var(--text-dim);">Keep under 20 MB, 5-15 seconds preferred.</small>
+          <div style="font-weight:800;color:var(--primary);">Popup ads</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1200px x 800px</div>
+          <small style="color:var(--text-dim);">Use Popup Ads tab for overlay images/videos.</small>
         </div>
       </div>
-      <p style="margin:12px 0 0;color:var(--text-soft);font-size:0.9rem;">Keep important text and faces in the center area so cropping does not cut them on mobile.</p>
+      <p style="margin:12px 0 0;color:var(--text-soft);font-size:0.9rem;">Inline ads now crop to the container. Keep important text and faces in the center area.</p>
     </div>
-  `;
-  container.querySelector(".stats-grid")?.before(guide);
+  `;  container.querySelector(".stats-grid")?.before(guide);
   const refresh = () => renderAdsTab(container);
   container.querySelector("#ad-add-btn").onclick = () =>
     openAdEditor(null, refresh);
@@ -4401,4 +4400,5 @@ export async function renderAutoAssignmentTab(container) {
     toast(err.message || "Could not load auto assignment", "error");
   }
 }
+
 

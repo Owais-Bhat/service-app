@@ -2928,15 +2928,27 @@ tr:hover td {
   max-width: 520px;
 }
 .srf-contact-card {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 18px;
   flex-wrap: wrap;
-  padding: 12px;
-  border-radius: 20px;
+  width: min(100%, 760px);
+  padding: 16px 18px;
+  border-radius: 18px;
   background: var(--bg-soft);
   box-shadow: var(--neu-sm);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+}
+.srf-contact-section {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 80px) clamp(36px, 5vw, 60px);
+  display: flex;
+  justify-content: center;
 }
 .srf-contact-copy {
   display: flex;
@@ -2961,6 +2973,11 @@ tr:hover td {
   font-variant-numeric: tabular-nums;
 }
 .srf-contact-number:hover { color: var(--primary); }
+.srf-contact-note {
+  color: var(--text-soft);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
 .srf-contact-actions {
   display: inline-flex;
   align-items: center;
@@ -3087,7 +3104,7 @@ tr:hover td {
 .srf-ad-slot {
   position: relative;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 16 / 9;
   border-radius: 16px;
   overflow: hidden;
   background: #fff;
@@ -3095,7 +3112,7 @@ tr:hover td {
 .srf-ad-media {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 .srf-ad-caption {
@@ -3698,6 +3715,12 @@ tr:hover td {
     padding: 22px 20px 48px;
     gap: 24px;
   }
+  .srf-card-wrap {
+    order: 1;
+  }
+  .srf-intro {
+    order: 2;
+  }
   .srf-intro {
     max-width: min(92vw, 520px);
     justify-self: center;
@@ -3711,11 +3734,17 @@ tr:hover td {
   }
   .srf-ad-slot,
   .srf-ad-empty {
-    aspect-ratio: 486 / 518;
+    aspect-ratio: 4 / 5;
   }
   .srf-perks { max-width: 420px; margin: 0 auto; }
   .srf-card-wrap {
     justify-self: center;
+    max-width: min(92vw, 520px);
+  }
+  .srf-contact-section {
+    padding: 0 20px 44px;
+  }
+  .srf-contact-card {
     max-width: min(92vw, 520px);
   }
   .srf-logo { height: 44px; }
@@ -3739,6 +3768,17 @@ tr:hover td {
   .srf-main {
     padding-top: 18px !important;
   }
+  .srf-contact-card {
+    align-items: stretch;
+  }
+  .srf-contact-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+  .srf-contact-action {
+    width: 100%;
+  }
   .srf-ads {
     padding: 8px;
     border-radius: 18px;
@@ -3753,6 +3793,72 @@ tr:hover td {
   .srf-title { font-size: 1.9rem; }
   .srf-stepper { font-size: 0.75rem; }
   .srf-step span { display: none; }
+}
+
+.media-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.media-popup-dialog {
+  width: min(96vw, 920px);
+  max-height: 92vh;
+  border-radius: 18px;
+  background: var(--bg-soft);
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.34);
+  border: 1px solid rgba(255,255,255,0.42);
+  position: relative;
+  overflow: hidden;
+}
+.media-popup-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(255,255,255,0.9);
+  box-shadow: var(--neu-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.media-popup-close svg { width: 18px; height: 18px; }
+.media-popup-frame {
+  background: #fff;
+}
+.media-popup-frame img,
+.media-popup-frame video {
+  width: 100%;
+  max-height: 78vh;
+  object-fit: contain;
+  display: block;
+  background: #fff;
+}
+.media-popup-caption {
+  padding: 14px 18px 16px;
+  color: var(--text);
+  font-weight: 800;
+}
+@media (max-width: 640px) {
+  .media-popup-dialog {
+    width: min(94vw, 420px);
+    border-radius: 16px;
+  }
+  .media-popup-frame img,
+  .media-popup-frame video {
+    max-height: 74vh;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════

@@ -51,19 +51,71 @@ function fileKind(file) {
   return String(file?.type || '').startsWith('video/') ? 'video' : 'image';
 }
 
-export async function renderPortalMediaTab(container) {
+function deviceMatches(target) {
+  const isMobile = window.matchMedia('(max-width: 767px)').matches;
+  if (target === 'mobile') return isMobile;
+  if (target === 'desktop') return !isMobile;
+  return true;
+}
+
+function showPopupAd(item, storageKey) {
+  if (!item?.url || sessionStorage.getItem(storageKey) === '1') return;
+  sessionStorage.setItem(storageKey, '1');
+  const isVideo = (item.kind || 'image').toLowerCase() === 'video';
+  const url = escapeAttr(item.url || '');
+  const overlay = document.createElement('div');
+  overlay.className = 'media-popup-overlay';
+  overlay.innerHTML = `
+    <div class="media-popup-dialog" role="dialog" aria-modal="true">
+      <button type="button" class="media-popup-close" aria-label="Close">${ICONS.close}</button>
+      <div class="media-popup-frame">
+        ${isVideo
+          ? `<video src="${url}" controls autoplay muted playsinline></video>`
+          : `<img src="${url}" alt="${escapeAttr(item.caption || 'Popup ad')}"/>`}
+      </div>
+      ${item.caption ? `<div class="media-popup-caption">${escapeHtml(item.caption)}</div>` : ''}
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.media-popup-close').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+export async function mountEmployeePopupAds() {
+  try {
+    const { data } = await supabase
+      .from('ads')
+      .select('*')
+      .eq('placement', 'popup_employee')
+      .eq('active', 1)
+      .order('position', { ascending: true });
+    const now = Date.now();
+    const item = (data || []).find(ad => {
+      if (!deviceMatches(ad.device_target || 'both')) return false;
+      if (ad.starts_at && new Date(ad.starts_at).getTime() > now) return false;
+      if (ad.expires_at && new Date(ad.expires_at).getTime() <= now) return false;
+      return true;
+    });
+    if (item) showPopupAd(item, `employee-popup-${item.id}`);
+  } catch (err) {
+    console.warn('[popup ads] employee load failed', err);
+  }
+}
+
+export async function renderPopupAdsTab(container) {
   showLoader(container);
   const { data, error } = await supabase.from('ads').select('*').order('position', { ascending: true });
   if (error) {
     container.innerHTML = `<div class="card"><div class="card-body">Could not load media: ${escapeHtml(error.message)}</div></div>`;
     return;
   }
-  const items = data || [];
+  const items = (data || []).filter(item => ['popup_landing', 'popup_employee'].includes(item.placement));
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div>
-        <h1>Portal Media</h1>
-        <p>Upload popup images or videos for the landing page and employee portal</p>
+        <h1>Popup Ads</h1>
+        <p>Upload full-screen popup images or videos for the landing page and employee portal</p>
       </div>
       <button class="btn btn-secondary" id="media-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
@@ -71,7 +123,7 @@ export async function renderPortalMediaTab(container) {
       <div class="card-header"><span class="card-title">${ICONS.upload}<span style="margin-left:8px">Upload Media</span></span></div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
-          <div class="form-group"><label>Placement</label><select id="media-placement"><option value="landing">Landing page</option><option value="employee">Employee portal</option></select></div>
+          <div class="form-group"><label>Popup target</label><select id="media-placement"><option value="popup_landing">Landing page popup</option><option value="popup_employee">Employee portal popup</option></select></div>
           <div class="form-group"><label>Device target</label><select id="media-device-target"><option value="both">Both</option><option value="desktop">Desktop only</option><option value="mobile">Mobile only</option></select></div>
           <div class="form-group"><label>Caption</label><input id="media-caption" placeholder="Short title shown with the media"/></div>
           <div class="form-group"><label>Position</label><input id="media-position" type="number" value="0"/></div>
@@ -79,7 +131,7 @@ export async function renderPortalMediaTab(container) {
           <div class="form-group"><label>File</label><input id="media-file" type="file" accept="image/*,video/*"/></div>
         </div>
         <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);font-size:0.84rem;color:var(--text-soft);line-height:1.55;margin-top:6px;">
-          <b>Recommended sizes:</b> landing desktop 1920x900, landing mobile 1080x1440, employee portal 1600x900 or 1080x1080. Use JPG/WebP/PNG under 2 MB for images and MP4/WebM under 20 MB for videos. Keep important text centered so it is not cropped on phones.
+          <b>Recommended popup sizes:</b> desktop 1200x800, mobile 900x1200, square 1080x1080. Use JPG/WebP/PNG under 2 MB for images and MP4/WebM under 20 MB for videos.
         </div>
         <button class="btn btn-primary" id="media-save" style="margin-top:14px;">${ICONS.upload}<span>Upload & Publish</span></button>
       </div>
@@ -93,7 +145,7 @@ export async function renderPortalMediaTab(container) {
             ${items.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-dim)">No media uploaded yet</td></tr>' : items.map(item => `
               <tr>
                 <td style="width:180px">${mediaPreview(item)}</td>
-                <td><span class="badge badge-open">${escapeHtml(item.placement || 'landing')}</span><br/><small style="color:var(--text-dim)">${escapeHtml(item.device_target || 'both')}</small></td>
+                <td><span class="badge badge-open">${escapeHtml(item.placement === 'popup_employee' ? 'Employee popup' : 'Landing popup')}</span><br/><small style="color:var(--text-dim)">${escapeHtml(item.device_target || 'both')}</small></td>
                 <td><b>${escapeHtml(item.caption || 'Untitled')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(item.kind)}</small></td>
                 <td>${Number(item.active) === 1 ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-medium">Hidden</span>'}</td>
                 <td>${Number(item.position) || 0}</td>
@@ -105,7 +157,7 @@ export async function renderPortalMediaTab(container) {
       </div>
     </div>
   `;
-  container.querySelector('#media-refresh').onclick = () => renderPortalMediaTab(container);
+  container.querySelector('#media-refresh').onclick = () => renderPopupAdsTab(container);
   container.querySelector('#media-save').onclick = async () => {
     const btn = container.querySelector('#media-save');
     const file = container.querySelector('#media-file').files[0];
@@ -125,7 +177,7 @@ export async function renderPortalMediaTab(container) {
       });
       if (saveErr) throw new Error(saveErr.message);
       toast('Media published', 'success');
-      renderPortalMediaTab(container);
+      renderPopupAdsTab(container);
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
@@ -136,28 +188,9 @@ export async function renderPortalMediaTab(container) {
     btn.onclick = async () => {
       const { error: updateErr } = await supabase.from('ads').update({ active: Number(btn.dataset.active) }).eq('id', btn.dataset.id);
       if (updateErr) toast(updateErr.message, 'error');
-      else renderPortalMediaTab(container);
+      else renderPopupAdsTab(container);
     };
   });
-}
-
-export async function renderEmployeeMediaTab(container) {
-  showLoader(container);
-  const { data } = await supabase.from('ads').select('*').eq('placement', 'employee').eq('active', 1).order('position', { ascending: true });
-  const items = data || [];
-  container.innerHTML = `
-    <div class="page-header"><h1>Portal Media</h1><p>Updates and media shared by admin</p></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;">
-      ${items.length === 0 ? '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-dim);padding:36px;">No portal media right now</div></div>' : items.map(item => `
-        <div class="card">
-          <div class="card-body">
-            ${mediaPreview(item)}
-            <div style="font-weight:800;margin-top:12px;color:var(--text);">${escapeHtml(item.caption || 'Update')}</div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `;
 }
 
 export async function renderTrainingAdminTab(container) {
