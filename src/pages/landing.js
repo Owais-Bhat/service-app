@@ -432,6 +432,7 @@ export function renderLandingPage(container, onPortalClick) {
       const { data } = await supabase.from('ads')
         .select('*')
         .eq('active', 1)
+        .eq('placement', 'landing')
         .order('position', { ascending: true });
 
       const now = new Date().getTime();

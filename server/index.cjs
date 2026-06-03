@@ -391,6 +391,9 @@ const requiredColumns = {
         { name: 'cash_submitted_at', definition: 'TIMESTAMP NULL' },
         { name: 'cash_submitted_by', definition: 'VARCHAR(36)' },
         { name: 'auto_assigned', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Set to 1 when assigned via round-robin automation'" },
+        { name: 'employee_update_detail', definition: 'TEXT' },
+        { name: 'employee_update_status', definition: 'VARCHAR(40)' },
+        { name: 'employee_update_at', definition: 'TIMESTAMP NULL' },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -408,6 +411,7 @@ const requiredColumns = {
     ads: [
         { name: 'starts_at', definition: 'TIMESTAMP NULL' },
         { name: 'expires_at', definition: 'TIMESTAMP NULL' },
+        { name: 'placement', definition: "VARCHAR(20) DEFAULT 'landing'" },
     ],
     notices: [
         { name: 'priority', definition: "VARCHAR(20) DEFAULT 'normal'" },
@@ -483,12 +487,35 @@ const requiredTables = [
         caption VARCHAR(255),
         duration_ms INT DEFAULT 6000,
         active TINYINT(1) DEFAULT 1,
+        placement VARCHAR(20) DEFAULT 'landing',
         position INT DEFAULT 0,
         starts_at TIMESTAMP NULL,
         expires_at TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_ads_active (active),
+        INDEX idx_ads_placement (placement),
         INDEX idx_ads_position (position)
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_items (
+        id VARCHAR(36) PRIMARY KEY,
+        title VARCHAR(180) NOT NULL,
+        description TEXT,
+        kind VARCHAR(20) NOT NULL,
+        url TEXT NOT NULL,
+        active TINYINT(1) DEFAULT 1,
+        position INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_training_active (active),
+        INDEX idx_training_position (position)
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_completions (
+        id VARCHAR(36) PRIMARY KEY,
+        item_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_training_completion (item_id, employee_id),
+        INDEX idx_training_employee (employee_id),
+        INDEX idx_training_item (item_id)
     )`,
     `CREATE TABLE IF NOT EXISTS notices (
         id VARCHAR(36) PRIMARY KEY,
@@ -1000,6 +1027,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
     'payments', 'bills', 'complaints', 'ads', 'companies', 'notices', 'discount_presets',
+    'training_items', 'training_completions',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -1013,7 +1041,7 @@ const ADMIN_ONLY_WRITE_COLUMNS = {
 const EMPLOYEE_READ_TABLES = new Set([
     'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
     'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types', 'companies',
-    'notices', 'discount_presets',
+    'notices', 'discount_presets', 'ads', 'training_items', 'training_completions',
 ]);
 const EMPLOYEE_WRITE_FIELDS = {
     profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
@@ -1028,11 +1056,13 @@ const EMPLOYEE_WRITE_FIELDS = {
         'discount_reason', 'discount_label', 'discount_preset_id',
         'bill_generated_at', 'bill_pdf_url',
         'employee_bill_lat', 'employee_bill_lng',
+        'employee_update_detail', 'employee_update_status', 'employee_update_at',
     ]),
     tickets: new Set(['status']),
     ticket_comments: new Set(['id', 'ticket_id', 'user_id', 'content']),
     inquiry_services: new Set(['inquiry_id', 'service_id']),
     companies: new Set(['id', 'name']),
+    training_completions: new Set(['id', 'item_id', 'employee_id', 'completed_at']),
 };
 
 // Identifier-safe regex for column/select tokens. Lets us reject anything that
@@ -1111,6 +1141,20 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             whereClauses.push('?? = ?');
             params.push('active', 1);
             break;
+        case 'ads':
+            if (method !== 'GET') return { error: 'Admin only' };
+            whereClauses.push('?? = ?');
+            params.push('active', 1);
+            break;
+        case 'training_items':
+            if (method !== 'GET') return { error: 'Admin only' };
+            whereClauses.push('?? = ?');
+            params.push('active', 1);
+            break;
+        case 'training_completions':
+            whereClauses.push('?? = ?');
+            params.push('employee_id', id);
+            break;
         case 'discount_presets':
             if (method !== 'GET') return { error: 'Admin only' };
             whereClauses.push('?? = ?');
@@ -1170,6 +1214,7 @@ async function assertEmployeeInsertAllowed(connection, table, user, data) {
     if (table === 'profiles' && String(data.id) !== String(id)) return 'Cannot write another user profile';
     if (table === 'attendance' && String(data.user_id) !== String(id)) return 'Cannot write another user attendance';
     if ((table === 'eod_reports' || table === 'leave_requests') && String(data.employee_id) !== String(id)) return 'Cannot write another employee record';
+    if (table === 'training_completions' && String(data.employee_id) !== String(id)) return 'Cannot write another employee training record';
     if (table === 'leave_requests' && data.status && data.status !== 'pending') return 'Leave requests must start pending';
     if (table === 'ticket_comments') {
         if (String(data.user_id) !== String(id)) return 'Cannot comment as another user';
@@ -2084,6 +2129,8 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
                 else if (table === 'eod_reports' && relTable === 'profiles') fkInTable = 'employee_id';
                 else if (table === 'leave_requests' && relTable === 'profiles') fkInTable = 'employee_id';
                 else if (table === 'ticket_comments' && relTable === 'profiles') fkInTable = 'user_id';
+                else if (table === 'training_completions' && relTable === 'profiles') fkInTable = 'employee_id';
+                else if (table === 'training_completions' && relTable === 'training_items') fkInTable = 'item_id';
                 
                 if (fkInTable) {
                     const ids = [...new Set(rows.map(r => r[fkInTable]).filter(Boolean))];

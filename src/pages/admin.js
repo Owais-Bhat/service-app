@@ -241,7 +241,8 @@ function matchesServiceReportFilters(
   if (from && rowDate && rowDate < from) return false;
   if (to && rowDate && rowDate > to) return false;
   if (status === "active") return !["resolved", "closed", "issue_not_resolved"].includes(row.status);
-  if (status === "resolved") return ["resolved", "closed", "issue_not_resolved"].includes(row.status);
+  if (status === "resolved") return ["resolved", "closed"].includes(row.status);
+  if (status === "issues") return row.status === "issue_not_resolved";
   if (status === "paid") return row.payment_status === "paid";
   if (status === "unpaid")
     return row.bill_amount && row.payment_status !== "paid";
@@ -289,7 +290,15 @@ export async function renderAdminDashboard(container) {
     to: container.dataset.companyTo || "",
     status: container.dataset.companyStatus || "all",
   };
-  let tickets, inquiries, attendance, eodReports, stocks, profiles, complaints;
+  const apiBase =
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+      ? "/api"
+      : "http://localhost:5000/api";
+  const authHeaders = () => ({
+    Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
+  });
+  let tickets, inquiries, attendance, eodReports, stocks, profiles, complaints, autoAssignStatus;
   try {
     const res = await Promise.all([
       supabase
@@ -315,6 +324,7 @@ export async function renderAdminDashboard(container) {
         .from("eod_reports")
         .select("*")
         .order("date", { ascending: false }),
+      fetch(`${apiBase}/auto-assignment/status`, { headers: authHeaders() }).then(r => r.ok ? r.json() : { auto_assignment_enabled: false })
     ]);
     tickets = res[0].data;
     inquiries = res[1].data;
@@ -323,7 +333,8 @@ export async function renderAdminDashboard(container) {
     profiles = res[4].data;
     complaints = res[5].data;
     eodReports = res[6].data;
-    const firstErr = res.find((r) => r.error)?.error;
+    autoAssignStatus = res[7];
+    const firstErr = res.slice(0, 7).find((r) => r.error)?.error;
     if (firstErr) console.warn("[Admin] Partial load issue:", firstErr.message);
   } catch (err) {
     container.innerHTML = `<div class="card" style="text-align:center;padding:40px;"><h2 style="color:var(--primary);">Initialization Error</h2><p>${err.message}</p></div>`;
@@ -382,7 +393,7 @@ export async function renderAdminDashboard(container) {
       companyMap.set(company, { total: 0, active: 0, resolved: 0 });
     const entry = companyMap.get(company);
     entry.total++;
-    if (["resolved", "closed", "issue_not_resolved"].includes(inq.status)) entry.resolved++;
+    if (["resolved", "closed"].includes(inq.status)) entry.resolved++;
     else entry.active++;
   });
   const companyRows = [...companyMap.entries()]
@@ -391,7 +402,7 @@ export async function renderAdminDashboard(container) {
   const activeInquiries = [...i].sort(newestFirst);
   const allRows = allInquiries || [];
   const resolvedInquiries = (allInquiries || [])
-    .filter((x) => ["resolved", "closed", "issue_not_resolved"].includes(x.status))
+    .filter((x) => ["resolved", "closed"].includes(x.status))
     .sort(newestFirst);
   const newToday = allRows.filter(
     (x) => dateKey(x.created_at) === today,
@@ -405,7 +416,7 @@ export async function renderAdminDashboard(container) {
   ).length;
   const resolvedToday = allRows.filter(
     (x) =>
-      ["resolved", "closed", "issue_not_resolved"].includes(x.status) &&
+      ["resolved", "closed"].includes(x.status) &&
       dateKey(x.updated_at || x.bill_generated_at || x.created_at) === today,
   ).length;
   const unpaidBills = allRows.filter(
@@ -441,7 +452,7 @@ export async function renderAdminDashboard(container) {
             ? "Unassigned"
             : "Needs update",
     }));
-  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Admin Hub</h1>        <p>Real-time operations monitoring</p>      </div>      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">        <button class="btn btn-primary" id="admin-dashboard-register">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="admin-enable-alerts">Enable Alerts</button>        <button class="btn btn-secondary" id="admin-refresh">Refresh</button>      </div>    </div>    <div class="stats-grid">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${a.length}</div>        <div class="stat-label">Employees In</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning)">${i.length}</div>        <div class="stat-label">Active Service Requests</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--danger)">${lowStock}</div>        <div class="stat-label">Low Stock</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${t.filter((x) => x.status === "open").length}</div>        <div class="stat-label">Open Tasks</div>      </div>    </div>    <div class="stats-grid" style="margin-top:18px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${newToday}</div>        <div class="stat-label">New Today</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning)">${pendingAssignment}</div>        <div class="stat-label">Pending Assignment</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--info)">${inProgress}</div>        <div class="stat-label">In Progress</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${resolvedToday}</div>        <div class="stat-label">Resolved Today</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--danger)">${unpaidBills}</div>        <div class="stat-label">Unpaid Bills</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.7rem">${money(cashPending)}</div>        <div class="stat-label">Cash Pending</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--danger)">${openComplaints.length}</div>        <div class="stat-label">Open Complaints</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${eodWarnings.length ? "var(--danger)" : "var(--success)"}">${eodWarnings.length}</div>        <div class="stat-label">EOD Warnings</div>      </div>    </div>      ${
+  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Admin Hub</h1>        <p>Real-time operations monitoring</p>      </div>      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">        <div style="display:inline-flex;align-items:center;gap:10px;padding:6px 14px;border-radius:100px;background:var(--bg-soft);box-shadow:var(--neu-sm);">          <span style="font-size:0.82rem;font-weight:700;color:var(--text-dim);">Auto Assign:</span>          <label class="switch-container" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">            <div class="switch-outer" id="dash-auto-assign-switch-outer" style="position:relative;width:44px;height:22px;background:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);">              <div class="switch-inner" id="dash-auto-assign-switch-inner" style="position:absolute;top:2px;left:${autoAssignStatus.auto_assignment_enabled ? "24px" : "2px"};width:18px;height:18px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>            </div>            <span style="font-size:0.85rem;font-weight:700;color:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--text-dim)"};" id="dash-auto-assign-status-text">${autoAssignStatus.auto_assignment_enabled ? "ON" : "OFF"}</span>            <input type="checkbox" id="dash-auto-assign-toggle-input" style="display:none;" ${autoAssignStatus.auto_assignment_enabled ? "checked" : ""} />          </label>        </div>        <button class="btn btn-primary" id="admin-dashboard-register">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="admin-enable-alerts">Enable Alerts</button>        <button class="btn btn-secondary" id="admin-refresh">Refresh</button>      </div>    </div>    <div class="stats-grid">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${a.length}</div>        <div class="stat-label">Employees In</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning)">${i.length}</div>        <div class="stat-label">Active Service Requests</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--danger)">${lowStock}</div>        <div class="stat-label">Low Stock</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${t.filter((x) => x.status === "open").length}</div>        <div class="stat-label">Open Tasks</div>      </div>    </div>    <div class="stats-grid" style="margin-top:18px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${newToday}</div>        <div class="stat-label">New Today</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning)">${pendingAssignment}</div>        <div class="stat-label">Pending Assignment</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--info)">${inProgress}</div>        <div class="stat-label">In Progress</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${resolvedToday}</div>        <div class="stat-label">Resolved Today</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--danger)">${unpaidBills}</div>        <div class="stat-label">Unpaid Bills</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.7rem">${money(cashPending)}</div>        <div class="stat-label">Cash Pending</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--danger)">${openComplaints.length}</div>        <div class="stat-label">Open Complaints</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${eodWarnings.length ? "var(--danger)" : "var(--success)"}">${eodWarnings.length}</div>        <div class="stat-label">EOD Warnings</div>      </div>    </div>      ${
     eodWarnings.length
       ? `      <div class="card">        <div class="card-header"><span class="card-title">EOD Warnings</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Employee</th><th>Missed EOD</th><th>Last Attendance</th><th>Action</th></tr></thead>            <tbody>              ${eodWarnings
           .slice(0, 5)
@@ -474,6 +485,51 @@ export async function renderAdminDashboard(container) {
       tag: "admin-alerts-test",
     });
   });
+
+  const dashToggleInput = container.querySelector("#dash-auto-assign-toggle-input");
+  const dashSwitchOuter = container.querySelector("#dash-auto-assign-switch-outer");
+  const dashSwitchInner = container.querySelector("#dash-auto-assign-switch-inner");
+  const dashStatusText = container.querySelector("#dash-auto-assign-status-text");
+
+  if (dashToggleInput && dashSwitchOuter && dashSwitchInner && dashStatusText) {
+    dashToggleInput.onchange = async () => {
+      const enabled = dashToggleInput.checked;
+      dashSwitchOuter.style.background = enabled
+        ? "var(--success)"
+        : "var(--border)";
+      dashSwitchInner.style.left = enabled ? "24px" : "2px";
+      dashStatusText.textContent = enabled ? "ON" : "OFF";
+      dashStatusText.style.color = enabled ? "var(--success)" : "var(--text-dim)";
+
+      try {
+        const res = await fetch(`${apiBase}/auto-assignment/status`, {
+          method: "PUT",
+          headers: {
+            ...authHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ enabled }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok)
+          throw new Error(
+            data.error || "Failed to update auto-assignment status",
+          );
+
+        toast(`Auto assignment turned ${enabled ? "on" : "off"}`, "success");
+      } catch (err) {
+        toast(err.message, "error");
+        // Revert UI state on error
+        dashToggleInput.checked = !enabled;
+        dashSwitchOuter.style.background = !enabled
+          ? "var(--success)"
+          : "var(--border)";
+        dashSwitchInner.style.left = !enabled ? "24px" : "2px";
+        dashStatusText.textContent = !enabled ? "ON" : "OFF";
+        dashStatusText.style.color = !enabled ? "var(--success)" : "var(--text-dim)";
+      }
+    };
+  }
   const companySearch = container.querySelector("#company-search");
   if (companySearch) {
     companySearch.oninput = () => {
@@ -828,6 +884,16 @@ async function openInquiryDetail(id, onDone) {
               })
               .join("")}          </select>          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentLocked ? "Already assigned. Save is disabled to prevent duplicate assignment." : "Only currently clocked-in employees with no strict EOD restriction can receive new assignments."}</small>        </div>      </div>      <div class="modal-footer">        <button class="btn btn-secondary" id="ci2">Close</button>        <button class="btn btn-primary" id="save-sr" ${assignmentLocked ? "disabled" : ""}>${ICONS.check}<span>${assignmentLocked ? "Already assigned" : "Save assignment"}</span></button>      </div>    </div>`;
   document.body.appendChild(overlay);
+  if (i.employee_update_detail) {
+    const updateBox = document.createElement("div");
+    updateBox.style.cssText =
+      "padding:12px;border-radius:12px;background:var(--bg-soft);border:1px solid var(--border);margin-top:10px;";
+    const updateStatus = String(i.employee_update_status || i.status || "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    updateBox.innerHTML = `<div class="sr-meta-label">Employee submitted detail</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(i.employee_update_detail)}</div><small style="color:var(--text-dim)">Status: ${updateStatus}${i.employee_update_at ? ` - ${formatDateTime(i.employee_update_at)}` : ""}</small>`;
+    overlay.querySelector(".sr-meta")?.appendChild(updateBox);
+  }
   overlay.querySelector("#ci").onclick = overlay.querySelector("#ci2").onclick =
     () => overlay.remove();
   if (hasBill) {
@@ -1267,8 +1333,9 @@ export async function renderInquiries(container) {
     all: all.length,
     active: all.filter((x) => !["resolved", "closed", "issue_not_resolved"].includes(x.status))
       .length,
-    resolved: all.filter((x) => ["resolved", "closed", "issue_not_resolved"].includes(x.status))
+    resolved: all.filter((x) => ["resolved", "closed"].includes(x.status))
       .length,
+    issues: all.filter((x) => x.status === "issue_not_resolved").length,
     paid: all.filter((x) => x.payment_status === "paid").length,
     unpaid: all.filter((x) => x.bill_amount && x.payment_status !== "paid")
       .length,
@@ -1278,7 +1345,8 @@ export async function renderInquiries(container) {
     if (filterKey === "active")
       return !["resolved", "closed", "issue_not_resolved"].includes(x.status);
     if (filterKey === "resolved")
-      return ["resolved", "closed", "issue_not_resolved"].includes(x.status);
+      return ["resolved", "closed"].includes(x.status);
+    if (filterKey === "issues") return x.status === "issue_not_resolved";
     if (filterKey === "paid") return x.payment_status === "paid";
     if (filterKey === "unpaid")
       return x.bill_amount && x.payment_status !== "paid";
@@ -1290,6 +1358,7 @@ export async function renderInquiries(container) {
   const tabs = [
     ["active", "Active"],
     ["resolved", "Resolved"],
+    ["issues", "Issue Not Resolved"],
     ["unpaid", "Awaiting Payment"],
     ["paid", "Paid"],
     ["all", "All"],

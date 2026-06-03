@@ -6,6 +6,7 @@ import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, 
 import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
+import { renderPortalMediaTab, renderEmployeeMediaTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab } from './pages/media-training.js';
 import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeeEstimatorTab, renderEmployeePricingTab } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
@@ -70,6 +71,8 @@ function getNavItems(role) {
       { id: 'my-collections', icon: ICONS.card, label: 'Collections' },
       { id: 'my-salary', icon: ICONS.rupee, label: 'Salary' },
       { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
+      { id: 'employee-media', icon: ICONS.box, label: 'Portal Media' },
+      { id: 'employee-training', icon: ICONS.play, label: 'Tutorials' },
     ];
     items.push({ type: 'section', label: 'Services' });
     items.push({ id: 'estimator', icon: ICONS.receipt, label: 'Estimator' });
@@ -91,7 +94,10 @@ function getNavItems(role) {
     { type: 'section', label: 'Management' },
     { id: 'contacts', icon: ICONS.phone, label: 'Contacts' },
     { id: 'users', icon: ICONS.users, label: 'Users' },
+    { id: 'portal-media', icon: ICONS.box, label: 'Portal Media' },
+    { id: 'training-admin', icon: ICONS.play, label: 'Employee Tutorials' },
     { type: 'section', label: 'Reports' },
+    { id: 'ai-report', icon: ICONS.star, label: 'AI Report' },
     { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
     { id: 'bills', icon: ICONS.receipt, label: 'Bills' },
     { id: 'cash', icon: ICONS.rupee, label: 'Cash Collections' },
@@ -127,6 +133,8 @@ function getPageRenderer(role, page) {
       'my-collections': renderEmployeeCollections,
       'my-salary': renderEmployeeSalary,
       leaderboard: renderEmployeeLeaderboard,
+      'employee-media': renderEmployeeMediaTab,
+      'employee-training': renderEmployeeTrainingTab,
       estimator: renderEmployeeEstimatorTab,
       'service-pricing': renderEmployeePricingTab,
       profile: renderProfile
@@ -136,6 +144,7 @@ function getPageRenderer(role, page) {
       inquiries: renderInquiries, contacts: renderContacts, users: renderUsers, profile: renderProfile,
       payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
       collections: renderAdminCollections, discounts: renderDiscountsTab, 'discount-details': renderDiscountRequestsTab,
+      'portal-media': renderPortalMediaTab, 'training-admin': renderTrainingAdminTab, 'ai-report': renderAIReportTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
       ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
       'auto-assignment': renderAutoAssignmentTab,

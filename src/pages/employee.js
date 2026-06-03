@@ -2050,21 +2050,22 @@ export async function renderEmployeeTasks(container) {
 
   const activeTasks = tasks.filter(x => {
     const status = displayStatus(x.status);
-    if (status === 'resolved') return false;
+    if (status === 'resolved' || status === 'issue_not_resolved') return false;
     const inq = x.inquiries?.[0];
     if (!inq) return status === 'assigned' || status === 'in_progress' || status === 'open';
-    return inq.assignment_status === 'accepted' && displayStatus(inq.status) !== 'resolved';
+    return inq.assignment_status === 'accepted' && !['resolved', 'issue_not_resolved'].includes(displayStatus(inq.status));
   });
   const completedTasks = tasks.filter(x => displayStatus(x.status) === 'resolved');
   const issueTasks = tasks.filter(x => displayStatus(x.status) === 'issue_not_resolved');
   const activeAcceptedInquiries = acceptedInquiries.filter(x => !['resolved', 'closed', 'issue_not_resolved'].includes(x.status));
-  const resolvedAcceptedInquiries = acceptedInquiries.filter(x => ['resolved', 'closed', 'issue_not_resolved'].includes(x.status));
+  const resolvedAcceptedInquiries = acceptedInquiries.filter(x => ['resolved', 'closed'].includes(x.status));
+  const issueAcceptedInquiries = acceptedInquiries.filter(x => x.status === 'issue_not_resolved');
 
   const filterCounts = {
     all: tasks.length + acceptedInquiries.length,
     active: activeTasks.length + activeAcceptedInquiries.length,
     completed: completedTasks.length + resolvedAcceptedInquiries.length,
-    issues: issueTasks.length,
+    issues: issueTasks.length + issueAcceptedInquiries.length,
   };
 
   const jobCard = (inq) => `
@@ -2076,6 +2077,7 @@ export async function renderEmployeeTasks(container) {
            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;"><b>Ticket:</b> ${inq.ticket_no || '-'}</div>
            <div style="font-size:0.82rem; color:var(--text-dim); margin-top:4px;"><b>Created:</b> ${formatDateTime(inq.created_at)}</div>
            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
+           ${inq.employee_update_detail ? `<div style="font-size:0.82rem;color:var(--text-soft);margin-top:8px;padding:10px;border-radius:10px;background:var(--bg-soft);"><b>Employee update:</b> ${escapeHtml(inq.employee_update_detail)}</div>` : ''}
          </div>
          <span class="badge badge-${displayStatus(inq.status)}" style="font-size:0.75rem">${statusText(inq.status)}</span>
        </div>
@@ -2160,6 +2162,12 @@ export async function renderEmployeeTasks(container) {
                 <div style="font-size:0.7rem; color:var(--text-dim)">Service</div>
                 <div style="font-size:0.9rem; font-weight:600">${inq.service_item || '-'}</div>
               </div>
+              ${inq.employee_update_detail ? `
+                <div style="grid-column: span 2">
+                  <div style="font-size:0.7rem; color:var(--text-dim)">Employee update</div>
+                  <div style="font-size:0.88rem; font-weight:600; white-space:pre-wrap;">${escapeHtml(inq.employee_update_detail)}</div>
+                </div>
+              ` : ''}
               <div style="grid-column: span 2">
                 <div style="font-size:0.7rem; color:var(--text-dim)">Location</div>
                 <div style="font-size:0.88rem; font-weight:600; display:flex; align-items:flex-start; gap:6px;">
@@ -2193,6 +2201,10 @@ export async function renderEmployeeTasks(container) {
     ...resolvedAcceptedInquiries,
     ...completedTasks,
   ].sort(byNewestCreated);
+  const issueServiceCards = [
+    ...issueAcceptedInquiries,
+    ...issueTasks,
+  ].sort(byNewestCreated);
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -2222,7 +2234,7 @@ export async function renderEmployeeTasks(container) {
         <div class="stat-label">Completed</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:var(--danger)">${issueTasks.length}</div>
+        <div class="stat-value" style="color:var(--danger)">${issueTasks.length + issueAcceptedInquiries.length}</div>
         <div class="stat-label">Issues</div>
       </div>
     </div>
@@ -2310,6 +2322,14 @@ export async function renderEmployeeTasks(container) {
               ${resolvedServiceCards.length === 0
                 ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No resolved services yet</div>'
                 : resolvedServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Issue Not Resolved Services</span></div>
+            <div class="card-body emp-scroll-list">
+              ${issueServiceCards.length === 0
+                ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No unresolved issue services</div>'
+                : issueServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
             </div>
           </div>
         `}
@@ -2804,6 +2824,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    if (inquiryRow?.employee_update_detail) {
+      const updateBox = document.createElement('div');
+      updateBox.style.cssText = 'padding:12px;border-radius:12px;background:var(--bg-soft);border:1px solid var(--border);margin:12px 0;';
+      updateBox.innerHTML = `<div class="sr-meta-label">Last submitted detail</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(inquiryRow.employee_update_detail)}</div><small style="color:var(--text-dim)">Status: ${statusText(inquiryRow.employee_update_status || inquiryRow.status)}${inquiryRow.employee_update_at ? ` - ${formatDateTime(inquiryRow.employee_update_at)}` : ''}</small>`;
+      overlay.querySelector('[data-pane="status"]')?.appendChild(updateBox);
+    }
 
     // Tab switcher - also drives the footer button label (Next → on intermediate tabs, Save on the last).
     const TAB_ORDER = ['status', 'device', 'bill'];
@@ -3709,9 +3735,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
 
       const { data: { user } } = await supabase.auth.getUser();
-      const ops = [supabase.from('tickets').update({ status: newStatus }).eq('id', taskId)];
+      const ops = [];
+      if (taskId) ops.push(supabase.from('tickets').update({ status: newStatus }).eq('id', taskId));
 
-      const inqUpdates = { status: newStatus };
+      const inqUpdates = {
+        status: newStatus,
+        employee_update_detail: detail,
+        employee_update_status: newStatus,
+        employee_update_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      };
       const deviceType = overlay.querySelector('#device-type')?.value.trim();
       const deviceSerial = overlay.querySelector('#device-serial')?.value.trim();
       if (companyName) inqUpdates.company_name = companyName;
@@ -3736,7 +3768,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
       if (inqId) {
         ops.push(supabase.from('inquiries').update(inqUpdates).eq('id', inqId));
-      } else {
+      } else if (taskId) {
         ops.push(supabase.from('inquiries').update(inqUpdates).eq('ticket_id', taskId));
       }
 
@@ -3750,8 +3782,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         }
       }
 
-      // Add progress detail as a comment
-      ops.push(supabase.from('ticket_comments').insert({
+      // Add progress detail as a comment when this service has a linked ticket.
+      if (taskId) ops.push(supabase.from('ticket_comments').insert({
         ticket_id: taskId,
         user_id: user.id,
         content: `[Status: ${newStatus.replace('_', ' ')}] ${detail}${resolving && bill.total > 0 ? ` (Bill: ₹${bill.total})` : ''}`
