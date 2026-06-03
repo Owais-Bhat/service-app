@@ -103,6 +103,162 @@ export async function mountEmployeePopupAds() {
   }
 }
 
+function openPopupAdEditor(ad, onChange) {
+  const editing = !!ad;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <span class="modal-title">${editing ? 'Edit popup' : 'Add popup'}</span>
+        <button class="modal-close">×</button>
+      </div>
+      <div class="modal-body">
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Media type</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <label style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;cursor:pointer;text-align:center;font-weight:700;">
+            <input type="radio" name="popup-kind" value="image" ${!ad || ad.kind === "image" ? "checked" : ""} style="margin-right:6px"/> Image
+          </label>
+          <label style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;cursor:pointer;text-align:center;font-weight:700;">
+            <input type="radio" name="popup-kind" value="video" ${ad?.kind === "video" ? "checked" : ""} style="margin-right:6px"/> Video
+          </label>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Media source</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <label style="font-size:0.85rem;cursor:pointer;"><input type="radio" name="popup-media-source" value="upload" checked> Upload file</label>
+            <label style="font-size:0.85rem;cursor:pointer;"><input type="radio" name="popup-media-source" value="url"> Enter URL</label>
+          </div>
+          <div id="popup-media-upload-div">
+            <input type="file" id="popup-file" accept="image/*,video/*" style="width:100%;padding:8px;border-radius:10px;border:1px dashed var(--border);background:var(--bg);font-size:0.9rem;" />
+          </div>
+          <div id="popup-media-url-div" style="display:none;">
+            <input id="popup-url" type="url" placeholder="https://…/image.jpg or https://…/video.mp4"
+                   value="${escapeHtml(ad?.url || "")}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+          ${ad?.url ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;overflow:hidden;text-overflow:ellipsis;">Current: <a href="${escapeHtml(ad.url)}" target="_blank" style="color:var(--primary)">${escapeHtml(ad.url)}</a></div>` : ""}
+        </div>
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Popup target ${editing ? '' : '(required)'}</label>
+        <select id="popup-placement" ${editing ? 'disabled' : ''} style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;margin-bottom:14px;">
+          <option value="popup_landing" ${ad?.placement === "popup_landing" ? "selected" : ""}>Landing page popup</option>
+          <option value="popup_employee" ${ad?.placement === "popup_employee" ? "selected" : ""}>Employee portal popup</option>
+        </select>
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Device target</label>
+        <select id="popup-device-target" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;margin-bottom:14px;">
+          <option value="both" ${!ad?.device_target || ad.device_target === "both" ? "selected" : ""}>Both mobile and desktop</option>
+          <option value="desktop" ${ad?.device_target === "desktop" ? "selected" : ""}>Desktop only</option>
+          <option value="mobile" ${ad?.device_target === "mobile" ? "selected" : ""}>Mobile only</option>
+        </select>
+        <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Caption (optional)</label>
+        <input id="popup-caption" type="text" maxlength="255" placeholder="Title or description"
+               value="${escapeHtml(ad?.caption || "")}"
+               style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;margin-bottom:14px;"/>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Duration (seconds)</label>
+            <input id="popup-duration" type="number" min="2" max="60" step="0.5"
+                   value="${ad ? (Number(ad.duration_ms) || 6000) / 1000 : 6}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+          <div>
+            <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Position</label>
+            <input id="popup-position" type="number" min="0" step="1"
+                   value="${ad?.position ?? 0}"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.9rem;margin-bottom:14px;">
+          <input id="popup-active" type="checkbox" ${!ad || ad.active ? "checked" : ""}/>
+          Active (show popup)
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="popup-cancel">Cancel</button>
+        <button class="btn btn-primary" id="popup-save">${editing ? "Save" : "Add popup"}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.modal-close').onclick = close;
+  overlay.querySelector('#popup-cancel').onclick = close;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  overlay.querySelectorAll('input[name="popup-media-source"]').forEach((r) => {
+    r.onchange = () => {
+      overlay.querySelector('#popup-media-upload-div').style.display = r.value === 'upload' ? 'block' : 'none';
+      overlay.querySelector('#popup-media-url-div').style.display = r.value === 'url' ? 'block' : 'none';
+    };
+  });
+
+  overlay.querySelector('#popup-save').onclick = async () => {
+    const kind = overlay.querySelector('input[name="popup-kind"]:checked').value;
+    const caption = overlay.querySelector('#popup-caption').value.trim();
+    const durationSec = parseFloat(overlay.querySelector('#popup-duration').value);
+    const position = parseInt(overlay.querySelector('#popup-position').value, 10) || 0;
+    const active = overlay.querySelector('#popup-active').checked ? 1 : 0;
+    const deviceTarget = overlay.querySelector('#popup-device-target').value;
+    const placement = overlay.querySelector('#popup-placement').value;
+
+    const radioUpload = overlay.querySelector('input[name="popup-media-source"][value="upload"]').checked;
+    const fileInput = overlay.querySelector('#popup-file');
+    let url = overlay.querySelector('#popup-url').value.trim();
+
+    if (radioUpload && fileInput.files.length > 0) {
+      const btn = overlay.querySelector('#popup-save');
+      btn.disabled = true;
+      btn.textContent = 'Uploading...';
+      try {
+        url = await uploadMediaFile(fileInput.files[0]);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = editing ? 'Save' : 'Add popup';
+        return toast(err.message, 'error');
+      }
+    }
+
+    if (!url) {
+      if (ad?.url) {
+        url = ad.url;
+      } else {
+        return toast('Media file or URL is required', 'error');
+      }
+    }
+
+    if (!/^https?:\/\//i.test(url) && !url.startsWith('/uploads/'))
+      return toast('URL must start with http(s):// or /uploads/', 'error');
+
+    if (!Number.isFinite(durationSec) || durationSec < 2)
+      return toast('Duration must be at least 2 seconds', 'error');
+
+    const payload = {
+      kind,
+      url,
+      caption: caption || null,
+      placement,
+      device_target: deviceTarget,
+      duration_ms: Math.round(durationSec * 1000),
+      position,
+      active,
+    };
+
+    let res;
+    if (editing) {
+      res = await supabase.from('ads').update(payload).eq('id', ad.id);
+    } else {
+      res = await supabase.from('ads').insert(payload);
+    }
+
+    if (res.error)
+      return toast('Could not save: ' + (res.error.message || ''), 'error');
+
+    toast(editing ? 'Popup updated' : 'Popup added', 'success');
+    close();
+    if (onChange) onChange();
+  };
+}
+
 export async function renderPopupAdsTab(container) {
   showLoader(container);
   const { data, error } = await supabase.from('ads').select('*').order('position', { ascending: true });
@@ -140,7 +296,7 @@ export async function renderPopupAdsTab(container) {
       <div class="card-header"><span class="card-title">Published Media</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Preview</th><th>Placement</th><th>Caption</th><th>Status</th><th>Position</th><th></th></tr></thead>
+          <thead><tr><th>Preview</th><th>Placement</th><th>Caption</th><th>Status</th><th>Position</th><th style="width:240px">Actions</th></tr></thead>
           <tbody>
             ${items.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-dim)">No media uploaded yet</td></tr>' : items.map(item => `
               <tr>
@@ -149,7 +305,7 @@ export async function renderPopupAdsTab(container) {
                 <td><b>${escapeHtml(item.caption || 'Untitled')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(item.kind)}</small></td>
                 <td>${Number(item.active) === 1 ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-medium">Hidden</span>'}</td>
                 <td>${Number(item.position) || 0}</td>
-                <td><button class="btn btn-secondary btn-sm media-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button></td>
+                <td><button class="btn btn-secondary btn-sm popup-edit-btn" data-id="${escapeAttr(item.id)}">Edit</button><button class="btn btn-secondary btn-sm media-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button><button class="btn btn-secondary btn-sm popup-delete-btn" data-id="${escapeAttr(item.id)}" style="color:var(--danger)">Delete</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -184,11 +340,27 @@ export async function renderPopupAdsTab(container) {
       btn.innerHTML = `${ICONS.upload}<span>Upload & Publish</span>`;
     }
   };
+  const refresh = () => renderPopupAdsTab(container);
+  container.querySelectorAll('.popup-edit-btn').forEach(btn => {
+    btn.onclick = () => {
+      const ad = items.find(i => String(i.id) === btn.dataset.id);
+      if (ad) openPopupAdEditor(ad, refresh);
+    };
+  });
   container.querySelectorAll('.media-toggle').forEach(btn => {
     btn.onclick = async () => {
       const { error: updateErr } = await supabase.from('ads').update({ active: Number(btn.dataset.active) }).eq('id', btn.dataset.id);
       if (updateErr) toast(updateErr.message, 'error');
-      else renderPopupAdsTab(container);
+      else refresh();
+    };
+  });
+  container.querySelectorAll('.popup-delete-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Delete this popup ad? This cannot be undone.')) return;
+      const { error: deleteErr } = await supabase.from('ads').delete().eq('id', btn.dataset.id);
+      if (deleteErr) return toast('Could not delete: ' + (deleteErr.message || ''), 'error');
+      toast('Popup ad deleted', 'success');
+      refresh();
     };
   });
 }
