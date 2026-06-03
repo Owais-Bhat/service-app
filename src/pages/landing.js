@@ -366,8 +366,7 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   function showPopupAd(item) {
-    if (!item?.url || sessionStorage.getItem(`landing-popup-${item.id}`) === '1') return;
-    sessionStorage.setItem(`landing-popup-${item.id}`, '1');
+    if (!item?.url) return;
     const isVideo = (item.kind || 'image').toLowerCase() === 'video';
     const overlay = document.createElement('div');
     overlay.className = 'media-popup-overlay';
