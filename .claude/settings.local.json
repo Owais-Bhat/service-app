@@ -36,7 +36,8 @@
       "Bash(node -c src/pages/admin.js)",
       "Bash(node -c src/utils.js)",
       "Bash(git update-index *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git hash-object *)"
     ]
   }
 }
