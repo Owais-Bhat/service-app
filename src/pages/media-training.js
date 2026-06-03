@@ -72,6 +72,7 @@ export async function renderPortalMediaTab(container) {
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
           <div class="form-group"><label>Placement</label><select id="media-placement"><option value="landing">Landing page</option><option value="employee">Employee portal</option></select></div>
+          <div class="form-group"><label>Device target</label><select id="media-device-target"><option value="both">Both</option><option value="desktop">Desktop only</option><option value="mobile">Mobile only</option></select></div>
           <div class="form-group"><label>Caption</label><input id="media-caption" placeholder="Short title shown with the media"/></div>
           <div class="form-group"><label>Position</label><input id="media-position" type="number" value="0"/></div>
           <div class="form-group"><label>Duration (seconds)</label><input id="media-duration" type="number" min="2" value="6"/></div>
@@ -92,7 +93,7 @@ export async function renderPortalMediaTab(container) {
             ${items.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-dim)">No media uploaded yet</td></tr>' : items.map(item => `
               <tr>
                 <td style="width:180px">${mediaPreview(item)}</td>
-                <td><span class="badge badge-open">${escapeHtml(item.placement || 'landing')}</span></td>
+                <td><span class="badge badge-open">${escapeHtml(item.placement || 'landing')}</span><br/><small style="color:var(--text-dim)">${escapeHtml(item.device_target || 'both')}</small></td>
                 <td><b>${escapeHtml(item.caption || 'Untitled')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(item.kind)}</small></td>
                 <td>${Number(item.active) === 1 ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-medium">Hidden</span>'}</td>
                 <td>${Number(item.position) || 0}</td>
@@ -117,6 +118,7 @@ export async function renderPortalMediaTab(container) {
         url,
         caption: container.querySelector('#media-caption').value.trim(),
         placement: container.querySelector('#media-placement').value,
+        device_target: container.querySelector('#media-device-target').value,
         duration_ms: Math.max(2, Number(container.querySelector('#media-duration').value) || 6) * 1000,
         position: Number(container.querySelector('#media-position').value) || 0,
         active: 1,

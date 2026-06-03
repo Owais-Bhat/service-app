@@ -436,8 +436,12 @@ export function renderLandingPage(container, onPortalClick) {
         .order('position', { ascending: true });
 
       const now = new Date().getTime();
+      const isMobileView = window.matchMedia('(max-width: 767px)').matches;
       const ads = (data || []).map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => {
         if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
+        const target = a.device_target || 'both';
+        if (target === 'mobile' && !isMobileView) return false;
+        if (target === 'desktop' && isMobileView) return false;
         if (a.starts_at && new Date(a.starts_at).getTime() > now) return false;
         if (a.expires_at && new Date(a.expires_at).getTime() <= now) return false;
         return true;

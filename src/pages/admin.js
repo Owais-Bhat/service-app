@@ -1189,6 +1189,18 @@ async function openAdminRequestModal(onDone) {
   overlay.className = "modal-overlay";
   overlay.innerHTML = `    <div class="modal" style="max-width:620px">      <div class="modal-header">        <span class="modal-title">Register Service Request</span>        <button class="modal-close" id="admin-request-close">×</button>      </div>      <div class="modal-body">        <div style="padding:12px 14px;border-radius:12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.18);color:var(--text-soft);font-size:0.84rem;line-height:1.45;margin-bottom:16px;">          This creates the ticket directly. No OTP is sent. The customer will receive the ticket confirmation SMS, and the assigned employee will receive the job SMS if you assign one.        </div>        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">          <div class="form-group">            <label>Customer Name</label>            <input id="ar-name" type="text" placeholder="Customer name" />          </div>          <div class="form-group">            <label>Phone</label>            <input id="ar-phone" type="tel" placeholder="10 digit mobile number" />          </div>          <div class="form-group">            <label>Company <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>            <input id="ar-company" type="text" placeholder="Company / building name" />          </div>          <div class="form-group">            <label>Preferred Time</label>            <select id="ar-time">              <option value="As soon as possible">As soon as possible</option>              <option value="Morning (10 AM - 1 PM)">Morning (10 AM - 1 PM)</option>              <option value="Afternoon (1 PM - 4 PM)">Afternoon (1 PM - 4 PM)</option>              <option value="Evening (4 PM - 6 PM)">Evening (4 PM - 6 PM)</option>              <option value="Tomorrow Morning">Tomorrow Morning</option>              <option value="Flexible">Flexible</option>            </select>          </div>          <div class="form-group">            <label>Issue</label>            <select id="ar-issue">              <option value="">Select issue</option>              ${issueOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("")}              <option value="other">Other</option>            </select>          </div>          <div class="form-group" id="ar-other-wrap" style="display:none;">            <label>Other Issue</label>            <input id="ar-other" type="text" placeholder="Describe issue" />          </div>          <div class="form-group">            <label>Assign Employee <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>            <select id="ar-employee">              <option value="">Create unassigned</option>              ${onlineEmployees.length ? onlineEmployees.map((e) => `<option value="${escapeHtml(e.id)}">Online - ${escapeHtml(e.full_name || "Employee")}${e.phone ? ` - ${escapeHtml(e.phone)}` : ""}</option>`).join("") : '<option value="" disabled>No employees online</option>'}            </select>            <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">Only employees currently clocked in with no strict EOD restriction can be assigned.</small>          </div>          <div class="form-group">            <label>Device Bill No <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>            <input id="ar-bill" type="text" placeholder="Invoice / bill no" />          </div>        </div>        <div class="form-group">          <label>Location</label>          <div style="display:flex;gap:8px;align-items:flex-start;">            <textarea id="ar-location" rows="3" placeholder="Customer address / landmark" style="flex:1;"></textarea>            <button type="button" class="btn btn-secondary" id="ar-detect-gps" title="Detect exact client coordinates" style="height:42px;padding:0 12px;display:flex;align-items:center;justify-content:center;">              ${ICONS.pin}            </button>          </div>          <small id="ar-coords-display" style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.78rem;"></small>        </div>        <div class="form-group">          <label>Description <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>          <textarea id="ar-description" rows="3" placeholder="Any extra details from the customer"></textarea>        </div>      </div>      <div class="modal-footer">        <button class="btn btn-secondary" id="ar-cancel">Cancel</button>        <button class="btn btn-primary" id="ar-submit">${ICONS.plus}<span>Create Request</span></button>      </div>    </div>  `;
   document.body.appendChild(overlay);
+  overlay.querySelector("#ad-caption")?.insertAdjacentHTML(
+    "afterend",
+    `<div style="margin-bottom:14px;">
+      <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:6px;">Show on device</label>
+      <select id="ad-device-target" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;">
+        <option value="both" ${!ad?.device_target || ad.device_target === "both" ? "selected" : ""}>Both mobile and desktop</option>
+        <option value="desktop" ${ad?.device_target === "desktop" ? "selected" : ""}>Desktop only</option>
+        <option value="mobile" ${ad?.device_target === "mobile" ? "selected" : ""}>Mobile only</option>
+      </select>
+      <small style="display:block;margin-top:6px;color:var(--text-dim);">Upload separate mobile and desktop banners, then choose where each one appears.</small>
+    </div>`,
+  );
   const close = () => overlay.remove();
   overlay.querySelector("#admin-request-close").onclick = close;
   overlay.querySelector("#ar-cancel").onclick = close;
@@ -3712,6 +3724,38 @@ export async function renderAdsTab(container) {
   const ads = data || [];
   const activeCount = ads.filter((a) => a.active).length;
   container.innerHTML = `    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">      <div>        <h1>Landing Page Ads</h1>        <p>Slides shown in the rotating carousel on the public service portal</p>      </div>      <button class="btn btn-primary" id="ad-add-btn">+ Add slide</button>    </div>    <div class="stats-grid">      <div class="stat-card"><div class="stat-value">${ads.length}</div><div class="stat-label">Total Slides</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${activeCount}</div><div class="stat-label">Active</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--text-dim)">${ads.length - activeCount}</div><div class="stat-label">Hidden</div></div>    </div>    <div class="card" style="margin-top:24px">      <div class="card-header"><span class="card-title">Slides (drag order via Position field)</span></div>      <div class="table-wrap">        <table>          <thead><tr><th style="width:60px">Pos</th><th>Preview</th><th>Kind</th><th>Caption</th><th>Duration</th><th>Status</th><th style="width:200px">Actions</th></tr></thead>          <tbody>            ${ads.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No ads yet — click "Add slide" to create your first one</td></tr>` : ads.map((a) => `                <tr>                  <td><b>${a.position ?? 0}</b></td>                  <td>                    ${a.kind === "video" ? `<video src="${escapeHtml(a.url)}" muted style="width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--bg-soft);" onmouseover="this.play()" onmouseout="this.pause()"></video>` : `<img src="${escapeHtml(a.url)}" alt="" style="width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--bg-soft);" loading="lazy"/>`}                  </td>                  <td><span class="badge ${a.kind === "video" ? "badge-in_progress" : "badge-resolved"}">${a.kind}</span></td>                  <td style="max-width:240px;white-space:normal;font-size:0.85rem;color:var(--text-soft)">${escapeHtml(a.caption || "")}</td>                  <td><small>${((Number(a.duration_ms) || 6000) / 1000).toFixed(1)}s</small></td>                  <td>                    <div style="font-size:0.75rem; color:var(--text-soft)">                      <div><b>Start:</b> ${a.starts_at ? new Date(a.starts_at).toLocaleString() : "Now"}</div>                      <div><b>End:</b> ${a.expires_at ? new Date(a.expires_at).toLocaleString() : "Never"}</div>                    </div>                  </td>                  <td>${a.active ? '<span class="badge badge-resolved">Active</span>' : '<span class="badge badge-danger">Hidden</span>'}</td>                  <td>                    <button class="btn btn-secondary btn-sm ad-edit-btn" data-id="${a.id}">Edit</button>                    <button class="btn btn-secondary btn-sm ad-toggle-btn" data-id="${a.id}">${a.active ? "Hide" : "Show"}</button>                    <button class="btn btn-secondary btn-sm ad-delete-btn" data-id="${a.id}" style="color:var(--danger)">Delete</button>                  </td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
+  const guide = document.createElement("div");
+  guide.className = "card";
+  guide.style.margin = "0 0 24px";
+  guide.innerHTML = `
+    <div class="card-header"><span class="card-title">Required Resolution For Landing Ads</span></div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
+          <div style="font-weight:800;color:var(--primary);">Square logo/icon</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">512px × 512px</div>
+          <small style="color:var(--text-dim);">Use for small popup/logo style images.</small>
+        </div>
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
+          <div style="font-weight:800;color:var(--primary);">Desktop banner</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1920px × 900px</div>
+          <small style="color:var(--text-dim);">Best for laptop and desktop landing carousel.</small>
+        </div>
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
+          <div style="font-weight:800;color:var(--primary);">Mobile banner</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1080px × 1440px</div>
+          <small style="color:var(--text-dim);">Best for phone screens and PWA view.</small>
+        </div>
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);">
+          <div style="font-weight:800;color:var(--primary);">Video ads</div>
+          <div style="font-size:1.05rem;font-weight:900;margin-top:4px;">1920px × 1080px MP4</div>
+          <small style="color:var(--text-dim);">Keep under 20 MB, 5-15 seconds preferred.</small>
+        </div>
+      </div>
+      <p style="margin:12px 0 0;color:var(--text-soft);font-size:0.9rem;">Keep important text and faces in the center area so cropping does not cut them on mobile.</p>
+    </div>
+  `;
+  container.querySelector(".stats-grid")?.before(guide);
   const refresh = () => renderAdsTab(container);
   container.querySelector("#ad-add-btn").onclick = () =>
     openAdEditor(null, refresh);
@@ -3778,6 +3822,7 @@ function openAdEditor(ad, onChange) {
     const startsAt = overlay.querySelector("#ad-starts").value;
     const expiresAt = overlay.querySelector("#ad-expires").value;
     const active = overlay.querySelector("#ad-active").checked ? 1 : 0;
+    const deviceTarget = overlay.querySelector("#ad-device-target")?.value || "both";
     let url = overlay.querySelector("#ad-url").value.trim();
     const radioUpload = overlay.querySelector(
       'input[name="media-source"][value="upload"]',
@@ -3827,6 +3872,8 @@ function openAdEditor(ad, onChange) {
       kind,
       url,
       caption: caption || null,
+      placement: "landing",
+      device_target: deviceTarget,
       duration_ms: Math.round(durationSec * 1000),
       position,
       starts_at: startsAt
@@ -4354,3 +4401,4 @@ export async function renderAutoAssignmentTab(container) {
     toast(err.message || "Could not load auto assignment", "error");
   }
 }
+

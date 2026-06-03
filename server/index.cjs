@@ -412,6 +412,7 @@ const requiredColumns = {
         { name: 'starts_at', definition: 'TIMESTAMP NULL' },
         { name: 'expires_at', definition: 'TIMESTAMP NULL' },
         { name: 'placement', definition: "VARCHAR(20) DEFAULT 'landing'" },
+        { name: 'device_target', definition: "VARCHAR(20) DEFAULT 'both'" },
     ],
     notices: [
         { name: 'priority', definition: "VARCHAR(20) DEFAULT 'normal'" },
@@ -488,12 +489,14 @@ const requiredTables = [
         duration_ms INT DEFAULT 6000,
         active TINYINT(1) DEFAULT 1,
         placement VARCHAR(20) DEFAULT 'landing',
+        device_target VARCHAR(20) DEFAULT 'both',
         position INT DEFAULT 0,
         starts_at TIMESTAMP NULL,
         expires_at TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_ads_active (active),
         INDEX idx_ads_placement (placement),
+        INDEX idx_ads_device_target (device_target),
         INDEX idx_ads_position (position)
     )`,
     `CREATE TABLE IF NOT EXISTS training_items (
