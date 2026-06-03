@@ -37,7 +37,8 @@
       "Bash(node -c src/utils.js)",
       "Bash(git update-index *)",
       "Bash(git add *)",
-      "Bash(git hash-object *)"
+      "Bash(git hash-object *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
