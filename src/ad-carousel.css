@@ -3,7 +3,8 @@
   position: relative;
   width: 100%;
   max-width: 1920px;
-  aspect-ratio: 1920 / 450;
+  min-height: 320px;
+  aspect-ratio: auto;
   border-radius: 8px;
   overflow: hidden;
   background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
@@ -143,12 +144,12 @@
   transform: scale(0.95);
 }
 
-/* Mobile Responsive - maintains same 1920:450 aspect ratio */
+/* Mobile Responsive */
 @media (max-width: 767px) {
   .ad-carousel {
     width: 100%;
     max-width: 100%;
-    aspect-ratio: 1920 / 450;
+    min-height: 280px;
     border-radius: 4px;
   }
 
