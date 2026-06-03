@@ -806,7 +806,7 @@ export function renderLandingPage(container, onPortalClick) {
             <div class="srf-bill-icon">${ICONS.rupee}</div>
             <div class="srf-bill-info">
               <div class="srf-bill-label">${paid ? 'Amount paid' : 'Amount due'}</div>
-              <div class="srf-bill-amount">₹${Number(r.bill_amount).toLocaleString('en-IN')}</div>
+              <div class="srf-bill-amount">₹${Number(r.bill_total || r.bill_amount).toLocaleString('en-IN')}</div>
             </div>
             ${paid
           ? `<span class="srf-bill-paid">${ICONS.check}<span>Paid</span></span>`
