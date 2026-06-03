@@ -1,52 +1,74 @@
-# Graph Report - .  (2026-05-22)
+# Graph Report - .  (2026-06-03)
 
 ## Corpus Check
-- 63 files · ~63,400 words
+- 70 files · ~79,334 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 403 nodes · 679 edges · 28 communities (26 shown, 2 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 17 edges (avg confidence: 0.89)
-- Token cost: 71,128 input · 7,700 output
+- 539 nodes · 941 edges · 57 communities (41 shown, 16 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 26 edges (avg confidence: 0.87)
+- Token cost: 259,714 input · 0 output
 
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_AdminEmployee Shared Utilities|Admin/Employee Shared Utilities]]
-- [[_COMMUNITY_App Shell & Supabase Client|App Shell & Supabase Client]]
-- [[_COMMUNITY_Ticket Display & Profile UI|Ticket Display & Profile UI]]
-- [[_COMMUNITY_Page Renderers & Routing|Page Renderers & Routing]]
-- [[_COMMUNITY_Caveman-Compress CLI Engine|Caveman-Compress CLI Engine]]
-- [[_COMMUNITY_Landing Page & Public Forms|Landing Page & Public Forms]]
-- [[_COMMUNITY_Frontend Package & Dependencies|Frontend Package & Dependencies]]
-- [[_COMMUNITY_Caveman-Compress Validation|Caveman-Compress Validation]]
-- [[_COMMUNITY_Admin CSVXLSX Import & Payments|Admin CSV/XLSX Import & Payments]]
-- [[_COMMUNITY_Backend Server Dependencies|Backend Server Dependencies]]
-- [[_COMMUNITY_Service Portal Architecture Doc|Service Portal Architecture Doc]]
-- [[_COMMUNITY_Admin Dashboard & AttendanceSalary|Admin Dashboard & Attendance/Salary]]
-- [[_COMMUNITY_PWA Icons & Branding|PWA Icons & Branding]]
-- [[_COMMUNITY_Scratch Employee Bill Repair|Scratch: Employee Bill Repair]]
-- [[_COMMUNITY_Caveman-Compress Documentation|Caveman-Compress Documentation]]
-- [[_COMMUNITY_Attendance Date Helpers|Attendance Date Helpers]]
-- [[_COMMUNITY_Admin Ads & Complaints Modals|Admin Ads & Complaints Modals]]
-- [[_COMMUNITY_UI Icon Sprite Symbols|UI Icon Sprite Symbols]]
-- [[_COMMUNITY_Caveman-Compress Benchmark|Caveman-Compress Benchmark]]
-- [[_COMMUNITY_Fast2SMS OTP Tests|Fast2SMS OTP Tests]]
-- [[_COMMUNITY_Project Entry & File Structure|Project Entry & File Structure]]
-- [[_COMMUNITY_PDF Rendering Tests|PDF Rendering Tests]]
-- [[_COMMUNITY_Caveman-Compress Package Init|Caveman-Compress Package Init]]
-- [[_COMMUNITY_Tailored Resume Generator Skill|Tailored Resume Generator Skill]]
-- [[_COMMUNITY_Claude Permissions Config|Claude Permissions Config]]
+- [[_COMMUNITY_PDF Billing|PDF Billing]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_UI Pages|UI Pages]]
+- [[_COMMUNITY_Admin Functions|Admin Functions]]
+- [[_COMMUNITY_UI Pages|UI Pages]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Authentication|Authentication]]
+- [[_COMMUNITY_Authentication|Authentication]]
+- [[_COMMUNITY_UI Pages|UI Pages]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_PDF Billing|PDF Billing]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_UI Pages|UI Pages]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_SMSOTP|SMS/OTP]]
+- [[_COMMUNITY_Testing|Testing]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Admin Functions|Admin Functions]]
+- [[_COMMUNITY_Admin Functions|Admin Functions]]
+- [[_COMMUNITY_Testing|Testing]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Testing|Testing]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Other|Other]]
+- [[_COMMUNITY_Database|Database]]
+- [[_COMMUNITY_Database|Database]]
+- [[_COMMUNITY_UI Pages|UI Pages]]
+- [[_COMMUNITY_Database|Database]]
+- [[_COMMUNITY_Database|Database]]
+- [[_COMMUNITY_Database|Database]]
+- [[_COMMUNITY_Database|Database]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Memory Compression|Memory Compression]]
+- [[_COMMUNITY_Other|Other]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `QueryBuilder` - 14 edges
-2. `toast()` - 13 edges
-3. `App Logo / Brand Mark` - 11 edges
-4. `validate()` - 10 edges
-5. `openInquiryDetail()` - 10 edges
-6. `detect_file_type()` - 7 edges
-7. `ICONS` - 7 edges
-8. `navigate()` - 7 edges
-9. `supabase` - 7 edges
-10. `getUserRole()` - 7 edges
+1. `showLoader()` - 42 edges
+2. `toast()` - 17 edges
+3. `QueryBuilder` - 14 edges
+4. `ICONS` - 12 edges
+5. `Supabase Compatibility Layer (MySQL)` - 12 edges
+6. `supabase` - 11 edges
+7. `openInquiryDetail()` - 11 edges
+8. `App Logo / Brand Mark` - 11 edges
+9. `Utilities Module` - 11 edges
+10. `validate()` - 10 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Unauthorized Response Marker` --conceptually_related_to--> `Role-Based Access Control`  [AMBIGUOUS]
@@ -64,86 +86,108 @@
 - **RBAC Three-Role System** — documentation_role_client, documentation_role_employee, documentation_role_admin, documentation_rbac [EXTRACTED 1.00]
 - **Supabase Core Schema Tables** — documentation_table_profiles, documentation_table_tickets, documentation_table_ticket_comments, documentation_supabase [EXTRACTED 1.00]
 - **Caveman Compress Pipeline** — agents_caveman_skill, agents_caveman_compression_rules, agents_caveman_token_savings [EXTRACTED 1.00]
+- **Authentication System** — auth_module, supabase_compat, main_app [INFERRED 0.85]
+- **UI Rendering Stack** — layout_module, icons_module, utils_module [INFERRED 0.75]
+- **Data Persistence Layer** — supabase_compat, realtime_transport, server_package [INFERRED 0.75]
+- **Fast2SMS OTP operations test suite** — fast2sms_test_normalizeIndianMobile, fast2sms_test_sendFast2SmsOtp, fast2sms_test_verifyFast2SmsOtp, fast2sms_test_resendFast2SmsOtp [EXTRACTED 1.00]
+- **Bill PDF rendering dual implementation path (html2canvas + native print)** — pdf_rendering_test_renderBillToPdfBlob, pdf_rendering_test_printWindow [INFERRED 0.85]
+- **Code audit improvements and feature additions** — audit_critical_issues, audit_new_features, audit_error_handling_pattern [EXTRACTED 1.00]
 
-## Communities (28 total, 2 thin omitted)
+## Communities (57 total, 16 thin omitted)
 
-### Community 0 - "Admin/Employee Shared Utilities"
+### Community 0 - "PDF Billing"
 Cohesion: 0.06
-Nodes (33): showBillShareModal(), attendanceDateKey(), blobToBase64(), BUSINESS, dateKey(), daysBetweenInclusive(), displayStatus(), escapeAttr() (+25 more)
+Nodes (29): showBillShareModal(), attendanceDateKey(), blobToBase64(), BUSINESS, dateKey(), daysBetweenInclusive(), displayStatus(), escapeAttr() (+21 more)
 
-### Community 1 - "App Shell & Supabase Client"
+### Community 1 - "Other"
 Cohesion: 0.08
-Nodes (14): ICONS, buildNav(), renderLayout(), renderPage(), getHeaders(), getUserRole(), QueryBuilder, realtime (+6 more)
+Nodes (27): escapeAttr(), escapeHtml(), openNoticeEditor(), renderNoticesTab(), toDatetimeLocal(), escapeAttr(), escapeHtml(), mediaPreview() (+19 more)
 
-### Community 2 - "Ticket Display & Profile UI"
-Cohesion: 0.11
-Nodes (22): displayStatus(), loadMiniStats(), openTicketDetail(), renderClientDashboard(), statusText(), openEmployeeRequestModal(), renderEmployeeDashboard(), renderProfile() (+14 more)
+### Community 2 - "UI Pages"
+Cohesion: 0.09
+Nodes (31): mapLink(), openInquiryDetail(), openInquiryDetailWithLoader(), setButtonLoading(), displayStatus(), loadMiniStats(), openTicketDetail(), renderClientDashboard() (+23 more)
 
-### Community 3 - "Page Renderers & Routing"
+### Community 3 - "Admin Functions"
+Cohesion: 0.12
+Nodes (32): money(), renderAdminDashboard(), renderAllTickets(), renderBillsTab(), renderCashCollectionsTab(), renderClients(), renderContacts(), renderDeviceTypesTab() (+24 more)
+
+### Community 4 - "UI Pages"
 Cohesion: 0.10
-Nodes (27): renderAllTickets(), renderBillsTab(), renderCashCollectionsTab(), renderClients(), renderContacts(), renderDeviceTypesTab(), renderEODReports(), renderInquiries() (+19 more)
+Nodes (18): attendanceDateKey(), buildPaidUpdates(), dateKey(), daysBetweenInclusive(), detectHeader(), displayStatus(), importServiceRows(), inferLayout() (+10 more)
 
-### Community 4 - "Caveman-Compress CLI Engine"
+### Community 5 - "Memory Compression"
 Cohesion: 0.13
 Nodes (20): main(), print_usage(), build_compress_prompt(), build_fix_prompt(), call_claude(), compress_file(), is_sensitive_path(), Heuristic denylist for files that must never be shipped to a third-party API. (+12 more)
 
-### Community 5 - "Landing Page & Public Forms"
-Cohesion: 0.10
+### Community 6 - "Other"
+Cohesion: 0.09
 Nodes (16): escapeAttr(), escapeHTML(), FALLBACK_ISSUE_OPTIONS, getCachedAds(), loadIssueOptionsFromPricing(), makeCaptcha(), OTHER_OPTION, postPublicApi() (+8 more)
 
-### Community 6 - "Frontend Package & Dependencies"
+### Community 7 - "Other"
+Cohesion: 0.20
+Nodes (20): benchmark_pair(), count_tokens(), main(), print_table(), count_bullets(), extract_code_blocks(), extract_headings(), extract_inline_codes() (+12 more)
+
+### Community 8 - "Other"
 Cohesion: 0.08
 Nodes (24): dependencies, bcryptjs, cors, dotenv, express, jsonwebtoken, multer, mysql2 (+16 more)
 
-### Community 7 - "Caveman-Compress Validation"
-Cohesion: 0.27
-Nodes (16): count_bullets(), extract_code_blocks(), extract_headings(), extract_inline_codes(), extract_paths(), extract_urls(), Line-based fenced code block extractor.      Handles ``` and ~~~ fences with var, read_file() (+8 more)
-
-### Community 8 - "Admin CSV/XLSX Import & Payments"
-Cohesion: 0.14
-Nodes (10): buildPaidUpdates(), detectHeader(), importServiceRows(), inferLayout(), loadXLSX(), markInquiryPaid(), parseCSV(), parsePrice() (+2 more)
-
-### Community 9 - "Backend Server Dependencies"
+### Community 9 - "Authentication"
 Cohesion: 0.10
 Nodes (19): author, dependencies, bcryptjs, cors, dotenv, express, jsonwebtoken, mysql2 (+11 more)
 
-### Community 10 - "Service Portal Architecture Doc"
+### Community 10 - "Authentication"
+Cohesion: 0.24
+Nodes (19): Authentication Flow (SMS OTP + Phone Verification), Authentication Module, Client Dashboard and Ticket Management, Collections Report Module, Discounts Management, Employee Repaired Billing Module, Fixed PDF Rendering Function, High-Accuracy GPS with Multiple Fixes (+11 more)
+
+### Community 11 - "UI Pages"
+Cohesion: 0.15
+Nodes (3): getHeaders(), getUserRole(), QueryBuilder
+
+### Community 12 - "Other"
 Cohesion: 0.18
 Nodes (15): Attendance Clock-in/out Tracking, Inventory Stock Monitoring, Role-Based Access Control, Row Level Security Policies, Admin Role, Client Role, Employee Role, Networking Experts Service Portal (+7 more)
 
-### Community 11 - "Admin Dashboard & Attendance/Salary"
+### Community 13 - "Other"
 Cohesion: 0.15
-Nodes (14): displayStatus(), groupedForgottenClockouts(), mapLink(), money(), openAdminRequestModal(), openInquiryDetail(), openInquiryDetailWithLoader(), renderAdminDashboard() (+6 more)
+Nodes (14): escapeAttr(), escapeHtml(), getMissedEodRows(), groupedMissedEods(), openAdEditor(), openAdminRequestModal(), openComplaintResponder(), renderAdsTab() (+6 more)
 
-### Community 12 - "PWA Icons & Branding"
+### Community 14 - "Other"
+Cohesion: 0.15
+Nodes (12): createdUser, deletedUser, __dirname, dotenv, empHeaders, employeeToken, headers, jwt (+4 more)
+
+### Community 15 - "Other"
 Cohesion: 0.17
 Nodes (12): Apple Touch Icon (assets), Favicon 96x96 PNG, Favicon SVG (assets), JavaScript Logo SVG, Logo PNG, Web App Manifest Icon 192x192, Web App Manifest Icon 512x512, App Logo / Brand Mark (+4 more)
 
-### Community 13 - "Scratch: Employee Bill Repair"
+### Community 16 - "PDF Billing"
 Cohesion: 0.23
 Nodes (9): blobToBase64(), BUSINESS, displayStatus(), loadHtml2Pdf(), openPremiumBillModal(), renderBillToPdfBlob(), renderPremiumBillHTML(), statusText() (+1 more)
 
-### Community 14 - "Caveman-Compress Documentation"
+### Community 17 - "Memory Compression"
 Cohesion: 0.22
 Nodes (11): Caveman Compression Rules, caveman-compress README (.agents), caveman-compress Security Doc (.agents), caveman-compress Skill (.agents), Snyk High Risk False Positive, Token Savings Per Session, Caveman Toolkit, Anthropic Python SDK / Claude CLI Fallback (+3 more)
 
-### Community 15 - "Attendance Date Helpers"
-Cohesion: 0.33
-Nodes (7): attendanceDateKey(), dateKey(), daysBetweenInclusive(), isForgottenClockOut(), isPastAutoClockOut(), isValidActiveAttendance(), matchesServiceReportFilters()
+### Community 18 - "Other"
+Cohesion: 0.38
+Nodes (9): dateKey(), filterRows(), inr(), paymentDate(), rangeFor(), renderAdminCollections(), renderEmployeeCollections(), rowsTable() (+1 more)
 
-### Community 16 - "Admin Ads & Complaints Modals"
-Cohesion: 0.29
-Nodes (7): escapeHtml(), openAdEditor(), openComplaintResponder(), renderAdsTab(), renderComplaintsTab(), renderFeedbackTab(), formatDateTime()
+### Community 19 - "UI Pages"
+Cohesion: 0.18
+Nodes (11): boot(), getNavItems(), getPageRenderer(), goToLanding(), hidePWAInstallBtn(), loadCanAddService(), navigate(), showPWAInstallBtn() (+3 more)
 
-### Community 17 - "UI Icon Sprite Symbols"
+### Community 20 - "Other"
 Cohesion: 0.29
 Nodes (7): Bluesky Icon, Discord Icon, Documentation Icon, GitHub Icon, Social/Community Icon, X (Twitter) Icon, UI Icon Sprite (icons.svg)
 
-### Community 18 - "Caveman-Compress Benchmark"
-Cohesion: 0.73
-Nodes (4): benchmark_pair(), count_tokens(), main(), print_table()
+### Community 21 - "Other"
+Cohesion: 0.29
+Nodes (6): __dirname, dotenv, headers, jwt, require, token
 
-### Community 19 - "Fast2SMS OTP Tests"
+### Community 22 - "SMS/OTP"
+Cohesion: 0.33
+Nodes (6): fast2sms.cjs server module, normalizeIndianMobile function test, resendFast2SmsOtp function test, sendDltSms function test, sendFast2SmsOtp function test, verifyFast2SmsOtp function test
+
+### Community 23 - "Testing"
 Cohesion: 0.33
 Nodes (4): calls, {
   normalizeIndianMobile,
@@ -153,43 +197,59 @@ Nodes (4): calls, {
   sendDltSms,
 }, require, url
 
-### Community 20 - "Project Entry & File Structure"
+### Community 24 - "Other"
 Cohesion: 0.60
 Nodes (5): Project File Structure, Google Fonts (Inter, JetBrains Mono), index.html Entry Point, src/main.js (Application Logic), src/style.css (Design System)
 
-### Community 21 - "PDF Rendering Tests"
+### Community 25 - "Other"
 Cohesion: 0.40
 Nodes (4): employeeSource, functionEnd, functionStart, source
 
-### Community 23 - "Tailored Resume Generator Skill"
+### Community 26 - "Admin Functions"
+Cohesion: 0.50
+Nodes (4): Rate limit handling in admin.js, Service pricing upload functionality in admin.js, Critical issues fixed in code audit, Error handling patterns review
+
+### Community 27 - "Admin Functions"
+Cohesion: 0.50
+Nodes (4): Admin Settings Panel with auto clock-out configuration, New features added in audit period, Employee Service Pricing Tab feature, can_add_service permission-based access control
+
+### Community 28 - "Testing"
+Cohesion: 0.67
+Nodes (3): Admin User CRUD Integration Tests, Auto Assignment Toggle Tests, Server Dependencies
+
+### Community 29 - "Other"
 Cohesion: 0.67
 Nodes (3): ATS Optimization, Tailored Resume Generator Skill (.agents), Tailored Resume Generator Skill (.claude)
+
+### Community 31 - "Testing"
+Cohesion: 0.67
+Nodes (3): employee.js page module, openBillPrintWindow function test, renderBillToPdfBlob function validation test
 
 ## Ambiguous Edges - Review These
 - `Role-Based Access Control` → `Unauthorized Response Marker`  [AMBIGUOUS]
   response.txt · relation: conceptually_related_to
-- `App Logo / Brand Mark` → `JavaScript Logo SVG`  [AMBIGUOUS]
+- `JavaScript Logo SVG` → `App Logo / Brand Mark`  [AMBIGUOUS]
   src/assets/javascript.svg · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **75 isolated node(s):** `name`, `version`, `private`, `type`, `dev` (+70 more)
+- **110 isolated node(s):** `name`, `version`, `private`, `type`, `dev` (+105 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Role-Based Access Control` and `Unauthorized Response Marker`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **What is the exact relationship between `App Logo / Brand Mark` and `JavaScript Logo SVG`?**
+- **What is the exact relationship between `JavaScript Logo SVG` and `App Logo / Brand Mark`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `toast()` connect `Ticket Display & Profile UI` to `Admin/Employee Shared Utilities`, `App Shell & Supabase Client`, `Page Renderers & Routing`, `Landing Page & Public Forms`, `Admin CSV/XLSX Import & Payments`, `Admin Dashboard & Attendance/Salary`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
-- **Are the 9 inferred relationships involving `App Logo / Brand Mark` (e.g. with `Apple Touch Icon (public)` and `Favicon SVG (public)`) actually correct?**
-  _`App Logo / Brand Mark` has 9 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `esc()` connect `UI Pages` to `PDF Billing`, `PDF Billing`?**
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
+- **Why does `renderPremiumBillHTML()` connect `PDF Billing` to `UI Pages`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **Why does `QueryBuilder` connect `UI Pages` to `Other`?**
+  _High betweenness centrality (0.020) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `private` to the rest of the system?**
-  _95 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Admin/Employee Shared Utilities` be split into smaller, more focused modules?**
-  _Cohesion score 0.06294326241134751 - nodes in this community are weakly interconnected._
-- **Should `App Shell & Supabase Client` be split into smaller, more focused modules?**
-  _Cohesion score 0.08253968253968254 - nodes in this community are weakly interconnected._
+  _145 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `PDF Billing` be split into smaller, more focused modules?**
+  _Cohesion score 0.05939716312056738 - nodes in this community are weakly interconnected._

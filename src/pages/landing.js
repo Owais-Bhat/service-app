@@ -1,6 +1,8 @@
 import { supabase } from '../supabase.js';
 import { toggleTheme, calculateSLA, toast } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { AdCarousel } from '../ad-carousel.js';
+import '../ad-carousel.css';
 
 const LOGO = new URL('../assets/logo.png', import.meta.url).href;
 
@@ -306,14 +308,7 @@ export function renderLandingPage(container, onPortalClick) {
         <main class="srf-main">
           <section class="srf-intro">
             ${state.ads.length > 0 ? `
-              <div class="srf-ads" id="srf-ads">
-                <div class="srf-ad-slot" id="srf-ad-slot"></div>
-                ${state.ads.length > 1 ? `
-                  <div class="srf-ad-dots" id="srf-ad-dots">
-                    ${state.ads.map((_, i) => `<button type="button" class="srf-ad-dot" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
-                  </div>
-                ` : ''}
-              </div>
+              <div id="srf-ad-slot"></div>
             ` : `
                <div class="srf-ad-empty">
                   <h2 style="font-size:1.5rem; font-weight:800; color:var(--text); margin-bottom:12px;">Welcome to Networking Experts</h2>
@@ -399,63 +394,23 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   function mountAdCarousel() {
+    // Cleanup old timer if exists
     if (state._adTimer) { clearTimeout(state._adTimer); state._adTimer = null; }
+    if (state._adCarousel) { state._adCarousel.destroy(); }
+
     if (!state.ads.length) return;
+
     const slot = container.querySelector('#srf-ad-slot');
     if (!slot) return;
-    const dots = [...container.querySelectorAll('.srf-ad-dot')];
-    state.adIndex = Math.min(Math.max(Number(state.adIndex) || 0, 0), state.ads.length - 1);
 
-    const paint = () => {
-      const ad = state.ads[state.adIndex];
-      const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
-      const media = isVideo
-        ? `<video class="srf-ad-media" src="${escapeAttr(ad.url)}" autoplay muted playsinline preload="auto"></video>`
-        : `<img class="srf-ad-media" src="${escapeAttr(ad.url)}" alt="${escapeAttr(ad.caption || 'Advertisement')}" loading="eager"/>`;
-
-      const captionHtml = ad.caption
-        ? `<div class="srf-ad-caption">
-             <span>${escapeHTML(ad.caption)}</span>
-           </div>`
-        : '';
-
-      slot.innerHTML = `${media}${captionHtml}`;
-      if (isVideo) {
-        const video = slot.querySelector('video');
-        if (video) {
-          const replay = () => {
-            try {
-              video.currentTime = 0;
-              const playPromise = video.play();
-              if (playPromise?.catch) playPromise.catch(() => {});
-            } catch { /* ignore autoplay edge cases */ }
-          };
-          video.addEventListener('ended', replay);
-          video.addEventListener('error', replay, { once: true });
-          video.play().catch?.(() => {});
-        }
-      }
-      dots.forEach((d, i) => d.classList.toggle('active', i === state.adIndex));
-    };
-
-    const schedule = () => {
-      if (state._adTimer) clearTimeout(state._adTimer);
-      if (state.ads.length <= 1) return;
-      if ((state.ads[state.adIndex]?.kind || 'image').toLowerCase() === 'video') return;
-      const ms = Math.max(1500, Number(state.ads[state.adIndex].duration_ms) || 6000);
-      state._adTimer = setTimeout(() => {
-        state.adIndex = (state.adIndex + 1) % state.ads.length;
-        paint();
-        schedule();
-      }, ms);
-    };
-
-    dots.forEach((d, i) => {
-      d.onclick = () => { state.adIndex = i; paint(); schedule(); };
-    });
-
-    paint();
-    schedule();
+    // Mount new AdCarousel component
+    try {
+      state._adCarousel = new AdCarousel('srf-ad-slot', state.ads, {
+        autoRotateMs: 5000,
+      });
+    } catch (err) {
+      console.warn('AdCarousel mount failed:', err);
+    }
   }
 
   async function loadAds() {
