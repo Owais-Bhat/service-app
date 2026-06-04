@@ -115,7 +115,7 @@ try {
     console.error('❌ Razorpay initialization failed:', err.message);
 }
 
-function feedbackPageHtml() {
+function feedbackPageHtml(initialToken = '') {
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -170,11 +170,12 @@ function feedbackPageHtml() {
       </div>
     </section>
   </main>
+  <script>window.__FEEDBACK_TOKEN__ = ${JSON.stringify(initialToken)};</script>
   <script>
     (function () {
       var app = document.getElementById('app');
       var params = new URLSearchParams(window.location.search);
-      var token = (params.get('token') || params.get('feedback') || params.get('f') || '').trim();
+      var token = (window.__FEEDBACK_TOKEN__ || params.get('token') || params.get('feedback') || params.get('f') || '').trim();
       var inquiry = null;
       var rating = 0;
       var techRating = 0;
@@ -283,6 +284,11 @@ function feedbackPageHtml() {
 app.get(['/feedback.html', '/feedback'], (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.type('html').send(feedbackPageHtml());
+});
+
+app.get('/f/:token', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.type('html').send(feedbackPageHtml(String(req.params.token || '')));
 });
 
 // Serve static files from the frontend build directory
@@ -1875,7 +1881,7 @@ function feedbackTokenHash(token) {
 }
 
 function feedbackLinkFromToken(token, req = null) {
-    return `${publicBaseUrl(req)}/feedback.html?token=${encodeURIComponent(token)}`;
+    return `${publicBaseUrl(req)}/f/${encodeURIComponent(token)}`;
 }
 
 async function createFeedbackToken(connection, inquiryId) {
@@ -1887,7 +1893,7 @@ async function createFeedbackToken(connection, inquiryId) {
     const row = rows[0];
     if (!row || row.feedback_rating != null) return null;
 
-    const token = crypto.randomBytes(24).toString('base64url');
+    const token = crypto.randomBytes(8).toString('base64url');
     const tokenHash = feedbackTokenHash(token);
     await connection.execute(
         `UPDATE inquiries
