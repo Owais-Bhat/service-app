@@ -1532,16 +1532,56 @@ function verifyLocalDltOtp({ mobile, otp }) {
 // templateEnvKey: the env var name holding the Fast2SMS DLT Manager Message ID
 // (e.g. 'SMS_TID_TICKET'). This is passed to Fast2SMS as the `message` param.
 // variables: array of values matching {#var#} placeholders in the template
+const SMS_TEMPLATE_ENV_ALIASES = {
+    SMS_TID_TICKET: [
+        'SMS_TID_TICKET_CONFIRMED',
+        'SMS_TID_TICKET_CONFIRMATION',
+        'SMS_TID_SERVICE_REQUEST',
+        'SMS_TID_REQUEST_CONFIRMATION',
+    ],
+    SMS_TID_ASSIGN_EMP: [
+        'SMS_TID_JOB_ASSIGNED',
+        'SMS_TID_SERVICE_ASSIGNED',
+        'SMS_TID_ASSIGNMENT',
+        'SMS_TID_TECHNICIAN_ASSIGN',
+    ],
+    SMS_TID_ACCEPTED: [
+        'SMS_TID_TECH_ACCEPTED',
+        'SMS_TID_ASSIGN_ACCEPTED',
+        'SMS_TID_TECHNICIAN_ACCEPTED',
+    ],
+    SMS_TID_PAYMENT: [
+        'SMS_TID_PAYMENT_RECEIVED',
+    ],
+};
+
+function resolveSmsTemplate(templateEnvKey) {
+    if (process.env[templateEnvKey]) {
+        return { templateId: process.env[templateEnvKey], envKey: templateEnvKey };
+    }
+    const alias = (SMS_TEMPLATE_ENV_ALIASES[templateEnvKey] || []).find(key => process.env[key]);
+    if (alias) {
+        console.warn(`[SMS ${templateEnvKey}] using fallback env ${alias}. Prefer setting ${templateEnvKey}.`);
+        return { templateId: process.env[alias], envKey: alias };
+    }
+    return { templateId: null, envKey: templateEnvKey };
+}
+
+function smsMissingTemplateMessage(templateEnvKey) {
+    const aliases = SMS_TEMPLATE_ENV_ALIASES[templateEnvKey] || [];
+    return aliases.length ? `${templateEnvKey} or aliases ${aliases.join(', ')}` : templateEnvKey;
+}
+
 function smsNotify(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;
-    const templateId = process.env[templateEnvKey];
+    const { templateId, envKey } = resolveSmsTemplate(templateEnvKey);
     const senderId = process.env[`FAST2SMS_SENDER_ID_${templateEnvKey}`]
         || process.env[`SMS_SENDER_ID_${templateEnvKey}`]
         || process.env.FAST2SMS_SENDER_ID
         || 'NTWRKE';
     const normalized = normalizeIndianMobile(mobile);
     if (!apiKey || !templateId || !mobile) {
-        console.warn(`[SMS ${templateEnvKey}] skipped: missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'} (raw mobile=${JSON.stringify(mobile)})`);
+        console.warn(`[SMS ${templateEnvKey}] skipped: missing ${!apiKey ? 'SMS_API' : !templateId ? smsMissingTemplateMessage(templateEnvKey) : 'mobile'} (raw mobile=${JSON.stringify(mobile)})`);
         return;
     }
     if (!normalized) {
@@ -1562,18 +1602,18 @@ function smsNotify(mobile, templateEnvKey, variables) {
 
 async function smsNotifyResult(mobile, templateEnvKey, variables) {
     const apiKey = process.env.SMS_API;
-    const templateId = process.env[templateEnvKey];
+    const { templateId, envKey } = resolveSmsTemplate(templateEnvKey);
     const senderId = process.env[`FAST2SMS_SENDER_ID_${templateEnvKey}`]
         || process.env[`SMS_SENDER_ID_${templateEnvKey}`]
         || process.env.FAST2SMS_SENDER_ID
         || 'NTWRKE';
     const normalized = normalizeIndianMobile(mobile);
     if (!apiKey || !templateId || !mobile) {
-        return { ok: false, error: `Missing ${!apiKey ? 'SMS_API' : !templateId ? templateEnvKey : 'mobile'}` };
+        return { ok: false, error: `Missing ${!apiKey ? 'SMS_API' : !templateId ? smsMissingTemplateMessage(templateEnvKey) : 'mobile'}` };
     }
     if (!normalized) return { ok: false, error: 'Invalid mobile number' };
 
-    console.log(`[SMS ${templateEnvKey}] sending -> mobile=${normalized} templateId=${templateId} senderId=${senderId} vars(${variables.length})=${JSON.stringify(variables)}`);
+    console.log(`[SMS ${templateEnvKey}] sending -> mobile=${normalized} templateEnv=${envKey} templateId=${templateId} senderId=${senderId} vars(${variables.length})=${JSON.stringify(variables)}`);
     const result = await sendDltSms({ mobile, templateId, variables, apiKey, senderId });
     if (!result.ok) {
         console.warn(`[SMS ${templateEnvKey}] FAILED -> status=${result.status || '?'} error=${result.error || 'unknown'} provider=${JSON.stringify(result.provider || null)}`);
@@ -2781,28 +2821,32 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
         connection.release();
         rowsToInsert.forEach(row => broadcastChange('INSERT', table, row));
         if (table === 'inquiries') {
-            broadcastNotify({
-                subject: 'new_service_request',
-                title: 'New Service Request',
-                body: `${data.full_name || 'Client'}${data.service_item ? ' - ' + data.service_item : ''}`,
-                audience: { role: 'admin' },
-                data: { inquiry_id: data.id, ticket_no: data.ticket_no || null },
+            rowsToInsert.forEach(inquiry => {
+                broadcastNotify({
+                    subject: 'new_service_request',
+                    title: 'New Service Request',
+                    body: `${inquiry.full_name || 'Client'}${inquiry.service_item ? ' - ' + inquiry.service_item : ''}`,
+                    audience: { role: 'admin' },
+                    data: { inquiry_id: inquiry.id, ticket_no: inquiry.ticket_no || null },
+                });
+                // SMS to client: {name} {ticket_no} {service_item} {sla_deadline}
+                if (inquiry.phone && inquiry.ticket_no) {
+                    const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(inquiry.created_at || new Date()));
+                    smsNotify(inquiry.phone, 'SMS_TID_TICKET', [
+                        smsVar(inquiry.full_name, 'Customer', 60),
+                        smsVar(inquiry.ticket_no, 'N/A', 20),
+                        smsVar(inquiry.service_item, 'General Service', 80),
+                        smsVar(slaDeadlineText, 'As soon as possible', 40),
+                    ]);
+                } else {
+                    console.warn(`[SMS SMS_TID_TICKET] skipped: inquiry missing phone or ticket_no (id=${inquiry.id || 'unknown'})`);
+                }
+                if (!inquiry.assigned_employee_id) {
+                    autoAssignInquiry(inquiry.id);
+                }
             });
-            // SMS → client: ticket confirmed with ticket no, service type, preferred time
-            // Template variables: {name} {ticket_no} {service_item} {sla_deadline}
-            if (data.phone && data.ticket_no) {
-                const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(data.created_at || new Date()));
-                smsNotify(data.phone, 'SMS_TID_TICKET', [
-                    smsVar(data.full_name, 'Customer', 60),
-                    smsVar(data.ticket_no, 'N/A', 20),
-                    smsVar(data.service_item, 'General Service', 80),
-                    smsVar(slaDeadlineText, 'As soon as possible', 40),
-                ]);
-            }
-            if (!data.assigned_employee_id) {
-                autoAssignInquiry(data.id);
-            }
         }
+            // SMS → client: ticket confirmed with ticket no, service type, preferred time
         if (table === 'complaints') {
             broadcastNotify({
                 subject: 'new_complaint',

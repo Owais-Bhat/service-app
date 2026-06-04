@@ -2068,8 +2068,13 @@ export async function renderEmployeeTasks(container) {
     issues: issueTasks.length + issueAcceptedInquiries.length,
   };
 
-  const jobCard = (inq) => `
-    <div class="emp-job-card" data-status="${displayStatus(inq.status)}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
+  const jobCard = (inq) => {
+    const shownStatus = displayStatus(inq.status);
+    const serviceDeadline = inq.created_at ? calculateSLA(inq.created_at) : null;
+    const terminalStatus = ['resolved', 'closed', 'issue_not_resolved'].includes(shownStatus);
+    const slaTimerText = terminalStatus ? 'Service Completed' : (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-');
+    return `
+    <div class="emp-job-card" data-status="${shownStatus}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
          <div>
            <div style="font-weight:800; font-size:1.15rem; color:var(--primary)">${inq.full_name}</div>
@@ -2079,7 +2084,7 @@ export async function renderEmployeeTasks(container) {
            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:4px;">${inq.service_item}</div>
            ${inq.employee_update_detail ? `<div style="font-size:0.82rem;color:var(--text-soft);margin-top:8px;padding:10px;border-radius:10px;background:var(--bg-soft);"><b>Employee update:</b> ${escapeHtml(inq.employee_update_detail)}</div>` : ''}
          </div>
-         <span class="badge badge-${displayStatus(inq.status)}" style="font-size:0.75rem">${statusText(inq.status)}</span>
+         <span class="badge badge-${shownStatus}" style="font-size:0.75rem">${statusText(inq.status)}</span>
        </div>
 
        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid rgba(16,185,129,0.1);">
@@ -2108,6 +2113,10 @@ export async function renderEmployeeTasks(container) {
            <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Preferred Time</div>
            <div style="font-size:0.88rem; font-weight:700; margin-top:8px; color:var(--primary)">${inq.preferred_time || 'Flexible'}</div>
          </div>
+         <div>
+           <div style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">SLA Timer</div>
+           <div style="font-size:0.88rem; font-weight:700; margin-top:8px;">${slaTimerText}</div>
+         </div>
        </div>
 
        <div style="margin-top:20px; display:flex; gap:10px;">
@@ -2120,6 +2129,7 @@ export async function renderEmployeeTasks(container) {
        </div>
     </div>
   `;
+  };
 
   const taskCard = (task) => {
     const inq = task.inquiries?.[0];
