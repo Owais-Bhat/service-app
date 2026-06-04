@@ -14,8 +14,15 @@ import { initTheme, toast, ensureNotifyPermission, showNotification } from './ut
 import { ICONS } from './icons.js';
 import { registerSW } from 'virtual:pwa-register';
 
-// Register Service Worker for PWA
-registerSW({ immediate: true });
+// Register Service Worker for PWA. Force activation of fresh bundles so public
+// SMS links do not keep opening with an old cached landing-page script.
+const updateServiceWorker = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateServiceWorker(true);
+  },
+  onOfflineReady() {},
+});
 
 // PWA Install Prompt Logic — button only shown on the landing page
 let deferredPrompt;
