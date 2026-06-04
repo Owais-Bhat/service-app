@@ -115,6 +115,176 @@ try {
     console.error('❌ Razorpay initialization failed:', err.message);
 }
 
+function feedbackPageHtml() {
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Secure Feedback - Networking Experts</title>
+  <style>
+    :root { color-scheme: light; --green:#10b981; --dark:#064e3b; --text:#0f172a; --soft:#64748b; --line:#d7f3e8; --bg:#f2fbf7; --card:#ffffff; --danger:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:radial-gradient(circle at top right, #d5faeb 0, transparent 35%), var(--bg); color:var(--text); }
+    .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:28px 16px; }
+    .card { width:min(100%, 620px); background:var(--card); border:1px solid var(--line); border-radius:24px; box-shadow:0 24px 70px rgba(15, 23, 42, .10); overflow:hidden; }
+    .head { padding:28px; border-bottom:1px solid var(--line); background:linear-gradient(135deg, rgba(16,185,129,.12), rgba(255,255,255,.7)); }
+    .brand { font-weight:900; letter-spacing:.12em; color:var(--dark); font-size:1.05rem; margin-bottom:16px; }
+    .pill { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:999px; background:#e9fbf4; color:var(--dark); font-size:.75rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px; }
+    h1 { margin:0; font-size:1.65rem; line-height:1.15; color:var(--dark); }
+    .sub { margin:8px 0 0; color:var(--soft); line-height:1.5; }
+    .body { padding:28px; }
+    .center { text-align:center; padding:30px 8px; }
+    .spinner { width:34px; height:34px; border-radius:50%; border:4px solid #d1fae5; border-top-color:var(--green); display:inline-block; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:22px; }
+    .info { padding:14px; border:1px solid var(--line); border-radius:14px; background:#f8fffc; }
+    .wide { grid-column:1 / -1; }
+    .label { font-size:.72rem; color:var(--soft); text-transform:uppercase; letter-spacing:.06em; font-weight:800; }
+    .value { margin-top:5px; font-weight:850; color:var(--text); word-break:break-word; }
+    .stars { display:flex; gap:8px; margin:8px 0 6px; }
+    .star { width:42px; height:42px; border:0; background:#ecfdf5; color:#94a3b8; border-radius:12px; cursor:pointer; font-size:25px; line-height:1; transition:.15s ease; }
+    .star.on { color:#f59e0b; background:#fff7ed; transform:translateY(-1px); }
+    textarea { width:100%; min-height:100px; resize:vertical; border:1px solid var(--line); border-radius:14px; padding:14px; font:inherit; color:var(--text); outline:none; background:#fbfffd; }
+    textarea:focus { border-color:var(--green); box-shadow:0 0 0 4px rgba(16,185,129,.12); }
+    .btn { width:100%; height:48px; border:0; border-radius:14px; background:linear-gradient(135deg, var(--green), #059669); color:white; font-weight:900; font:inherit; cursor:pointer; box-shadow:0 14px 34px rgba(16,185,129,.24); }
+    .btn:disabled { opacity:.55; cursor:not-allowed; box-shadow:none; }
+    .ghost { margin-top:12px; background:#f8fffc; color:var(--dark); border:1px solid var(--line); box-shadow:none; }
+    .error { color:var(--danger); font-weight:800; }
+    .done { width:64px; height:64px; border-radius:20px; display:flex; align-items:center; justify-content:center; background:#ecfdf5; color:#f59e0b; margin:0 auto 16px; font-size:34px; }
+    @media (max-width:560px) { .head,.body{padding:22px;} .grid{grid-template-columns:1fr;} h1{font-size:1.4rem;} .star{width:38px;height:38px;} }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="card">
+      <div class="head">
+        <div class="brand">NEST</div>
+        <div class="pill">Secure Feedback</div>
+        <h1>Rate your service experience</h1>
+        <p class="sub">This page opens only from your secure payment feedback link.</p>
+      </div>
+      <div class="body" id="app">
+        <div class="center"><span class="spinner"></span><p class="sub">Opening feedback...</p></div>
+      </div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var app = document.getElementById('app');
+      var params = new URLSearchParams(window.location.search);
+      var token = (params.get('token') || params.get('feedback') || params.get('f') || '').trim();
+      var inquiry = null;
+      var rating = 0;
+      var techRating = 0;
+      function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+          return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch];
+        });
+      }
+      function setLoading(text) {
+        app.innerHTML = '<div class="center"><span class="spinner"></span><p class="sub">' + esc(text || 'Loading...') + '</p></div>';
+      }
+      function setError(text) {
+        app.innerHTML = '<div class="center"><p class="error">' + esc(text || 'Feedback link unavailable') + '</p><button class="btn ghost" id="home">Open service portal</button></div>';
+        document.getElementById('home').onclick = function () { window.location.href = '/'; };
+      }
+      function paintStars(rowId, value) {
+        var row = document.getElementById(rowId);
+        if (!row) return;
+        Array.prototype.forEach.call(row.querySelectorAll('.star'), function (btn) {
+          btn.classList.toggle('on', Number(btn.dataset.value) <= value);
+        });
+      }
+      function bindStars(rowId, onPick) {
+        var row = document.getElementById(rowId);
+        if (!row) return;
+        Array.prototype.forEach.call(row.querySelectorAll('.star'), function (btn) {
+          btn.onclick = function () {
+            var value = Number(btn.dataset.value);
+            onPick(value);
+            paintStars(rowId, value);
+          };
+        });
+      }
+      function renderDone(row) {
+        app.innerHTML = '<div class="center"><div class="done">★</div><h2 style="margin:0 0 8px;color:var(--dark);">Thank you for your feedback</h2><p class="sub">You rated us <b>' + esc(row.feedback_rating || rating) + '/5</b>.</p><button class="btn ghost" id="home">Open service portal</button></div>';
+        document.getElementById('home').onclick = function () { window.location.href = '/'; };
+      }
+      function renderForm(row) {
+        inquiry = row;
+        if (row.feedback_rating != null) return renderDone(row);
+        app.innerHTML =
+          '<div class="grid">' +
+            '<div class="info"><div class="label">Ticket</div><div class="value">' + esc(row.ticket_no || '-') + '</div></div>' +
+            '<div class="info"><div class="label">Status</div><div class="value">' + esc(row.status || '-') + '</div></div>' +
+            '<div class="info wide"><div class="label">Service</div><div class="value">' + esc(row.service_item || '-') + '</div><div class="sub">' + esc(row.full_name || 'Customer') + '</div></div>' +
+          '</div>' +
+          '<div class="label">Overall experience</div>' +
+          '<div class="stars" id="overall">' + [1,2,3,4,5].map(function (n) { return '<button class="star" type="button" data-value="' + n + '">★</button>'; }).join('') + '</div>' +
+          '<div id="ratingText" class="sub" style="min-height:22px;margin-bottom:18px;"></div>' +
+          '<div class="label">Technician rating</div>' +
+          '<div class="stars" id="tech">' + [1,2,3,4,5].map(function (n) { return '<button class="star" type="button" data-value="' + n + '">★</button>'; }).join('') + '</div>' +
+          '<div style="height:14px"></div>' +
+          '<textarea id="comment" placeholder="Tell us about your experience..."></textarea>' +
+          '<div style="height:14px"></div>' +
+          '<button class="btn" id="submit" disabled>Submit Feedback</button>';
+        var labels = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'];
+        bindStars('overall', function (value) {
+          rating = value;
+          document.getElementById('ratingText').textContent = labels[value] || '';
+          document.getElementById('submit').disabled = !rating;
+        });
+        bindStars('tech', function (value) { techRating = value; });
+        document.getElementById('submit').onclick = submit;
+      }
+      async function submit() {
+        if (!rating) return;
+        var btn = document.getElementById('submit');
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        var comment = document.getElementById('comment').value.trim();
+        var fullComment = [comment, techRating ? 'Technician: ' + techRating + '/5' : ''].filter(Boolean).join(' | ');
+        try {
+          var res = await fetch('/api/feedback/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token, rating: rating, employee_rating: techRating || null, comment: fullComment || null })
+          });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error(data.error || 'Could not submit feedback');
+          renderDone(data.inquiry || Object.assign({}, inquiry, { feedback_rating: rating, feedback_comment: fullComment }));
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Submit Feedback';
+          alert(err.message || 'Could not submit feedback');
+        }
+      }
+      async function init() {
+        if (!token) return setError('Feedback token is missing.');
+        setLoading('Verifying secure link...');
+        try {
+          var res = await fetch('/api/feedback/resolve?token=' + encodeURIComponent(token), { cache: 'no-store' });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error(data.error || 'This feedback link is invalid or expired.');
+          renderForm(data.inquiry || {});
+        } catch (err) {
+          setError(err.message || 'Could not open feedback link.');
+        }
+      }
+      init();
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+app.get(['/feedback.html', '/feedback'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.type('html').send(feedbackPageHtml());
+});
+
 // Serve static files from the frontend build directory
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath, {
@@ -1705,7 +1875,7 @@ function feedbackTokenHash(token) {
 }
 
 function feedbackLinkFromToken(token, req = null) {
-    return `${publicBaseUrl(req)}/feedback?token=${encodeURIComponent(token)}`;
+    return `${publicBaseUrl(req)}/feedback.html?token=${encodeURIComponent(token)}`;
 }
 
 async function createFeedbackToken(connection, inquiryId) {
