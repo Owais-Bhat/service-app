@@ -1465,6 +1465,60 @@ function smsVar(value, fallback = 'N/A', maxLen = 80) {
     return cleaned.slice(0, maxLen) || fallback;
 }
 
+function calculateSlaDeadline(createdAt, slaHours = 12) {
+    const date = createdAt ? new Date(createdAt) : new Date();
+    if (Number.isNaN(date.getTime())) return new Date();
+    let hoursRemaining = slaHours;
+    const startHour = 10;
+    const endHour = 18;
+
+    while (hoursRemaining > 0) {
+        const curHour = date.getHours();
+        const day = date.getDay();
+
+        if (day === 0) {
+            date.setDate(date.getDate() + 1);
+            date.setHours(startHour, 0, 0, 0);
+            continue;
+        }
+        if (curHour < startHour) {
+            date.setHours(startHour, 0, 0, 0);
+            continue;
+        }
+        if (curHour >= endHour) {
+            date.setDate(date.getDate() + 1);
+            date.setHours(startHour, 0, 0, 0);
+            continue;
+        }
+
+        const endOfDay = new Date(date);
+        endOfDay.setHours(endHour, 0, 0, 0);
+        const workdayRemainingHours = (endOfDay.getTime() - date.getTime()) / (1000 * 60 * 60);
+        if (hoursRemaining <= workdayRemainingHours) {
+            date.setMilliseconds(date.getMilliseconds() + hoursRemaining * 60 * 60 * 1000);
+            hoursRemaining = 0;
+        } else {
+            hoursRemaining -= workdayRemainingHours;
+            date.setDate(date.getDate() + 1);
+            date.setHours(startHour, 0, 0, 0);
+        }
+    }
+    return date;
+}
+
+function formatSlaDeadlineForSms(deadline) {
+    const d = deadline ? new Date(deadline) : null;
+    if (!d || Number.isNaN(d.getTime())) return 'As soon as possible';
+    const day = d.getDate();
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+    const time = d.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+    }).toLowerCase();
+    return `${day} ${dayName} ${time}`;
+}
+
 function smsPhoneVar(value) {
     return normalizeIndianMobile(value) || '0000000000';
 }
@@ -2562,13 +2616,14 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 data: { inquiry_id: data.id, ticket_no: data.ticket_no || null },
             });
             // SMS → client: ticket confirmed with ticket no, service type, preferred time
-            // Template variables: {name} {ticket_no} {service_item} {preferred_time}
+            // Template variables: {name} {ticket_no} {service_item} {sla_deadline}
             if (data.phone && data.ticket_no) {
+                const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(data.created_at || new Date()));
                 smsNotify(data.phone, 'SMS_TID_TICKET', [
                     smsVar(data.full_name, 'Customer', 60),
                     smsVar(data.ticket_no, 'N/A', 20),
                     smsVar(data.service_item, 'General Service', 80),
-                    smsVar(data.preferred_time, 'As soon as possible', 60),
+                    smsVar(slaDeadlineText, 'As soon as possible', 40),
                 ]);
             }
             if (!data.assigned_employee_id) {
