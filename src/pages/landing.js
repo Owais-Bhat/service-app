@@ -221,10 +221,11 @@ export function renderLandingPage(container, onPortalClick) {
   const urlTab = urlParams.get('tab');
   const urlTicket = urlParams.get('ticket') || '';
   const urlPhone = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
+  const urlFeedback = (urlParams.get('feedback') || urlParams.get('f') || '').trim();
   const cachedAds = getCachedAds();
 
   const state = {
-    mode: urlTab === 'track' ? 'track' : 'new',
+    mode: (urlTab === 'track' || urlFeedback) ? 'track' : 'new',
     step: 1,
     phone: '',
     otp: '',
@@ -243,6 +244,9 @@ export function renderLandingPage(container, onPortalClick) {
     trackResult: null,
     trackList: null,
     trackLoading: false,
+    feedbackToken: urlFeedback,
+    feedbackLoading: !!urlFeedback,
+    feedbackError: '',
     // Complaint tab state
     complaintTicketNo: '',
     complaintPhone: '',
@@ -700,6 +704,20 @@ export function renderLandingPage(container, onPortalClick) {
 
   // ── TRACK MODE ──────────────────────────────────────
   function stepTrack() {
+    if (state.feedbackToken && state.feedbackLoading) {
+      return `
+        <h2 class="srf-card-title">Opening feedback</h2>
+        <p class="srf-card-sub">Please wait while we verify your secure feedback link.</p>
+        <div style="padding:28px;text-align:center;color:var(--text-soft);"><span class="srf-spin"></span></div>
+      `;
+    }
+    if (state.feedbackToken && state.feedbackError) {
+      return `
+        <h2 class="srf-card-title">Feedback link unavailable</h2>
+        <p class="srf-card-sub">${escapeHTML(state.feedbackError)}</p>
+        <button class="srf-btn srf-btn-secondary" id="srf-feedback-track">${ICONS.search}<span>Track request instead</span></button>
+      `;
+    }
     if (state.trackResult) return renderTrackResult(state.trackResult);
     if (state.trackList) return renderTrackList(state.trackList);
     return `
@@ -770,6 +788,7 @@ export function renderLandingPage(container, onPortalClick) {
     const hasBill = r.bill_amount != null && Number(r.bill_amount) > 0;
     const paid = r.payment_status === 'paid';
     const hasFeedback = r.feedback_rating != null;
+    const canLeaveFeedback = !!state.feedbackToken && resolved && !hasFeedback;
     const employee = r.profiles || null;
 
     return `
@@ -818,7 +837,14 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
       ` : ''}
 
-      ${resolved && !hasFeedback ? `
+      ${resolved && !hasFeedback && !canLeaveFeedback ? `
+        <div class="srf-feedback">
+          <h3 class="srf-fb-title">Feedback secured</h3>
+          <p class="srf-fb-sub">For your safety, feedback can be submitted only from the secure link sent after payment.</p>
+        </div>
+      ` : ''}
+
+      ${canLeaveFeedback ? `
         <div class="srf-feedback">
           <h3 class="srf-fb-title">How did we do?</h3>
           <p class="srf-fb-sub">Your honest feedback helps us serve you better.</p>
@@ -1182,6 +1208,16 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   function bindTrack() {
+    if (state.feedbackToken && state.feedbackError) {
+      bind('#srf-feedback-track', () => {
+        state.feedbackToken = '';
+        state.feedbackError = '';
+        state.feedbackLoading = false;
+        state.trackResult = null;
+        render();
+      });
+      return;
+    }
     if (state.trackResult) {
       container.querySelector('#srf-track-back').onclick = () => {
         // Clearing trackResult naturally falls back to the list (if we came from
@@ -1254,30 +1290,29 @@ export function renderLandingPage(container, onPortalClick) {
           const btn = container.querySelector('#srf-fb-submit');
           btn.disabled = true;
           btn.innerHTML = `<span class="srf-spin"></span><span>Submitting…</span>`;
-          const fbPayload = {
-            feedback_rating: chosenOverall,
-            feedback_comment: fullComment || null,
-            feedback_at: new Date().toISOString(),
-          };
-          // Capture the explicit employee rating so admins can rank technicians.
-          if (techRating) {
-            fbPayload.employee_rating = techRating;
-            if (state.trackResult.assigned_employee_id) {
-              fbPayload.feedback_employee_id = state.trackResult.assigned_employee_id;
-            }
-          }
-          const { error } = await supabase.from('inquiries')
-            .update(fbPayload)
-            .eq('id', state.trackResult.id)
-            .eq('ticket_no', state.trackResult.ticket_no)
-            .eq('phone', state.trackResult.phone);
-          if (error) {
-            toast('Could not submit feedback', 'error');
+          const res = await fetch('/api/feedback/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: state.feedbackToken,
+              rating: chosenOverall,
+              employee_rating: techRating || null,
+              comment: fullComment || null,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            toast(data.error || 'Could not submit feedback', 'error');
             btn.disabled = false;
             btn.innerHTML = `<span>Submit Feedback</span> ${ICONS.arrowRight}`;
             return;
           }
-          state.trackResult = { ...state.trackResult, ...fbPayload };
+          state.trackResult = data.inquiry || {
+            ...state.trackResult,
+            feedback_rating: chosenOverall,
+            feedback_comment: fullComment || null,
+            feedback_at: new Date().toISOString(),
+          };
           toast('Thanks for your feedback! 🙏', 'success');
           render();
         });
@@ -1441,8 +1476,33 @@ export function renderLandingPage(container, onPortalClick) {
   loadIssueOptions();
   loadAds();
 
+  if (urlFeedback) {
+    (async () => {
+      state.feedbackLoading = true;
+      render();
+      try {
+        const res = await fetch(`/api/feedback/resolve?token=${encodeURIComponent(urlFeedback)}`);
+        const data = await res.json().catch(() => ({}));
+        state.feedbackLoading = false;
+        if (!res.ok) {
+          state.feedbackError = data.error || 'This feedback link is invalid or expired.';
+          render();
+          return;
+        }
+        state.trackResult = data.inquiry || null;
+        if (data.used && data.inquiry) {
+          state.trackResult = data.inquiry;
+        }
+      } catch {
+        state.feedbackLoading = false;
+        state.feedbackError = 'Could not open feedback link. Please try again.';
+      }
+      render();
+    })();
+  }
+
   // Auto-fetch inquiry when URL has ?tab=track&ticket=...&phone=...
-  if (urlTab === 'track' && urlTicket && urlPhone && urlPhone.length === 10) {
+  if (!urlFeedback && urlTab === 'track' && urlTicket && urlPhone && urlPhone.length === 10) {
     (async () => {
       state.trackLoading = true;
       render();

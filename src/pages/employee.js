@@ -3793,26 +3793,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       toast('Task updated!', 'success');
 
       if (newStatus === 'resolved') {
-        // Show feedback link for the client to use
-        const { data: inqRow } = inqId
-          ? await supabase.from('inquiries').select('ticket_no,phone').eq('id', inqId).single()
-          : await supabase.from('inquiries').select('ticket_no,phone').eq('ticket_id', taskId).single();
-
-        if (inqRow?.ticket_no) {
-          const feedbackUrl = `${window.location.origin}/?tab=track&ticket=${inqRow.ticket_no}&phone=${inqRow.phone || ''}`;
-          const fbBox = overlay.querySelector('#feedback-link-box');
-          const fbInput = overlay.querySelector('#feedback-url');
-          const copyBtn = overlay.querySelector('#copy-feedback-url');
-          const waBtn = overlay.querySelector('#share-feedback-wa');
-          if (fbBox && fbInput) {
-            fbInput.value = feedbackUrl;
-            fbBox.style.display = 'block';
-            copyBtn.onclick = () => { navigator.clipboard.writeText(feedbackUrl); toast('Copied!', 'success'); };
-            waBtn.onclick = () => window.open(`https://wa.me/${(inqRow.phone || '').replace(/\D/g,'')}?text=${encodeURIComponent('Thank you for choosing our service! Please share your feedback here: ' + feedbackUrl)}`, '_blank');
-            btn.disabled = false; btn.textContent = 'Done';
-            return;
-          }
-        }
+        toast('Secure feedback link will be sent after payment is received', 'info');
       }
 
       closeOverlay();

@@ -360,6 +360,10 @@ const requiredColumns = {
         { name: 'feedback_rating', definition: 'INT' },
         { name: 'feedback_comment', definition: 'TEXT' },
         { name: 'feedback_at', definition: 'TIMESTAMP NULL' },
+        { name: 'feedback_token_hash', definition: 'VARCHAR(128)' },
+        { name: 'feedback_token_created_at', definition: 'TIMESTAMP NULL' },
+        { name: 'feedback_token_expires_at', definition: 'TIMESTAMP NULL' },
+        { name: 'feedback_token_used_at', definition: 'TIMESTAMP NULL' },
         { name: 'preferred_time', definition: 'TEXT' },
         { name: 'assignment_status', definition: "VARCHAR(20) DEFAULT 'pending'" },
         { name: 'decline_reason', definition: 'TEXT' },
@@ -891,11 +895,14 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     // Template variables: {customer_name} {amount} {ticket_no} {bill_no}
     if (inqRow?.phone) {
         const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
+        const feedbackToken = await createFeedbackToken(connection, inqRow.id);
+        const feedbackLink = feedbackToken ? feedbackLinkFromToken(feedbackToken) : publicBaseUrl();
         smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
             smsVar(inqRow.full_name, 'Customer', 60),
             smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
             smsVar(ticket_no, 'N/A', 20),
             smsVar(inqRow.bill_no, 'N/A', 30),
+            smsVar(feedbackLink, publicBaseUrl(), 140),
         ]);
     }
 
@@ -1296,14 +1303,6 @@ const dataAuth = (req, res, next) => {
             req.user = { role: 'public' };
             return next();
         }
-        if (req.method === 'PATCH'
-            && eqs.some(e => e.startsWith('id:'))
-            && eqs.some(e => e.startsWith('ticket_no:'))
-            && eqs.some(e => e.startsWith('phone:'))
-            && Object.keys(req.body || {}).every(k => PUBLIC_INQUIRY_FEEDBACK_FIELDS.has(k))) {
-            req.user = { role: 'public' };
-            return next();
-        }
     }
     if (req.params.table === 'complaints' && req.method === 'POST') {
         // POST handler verifies the ticket_no/phone pair against inquiries
@@ -1325,6 +1324,133 @@ const dataAuth = (req, res, next) => {
     }
     return authenticateToken(req, res, next);
 };
+
+// --- PUBLIC SECURE FEEDBACK ROUTES ---
+app.get('/api/feedback/resolve', rateLimit({ windowMs: 60_000, max: 30, key: 'feedback-resolve' }), async (req, res) => {
+    const token = String(req.query.token || '').trim();
+    if (!token || token.length < 20) return res.status(400).json({ error: 'Invalid feedback link' });
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(
+            `SELECT id, ticket_no, full_name, service_item, status, payment_status,
+                    bill_total, bill_amount, feedback_rating, feedback_comment, feedback_at,
+                    feedback_token_expires_at, feedback_token_used_at,
+                    assigned_employee_id
+               FROM inquiries
+              WHERE feedback_token_hash = ?
+              LIMIT 1`,
+            [feedbackTokenHash(token)]
+        );
+        connection.release();
+        connection = null;
+
+        const row = rows[0];
+        if (!row) return res.status(404).json({ error: 'Feedback link not found' });
+        if (row.feedback_token_used_at || row.feedback_rating != null) {
+            return res.json({ used: true, inquiry: row });
+        }
+        if (row.feedback_token_expires_at && new Date(row.feedback_token_expires_at).getTime() <= Date.now()) {
+            return res.status(410).json({ error: 'Feedback link expired' });
+        }
+        if (!['paid', 'completed'].includes(String(row.payment_status || '').toLowerCase())) {
+            return res.status(403).json({ error: 'Feedback opens after payment is received' });
+        }
+        res.json({ ok: true, inquiry: row });
+    } catch (err) {
+        if (connection) { try { connection.release(); } catch {} }
+        console.error('[feedback/resolve]', err);
+        res.status(500).json({ error: 'Could not open feedback link' });
+    }
+});
+
+app.post('/api/feedback/submit', rateLimit({ windowMs: 60_000, max: 10, key: 'feedback-submit' }), async (req, res) => {
+    const token = String(req.body?.token || '').trim();
+    const rating = Number(req.body?.rating || 0);
+    const employeeRating = Number(req.body?.employee_rating || 0);
+    const comment = smsVar(req.body?.comment || '', '', 1000);
+    if (!token || token.length < 20) return res.status(400).json({ error: 'Invalid feedback link' });
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: 'Rating must be from 1 to 5' });
+    }
+    if (employeeRating && (!Number.isInteger(employeeRating) || employeeRating < 1 || employeeRating > 5)) {
+        return res.status(400).json({ error: 'Technician rating must be from 1 to 5' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const tokenHash = feedbackTokenHash(token);
+        const [rows] = await connection.execute(
+            `SELECT id, ticket_no, full_name, assigned_employee_id, feedback_rating,
+                    feedback_token_expires_at, feedback_token_used_at, payment_status
+               FROM inquiries
+              WHERE feedback_token_hash = ?
+              LIMIT 1`,
+            [tokenHash]
+        );
+        const row = rows[0];
+        if (!row) {
+            connection.release();
+            return res.status(404).json({ error: 'Feedback link not found' });
+        }
+        if (row.feedback_token_used_at || row.feedback_rating != null) {
+            connection.release();
+            return res.status(409).json({ error: 'Feedback already submitted' });
+        }
+        if (row.feedback_token_expires_at && new Date(row.feedback_token_expires_at).getTime() <= Date.now()) {
+            connection.release();
+            return res.status(410).json({ error: 'Feedback link expired' });
+        }
+        if (!['paid', 'completed'].includes(String(row.payment_status || '').toLowerCase())) {
+            connection.release();
+            return res.status(403).json({ error: 'Feedback opens after payment is received' });
+        }
+
+        const [result] = await connection.execute(
+            `UPDATE inquiries
+                SET feedback_rating = ?,
+                    feedback_comment = ?,
+                    feedback_at = NOW(),
+                    employee_rating = ?,
+                    feedback_employee_id = ?,
+                    feedback_token_used_at = NOW()
+              WHERE id = ?
+                AND feedback_token_hash = ?
+                AND feedback_rating IS NULL
+                AND feedback_token_used_at IS NULL`,
+            [
+                rating,
+                comment || null,
+                employeeRating || null,
+                employeeRating ? row.assigned_employee_id || null : null,
+                row.id,
+                tokenHash,
+            ]
+        );
+        if (!result.affectedRows) {
+            connection.release();
+            return res.status(409).json({ error: 'Feedback already submitted' });
+        }
+        const [freshRows] = await connection.execute('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [row.id]);
+        connection.release();
+        const fresh = freshRows[0] || { id: row.id, feedback_rating: rating };
+        broadcastChange('UPDATE', 'inquiries', fresh);
+        broadcastNotify({
+            subject: 'feedback_received',
+            title: 'Customer Feedback',
+            body: `${row.full_name || 'Client'} rated ${rating}/5`,
+            audience: { role: 'admin' },
+            data: { inquiry_id: row.id, ticket_no: row.ticket_no, rating },
+        });
+        res.json({ ok: true, inquiry: fresh });
+    } catch (err) {
+        if (connection) { try { connection.release(); } catch {} }
+        console.error('[feedback/submit]', err);
+        res.status(500).json({ error: 'Could not submit feedback' });
+    }
+});
 
 // --- PUBLIC OTP ROUTES ---
 
@@ -1521,6 +1647,48 @@ function formatSlaDeadlineForSms(deadline) {
 
 function smsPhoneVar(value) {
     return normalizeIndianMobile(value) || '0000000000';
+}
+
+function publicBaseUrl(req = null) {
+    const configured = (process.env.PUBLIC_BASE_URL || process.env.APP_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+    if (configured) return configured;
+    if (req?.get) {
+        const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+        const host = req.get('host');
+        if (host) return `${proto}://${host}`.replace(/\/+$/, '');
+    }
+    return 'https://services.networkingexperts.in';
+}
+
+function feedbackTokenHash(token) {
+    return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function feedbackLinkFromToken(token, req = null) {
+    return `${publicBaseUrl(req)}/?feedback=${encodeURIComponent(token)}`;
+}
+
+async function createFeedbackToken(connection, inquiryId) {
+    if (!inquiryId) return null;
+    const [rows] = await connection.execute(
+        'SELECT id, feedback_rating FROM inquiries WHERE id = ? LIMIT 1',
+        [inquiryId]
+    );
+    const row = rows[0];
+    if (!row || row.feedback_rating != null) return null;
+
+    const token = crypto.randomBytes(24).toString('base64url');
+    const tokenHash = feedbackTokenHash(token);
+    await connection.execute(
+        `UPDATE inquiries
+            SET feedback_token_hash = ?,
+                feedback_token_created_at = NOW(),
+                feedback_token_expires_at = DATE_ADD(NOW(), INTERVAL 7 DAY),
+                feedback_token_used_at = NULL
+          WHERE id = ? AND feedback_rating IS NULL`,
+        [tokenHash, inquiryId]
+    );
+    return token;
 }
 
 function sendOtpResponse(res, result, successPayload = {}) {
@@ -2330,14 +2498,19 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             const row = updatedRows[0];
 
             // Any manual/admin/cash payment completion should also notify the client.
-            // Template variables: {customer_name} {amount} {ticket_no} {bill_no}
+            // Template variables: {customer_name} {amount} {ticket_no} {bill_no} {feedback_link}
             if (data.payment_status === 'paid' && row.phone) {
                 const amount = row.bill_total || row.bill_amount || 0;
+                const smsConn = await getConn();
+                const feedbackToken = await createFeedbackToken(smsConn, row.id);
+                smsConn.release();
+                const feedbackLink = feedbackToken ? feedbackLinkFromToken(feedbackToken, req) : publicBaseUrl(req);
                 smsNotify(row.phone, 'SMS_TID_PAYMENT', [
                     smsVar(row.full_name, 'Customer', 60),
                     smsVar(`Rs.${Math.round(Number(amount) || 0)}`, 'Rs.0', 20),
                     smsVar(row.ticket_no, 'N/A', 20),
                     smsVar(row.bill_no, 'N/A', 30),
+                    smsVar(feedbackLink, publicBaseUrl(req), 140),
                 ]);
             }
 
@@ -2965,11 +3138,14 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 // SMS → client: payment confirmation
                 if (inqRow?.phone) {
                     const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
+                    const feedbackToken = await createFeedbackToken(connection, inqRow.id);
+                    const feedbackLink = feedbackToken ? feedbackLinkFromToken(feedbackToken, req) : publicBaseUrl(req);
                     smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
                         smsVar(inqRow.full_name, 'Customer', 60),
                         smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
                         smsVar(ticket_no, 'N/A', 20),
                         smsVar(inqRow.bill_no, 'N/A', 30),
+                        smsVar(feedbackLink, publicBaseUrl(req), 140),
                     ]);
                 }
             } catch (err) {
