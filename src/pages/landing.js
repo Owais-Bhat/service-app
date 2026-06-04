@@ -244,6 +244,7 @@ export function renderLandingPage(container, onPortalClick) {
     trackResult: null,
     trackList: null,
     trackLoading: false,
+    isFeedbackPage: !!urlFeedback,
     feedbackToken: urlFeedback,
     feedbackLoading: !!urlFeedback,
     feedbackError: '',
@@ -264,6 +265,11 @@ export function renderLandingPage(container, onPortalClick) {
   };
 
   function render() {
+    if (state.isFeedbackPage) {
+      renderFeedbackOnlyPage();
+      return;
+    }
+
     const savedTheme = localStorage.getItem('theme') || 'light';
     const themeIcon = savedTheme === 'dark' ? ICONS.sun : ICONS.moon;
 
@@ -367,6 +373,113 @@ export function renderLandingPage(container, onPortalClick) {
     bindStep();
     mountAdCarousel();
     maybeShowLandingPopup();
+  }
+
+  function renderFeedbackOnlyPage() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    const themeIcon = savedTheme === 'dark' ? ICONS.sun : ICONS.moon;
+    const r = state.trackResult;
+    const status = r ? displayStatus(r.status) : '';
+    const hasFeedback = r?.feedback_rating != null;
+    const canSubmit = r && !hasFeedback && !state.feedbackLoading && !state.feedbackError;
+
+    container.innerHTML = `
+      <div class="srf-page srf-feedback-page">
+        <div class="srf-bg-orb srf-orb-1"></div>
+        <div class="srf-bg-orb srf-orb-2"></div>
+
+        <nav class="srf-nav">
+          <img src="${LOGO}" alt="Networking Experts" class="srf-logo"
+               onerror="this.outerHTML='<span class=\\'srf-brand\\'>Networking Experts</span>'"/>
+          <div class="srf-nav-actions">
+            <button class="srf-icon-btn theme-toggle-btn" title="Toggle theme">${themeIcon}</button>
+            <button class="srf-icon-btn" id="srf-feedback-home" title="Service portal">${ICONS.home || ICONS.wrench}</button>
+          </div>
+        </nav>
+
+        <main style="min-height:calc(100vh - 96px);display:flex;align-items:center;justify-content:center;padding:32px 18px 56px;">
+          <section class="srf-card" style="width:min(100%,620px);padding:0;overflow:hidden;">
+            <div style="padding:28px 28px 22px;background:linear-gradient(135deg,rgba(16,185,129,.10),rgba(255,255,255,.45));border-bottom:1px solid var(--border);">
+              <div class="srf-badge" style="margin-bottom:14px;">${ICONS.shield}<span>Secure Feedback</span></div>
+              <h1 class="srf-card-title" style="font-size:1.65rem;margin-bottom:8px;">Rate your service experience</h1>
+              <p class="srf-card-sub" style="margin:0;">This page opens only from your secure payment feedback link.</p>
+            </div>
+
+            <div style="padding:28px;">
+              ${state.feedbackLoading ? `
+                <div style="text-align:center;padding:32px 10px;">
+                  <span class="srf-spin"></span>
+                  <h2 class="srf-card-title" style="margin-top:18px;">Opening feedback</h2>
+                  <p class="srf-card-sub">Please wait while we verify your secure link.</p>
+                </div>
+              ` : state.feedbackError ? `
+                <div style="text-align:center;padding:28px 10px;">
+                  <div style="width:58px;height:58px;border-radius:18px;margin:0 auto 16px;background:rgba(239,68,68,.10);color:var(--danger);display:flex;align-items:center;justify-content:center;">${ICONS.shield}</div>
+                  <h2 class="srf-card-title">Feedback link unavailable</h2>
+                  <p class="srf-card-sub">${escapeHTML(state.feedbackError)}</p>
+                  <button class="srf-btn srf-btn-secondary" id="srf-feedback-home-2">${ICONS.arrowLeft}<span>Open service portal</span></button>
+                </div>
+              ` : hasFeedback ? `
+                <div class="srf-fb-done" style="box-shadow:none;margin:0;">
+                  <div class="srf-fb-done-ring">${ICONS.star}</div>
+                  <h2 style="font-weight:800;font-size:1.25rem;color:var(--text);margin:0 0 8px;">Thank you for your feedback</h2>
+                  <p style="font-size:0.95rem;color:var(--text-soft);margin:0 0 8px;">You rated us <strong style="color:var(--warning)">${r.feedback_rating}/5 ★</strong></p>
+                  ${r.feedback_comment ? `<p style="font-size:0.88rem;color:var(--text-soft);font-style:italic;margin:0;">"${escapeHTML(r.feedback_comment)}"</p>` : ''}
+                </div>
+              ` : canSubmit ? `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;">
+                  <div style="padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);">
+                    <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);font-weight:800;">Ticket</div>
+                    <div style="margin-top:4px;font-weight:800;color:var(--text);">${escapeHTML(r.ticket_no || '-')}</div>
+                  </div>
+                  <div style="padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);">
+                    <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);font-weight:800;">Status</div>
+                    <div style="margin-top:4px;font-weight:800;color:var(--primary);">${escapeHTML(STATUS_LABELS[status] || status || '-')}</div>
+                  </div>
+                  <div style="grid-column:1/-1;padding:14px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border);">
+                    <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);font-weight:800;">Service</div>
+                    <div style="margin-top:4px;font-weight:800;color:var(--text);">${escapeHTML(r.service_item || '-')}</div>
+                    <div style="margin-top:3px;font-size:.86rem;color:var(--text-soft);">${escapeHTML(r.full_name || 'Customer')}</div>
+                  </div>
+                </div>
+
+                <div style="margin-bottom:20px;">
+                  <div style="font-size:0.76rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Overall experience</div>
+                  <div class="srf-stars" id="srf-stars" data-rating="0">
+                    ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="srf-star" data-val="${n}">${ICONS.starOutline}</button>`).join('')}
+                  </div>
+                  <div id="srf-rating-label" style="font-size:0.86rem;color:var(--primary);font-weight:800;margin-top:8px;min-height:20px;"></div>
+                </div>
+
+                <div style="margin-bottom:20px;">
+                  <div style="font-size:0.76rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Technician rating</div>
+                  <div class="srf-stars" id="srf-stars-tech" data-rating="0">
+                    ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="srf-star" data-val="${n}">${ICONS.starOutline}</button>`).join('')}
+                  </div>
+                </div>
+
+                <div class="srf-input-wrap" style="margin-bottom:16px;">
+                  <span class="srf-input-icon">${ICONS.edit}</span>
+                  <textarea id="srf-fb-comment" placeholder="Tell us about your experience..." class="srf-input" rows="4" style="padding-top:12px;padding-bottom:12px;resize:vertical;min-height:92px;"></textarea>
+                </div>
+
+                <button class="srf-btn srf-btn-primary" id="srf-fb-submit" disabled style="opacity:.5;cursor:not-allowed;">
+                  <span>Submit Feedback</span> ${ICONS.arrowRight}
+                </button>
+                <p style="text-align:center;font-size:.76rem;color:var(--text-dim);margin:10px 0 0;">Overall star rating is required.</p>
+              ` : `
+                <div style="text-align:center;padding:28px 10px;">
+                  <h2 class="srf-card-title">Feedback not ready</h2>
+                  <p class="srf-card-sub">This secure link could not load feedback details.</p>
+                </div>
+              `}
+            </div>
+          </section>
+        </main>
+      </div>
+    `;
+
+    bindFeedbackOnly();
   }
 
   function showPopupAd(item) {
@@ -1406,6 +1519,104 @@ export function renderLandingPage(container, onPortalClick) {
 
   }
 
+  function wireStarRating(el, onPick) {
+    if (!el) return () => 0;
+    const btns = [...el.querySelectorAll('.srf-star')];
+    let val = Number(el.dataset.rating || 0);
+    const paint = (v) => btns.forEach((b, i) => {
+      b.innerHTML = i < v ? ICONS.star : ICONS.starOutline;
+      b.classList.toggle('on', i < v);
+    });
+    btns.forEach((b, i) => {
+      b.onmouseenter = () => paint(i + 1);
+      b.onmouseleave = () => paint(val);
+      b.onclick = () => {
+        val = i + 1;
+        el.dataset.rating = String(val);
+        paint(val);
+        if (onPick) onPick(val);
+      };
+    });
+    paint(val);
+    return () => val;
+  }
+
+  function bindFeedbackOnly() {
+    bind('.theme-toggle-btn', () => { toggleTheme(); render(); });
+    const openPortal = () => {
+      window.history.replaceState({}, '', '/');
+      state.isFeedbackPage = false;
+      state.feedbackToken = '';
+      state.feedbackError = '';
+      state.feedbackLoading = false;
+      state.trackResult = null;
+      render();
+      loadIssueOptions();
+      loadAds();
+    };
+    bind('#srf-feedback-home', openPortal);
+    bind('#srf-feedback-home-2', openPortal);
+
+    if (!state.trackResult || state.feedbackLoading || state.feedbackError || state.trackResult.feedback_rating != null) return;
+
+    const labels = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'];
+    let chosenOverall = 0;
+    const submitBtn = container.querySelector('#srf-fb-submit');
+    const checkReady = () => {
+      if (!submitBtn) return;
+      submitBtn.disabled = !chosenOverall;
+      submitBtn.style.opacity = chosenOverall ? '1' : '0.5';
+      submitBtn.style.cursor = chosenOverall ? 'pointer' : 'not-allowed';
+    };
+
+    wireStarRating(container.querySelector('#srf-stars'), (v) => {
+      chosenOverall = v;
+      const lbl = container.querySelector('#srf-rating-label');
+      if (lbl) lbl.textContent = labels[v] || '';
+      checkReady();
+    });
+    wireStarRating(container.querySelector('#srf-stars-tech'));
+
+    bind('#srf-fb-submit', async () => {
+      if (!chosenOverall) return toast('Please pick an overall star rating', 'warning');
+      const techRating = Number(container.querySelector('#srf-stars-tech')?.dataset.rating || 0);
+      const comment = (container.querySelector('#srf-fb-comment')?.value || '').trim();
+      const fullComment = [
+        comment,
+        techRating ? `Technician: ${techRating}/5` : '',
+      ].filter(Boolean).join(' | ');
+
+      const btn = container.querySelector('#srf-fb-submit');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="srf-spin"></span><span>Submitting...</span>`;
+      const res = await fetch('/api/feedback/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: state.feedbackToken,
+          rating: chosenOverall,
+          employee_rating: techRating || null,
+          comment: fullComment || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data.error || 'Could not submit feedback', 'error');
+        btn.disabled = false;
+        btn.innerHTML = `<span>Submit Feedback</span> ${ICONS.arrowRight}`;
+        return;
+      }
+      state.trackResult = data.inquiry || {
+        ...state.trackResult,
+        feedback_rating: chosenOverall,
+        feedback_comment: fullComment || null,
+        feedback_at: new Date().toISOString(),
+      };
+      toast('Thanks for your feedback', 'success');
+      render();
+    });
+  }
+
   function bindComplaint() {
     if (state.complaintSubmitted) {
       bind('#srf-complaint-another', () => {
@@ -1473,8 +1684,10 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   render();
-  loadIssueOptions();
-  loadAds();
+  if (!state.isFeedbackPage) {
+    loadIssueOptions();
+    loadAds();
+  }
 
   if (urlFeedback) {
     (async () => {
