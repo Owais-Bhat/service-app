@@ -190,6 +190,14 @@ function goToLanding() {
   showPWAInstallBtn();
 }
 
+function isFeedbackRoute() {
+  const params = new URLSearchParams(window.location.search);
+  return window.location.pathname === '/feedback'
+    || params.has('feedback')
+    || params.has('f')
+    || params.has('token');
+}
+
 async function loadCanAddService(userId) {
   try {
     const { data } = await supabase.from('profiles').select('can_add_service').eq('id', userId).single();
@@ -221,6 +229,13 @@ function showAuth() {
 // ── BOOT ─────────────────────────────────────────────
 async function boot() {
   app.innerHTML = `<div class="loading-screen"><div class="spinner"></div></div>`;
+
+  if (isFeedbackRoute()) {
+    renderLandingPage(app, showAuth);
+    hidePWAInstallBtn();
+    return;
+  }
+
   const { data: { session } } = await supabase.auth.getSession();
 
   if (session?.user) {

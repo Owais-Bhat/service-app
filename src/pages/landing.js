@@ -221,7 +221,7 @@ export function renderLandingPage(container, onPortalClick) {
   const urlTab = urlParams.get('tab');
   const urlTicket = urlParams.get('ticket') || '';
   const urlPhone = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
-  const urlFeedback = (urlParams.get('feedback') || urlParams.get('f') || '').trim();
+  const urlFeedback = (urlParams.get('token') || urlParams.get('feedback') || urlParams.get('f') || '').trim();
   const cachedAds = getCachedAds();
 
   const state = {
