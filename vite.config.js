@@ -2,6 +2,14 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // In dev, the Vite server doesn't host uploaded images / bill PDFs — proxy
+  // those paths to the Node backend so images don't render broken locally.
+  server: {
+    proxy: {
+      '/uploads': 'http://localhost:5000',
+      '/bills': 'http://localhost:5000',
+    },
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

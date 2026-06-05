@@ -311,24 +311,54 @@ app.use('/bills', express.static(BILLS_DIR, {
     },
 }));
 
-// Serve uploaded files
+// Serve uploaded files. Prefer the copy stored in MySQL (survives rebuilds and
+// redeploys), and fall back to any legacy file still on disk.
+app.get('/uploads/:file', async (req, res, next) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            'SELECT mime, data FROM uploaded_files WHERE id = ? LIMIT 1',
+            [req.params.file]
+        );
+        if (rows.length && rows[0].data) {
+            res.setHeader('Content-Type', rows[0].mime || 'application/octet-stream');
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            return res.end(rows[0].data);
+        }
+    } catch (err) {
+        console.error('[uploads] DB serve error:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+    next(); // legacy on-disk file
+});
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-const uploadStorage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, UPLOADS_DIR);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-const upload = multer({ storage: uploadStorage });
+// Keep uploads in memory then persist the bytes to MySQL — the on-disk uploads/
+// folder is ephemeral (wiped on rebuild / not shipped on deploy), which made
+// previously uploaded images break. 10 MB cap keeps inserts within MySQL limits.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+app.post('/api/upload', authenticateToken, upload.single('file'), async (req, res) => {
     if (!['admin', 'employee'].includes(req.user.role)) return res.sendStatus(403);
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    res.json({ url: `/uploads/${req.file.filename}` });
+    const ext = path.extname(req.file.originalname || '') || '';
+    const id = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+    let connection;
+    try {
+        connection = await getConn();
+        await connection.query(
+            'INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)',
+            [id, req.file.mimetype || 'application/octet-stream', req.file.buffer]
+        );
+        res.json({ url: `/uploads/${id}` });
+    } catch (err) {
+        console.error('[upload] DB store error:', err);
+        res.status(500).json({ error: 'Could not store file' });
+    } finally {
+        if (connection) connection.release();
+    }
 });
 
 const dbConfig = {
@@ -778,6 +808,14 @@ const requiredTables = [
         updated_by VARCHAR(36),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_device_followup_inquiry (inquiry_id)
+    )`,
+    // Uploaded images live in MySQL so they survive frontend rebuilds and
+    // server redeploys (the on-disk uploads/ folder is ephemeral / not shipped).
+    `CREATE TABLE IF NOT EXISTS uploaded_files (
+        id VARCHAR(255) PRIMARY KEY,
+        mime VARCHAR(120),
+        data LONGBLOB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 ];
 
