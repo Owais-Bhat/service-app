@@ -2473,7 +2473,7 @@ app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
 
     try {
         const connection = await getConn();
-        const logId = generateId();
+        const logId = uuidv4();
 
         await connection.execute(
             `INSERT INTO device_taken_logs (id, inquiry_id, employee_id, device_description, device_image_url, taken_at)
@@ -2502,7 +2502,7 @@ app.post('/api/device-tracking/return', authenticateToken, async (req, res) => {
 
     try {
         const connection = await getConn();
-        const logId = generateId();
+        const logId = uuidv4();
 
         await connection.execute(
             `INSERT INTO device_return_logs (id, inquiry_id, device_condition, return_notes, return_image_url, returned_at)
@@ -2532,7 +2532,7 @@ app.post('/api/device-tracking/followup', authenticateToken, async (req, res) =>
 
     try {
         const connection = await getConn();
-        const logId = generateId();
+        const logId = uuidv4();
 
         await connection.execute(
             `INSERT INTO device_follow_up_logs (id, inquiry_id, status, notes, updated_by)
