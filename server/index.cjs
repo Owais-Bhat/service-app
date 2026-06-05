@@ -2642,6 +2642,156 @@ app.post('/api/device-tracking/toggle', authenticateToken, async (req, res) => {
     }
 });
 
+// ── FINANCE REPORT ──────────────────────────────────────────────
+// Aggregated business finance summary for the admin dashboard. Pure SQL/JS —
+// no AI — so the numbers are always trustworthy. Optional ?from=&to=YYYY-MM-DD.
+async function computeFinanceSummary(connection, from, to) {
+        const where = ['(i.bill_total > 0 OR i.bill_amount > 0)'];
+        const params = [];
+        if (from) { where.push('COALESCE(i.bill_generated_at, i.created_at) >= ?'); params.push(`${from} 00:00:00`); }
+        if (to) { where.push('COALESCE(i.bill_generated_at, i.created_at) <= ?'); params.push(`${to} 23:59:59`); }
+        const whereSql = 'WHERE ' + where.join(' AND ');
+
+        const [rows] = await connection.query(
+            `SELECT i.id, i.company_name, i.bill_total, i.bill_amount, i.gst_amount,
+                    i.discount_amount, i.platform_fee, i.transport_fee, i.payment_status,
+                    i.payment_method, i.bill_generated_at, i.created_at,
+                    i.cash_collected_at, i.cash_submitted_at,
+                    p.full_name AS technician
+               FROM inquiries i
+               LEFT JOIN profiles p ON p.id = i.assigned_employee_id
+               ${whereSql}`,
+            params
+        );
+        const [catRows] = await connection.query(
+            `SELECT COALESCE(sp.category, 'Uncategorized') AS category,
+                    SUM(COALESCE(sp.cost, 0)) AS revenue, COUNT(*) AS items
+               FROM inquiry_services isv
+               JOIN service_pricing sp ON sp.id = isv.service_id
+               JOIN inquiries i ON i.id = isv.inquiry_id
+               ${whereSql}
+              GROUP BY COALESCE(sp.category, 'Uncategorized')
+              ORDER BY revenue DESC`,
+            params
+        );
+
+        const amt = (r) => Number(r.bill_total) || Number(r.bill_amount) || 0;
+        const isPaid = (r) => r.payment_status === 'paid';
+        const now = new Date();
+
+        let billed = 0, received = 0, pending = 0, gst = 0, discounts = 0, platform = 0, transport = 0, paidCount = 0, cashInHand = 0;
+        const byTech = new Map(), byCompany = new Map(), byMonth = new Map();
+        const byMethod = { cash: 0, online: 0, unknown: 0 };
+        const aging = { '0-7': 0, '8-30': 0, '31+': 0 };
+
+        rows.forEach(r => {
+            const a = amt(r);
+            billed += a;
+            gst += Number(r.gst_amount) || 0;
+            discounts += Number(r.discount_amount) || 0;
+            platform += Number(r.platform_fee) || 0;
+            transport += Number(r.transport_fee) || 0;
+            if (isPaid(r)) {
+                received += a; paidCount++;
+                const m = (r.payment_method || '').toLowerCase();
+                if (m.includes('cash')) byMethod.cash += a;
+                else if (m) byMethod.online += a;
+                else byMethod.unknown += a;
+            } else {
+                pending += a;
+                const days = Math.floor((now - new Date(r.bill_generated_at || r.created_at)) / 86400000);
+                if (days <= 7) aging['0-7'] += a; else if (days <= 30) aging['8-30'] += a; else aging['31+'] += a;
+            }
+            if (r.cash_collected_at && !r.cash_submitted_at) cashInHand += a;
+
+            const tName = r.technician || 'Unassigned';
+            const t = byTech.get(tName) || { name: tName, billed: 0, received: 0, jobs: 0 };
+            t.billed += a; if (isPaid(r)) t.received += a; t.jobs++; byTech.set(tName, t);
+
+            const cName = r.company_name || 'networking experts';
+            const c = byCompany.get(cName) || { company: cName, billed: 0, received: 0 };
+            c.billed += a; if (isPaid(r)) c.received += a; byCompany.set(cName, c);
+
+            const d = new Date(r.bill_generated_at || r.created_at);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const mo = byMonth.get(key) || { month: key, billed: 0, received: 0 };
+            mo.billed += a; if (isPaid(r)) mo.received += a; byMonth.set(key, mo);
+        });
+
+        return {
+            range: { from: from || null, to: to || null },
+            totals: {
+                billed, received, pending, billsCount: rows.length, paidCount,
+                avgTicket: rows.length ? billed / rows.length : 0,
+                gst, discounts, platform, transport, cashInHand,
+            },
+            byMethod, aging,
+            byTechnician: [...byTech.values()].sort((a, b) => b.billed - a.billed),
+            byCompany: [...byCompany.values()].sort((a, b) => b.billed - a.billed),
+            byCategory: catRows.map(c => ({ category: c.category, revenue: Number(c.revenue) || 0, items: Number(c.items) || 0 })),
+            byMonth: [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)),
+        };
+}
+
+app.get('/api/finance/summary', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        res.json(await computeFinanceSummary(connection, req.query.from, req.query.to));
+    } catch (err) {
+        console.error('[finance] summary error:', err);
+        res.status(500).json({ error: err.message || 'Could not build finance summary' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// AI finance analyst (OpenRouter). Narrates / answers questions over the SAME
+// aggregated numbers so it can't invent figures. Requires OPENROUTER_API_KEY in
+// server/.env (optional OPENROUTER_MODEL to override the model).
+app.post('/api/ai/finance', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'OPENROUTER_API_KEY is not set on the server.' });
+    const { from, to, question } = req.body || {};
+    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    let connection;
+    try {
+        connection = await getConn();
+        const summary = await computeFinanceSummary(connection, from, to);
+        connection.release(); connection = null;
+
+        const system = 'You are a finance analyst for "Networking Experts", a field-service business (CCTV, networking, video door phones) in India. Currency is INR (₹). Only use the numbers in the provided JSON — never invent figures. Be concise and practical. For a summary give: 1) headline numbers, 2) 2-4 key insights or anomalies, 3) 2-3 concrete recommendations (e.g. chase aged receivables, flag employees holding cash). Use short paragraphs and bullet points.';
+        const ask = (question && String(question).trim()) ? String(question).trim() : 'Give me an executive finance summary for this period.';
+        const userContent = `Finance data (JSON):\n${JSON.stringify(summary)}\n\nQuestion: ${ask}`;
+
+        const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model,
+                messages: [
+                    { role: 'system', content: system },
+                    { role: 'user', content: userContent },
+                ],
+                temperature: 0.3,
+            }),
+        });
+        const aiData = await aiRes.json();
+        if (!aiRes.ok) {
+            console.error('[ai/finance] OpenRouter error:', aiData);
+            return res.status(502).json({ error: aiData.error?.message || 'AI request failed' });
+        }
+        res.json({ answer: aiData.choices?.[0]?.message?.content || 'No response.', model });
+    } catch (err) {
+        console.error('[ai/finance] error:', err);
+        res.status(500).json({ error: err.message || 'AI finance request failed' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Get employee's devices
 app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (req, res) => {
     const { employeeId } = req.params;

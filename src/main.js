@@ -5,6 +5,7 @@ import { renderLayout } from './layout.js';
 import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab, renderAutoAssignmentTab } from './pages/admin.js';
 import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderDeviceTrackingTab } from './pages/device-tracking-admin.js';
+import { renderFinanceReportTab } from './pages/finance.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
 import { renderPopupAdsTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab, mountEmployeePopupAds } from './pages/media-training.js';
@@ -106,6 +107,7 @@ function getNavItems(role) {
     { id: 'training-admin', icon: ICONS.play, label: 'Employee Tutorials' },
     { id: 'device-tracking', icon: ICONS.wrench, label: 'Device Follow-up' },
     { type: 'section', label: 'Reports' },
+    { id: 'finance', icon: ICONS.rupee, label: 'Finance Report' },
     { id: 'ai-report', icon: ICONS.star, label: 'AI Report' },
     { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
     { id: 'bills', icon: ICONS.receipt, label: 'Bills' },
@@ -157,6 +159,7 @@ function getPageRenderer(role, page) {
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
       ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
       'auto-assignment': renderAutoAssignmentTab, 'device-tracking': renderDeviceTrackingTab,
+      finance: renderFinanceReportTab,
     }
   };
   return (map[role] || map.admin)[page];
