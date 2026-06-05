@@ -2464,6 +2464,64 @@ app.put('/api/settings/popup', authenticateToken, async (req, res) => {
     }
 });
 
+// Get all device tracking data
+app.get('/api/device-tracking/all', async (req, res) => {
+    try {
+        const connection = await getConn();
+
+        // Get all inquiries with device tracking
+        const [inquiries] = await connection.execute(`
+            SELECT
+                i.id,
+                i.ticket_no,
+                i.full_name,
+                i.phone,
+                i.service_item,
+                i.device_status,
+                i.follow_up_status,
+                i.status,
+                i.created_at
+            FROM inquiries i
+            ORDER BY i.created_at DESC
+        `);
+
+        // Get all device logs
+        const [deviceTaken] = await connection.execute('SELECT * FROM device_taken_logs');
+        const [deviceReturn] = await connection.execute('SELECT * FROM device_return_logs');
+        const [deviceFollowup] = await connection.execute('SELECT * FROM device_follow_up_logs');
+
+        // Get employee names for device taken logs
+        const [employees] = await connection.execute('SELECT id, full_name FROM profiles WHERE role = "employee"');
+        const employeeMap = new Map(employees.map(e => [e.id, e.full_name]));
+
+        // Combine data
+        const result = inquiries.map(inq => {
+            const taken = deviceTaken.filter(dt => dt.inquiry_id === inq.id);
+            const returned = deviceReturn.filter(dr => dr.inquiry_id === inq.id);
+            const followup = deviceFollowup.filter(df => df.inquiry_id === inq.id);
+
+            return {
+                ...inq,
+                device_taken_logs: taken.map(t => ({
+                    ...t,
+                    profiles: { full_name: employeeMap.get(t.employee_id) || 'Unknown' }
+                })),
+                device_return_logs: returned,
+                device_follow_up_logs: followup.map(f => ({
+                    ...f,
+                    profiles: { full_name: employeeMap.get(f.updated_by) || 'Unknown' }
+                }))
+            };
+        });
+
+        connection.release();
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching device tracking:', error);
+        res.status(500).json({ error: error.message || 'Could not fetch device tracking data' });
+    }
+});
+
 // Device Tracking Endpoints
 app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
     const { inquiry_id, description, device_image_url } = req.body;

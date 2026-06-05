@@ -188,44 +188,14 @@ export async function saveFollowUpStatus(inquiryId, status, notes, userId) {
 // Get all device tracking data for admin panel
 export async function getAllDeviceTracking() {
   try {
-    const { data, error } = await supabase
-      .from('inquiries')
-      .select(`
-        id,
-        ticket_no,
-        full_name,
-        phone,
-        service_item,
-        device_status,
-        follow_up_status,
-        status,
-        created_at,
-        device_taken_logs(
-          id,
-          employee_id,
-          device_image_url,
-          device_description,
-          taken_at,
-          profiles(full_name)
-        ),
-        device_return_logs(
-          id,
-          device_condition,
-          return_image_url,
-          return_notes,
-          returned_at
-        ),
-        device_follow_up_logs(
-          id,
-          status,
-          notes,
-          created_at,
-          profiles(full_name)
-        )
-      `)
-      .order('created_at', { ascending: false });
+    const res = await fetch(`${API_URL}/device-tracking/all`);
+    const data = await res.json();
 
-    return { data: data || [], error };
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to load device tracking');
+    }
+
+    return { data: data || [], error: null };
   } catch (err) {
     console.error('Error loading all device tracking:', err);
     return { data: [], error: err };
