@@ -553,6 +553,50 @@ function startAutoClockOutJob() {
     setInterval(runAutoClockOut, 60_000).unref();
 }
 
+// Once a day, nudge every employee who still has device(s) in service to update
+// their follow-up status. Reaches online employees instantly and is buffered for
+// the audience so it is delivered when they next open the app that day.
+let _lastDeviceReminderDate = null;
+async function runDeviceFollowupReminders() {
+    const now = new Date();
+    if (now.getHours() < 10) return; // fire from 10:00 server time onward
+    const today = localDateKey(now);
+    if (_lastDeviceReminderDate === today) return;
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(
+            `SELECT i.assigned_employee_id AS emp, COUNT(*) AS cnt
+               FROM inquiries i
+              WHERE i.device_service_enabled = 1
+                AND i.assigned_employee_id IS NOT NULL
+                AND (i.follow_up_status IS NULL OR i.follow_up_status <> 'returned')
+              GROUP BY i.assigned_employee_id`
+        );
+        _lastDeviceReminderDate = today;
+        for (const r of rows) {
+            broadcastNotify({
+                subject: 'device_followup_reminder',
+                audience: { userId: r.emp },
+                title: 'Device follow-up reminder',
+                body: `You have ${r.cnt} device(s) in service. Please update their status today.`,
+            });
+        }
+        if (rows.length) console.log(`[device] Sent follow-up reminders to ${rows.length} employee(s)`);
+    } catch (err) {
+        console.error('[device] follow-up reminder failed:', err.message);
+    } finally {
+        if (connection) { try { connection.release(); } catch {} }
+    }
+}
+
+function startDeviceReminderJob() {
+    console.log('[device] Daily follow-up reminders scheduled for 10:00 server time');
+    runDeviceFollowupReminders();
+    setInterval(runDeviceFollowupReminders, 60_000).unref();
+}
+
 const requiredColumns = {
     profiles: [
         { name: 'salary', definition: 'DECIMAL(10, 2) DEFAULT 0' },
@@ -3892,6 +3936,7 @@ async function startServer() {
         await loadAppSettings(connection);
         connection.release();
         startAutoClockOutJob();
+        startDeviceReminderJob();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

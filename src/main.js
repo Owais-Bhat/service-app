@@ -178,6 +178,7 @@ function startGlobalNotifications() {
           : msg.subject === 'new_complaint' ? 'alert'
           : msg.subject === 'employee_clock_in' ? 'alert'
           : msg.subject === 'employee_clock_out' ? 'alert'
+          : msg.subject === 'device_followup_reminder' ? 'alert'
           : 'info',
     });
   });

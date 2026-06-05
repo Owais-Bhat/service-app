@@ -153,6 +153,23 @@ async function populateDevicesInService(container, employeeId) {
   }).join('');
   card.style.display = 'block';
 
+  // Daily nudge: remind the employee once per day (per device set) to update the
+  // follow-up status of devices still in service.
+  try {
+    const pending = inService.filter(d => (d.follow_up_status || 'none') !== 'returned');
+    const dayKey = `dev_reminder_${employeeId}_${new Date().toISOString().slice(0, 10)}`;
+    if (pending.length && !localStorage.getItem(dayKey)) {
+      localStorage.setItem(dayKey, '1');
+      showNotification({
+        title: 'Device follow-up reminder',
+        body: `You have ${pending.length} device(s) in service. Please update their status today.`,
+        type: 'alert',
+        tag: 'device-followup-daily',
+      });
+      toast(`Reminder: update follow-up for ${pending.length} device(s) in service`, 'info');
+    }
+  } catch {}
+
   list.querySelectorAll('.dev-manage-btn').forEach(btn => {
     btn.onclick = () => openTaskModalWithLoader(btn, null, btn.dataset.id, btn.dataset.status, () => {
       // Re-render the host view after the modal closes.
