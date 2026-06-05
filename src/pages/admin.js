@@ -3928,12 +3928,16 @@ export async function renderSettingsTab(container) {
   });
   let autoClockOutTime = "18:00";
   let registrationKeys = { admin: "", employee: "" };
+  let popupEnabled = true;
   try {
-    const [attendanceRes, keysRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/registration-keys`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/popup`, {
         headers: authHeaders(),
       }),
     ]);
@@ -3943,6 +3947,10 @@ export async function renderSettingsTab(container) {
     }
     if (keysRes.ok) {
       registrationKeys = await keysRes.json();
+    }
+    if (popupRes.ok) {
+      const data = await popupRes.json();
+      popupEnabled = data.enabled !== false;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4043,6 +4051,32 @@ export async function renderSettingsTab(container) {
 
       <div class="settings-card">
         <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.alert}</span>
+          <div>
+            <h3>Landing Page Popup</h3>
+            <p>Enable or disable the popup advertisements on the landing page.</p>
+          </div>
+        </div>
+
+        <div class="settings-alert settings-alert-info">
+          <span>${ICONS.alert}</span>
+          <small>Toggle on to show popup ads, off to hide them.</small>
+        </div>
+
+        <div class="settings-form-row" style="align-items: center; gap: 16px;">
+          <label style="margin: 0; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="popup-toggle" ${popupEnabled ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+            <span>${popupEnabled ? 'Popup Enabled' : 'Popup Disabled'}</span>
+          </label>
+          <button class="btn btn-primary settings-save-btn" id="save-popup-toggle">
+            ${ICONS.check}
+            <span>Save Setting</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
           <span class="settings-card-icon settings-card-icon-danger">${ICONS.block}</span>
           <div>
             <h3>Restrictions (${restrictedProfiles.length})</h3>
@@ -4124,6 +4158,36 @@ export async function renderSettingsTab(container) {
       toast(`Auto clock-out time saved: ${autoClockOutTime}`, "success");
     } catch (err) {
       toast(err.message || "Could not save clock-out time", "error");
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#save-popup-toggle").onclick = async () => {
+    const toggle = container.querySelector("#popup-toggle");
+    const enabled = toggle.checked;
+    const btn = container.querySelector("#save-popup-toggle");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/popup`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(data.error || "Could not save popup setting");
+      popupEnabled = enabled;
+      toggle.checked = enabled;
+      const label = toggle.parentElement;
+      if (label) {
+        const span = label.querySelector("span");
+        if (span) span.textContent = enabled ? "Popup Enabled" : "Popup Disabled";
+      }
+      toast(`Popup ${enabled ? "enabled" : "disabled"}`, "success");
+    } catch (err) {
+      toast(err.message || "Could not save popup setting", "error");
+      toggle.checked = popupEnabled;
     } finally {
       restore();
     }

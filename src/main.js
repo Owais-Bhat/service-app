@@ -4,6 +4,7 @@ import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
 import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab, renderAutoAssignmentTab } from './pages/admin.js';
 import { renderNoticesTab } from './pages/admin-notices.js';
+import { renderDeviceTrackingTab } from './pages/device-tracking-admin.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
 import { renderPopupAdsTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab, mountEmployeePopupAds } from './pages/media-training.js';
@@ -102,6 +103,7 @@ function getNavItems(role) {
     { id: 'users', icon: ICONS.users, label: 'Users' },
     { id: 'popup-ads', icon: ICONS.box, label: 'Popup Ads' },
     { id: 'training-admin', icon: ICONS.play, label: 'Employee Tutorials' },
+    { id: 'device-tracking', icon: ICONS.alert, label: 'Device Tracking' },
     { type: 'section', label: 'Reports' },
     { id: 'ai-report', icon: ICONS.star, label: 'AI Report' },
     { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
@@ -152,7 +154,7 @@ function getPageRenderer(role, page) {
       'popup-ads': renderPopupAdsTab, 'training-admin': renderTrainingAdminTab, 'ai-report': renderAIReportTab,
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
       ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
-      'auto-assignment': renderAutoAssignmentTab,
+      'auto-assignment': renderAutoAssignmentTab, 'device-tracking': renderDeviceTrackingTab,
     }
   };
   return (map[role] || map.admin)[page];

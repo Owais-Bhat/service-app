@@ -372,7 +372,6 @@ export function renderLandingPage(container, onPortalClick) {
     bindCommon();
     bindStep();
     mountAdCarousel();
-    maybeShowLandingPopup();
   }
 
   function renderFeedbackOnlyPage() {
@@ -504,9 +503,19 @@ export function renderLandingPage(container, onPortalClick) {
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   }
 
-  function maybeShowLandingPopup() {
+  async function maybeShowLandingPopup() {
     const item = state.popupAds.find(Boolean);
-    if (item) setTimeout(() => showPopupAd(item), 500);
+    if (!item) return;
+
+    try {
+      const popupSettingsRes = await fetch(`${API_URL}/settings/popup`);
+      const popupSettings = await popupSettingsRes.json().catch(() => ({}));
+      if (popupSettings.enabled === false) return;
+    } catch (err) {
+      console.warn('Could not check popup settings:', err);
+    }
+
+    setTimeout(() => showPopupAd(item), 500);
   }
 
   function mountAdCarousel() {
@@ -555,12 +564,13 @@ export function renderLandingPage(container, onPortalClick) {
         cacheAds(ads);
         state.ads = ads;
       }
-      maybeShowLandingPopup();
     } catch (err) {
       console.warn('Could not load ads:', err);
     } finally {
       state.adsLoading = false;
-      render();
+      // Update carousel & show popup without full re-render
+      mountAdCarousel();
+      if (!state.isFeedbackPage) maybeShowLandingPopup();
     }
   }
 

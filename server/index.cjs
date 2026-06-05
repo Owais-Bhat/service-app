@@ -2435,6 +2435,125 @@ app.post('/api/settings/registration-keys/regenerate', authenticateToken, async 
     }
 });
 
+// Popup settings endpoints
+app.get('/api/settings/popup', async (_, res) => {
+    try {
+        const connection = await getConn();
+        const [rows] = await connection.execute(
+            'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+            ['popup_enabled']
+        );
+        connection.release();
+        const enabled = rows.length > 0 ? (rows[0].setting_value !== '0' && rows[0].setting_value !== 'false') : true;
+        res.json({ enabled });
+    } catch (error) {
+        console.error('Popup settings load error:', error);
+        res.json({ enabled: true });
+    }
+});
+
+app.put('/api/settings/popup', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const enabled = req.body?.enabled !== false;
+    try {
+        await saveAppSetting('popup_enabled', enabled ? '1' : '0');
+        res.json({ enabled });
+    } catch (error) {
+        console.error('Popup settings update error:', error);
+        res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+// Device Tracking Endpoints
+app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
+    const { inquiry_id, description, device_image_url } = req.body;
+    const employee_id = req.user.id;
+
+    if (!inquiry_id) return res.status(400).json({ error: 'inquiry_id required' });
+
+    try {
+        const connection = await getConn();
+        const logId = generateId();
+
+        await connection.execute(
+            `INSERT INTO device_taken_logs (id, inquiry_id, employee_id, device_description, device_image_url, taken_at)
+             VALUES (?, ?, ?, ?, ?, NOW())`,
+            [logId, inquiry_id, employee_id, description || null, device_image_url || null]
+        );
+
+        // Update inquiry device_status
+        await connection.execute(
+            'UPDATE inquiries SET device_status = ? WHERE id = ?',
+            ['taken', inquiry_id]
+        );
+
+        connection.release();
+        res.json({ id: logId, message: 'Device taken logged successfully' });
+    } catch (error) {
+        console.error('Device taken log error:', error);
+        res.status(500).json({ error: error.message || 'Could not log device taken' });
+    }
+});
+
+app.post('/api/device-tracking/return', authenticateToken, async (req, res) => {
+    const { inquiry_id, device_condition, return_notes, return_image_url } = req.body;
+
+    if (!inquiry_id) return res.status(400).json({ error: 'inquiry_id required' });
+
+    try {
+        const connection = await getConn();
+        const logId = generateId();
+
+        await connection.execute(
+            `INSERT INTO device_return_logs (id, inquiry_id, device_condition, return_notes, return_image_url, returned_at)
+             VALUES (?, ?, ?, ?, ?, NOW())`,
+            [logId, inquiry_id, device_condition || 'good', return_notes || null, return_image_url || null]
+        );
+
+        // Update inquiry device_status
+        await connection.execute(
+            'UPDATE inquiries SET device_status = ? WHERE id = ?',
+            ['returned', inquiry_id]
+        );
+
+        connection.release();
+        res.json({ id: logId, message: 'Device return logged successfully' });
+    } catch (error) {
+        console.error('Device return log error:', error);
+        res.status(500).json({ error: error.message || 'Could not log device return' });
+    }
+});
+
+app.post('/api/device-tracking/followup', authenticateToken, async (req, res) => {
+    const { inquiry_id, status, notes } = req.body;
+    const updated_by = req.user.id;
+
+    if (!inquiry_id || !status) return res.status(400).json({ error: 'inquiry_id and status required' });
+
+    try {
+        const connection = await getConn();
+        const logId = generateId();
+
+        await connection.execute(
+            `INSERT INTO device_follow_up_logs (id, inquiry_id, status, notes, updated_by)
+             VALUES (?, ?, ?, ?, ?)`,
+            [logId, inquiry_id, status, notes || null, updated_by]
+        );
+
+        // Update inquiry follow_up_status
+        await connection.execute(
+            'UPDATE inquiries SET follow_up_status = ? WHERE id = ?',
+            [status, inquiry_id]
+        );
+
+        connection.release();
+        res.json({ id: logId, message: 'Follow-up status updated successfully' });
+    } catch (error) {
+        console.error('Device follow-up log error:', error);
+        res.status(500).json({ error: error.message || 'Could not update follow-up status' });
+    }
+});
+
 // Update password
 app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
     const { password } = req.body;
