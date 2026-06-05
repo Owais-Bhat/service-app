@@ -2464,6 +2464,88 @@ app.put('/api/settings/popup', authenticateToken, async (req, res) => {
     }
 });
 
+// Get employee's devices
+app.get('/api/device-tracking/employee/:employeeId', async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        const connection = await getConn();
+
+        // Get inquiries assigned to this employee
+        const [inquiries] = await connection.execute(`
+            SELECT
+                i.id,
+                i.ticket_no,
+                i.full_name,
+                i.phone,
+                i.service_item,
+                i.device_status,
+                i.follow_up_status,
+                i.status,
+                i.created_at
+            FROM inquiries i
+            WHERE i.assigned_employee_id = ?
+            ORDER BY i.created_at DESC
+        `, [employeeId]);
+
+        // Get device info for each inquiry
+        const [deviceTaken] = await connection.execute('SELECT * FROM device_taken_logs');
+        const [deviceReturn] = await connection.execute('SELECT * FROM device_return_logs');
+
+        const result = inquiries.map(inq => {
+            const taken = deviceTaken.find(dt => dt.inquiry_id === inq.id);
+            const returned = deviceReturn.find(dr => dr.inquiry_id === inq.id);
+
+            return {
+                ...inq,
+                device_taken_logs: taken || null,
+                device_return_logs: returned || null
+            };
+        });
+
+        connection.release();
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching employee devices:', error);
+        res.status(500).json({ error: error.message || 'Could not fetch devices' });
+    }
+});
+
+// Get device status for specific inquiry
+app.get('/api/device-tracking/status/:inquiryId', async (req, res) => {
+    try {
+        const { inquiryId } = req.params;
+        const connection = await getConn();
+
+        const [inquiry] = await connection.execute(`
+            SELECT device_status, follow_up_status FROM inquiries WHERE id = ?
+        `, [inquiryId]);
+
+        const [taken] = await connection.execute(`
+            SELECT * FROM device_taken_logs WHERE inquiry_id = ? ORDER BY taken_at DESC LIMIT 1
+        `, [inquiryId]);
+
+        const [returned] = await connection.execute(`
+            SELECT * FROM device_return_logs WHERE inquiry_id = ? ORDER BY returned_at DESC LIMIT 1
+        `, [inquiryId]);
+
+        const [followup] = await connection.execute(`
+            SELECT * FROM device_follow_up_logs WHERE inquiry_id = ? ORDER BY created_at DESC
+        `, [inquiryId]);
+
+        connection.release();
+
+        res.json({
+            inquiry: inquiry[0] || {},
+            device_taken_logs: taken,
+            device_return_logs: returned,
+            device_follow_up_logs: followup
+        });
+    } catch (error) {
+        console.error('Error fetching device status:', error);
+        res.status(500).json({ error: error.message || 'Could not fetch status' });
+    }
+});
+
 // Get all device tracking data
 app.get('/api/device-tracking/all', async (req, res) => {
     try {
