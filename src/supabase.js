@@ -15,6 +15,18 @@ const getHeaders = () => {
   return headers;
 };
 
+// fetch with an abort timeout so a slow/cold backend can never hang the app
+// (e.g. the boot-time /auth/me call that otherwise leaves the splash spinner
+// spinning forever on mobile / desktop). On timeout this throws like a network
+// error, which callers already handle by falling back to the login screen.
+function fetchWithTimeout(url, options = {}, ms = 12000) {
+  if (typeof AbortController === 'undefined') return fetch(url, options);
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(id));
+}
+
 // Chainable query builder to mimic Supabase
 class QueryBuilder {
   constructor(table) {
@@ -97,7 +109,7 @@ class QueryBuilder {
       };
       if (this.body) options.body = JSON.stringify(this.body);
 
-      const response = await fetch(`${API_URL}/data/${this.table}${queryString}`, options);
+      const response = await fetchWithTimeout(`${API_URL}/data/${this.table}${queryString}`, options);
       const data = await response.json();
 
       if (!response.ok) {
@@ -307,7 +319,7 @@ export const supabase = {
       const token = localStorage.getItem('auth_token');
       if (!token) return { data: { user: null } };
       try {
-        const response = await fetch(`${API_URL}/auth/me`, { headers: getHeaders() });
+        const response = await fetchWithTimeout(`${API_URL}/auth/me`, { headers: getHeaders() }, 10000);
         const data = await response.json();
         if (!response.ok) return { data: { user: null } };
         return { data: { user: data.user } };

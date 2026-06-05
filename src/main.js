@@ -247,23 +247,37 @@ async function boot() {
     return;
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
+  // Any unexpected failure (or a slow/unreachable backend that times out) must
+  // never leave the splash spinner hanging — fall back to the landing/login.
+  let session = null;
+  try {
+    ({ data: { session } } = await supabase.auth.getSession());
+  } catch (err) {
+    console.warn('[boot] session check failed', err);
+    goToLanding();
+    return;
+  }
 
   if (session?.user) {
-    currentUser = session.user;
-    currentRole = session.user.role || await getUserRole(currentUser.id);
+    try {
+      currentUser = session.user;
+      currentRole = session.user.role || await getUserRole(currentUser.id);
 
-    // Stale client sessions get evicted — the dashboard is staff-only now.
-    if (currentRole !== 'admin' && currentRole !== 'employee') {
-      await signOut();
-      currentUser = null;
-      currentRole = null;
+      // Stale client sessions get evicted — the dashboard is staff-only now.
+      if (currentRole !== 'admin' && currentRole !== 'employee') {
+        await signOut();
+        currentUser = null;
+        currentRole = null;
+        goToLanding();
+        return;
+      }
+
+      if (currentRole === 'employee') await loadCanAddService(currentUser.id);
+      navigate('dashboard');
+    } catch (err) {
+      console.warn('[boot] dashboard load failed', err);
       goToLanding();
-      return;
     }
-
-    if (currentRole === 'employee') await loadCanAddService(currentUser.id);
-    navigate('dashboard');
   } else {
     // Show Landing Page if not logged in
     goToLanding();
