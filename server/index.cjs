@@ -2694,25 +2694,30 @@ app.get('/api/device-tracking/all', authenticateToken, async (req, res) => {
         const [employees] = await connection.execute('SELECT id, full_name FROM profiles WHERE role = "employee"');
         const employeeMap = new Map(employees.map(e => [e.id, e.full_name]));
 
-        // Combine data
-        const result = inquiries.map(inq => {
-            const taken = deviceTaken.filter(dt => dt.inquiry_id === inq.id);
-            const returned = deviceReturn.filter(dr => dr.inquiry_id === inq.id);
-            const followup = deviceFollowup.filter(df => df.inquiry_id === inq.id);
+        // Only inquiries whose device was actually taken belong on this screen.
+        const takenInquiryIds = new Set(deviceTaken.map(dt => dt.inquiry_id));
 
-            return {
-                ...inq,
-                device_taken_logs: taken.map(t => ({
-                    ...t,
-                    profiles: { full_name: employeeMap.get(t.employee_id) || 'Unknown' }
-                })),
-                device_return_logs: returned,
-                device_follow_up_logs: followup.map(f => ({
-                    ...f,
-                    profiles: { full_name: employeeMap.get(f.updated_by) || 'Unknown' }
-                }))
-            };
-        });
+        // Combine data
+        const result = inquiries
+            .filter(inq => takenInquiryIds.has(inq.id))
+            .map(inq => {
+                const taken = deviceTaken.filter(dt => dt.inquiry_id === inq.id);
+                const returned = deviceReturn.filter(dr => dr.inquiry_id === inq.id);
+                const followup = deviceFollowup.filter(df => df.inquiry_id === inq.id);
+
+                return {
+                    ...inq,
+                    device_taken_logs: taken.map(t => ({
+                        ...t,
+                        profiles: { full_name: employeeMap.get(t.employee_id) || 'Unknown' }
+                    })),
+                    device_return_logs: returned,
+                    device_follow_up_logs: followup.map(f => ({
+                        ...f,
+                        profiles: { full_name: employeeMap.get(f.updated_by) || 'Unknown' }
+                    }))
+                };
+            });
 
         res.json(result);
     } catch (error) {

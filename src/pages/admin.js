@@ -866,10 +866,10 @@ async function openInquiryDetail(id, onDone) {
             `<div class="bill-row" style="display:flex; justify-content:space-between; gap:10px; font-size:0.85rem; margin-bottom:4px;"><span style="color:#475569;">${escapeHtml(s.name)}</span><b style="color:#0f172a; white-space:nowrap;">${money(s.cost)}</b></div>`,
         )
         .join("")
-    : `<div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>Services subtotal</span><b style="color:#0f172a;">${money(billServicesSubtotal)}</b></div>`;
+    : `<div class="bill-row" style="display:flex; justify-content:space-between; gap:10px; font-size:0.85rem; margin-bottom:4px;"><span style="color:#475569;">${escapeHtml(i.service_item || "Service")}</span><b style="color:#0f172a; white-space:nowrap;">${money(billServicesSubtotal)}</b></div>`;
   const billExtraRow =
     Number(i.extra_cost) > 0
-      ? `<div class="bill-row" style="display:flex; justify-content:space-between; gap:10px; font-size:0.85rem; margin-bottom:4px;"><span style="color:#475569;">Additional charge${i.extra_cost_reason ? ` <span style="color:#94a3b8;">(${escapeHtml(i.extra_cost_reason)})</span>` : ""}</span><b style="color:#0f172a; white-space:nowrap;">${money(i.extra_cost)}</b></div>`
+      ? `<div class="bill-row" style="display:flex; justify-content:space-between; gap:10px; font-size:0.85rem; margin-bottom:4px;"><span style="color:#475569;">Additional charges${i.extra_cost_reason ? ` <span style="color:#94a3b8;">(${escapeHtml(i.extra_cost_reason)})</span>` : ""}</span><b style="color:#0f172a; white-space:nowrap;">${money(i.extra_cost)}</b></div>`
       : "";
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -2402,15 +2402,7 @@ async function showBillShareModal(row, billData) {
       const inr = (n) =>
         `\u20B9${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
       const b = billData || {};
-      const itemLines = [];
-      (b.services || []).forEach((s) => itemLines.push(`\u2022 ${s.name}: ${inr(s.cost)}`));
-      if (Number(b.extra) > 0)
-        itemLines.push(`\u2022 Additional charge${b.extraReason ? ` (${b.extraReason})` : ""}: ${inr(b.extra)}`);
-      if (Number(b.platform) > 0) itemLines.push(`\u2022 Platform fee: ${inr(b.platform)}`);
-      if (Number(b.transport) > 0)
-        itemLines.push(`\u2022 Transport (${Number(b.km || 0).toFixed(1)} km): ${inr(b.transport)}`);
-      if (Number(b.discount) > 0) itemLines.push(`\u2022 Discount: -${inr(b.discount)}`);
-      if (Number(b.gst) > 0) itemLines.push(`\u2022 GST (18%): ${inr(b.gst)}`);
+      const itemLines = (b.services || []).map((s) => `\u2022 ${s.name}: ${inr(s.cost)}`);
       const msg = [
         `Hi ${row.full_name || ""}!`,
         `Your service invoice from *Networking Experts* is ready.`,

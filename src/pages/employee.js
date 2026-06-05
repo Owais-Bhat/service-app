@@ -2937,8 +2937,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               </div>
 
               <div class="bill-breakdown" id="bill-breakdown">
-                <div class="bill-row"><span>Services subtotal</span><b id="br-services">₹0</b></div>
-                <div class="bill-row"><span>Additional charges</span><b id="br-extra">₹0</b></div>
+                <div id="br-service-lines"></div>
+                <div class="bill-row" id="br-extra-row" style="display:none;"><span id="br-extra-label">Additional charges</span><b id="br-extra">₹0</b></div>
                 <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
                 <div class="bill-row"><span>Transport (<span id="br-km">0</span> km x ₹5)</span><b id="br-transport">₹0</b></div>
                 <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">-₹30</b></div>
@@ -3036,6 +3036,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const pricingSec = overlay.querySelector('#pricing-section');
     const totalDisplay = overlay.querySelector('#total-bill-display');
     const extraInput = overlay.querySelector('#extra-cost');
+    const extraReasonInput = overlay.querySelector('#extra-reason');
     const discountPresetInput = overlay.querySelector('#admin-discount-preset');
     const manualDiscountInput = overlay.querySelector('#manual-discount');
     const discountReasonInput = overlay.querySelector('#discount-reason');
@@ -3153,7 +3154,32 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       bill.gst = Math.round(bill.taxable * GST_RATE);
       bill.total = bill.taxable + bill.gst;
 
-      overlay.querySelector('#br-services').textContent = inr(bill.servicesSubtotal);
+      const serviceLines = overlay.querySelector('#br-service-lines');
+      if (serviceLines) {
+        const serviceRows = selectedServices.length
+          ? selectedServices.map(s => ({
+              label: `${s.main}${s.sub ? ' > ' + s.sub : ''} > ${s.leaf}`,
+              cost: Number(s.cost) || 0,
+            }))
+          : (bill.servicesSubtotal > 0
+              ? [{ label: inquiryRow?.service_item || 'Service', cost: bill.servicesSubtotal }]
+              : []);
+        serviceLines.innerHTML = serviceRows.length
+          ? serviceRows.map(s => `
+              <div class="bill-row">
+                <span>${escapeHtml(s.label)}</span>
+                <b>${inr(s.cost)}</b>
+              </div>
+            `).join('')
+          : `<div class="bill-row"><span>No service added</span><b>${inr(0)}</b></div>`;
+      }
+      const extraRow = overlay.querySelector('#br-extra-row');
+      const extraLabel = overlay.querySelector('#br-extra-label');
+      if (extraRow) extraRow.style.display = bill.extra > 0 ? 'flex' : 'none';
+      if (extraLabel) {
+        const reason = extraReasonInput?.value.trim();
+        extraLabel.textContent = reason ? `Additional charges (${reason})` : 'Additional charges';
+      }
       overlay.querySelector('#br-extra').textContent = inr(bill.extra);
       overlay.querySelector('#br-platform').textContent = inr(bill.platform);
       overlay.querySelector('#br-km').textContent = bill.km.toString();
@@ -3611,6 +3637,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (deviceTicketOn) refreshDeviceHistory();
     }
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
+    if (extraReasonInput) extraReasonInput.oninput = () => { calcTotal(); renderPayStatus(); };
     if (discountPresetInput) discountPresetInput.onchange = () => { calcTotal(); renderPayStatus(); };
     if (manualDiscountInput) manualDiscountInput.oninput = () => { calcTotal(); renderPayStatus(); };
     if (discountReasonInput) discountReasonInput.oninput = () => { calcTotal(); renderPayStatus(); };
