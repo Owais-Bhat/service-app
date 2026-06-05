@@ -8,8 +8,11 @@ export async function renderDeviceTrackingTab(container) {
   container.innerHTML = `
     <div class="page-header">
       <div>
-        <h1>${ICONS.alert} Device Tracking</h1>
-        <p>Monitor all devices taken for service and their return status.</p>
+        <h1 style="display:flex;align-items:center;gap:10px;">
+          <span style="width:26px;height:26px;display:inline-flex;flex-shrink:0;color:var(--primary);">${ICONS.wrench}</span>
+          <span>Device Tracking</span>
+        </h1>
+        <p>Devices taken for service and their follow-up / return status.</p>
       </div>
     </div>
 
@@ -184,7 +187,7 @@ function showDeviceDetails(item, onRefresh) {
   modal.innerHTML = `
     <div class="modal" style="max-width: 700px;">
       <div class="modal-header">
-        <span class="modal-title">${ICONS.alert}<span style="margin-left: 8px;">Device Tracking Details</span></span>
+        <span class="modal-title"><span style="width:20px;height:20px;display:inline-flex;vertical-align:middle;">${ICONS.wrench}</span><span style="margin-left: 8px;">Device Tracking Details</span></span>
         <button class="modal-close" id="close-modal" style="background: none; border: none; font-size: 24px; cursor: pointer;">✕</button>
       </div>
       <div class="modal-body">

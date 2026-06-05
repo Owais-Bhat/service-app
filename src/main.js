@@ -8,7 +8,7 @@ import { renderDeviceTrackingTab } from './pages/device-tracking-admin.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
 import { renderPopupAdsTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab, mountEmployeePopupAds } from './pages/media-training.js';
-import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeeEstimatorTab, renderEmployeePricingTab } from './pages/employee.js';
+import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeeEstimatorTab, renderEmployeePricingTab, renderEmployeeFollowUp } from './pages/employee.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
@@ -81,6 +81,7 @@ function getNavItems(role) {
       { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
       { id: 'employee-training', icon: ICONS.play, label: 'Tutorials' },
     ];
+    items.push({ id: 'device-followup', icon: ICONS.wrench, label: 'Device Follow-up' });
     items.push({ type: 'section', label: 'Services' });
     items.push({ id: 'estimator', icon: ICONS.receipt, label: 'Estimator' });
     if (canAddService) {
@@ -103,7 +104,7 @@ function getNavItems(role) {
     { id: 'users', icon: ICONS.users, label: 'Users' },
     { id: 'popup-ads', icon: ICONS.box, label: 'Popup Ads' },
     { id: 'training-admin', icon: ICONS.play, label: 'Employee Tutorials' },
-    { id: 'device-tracking', icon: ICONS.alert, label: 'Device Tracking' },
+    { id: 'device-tracking', icon: ICONS.wrench, label: 'Device Follow-up' },
     { type: 'section', label: 'Reports' },
     { id: 'ai-report', icon: ICONS.star, label: 'AI Report' },
     { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
@@ -144,6 +145,7 @@ function getPageRenderer(role, page) {
       'employee-training': renderEmployeeTrainingTab,
       estimator: renderEmployeeEstimatorTab,
       'service-pricing': renderEmployeePricingTab,
+      'device-followup': renderEmployeeFollowUp,
       profile: renderProfile
     },
     admin: {

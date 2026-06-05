@@ -163,6 +163,86 @@ async function populateDevicesInService(container, employeeId) {
   });
 }
 
+// Sidebar page: device follow-up management for the logged-in employee.
+export async function renderEmployeeFollowUp(container) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+
+  if (!(await loadDeviceTrackingEnabled())) {
+    container.innerHTML = `
+      <div class="page-header"><div><h1>Device Follow-up</h1></div></div>
+      <div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-dim)">Device tracking is currently turned off by admin.</div></div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1 style="display:flex;align-items:center;gap:10px;">
+          <span style="width:26px;height:26px;display:inline-flex;color:var(--primary);">${ICONS.wrench}</span>
+          <span>Device Follow-up</span>
+        </h1>
+        <p>Update the progress of devices you have taken for service.</p>
+      </div>
+    </div>
+    <div id="fu-list"><div style="text-align:center;padding:30px;color:var(--text-dim);">Loading…</div></div>`;
+
+  const listEl = container.querySelector('#fu-list');
+  const { data } = await getEmployeeDevices(user.id);
+  const inService = (data || []).filter(d => Number(d.device_service_enabled) === 1 || d.device_taken_logs);
+
+  if (inService.length === 0) {
+    listEl.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-dim)">No devices in service right now. Take a device from a ticket's <b>Device Service</b> tab to start tracking.</div></div>`;
+    return;
+  }
+
+  const details = await Promise.all(inService.map(d => getDeviceStatus(d.id)));
+
+  listEl.innerHTML = inService.map((d, idx) => {
+    const followups = details[idx]?.data?.device_follow_up_logs || [];
+    return `
+      <div class="card" style="margin-bottom:14px;" data-inq="${escapeAttr(d.id)}">
+        <div class="card-header"><span class="card-title">${escapeHtml(d.ticket_no || '—')} · ${escapeHtml(d.full_name || 'Client')}</span></div>
+        <div class="card-body">
+          <div style="font-size:0.85rem;color:var(--text-soft);margin-bottom:12px;">${escapeHtml(d.service_item || 'Service')}</div>
+          <div class="form-group">
+            <label>Update follow-up status</label>
+            <select class="fu-status">
+              <option value="awaiting_parts">⏳ Awaiting Parts</option>
+              <option value="repair_progress">🔧 Repair in Progress</option>
+              <option value="ready_return">📦 Ready to Return</option>
+              <option value="returned">✅ Returned to Client</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea class="fu-notes" rows="2" placeholder="Latest update on this device..."></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm fu-save" data-inq="${escapeAttr(d.id)}">Add update</button>
+          <div class="fu-history" style="margin-top:14px;">${renderFollowUpTab(followups)}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.fu-save').forEach(btn => {
+    btn.onclick = async () => {
+      const card = btn.closest('[data-inq]');
+      const inqId = btn.dataset.inq;
+      const status = card.querySelector('.fu-status').value;
+      const notes = card.querySelector('.fu-notes').value.trim();
+      btn.disabled = true; btn.textContent = 'Saving…';
+      const { error } = await saveFollowUpStatus(inqId, status, notes, user.id);
+      btn.disabled = false; btn.textContent = 'Add update';
+      if (error) return toast(error.message || 'Could not save', 'error');
+      toast('Follow-up update added', 'success');
+      const { data: st } = await getDeviceStatus(inqId);
+      const hist = card.querySelector('.fu-history');
+      if (hist) hist.innerHTML = renderFollowUpTab(st?.device_follow_up_logs || []);
+      const notesEl = card.querySelector('.fu-notes'); if (notesEl) notesEl.value = '';
+    };
+  });
+}
+
 // Business info shown on every premium bill.
 const BUSINESS = {
   name: 'Networking Experts',
@@ -2660,7 +2740,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
             <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device Info</span></button>
             ${deviceFeatureOn ? `<button type="button" class="mst-tab" data-tab="service">${ICONS.wrench}<span>Device Service</span></button>` : ''}
-            ${deviceFeatureOn ? `<button type="button" class="mst-tab" data-tab="followup">${ICONS.clipboard}<span>Follow-up</span></button>` : ''}
             <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
@@ -2854,31 +2933,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <button type="button" class="btn btn-primary btn-sm" id="save-device-return">Mark returned / sent back to client</button>
 
               <div id="device-history" style="margin-top:18px;"><div style="text-align:center;color:var(--text-dim);font-size:0.82rem;padding:10px;">Loading device history…</div></div>
-            </div>
-          </div>
-
-          <!-- TAB: FOLLOW-UP -->
-          <div class="mst-pane" data-pane="followup">
-            <div id="followup-disabled-hint" style="display:${deviceTicketOn ? 'none' : 'block'};padding:14px;border-radius:12px;background:var(--bg-soft);border:1px dashed var(--border);font-size:0.85rem;color:var(--text-soft);margin-bottom:14px;">
-              ℹ️ Turn on <b>Send device to service center</b> in the Device Service tab to start follow-ups.
-            </div>
-            <div id="followup-body" style="display:${deviceTicketOn ? 'block' : 'none'};">
-              <div class="form-group">
-                <label>Follow-up status update</label>
-                <select id="device-followup-status">
-                  <option value="awaiting_parts">⏳ Awaiting Parts</option>
-                  <option value="repair_progress">🔧 Repair in Progress</option>
-                  <option value="ready_return">📦 Ready to Return</option>
-                  <option value="returned">✅ Returned to Client</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Update notes</label>
-                <textarea id="device-followup-notes" rows="2" placeholder="What's the latest on this device?"></textarea>
-              </div>
-              <button type="button" class="btn btn-primary btn-sm" id="save-device-followup">Add follow-up update</button>
-
-              <div id="followup-history" style="margin-top:18px;"><div style="text-align:center;color:var(--text-dim);font-size:0.82rem;padding:10px;">Loading follow-up history…</div></div>
             </div>
           </div>
           ` : ''}
