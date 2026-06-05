@@ -1,5 +1,4 @@
 // Employee Device Tracking Functions
-import { supabase } from '../supabase.js';
 import { toast, formatDateTime, formatDate } from '../utils.js';
 
 const API_URL = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
@@ -43,15 +42,10 @@ export async function getDeviceStatus(inquiryId) {
 // Helper function to get device taken info
 export async function getDeviceTakenInfo(inquiryId) {
   try {
-    const { data, error } = await supabase
-      .from('device_taken_logs')
-      .select('*, profiles(full_name)')
-      .eq('inquiry_id', inquiryId)
-      .order('taken_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    return { data, error };
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load status');
+    return { data: data.device_taken_logs, error: null };
   } catch (err) {
     console.error('Error loading device taken info:', err);
     return { data: null, error: err };
@@ -61,15 +55,10 @@ export async function getDeviceTakenInfo(inquiryId) {
 // Helper function to get device return info
 export async function getDeviceReturnInfo(inquiryId) {
   try {
-    const { data, error } = await supabase
-      .from('device_return_logs')
-      .select('*')
-      .eq('inquiry_id', inquiryId)
-      .order('returned_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    return { data, error };
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load status');
+    return { data: data.device_return_logs, error: null };
   } catch (err) {
     console.error('Error loading device return info:', err);
     return { data: null, error: err };
@@ -79,13 +68,10 @@ export async function getDeviceReturnInfo(inquiryId) {
 // Helper function to get follow-up logs
 export async function getFollowUpLogs(inquiryId) {
   try {
-    const { data, error } = await supabase
-      .from('device_follow_up_logs')
-      .select('*, profiles(full_name)')
-      .eq('inquiry_id', inquiryId)
-      .order('created_at', { ascending: false });
-
-    return { data: data || [], error };
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load status');
+    return { data: data.device_follow_up_logs || [], error: null };
   } catch (err) {
     console.error('Error loading follow-up logs:', err);
     return { data: [], error: err };

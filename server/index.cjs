@@ -2532,13 +2532,23 @@ app.get('/api/device-tracking/status/:inquiryId', async (req, res) => {
             SELECT * FROM device_follow_up_logs WHERE inquiry_id = ? ORDER BY created_at DESC
         `, [inquiryId]);
 
+        // Get employee/updater profiles
+        const [employees] = await connection.execute('SELECT id, full_name FROM profiles');
+        const employeeMap = new Map(employees.map(e => [e.id, e.full_name]));
+
         connection.release();
 
         res.json({
             inquiry: inquiry[0] || {},
-            device_taken_logs: taken,
-            device_return_logs: returned,
-            device_follow_up_logs: followup
+            device_taken_logs: taken.length > 0 ? {
+                ...taken[0],
+                profiles: { full_name: employeeMap.get(taken[0].employee_id) || 'Unknown' }
+            } : null,
+            device_return_logs: returned[0] || null,
+            device_follow_up_logs: followup.map(f => ({
+                ...f,
+                profiles: { full_name: employeeMap.get(f.updated_by) || 'Unknown' }
+            }))
         });
     } catch (error) {
         console.error('Error fetching device status:', error);

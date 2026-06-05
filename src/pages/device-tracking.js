@@ -1,22 +1,24 @@
 // Device Tracking Module
-import { supabase } from '../supabase.js';
 import { toast, formatDateTime } from '../utils.js';
 
 const API_URL = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
   : 'http://localhost:5000/api';
 
+const getHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+};
+
 // Load device taken log for an inquiry
 export async function loadDeviceTakenLog(inquiryId) {
   try {
-    const { data, error } = await supabase
-      .from('device_taken_logs')
-      .select('*, profiles(full_name)')
-      .eq('inquiry_id', inquiryId)
-      .order('taken_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    return { data, error };
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load status');
+    return { data: data.device_taken_logs, error: null };
   } catch (err) {
     console.error('Error loading device taken log:', err);
     return { data: null, error: err };
@@ -26,14 +28,10 @@ export async function loadDeviceTakenLog(inquiryId) {
 // Load device return log for an inquiry
 export async function loadDeviceReturnLog(inquiryId) {
   try {
-    const { data, error } = await supabase
-      .from('device_return_logs')
-      .select('*')
-      .eq('inquiry_id', inquiryId)
-      .order('returned_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    return { data, error };
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load status');
+    return { data: data.device_return_logs, error: null };
   } catch (err) {
     console.error('Error loading device return log:', err);
     return { data: null, error: err };
@@ -43,12 +41,10 @@ export async function loadDeviceReturnLog(inquiryId) {
 // Load device follow-up logs
 export async function loadDeviceFollowUpLogs(inquiryId) {
   try {
-    const { data, error } = await supabase
-      .from('device_follow_up_logs')
-      .select('*, profiles(full_name)')
-      .eq('inquiry_id', inquiryId)
-      .order('created_at', { ascending: false });
-    return { data: data || [], error };
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load status');
+    return { data: data.device_follow_up_logs || [], error: null };
   } catch (err) {
     console.error('Error loading device follow-up logs:', err);
     return { data: [], error: err };
@@ -60,43 +56,35 @@ export async function saveDeviceTaken(inquiryId, employeeId, imageFile, descript
   try {
     let imageUrl = null;
 
-    // Upload image if provided
+    // Upload image if provided via Node.js backend upload endpoint
     if (imageFile) {
-      const fileName = `device-taken-${inquiryId}-${Date.now()}.jpg`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('device-tracking')
-        .upload(fileName, imageFile);
+      const formData = new FormData();
+      formData.append('file', imageFile);
 
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from('device-tracking')
-        .getPublicUrl(fileName);
-
-      imageUrl = publicUrlData?.publicUrl;
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
+      imageUrl = uploadData.url;
     }
 
-    // Save device taken log
-    const { data, error } = await supabase
-      .from('device_taken_logs')
-      .insert({
-        id: crypto.randomUUID(),
+    // Save device taken log via our backend API
+    const res = await fetch(`${API_URL}/device-tracking/taken`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
         inquiry_id: inquiryId,
-        employee_id: employeeId,
+        description,
         device_image_url: imageUrl,
-        device_description: description,
-        taken_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Update inquiry device_status
-    await supabase
-      .from('inquiries')
-      .update({ device_status: 'taken' })
-      .eq('id', inquiryId);
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to save device taken log');
 
     return { data, error: null };
   } catch (err) {
@@ -110,43 +98,36 @@ export async function saveDeviceReturn(inquiryId, imageFile, condition, notes) {
   try {
     let imageUrl = null;
 
-    // Upload image if provided
+    // Upload image if provided via Node.js backend upload endpoint
     if (imageFile) {
-      const fileName = `device-return-${inquiryId}-${Date.now()}.jpg`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('device-tracking')
-        .upload(fileName, imageFile);
+      const formData = new FormData();
+      formData.append('file', imageFile);
 
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from('device-tracking')
-        .getPublicUrl(fileName);
-
-      imageUrl = publicUrlData?.publicUrl;
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
+      imageUrl = uploadData.url;
     }
 
-    // Save device return log
-    const { data, error } = await supabase
-      .from('device_return_logs')
-      .insert({
-        id: crypto.randomUUID(),
+    // Save device return log via our backend API
+    const res = await fetch(`${API_URL}/device-tracking/return`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
         inquiry_id: inquiryId,
         device_condition: condition,
-        return_image_url: imageUrl,
         return_notes: notes,
-        returned_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Update inquiry device_status
-    await supabase
-      .from('inquiries')
-      .update({ device_status: 'returned' })
-      .eq('id', inquiryId);
+        return_image_url: imageUrl,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to save device return log');
 
     return { data, error: null };
   } catch (err) {
@@ -158,25 +139,17 @@ export async function saveDeviceReturn(inquiryId, imageFile, condition, notes) {
 // Add follow-up status update
 export async function saveFollowUpStatus(inquiryId, status, notes, userId) {
   try {
-    const { data, error } = await supabase
-      .from('device_follow_up_logs')
-      .insert({
-        id: crypto.randomUUID(),
+    const res = await fetch(`${API_URL}/device-tracking/followup`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
         inquiry_id: inquiryId,
         status,
         notes,
-        updated_by: userId,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Update inquiry follow_up_status
-    await supabase
-      .from('inquiries')
-      .update({ follow_up_status: status })
-      .eq('id', inquiryId);
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to save follow-up status');
 
     return { data, error: null };
   } catch (err) {
