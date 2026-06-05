@@ -5,10 +5,17 @@ const API_URL = (window.location.hostname !== 'localhost' && window.location.hos
   ? '/api'
   : 'http://localhost:5000/api';
 
+const getHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+};
+
 // Get devices assigned to this employee
 export async function getEmployeeDevices(employeeId) {
   try {
-    const res = await fetch(`${API_URL}/device-tracking/employee/${employeeId}`);
+    const res = await fetch(`${API_URL}/device-tracking/employee/${employeeId}`, { headers: getHeaders() });
     const data = await res.json();
 
     if (!res.ok) {
@@ -25,7 +32,7 @@ export async function getEmployeeDevices(employeeId) {
 // Get device status for specific inquiry
 export async function getDeviceStatus(inquiryId) {
   try {
-    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`, { headers: getHeaders() });
     const data = await res.json();
 
     if (!res.ok) {
@@ -42,7 +49,7 @@ export async function getDeviceStatus(inquiryId) {
 // Helper function to get device taken info
 export async function getDeviceTakenInfo(inquiryId) {
   try {
-    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`, { headers: getHeaders() });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load status');
     return { data: data.device_taken_logs, error: null };
@@ -55,7 +62,7 @@ export async function getDeviceTakenInfo(inquiryId) {
 // Helper function to get device return info
 export async function getDeviceReturnInfo(inquiryId) {
   try {
-    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`, { headers: getHeaders() });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load status');
     return { data: data.device_return_logs, error: null };
@@ -68,7 +75,7 @@ export async function getDeviceReturnInfo(inquiryId) {
 // Helper function to get follow-up logs
 export async function getFollowUpLogs(inquiryId) {
   try {
-    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`);
+    const res = await fetch(`${API_URL}/device-tracking/status/${inquiryId}`, { headers: getHeaders() });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load status');
     return { data: data.device_follow_up_logs || [], error: null };

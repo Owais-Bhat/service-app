@@ -326,7 +326,7 @@ const uploadStorage = multer.diskStorage({
 const upload = multer({ storage: uploadStorage });
 
 app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
+    if (!['admin', 'employee'].includes(req.user.role)) return res.sendStatus(403);
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     res.json({ url: `/uploads/${req.file.filename}` });
 });
@@ -347,6 +347,16 @@ const pool = mysql.createPool({
     queueLimit: 0,
 });
 async function getConn() { return pool.getConnection(); }
+
+async function canAccessInquiry(connection, user, inquiryId) {
+    if (user?.role === 'admin') return true;
+    if (user?.role !== 'employee') return false;
+    const [rows] = await connection.execute(
+        'SELECT assigned_employee_id FROM inquiries WHERE id = ? LIMIT 1',
+        [inquiryId]
+    );
+    return rows.length > 0 && String(rows[0].assigned_employee_id || '') === String(user.id || '');
+}
 
 const DEFAULT_AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
 const appSettings = {
@@ -2533,6 +2543,9 @@ app.post('/api/device-tracking/toggle', authenticateToken, async (req, res) => {
     try {
         const connection = await getConn();
         try {
+            if (!(await canAccessInquiry(connection, req.user, inquiry_id))) {
+                return res.sendStatus(403);
+            }
             await connection.execute(
                 'UPDATE inquiries SET device_service_enabled = ? WHERE id = ?',
                 [enabled ? 1 : 0, inquiry_id]
@@ -2548,10 +2561,14 @@ app.post('/api/device-tracking/toggle', authenticateToken, async (req, res) => {
 });
 
 // Get employee's devices
-app.get('/api/device-tracking/employee/:employeeId', async (req, res) => {
+app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (req, res) => {
+    const { employeeId } = req.params;
+    if (req.user.role !== 'admin' && String(req.user.id || '') !== String(employeeId || '')) {
+        return res.sendStatus(403);
+    }
+    let connection;
     try {
-        const { employeeId } = req.params;
-        const connection = await getConn();
+        connection = await getConn();
 
         // Get inquiries assigned to this employee
         const [inquiries] = await connection.execute(`
@@ -2586,19 +2603,24 @@ app.get('/api/device-tracking/employee/:employeeId', async (req, res) => {
             };
         });
 
-        connection.release();
         res.json(result);
     } catch (error) {
         console.error('Error fetching employee devices:', error);
         res.status(500).json({ error: error.message || 'Could not fetch devices' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Get device status for specific inquiry
-app.get('/api/device-tracking/status/:inquiryId', async (req, res) => {
+app.get('/api/device-tracking/status/:inquiryId', authenticateToken, async (req, res) => {
+    let connection;
     try {
         const { inquiryId } = req.params;
-        const connection = await getConn();
+        connection = await getConn();
+        if (!(await canAccessInquiry(connection, req.user, inquiryId))) {
+            return res.sendStatus(403);
+        }
 
         const [inquiry] = await connection.execute(`
             SELECT device_status, follow_up_status FROM inquiries WHERE id = ?
@@ -2620,8 +2642,6 @@ app.get('/api/device-tracking/status/:inquiryId', async (req, res) => {
         const [employees] = await connection.execute('SELECT id, full_name FROM profiles');
         const employeeMap = new Map(employees.map(e => [e.id, e.full_name]));
 
-        connection.release();
-
         res.json({
             inquiry: inquiry[0] || {},
             device_taken_logs: taken.length > 0 ? {
@@ -2637,13 +2657,17 @@ app.get('/api/device-tracking/status/:inquiryId', async (req, res) => {
     } catch (error) {
         console.error('Error fetching device status:', error);
         res.status(500).json({ error: error.message || 'Could not fetch status' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Get all device tracking data
-app.get('/api/device-tracking/all', async (req, res) => {
+app.get('/api/device-tracking/all', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
     try {
-        const connection = await getConn();
+        connection = await getConn();
 
         // Get all inquiries with device tracking
         const [inquiries] = await connection.execute(`
@@ -2690,11 +2714,12 @@ app.get('/api/device-tracking/all', async (req, res) => {
             };
         });
 
-        connection.release();
         res.json(result);
     } catch (error) {
         console.error('Error fetching device tracking:', error);
         res.status(500).json({ error: error.message || 'Could not fetch device tracking data' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -2705,9 +2730,13 @@ app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
 
     if (!inquiry_id) return res.status(400).json({ error: 'inquiry_id required' });
 
+    let connection;
     try {
-        const connection = await getConn();
+        connection = await getConn();
         const logId = uuidv4();
+        if (!(await canAccessInquiry(connection, req.user, inquiry_id))) {
+            return res.sendStatus(403);
+        }
 
         await connection.execute(
             `INSERT INTO device_taken_logs (id, inquiry_id, employee_id, device_description, device_image_url, taken_at)
@@ -2721,11 +2750,12 @@ app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
             ['taken', inquiry_id]
         );
 
-        connection.release();
         res.json({ id: logId, message: 'Device taken logged successfully' });
     } catch (error) {
         console.error('Device taken log error:', error);
         res.status(500).json({ error: error.message || 'Could not log device taken' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -2734,9 +2764,13 @@ app.post('/api/device-tracking/return', authenticateToken, async (req, res) => {
 
     if (!inquiry_id) return res.status(400).json({ error: 'inquiry_id required' });
 
+    let connection;
     try {
-        const connection = await getConn();
+        connection = await getConn();
         const logId = uuidv4();
+        if (!(await canAccessInquiry(connection, req.user, inquiry_id))) {
+            return res.sendStatus(403);
+        }
 
         await connection.execute(
             `INSERT INTO device_return_logs (id, inquiry_id, device_condition, return_notes, return_image_url, returned_at)
@@ -2750,11 +2784,12 @@ app.post('/api/device-tracking/return', authenticateToken, async (req, res) => {
             ['returned', inquiry_id]
         );
 
-        connection.release();
         res.json({ id: logId, message: 'Device return logged successfully' });
     } catch (error) {
         console.error('Device return log error:', error);
         res.status(500).json({ error: error.message || 'Could not log device return' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -2764,9 +2799,13 @@ app.post('/api/device-tracking/followup', authenticateToken, async (req, res) =>
 
     if (!inquiry_id || !status) return res.status(400).json({ error: 'inquiry_id and status required' });
 
+    let connection;
     try {
-        const connection = await getConn();
+        connection = await getConn();
         const logId = uuidv4();
+        if (!(await canAccessInquiry(connection, req.user, inquiry_id))) {
+            return res.sendStatus(403);
+        }
 
         await connection.execute(
             `INSERT INTO device_follow_up_logs (id, inquiry_id, status, notes, updated_by)
@@ -2780,11 +2819,12 @@ app.post('/api/device-tracking/followup', authenticateToken, async (req, res) =>
             [status, inquiry_id]
         );
 
-        connection.release();
         res.json({ id: logId, message: 'Follow-up status updated successfully' });
     } catch (error) {
         console.error('Device follow-up log error:', error);
         res.status(500).json({ error: error.message || 'Could not update follow-up status' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
