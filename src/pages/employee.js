@@ -2660,6 +2660,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
             <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device Info</span></button>
             ${deviceFeatureOn ? `<button type="button" class="mst-tab" data-tab="service">${ICONS.wrench}<span>Device Service</span></button>` : ''}
+            ${deviceFeatureOn ? `<button type="button" class="mst-tab" data-tab="followup">${ICONS.clipboard}<span>Follow-up</span></button>` : ''}
             <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
@@ -2832,23 +2833,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
 
               <div class="form-group">
-                <label>Follow-up status update</label>
-                <select id="device-followup-status">
-                  <option value="awaiting_parts">⏳ Awaiting Parts</option>
-                  <option value="repair_progress">🔧 Repair in Progress</option>
-                  <option value="ready_return">📦 Ready to Return</option>
-                  <option value="returned">✅ Returned to Client</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Update notes</label>
-                <textarea id="device-followup-notes" rows="2" placeholder="What's the latest on this device?"></textarea>
-              </div>
-              <button type="button" class="btn btn-secondary btn-sm" id="save-device-followup">Add follow-up update</button>
-
-              <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-
-              <div class="form-group">
                 <label>Return photo (when handing back to client)</label>
                 <input type="file" id="device-return-image" accept="image/*">
               </div>
@@ -2870,6 +2854,31 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <button type="button" class="btn btn-primary btn-sm" id="save-device-return">Mark returned / sent back to client</button>
 
               <div id="device-history" style="margin-top:18px;"><div style="text-align:center;color:var(--text-dim);font-size:0.82rem;padding:10px;">Loading device history…</div></div>
+            </div>
+          </div>
+
+          <!-- TAB: FOLLOW-UP -->
+          <div class="mst-pane" data-pane="followup">
+            <div id="followup-disabled-hint" style="display:${deviceTicketOn ? 'none' : 'block'};padding:14px;border-radius:12px;background:var(--bg-soft);border:1px dashed var(--border);font-size:0.85rem;color:var(--text-soft);margin-bottom:14px;">
+              ℹ️ Turn on <b>Send device to service center</b> in the Device Service tab to start follow-ups.
+            </div>
+            <div id="followup-body" style="display:${deviceTicketOn ? 'block' : 'none'};">
+              <div class="form-group">
+                <label>Follow-up status update</label>
+                <select id="device-followup-status">
+                  <option value="awaiting_parts">⏳ Awaiting Parts</option>
+                  <option value="repair_progress">🔧 Repair in Progress</option>
+                  <option value="ready_return">📦 Ready to Return</option>
+                  <option value="returned">✅ Returned to Client</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Update notes</label>
+                <textarea id="device-followup-notes" rows="2" placeholder="What's the latest on this device?"></textarea>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="save-device-followup">Add follow-up update</button>
+
+              <div id="followup-history" style="margin-top:18px;"><div style="text-align:center;color:var(--text-dim);font-size:0.82rem;padding:10px;">Loading follow-up history…</div></div>
             </div>
           </div>
           ` : ''}
@@ -3568,15 +3577,18 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const dToggle = overlay.querySelector('#device-service-toggle');
       const dBody = overlay.querySelector('#device-service-body');
       const dHistory = overlay.querySelector('#device-history');
+      const fBody = overlay.querySelector('#followup-body');
+      const fHint = overlay.querySelector('#followup-disabled-hint');
+      const fHistory = overlay.querySelector('#followup-history');
       const empId = authUser?.id || null;
 
       const refreshDeviceHistory = async () => {
-        if (!dHistory) return;
         const { data } = await getDeviceStatus(inqId);
         const taken = data?.device_taken_logs || null;
         const returned = data?.device_return_logs || null;
         const followups = data?.device_follow_up_logs || [];
-        dHistory.innerHTML = renderDeviceTrackingTab(inqId, taken, returned, followups) + renderFollowUpTab(followups);
+        if (dHistory) dHistory.innerHTML = renderDeviceTrackingTab(inqId, taken, returned, followups);
+        if (fHistory) fHistory.innerHTML = renderFollowUpTab(followups);
       };
 
       if (dToggle) {
@@ -3586,6 +3598,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             await setTicketDeviceFlag(inqId, on);
             deviceTicketOn = on;
             if (dBody) dBody.style.display = on ? 'block' : 'none';
+            if (fBody) fBody.style.display = on ? 'block' : 'none';
+            if (fHint) fHint.style.display = on ? 'none' : 'block';
             toast(on ? 'Device marked for service center' : 'Device service turned off', 'success');
             if (on) refreshDeviceHistory();
           } catch (e) {

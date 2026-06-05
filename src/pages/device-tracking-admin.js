@@ -100,46 +100,48 @@ function renderTable(container, data, onRefresh) {
   }
 
   const html = `
-    <div style="overflow-x: auto;">
-      <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background: var(--bg-soft); border-bottom: 2px solid var(--border);">
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Ticket</th>
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Customer</th>
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Service</th>
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Device Status</th>
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Follow-up</th>
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Taken By</th>
-            <th style="padding: 12px; text-align: left; font-weight: 600;">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.map(item => `
-            <tr style="border-bottom: 1px solid var(--border); hover-effect" data-id="${item.id}">
-              <td style="padding: 12px;"><strong>${item.ticket_no}</strong></td>
-              <td style="padding: 12px;">
-                <div style="font-weight: 600;">${item.full_name}</div>
-                <small style="color: var(--text-dim);">${item.phone}</small>
-              </td>
-              <td style="padding: 12px; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${item.service_item || '—'}</td>
-              <td style="padding: 12px;">
-                ${renderDeviceStatusBadge(item.device_status)}
-              </td>
-              <td style="padding: 12px;">
-                ${renderFollowupStatusBadge(item.follow_up_status)}
-              </td>
-              <td style="padding: 12px;">
-                ${item.device_taken_logs && item.device_taken_logs.length > 0
-                  ? `<small>${item.device_taken_logs[0].profiles?.full_name || '—'}</small><br><small style="color: var(--text-dim);">${formatDate(item.device_taken_logs[0].taken_at)}</small>`
-                  : '<small style="color: var(--text-dim);">—</small>'}
-              </td>
-              <td style="padding: 12px;">
-                <button class="btn btn-secondary btn-sm view-details" data-id="${item.id}" style="cursor: pointer;">View</button>
-              </td>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Devices Taken for Service</span>
+        <span class="badge" style="background: var(--bg-soft);">${data.length}</span>
+      </div>
+      <div class="card-body" style="padding: 0; overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: var(--bg-soft); border-bottom: 2px solid var(--border);">
+              <th style="padding: 12px 16px; text-align: left; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);">Ticket</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);">Customer</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);">Service</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);">Device Status</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);">Follow-up</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);">Taken By</th>
+              <th style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim);"></th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            ${data.map(item => `
+              <tr style="border-bottom: 1px solid var(--border);" data-id="${item.id}">
+                <td style="padding: 14px 16px;"><strong style="color: var(--primary);">${item.ticket_no || '—'}</strong></td>
+                <td style="padding: 14px 16px;">
+                  <div style="font-weight: 600;">${item.full_name || 'Client'}</div>
+                  <small style="color: var(--text-dim);">${item.phone || ''}</small>
+                </td>
+                <td style="padding: 14px 16px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.service_item || '—'}</td>
+                <td style="padding: 14px 16px;">${renderDeviceStatusBadge(item.device_status)}</td>
+                <td style="padding: 14px 16px;">${renderFollowupStatusBadge(item.follow_up_status)}</td>
+                <td style="padding: 14px 16px;">
+                  ${item.device_taken_logs && item.device_taken_logs.length > 0
+                    ? `<small>${item.device_taken_logs[0].profiles?.full_name || '—'}</small><br><small style="color: var(--text-dim);">${formatDate(item.device_taken_logs[0].taken_at)}</small>`
+                    : '<small style="color: var(--text-dim);">—</small>'}
+                </td>
+                <td style="padding: 14px 16px; text-align: right;">
+                  <button class="btn btn-secondary btn-sm view-details" data-id="${item.id}" style="cursor: pointer;">View / Follow-up</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 
@@ -200,6 +202,35 @@ function showDeviceDetails(item, onRefresh) {
           <div>
             <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim); font-weight: 800; margin-bottom: 4px;">Service Item</div>
             <div>${item.service_item || '—'}</div>
+          </div>
+        </div>
+
+        <div style="background: rgba(16,185,129,0.06); padding: 16px; border-radius: 12px; border: 1px solid var(--primary); margin-bottom: 16px;">
+          <h4 style="margin: 0 0 12px 0;">📋 Follow-up &amp; Update</h4>
+
+          <div style="margin-bottom: 12px;">
+            <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Add follow-up update</div>
+            <select id="admin-followup-status" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
+              <option value="awaiting_parts">⏳ Awaiting Parts</option>
+              <option value="repair_progress">🔧 Repair in Progress</option>
+              <option value="ready_return">📦 Ready to Return</option>
+              <option value="returned">✅ Returned to Client</option>
+            </select>
+            <textarea id="admin-followup-notes" rows="2" placeholder="Update notes..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;"></textarea>
+            <button class="btn btn-primary btn-sm" id="admin-save-followup">Add update</button>
+          </div>
+
+          <div style="padding-top: 12px; border-top: 1px solid rgba(16,185,129,0.2);">
+            <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Mark returned / sent back to client</div>
+            <input type="file" id="admin-return-image" accept="image/*" style="margin-bottom: 8px; display: block;">
+            <select id="admin-return-condition" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
+              <option value="repaired">Repaired</option>
+              <option value="good">Good</option>
+              <option value="damaged">Damaged</option>
+              <option value="lost">Lost</option>
+            </select>
+            <input type="text" id="admin-return-notes" placeholder="Return notes..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
+            <button class="btn btn-secondary btn-sm" id="admin-save-return">Mark returned</button>
           </div>
         </div>
 
@@ -275,34 +306,6 @@ function showDeviceDetails(item, onRefresh) {
           </div>
         ` : ''}
 
-        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
-          <h4 style="margin: 0 0 12px 0;">✏️ Admin Update</h4>
-
-          <div style="background: var(--bg-soft); padding: 14px; border-radius: 10px; margin-bottom: 12px;">
-            <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Add follow-up update</div>
-            <select id="admin-followup-status" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
-              <option value="awaiting_parts">⏳ Awaiting Parts</option>
-              <option value="repair_progress">🔧 Repair in Progress</option>
-              <option value="ready_return">📦 Ready to Return</option>
-              <option value="returned">✅ Returned to Client</option>
-            </select>
-            <textarea id="admin-followup-notes" rows="2" placeholder="Update notes..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;"></textarea>
-            <button class="btn btn-secondary btn-sm" id="admin-save-followup">Add update</button>
-          </div>
-
-          <div style="background: var(--bg-soft); padding: 14px; border-radius: 10px;">
-            <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Mark returned / sent back to client</div>
-            <input type="file" id="admin-return-image" accept="image/*" style="margin-bottom: 8px; display: block;">
-            <select id="admin-return-condition" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
-              <option value="repaired">Repaired</option>
-              <option value="good">Good</option>
-              <option value="damaged">Damaged</option>
-              <option value="lost">Lost</option>
-            </select>
-            <input type="text" id="admin-return-notes" placeholder="Return notes..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
-            <button class="btn btn-primary btn-sm" id="admin-save-return">Mark returned</button>
-          </div>
-        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="close-modal-btn">Close</button>
