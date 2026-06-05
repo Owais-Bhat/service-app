@@ -3929,8 +3929,9 @@ export async function renderSettingsTab(container) {
   let autoClockOutTime = "18:00";
   let registrationKeys = { admin: "", employee: "" };
   let popupEnabled = true;
+  let deviceTrackingEnabled = true;
   try {
-    const [attendanceRes, keysRes, popupRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes, deviceRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
@@ -3938,6 +3939,9 @@ export async function renderSettingsTab(container) {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/popup`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/device-tracking`, {
         headers: authHeaders(),
       }),
     ]);
@@ -3951,6 +3955,10 @@ export async function renderSettingsTab(container) {
     if (popupRes.ok) {
       const data = await popupRes.json();
       popupEnabled = data.enabled !== false;
+    }
+    if (deviceRes.ok) {
+      const data = await deviceRes.json();
+      deviceTrackingEnabled = data.enabled !== false;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4077,6 +4085,32 @@ export async function renderSettingsTab(container) {
 
       <div class="settings-card">
         <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.wrench}</span>
+          <div>
+            <h3>Device Service Tracking</h3>
+            <p>Master switch for the device-to-service-center workflow (employee popup tab, follow-ups, and "Devices in Service" containers).</p>
+          </div>
+        </div>
+
+        <div class="settings-alert settings-alert-info">
+          <span>${ICONS.alert}</span>
+          <small>When off, the device toggle, follow-up tab, and device containers are hidden for everyone.</small>
+        </div>
+
+        <div class="settings-form-row" style="align-items: center; gap: 16px;">
+          <label style="margin: 0; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="device-tracking-toggle" ${deviceTrackingEnabled ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+            <span>${deviceTrackingEnabled ? 'Device Tracking Enabled' : 'Device Tracking Disabled'}</span>
+          </label>
+          <button class="btn btn-primary settings-save-btn" id="save-device-tracking-toggle">
+            ${ICONS.check}
+            <span>Save Setting</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
           <span class="settings-card-icon settings-card-icon-danger">${ICONS.block}</span>
           <div>
             <h3>Restrictions (${restrictedProfiles.length})</h3>
@@ -4192,6 +4226,34 @@ export async function renderSettingsTab(container) {
       restore();
     }
   };
+
+  container.querySelector("#save-device-tracking-toggle").onclick = async () => {
+    const toggle = container.querySelector("#device-tracking-toggle");
+    const enabled = toggle.checked;
+    const btn = container.querySelector("#save-device-tracking-toggle");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/device-tracking`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(data.error || "Could not save device tracking setting");
+      deviceTrackingEnabled = enabled;
+      toggle.checked = enabled;
+      const span = toggle.parentElement?.querySelector("span");
+      if (span) span.textContent = enabled ? "Device Tracking Enabled" : "Device Tracking Disabled";
+      toast(`Device tracking ${enabled ? "enabled" : "disabled"}`, "success");
+    } catch (err) {
+      toast(err.message || "Could not save device tracking setting", "error");
+      toggle.checked = deviceTrackingEnabled;
+    } finally {
+      restore();
+    }
+  };
+
   container.querySelectorAll(".reg-key-toggle").forEach((btn) => {
     btn.onclick = () => {
       const input = container.querySelector(`#${btn.dataset.target}`);

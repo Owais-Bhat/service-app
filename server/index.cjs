@@ -574,6 +574,9 @@ const requiredColumns = {
         { name: 'employee_update_detail', definition: 'TEXT' },
         { name: 'employee_update_status', definition: 'VARCHAR(40)' },
         { name: 'employee_update_at', definition: 'TIMESTAMP NULL' },
+        { name: 'device_status', definition: "VARCHAR(50) DEFAULT 'pending'" },
+        { name: 'follow_up_status', definition: "VARCHAR(50) DEFAULT 'none'" },
+        { name: 'device_service_enabled', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -735,6 +738,36 @@ const requiredTables = [
         INDEX idx_aal_assigned_at (assigned_at),
         INDEX idx_aal_employee (employee_id),
         INDEX idx_aal_inquiry (inquiry_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS device_taken_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36),
+        device_image_url TEXT,
+        device_description TEXT,
+        taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_device_taken_inquiry (inquiry_id),
+        INDEX idx_device_taken_employee (employee_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS device_return_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        device_condition VARCHAR(50) DEFAULT 'good',
+        return_image_url TEXT,
+        return_notes TEXT,
+        returned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_device_return_inquiry (inquiry_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS device_follow_up_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        status VARCHAR(50),
+        notes TEXT,
+        updated_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_device_followup_inquiry (inquiry_id)
     )`,
 ];
 
@@ -1026,7 +1059,7 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
         `UPDATE inquiries
             SET payment_status = 'paid',
                 payment_received_at = COALESCE(payment_received_at, NOW()),
-                status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+                status = CASE WHEN status IN ('resolved','closed','case_closed') THEN status ELSE 'resolved' END
           WHERE ticket_no = ?`,
         [ticket_no]
     );
@@ -1040,7 +1073,7 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     if (ticketId) {
         await connection.execute(
             `UPDATE tickets
-                SET status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+                SET status = CASE WHEN status IN ('resolved','closed','case_closed') THEN status ELSE 'resolved' END
               WHERE id = ?`,
             [ticketId]
         );
@@ -2464,6 +2497,56 @@ app.put('/api/settings/popup', authenticateToken, async (req, res) => {
     }
 });
 
+// Device tracking master on/off (admin controlled, public read)
+app.get('/api/settings/device-tracking', async (_, res) => {
+    try {
+        const connection = await getConn();
+        const [rows] = await connection.execute(
+            'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+            ['device_tracking_enabled']
+        );
+        connection.release();
+        const enabled = rows.length > 0 ? (rows[0].setting_value !== '0' && rows[0].setting_value !== 'false') : true;
+        res.json({ enabled });
+    } catch (error) {
+        console.error('Device tracking settings load error:', error);
+        res.json({ enabled: true });
+    }
+});
+
+app.put('/api/settings/device-tracking', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const enabled = req.body?.enabled !== false;
+    try {
+        await saveAppSetting('device_tracking_enabled', enabled ? '1' : '0');
+        res.json({ enabled });
+    } catch (error) {
+        console.error('Device tracking settings update error:', error);
+        res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+// Toggle per-ticket "device sent to service center" flag
+app.post('/api/device-tracking/toggle', authenticateToken, async (req, res) => {
+    const { inquiry_id, enabled } = req.body || {};
+    if (!inquiry_id) return res.status(400).json({ error: 'inquiry_id is required' });
+    try {
+        const connection = await getConn();
+        try {
+            await connection.execute(
+                'UPDATE inquiries SET device_service_enabled = ? WHERE id = ?',
+                [enabled ? 1 : 0, inquiry_id]
+            );
+        } finally {
+            connection.release();
+        }
+        res.json({ inquiry_id, enabled: !!enabled });
+    } catch (error) {
+        console.error('Device toggle error:', error);
+        res.status(500).json({ error: error.message || 'Could not update device flag' });
+    }
+});
+
 // Get employee's devices
 app.get('/api/device-tracking/employee/:employeeId', async (req, res) => {
     try {
@@ -2480,6 +2563,7 @@ app.get('/api/device-tracking/employee/:employeeId', async (req, res) => {
                 i.service_item,
                 i.device_status,
                 i.follow_up_status,
+                i.device_service_enabled,
                 i.status,
                 i.created_at
             FROM inquiries i
@@ -3573,7 +3657,7 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                     `UPDATE inquiries
                         SET payment_status = 'paid',
                             payment_received_at = COALESCE(payment_received_at, NOW()),
-                            status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+                            status = CASE WHEN status IN ('resolved','closed','case_closed') THEN status ELSE 'resolved' END
                       WHERE ticket_no = ?`,
                     [ticket_no]
                 );
@@ -3588,7 +3672,7 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 if (ticketId) {
                     await connection.execute(
                         `UPDATE tickets
-                            SET status = CASE WHEN status IN ('resolved','closed') THEN status ELSE 'resolved' END
+                            SET status = CASE WHEN status IN ('resolved','closed','case_closed') THEN status ELSE 'resolved' END
                           WHERE id = ?`,
                         [ticketId]
                     );

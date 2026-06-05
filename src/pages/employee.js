@@ -1,6 +1,40 @@
 import { supabase } from '../supabase.js';
 import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, formatTimeRemaining, formatSLADeadline, exportToCSV, showLoader } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { saveDeviceTaken, saveDeviceReturn, saveFollowUpStatus, loadDeviceTakenLog, loadDeviceReturnLog, loadDeviceFollowUpLogs } from './device-tracking.js';
+import { getEmployeeDevices, getDeviceStatus, renderDeviceTrackingTab, renderFollowUpTab } from './device-tracking-employee.js';
+
+// Device tracking master on/off (admin-controlled). Cached after first fetch.
+let deviceTrackingEnabled = true;
+async function loadDeviceTrackingEnabled() {
+  try {
+    const base = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ? '/api' : 'http://localhost:5000/api';
+    const res = await fetch(`${base}/settings/device-tracking`);
+    const data = await res.json();
+    deviceTrackingEnabled = data.enabled !== false;
+  } catch { deviceTrackingEnabled = true; }
+  return deviceTrackingEnabled;
+}
+
+// A ticket is locked (read-only) once it reaches a terminal state.
+// 'resolved' and 'case_closed' lock the modal; 'issue_not_resolved' stays editable.
+function isLocked(status) {
+  return ['resolved', 'case_closed'].includes(displayStatus(status));
+}
+
+async function setTicketDeviceFlag(inquiryId, enabled) {
+  const base = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ? '/api' : 'http://localhost:5000/api';
+  const res = await fetch(`${base}/device-tracking/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+    body: JSON.stringify({ inquiry_id: inquiryId, enabled }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || 'Could not update device flag');
+  }
+  return res.json();
+}
 
 // Watches for several GPS fixes within `maxWaitMs`, returns the most accurate
 // reading seen - or short-circuits as soon as accuracy <= desiredAccuracy.
@@ -87,6 +121,48 @@ async function openTaskModalWithLoader(btn, taskId, inqId, currentStatus, onDone
   }
 }
 
+// Renders the "Devices in Service" container (tickets the employee sent to the
+// service center). Shared by the Tasks view and the Dashboard. Hidden entirely
+// when the master device-tracking feature is off or no devices are in service.
+const FOLLOWUP_LABELS = {
+  none: 'Not started', awaiting_parts: '⏳ Awaiting Parts', repair_progress: '🔧 In Repair',
+  ready_return: '📦 Ready to Return', returned: '✅ Returned', taken: '📸 Taken',
+};
+async function populateDevicesInService(container, employeeId) {
+  const card = container.querySelector('#devices-in-service-card');
+  const list = container.querySelector('#devices-in-service-list');
+  if (!card || !list) return;
+  if (!(await loadDeviceTrackingEnabled())) { card.style.display = 'none'; return; }
+
+  const { data } = await getEmployeeDevices(employeeId);
+  const inService = (data || []).filter(d => Number(d.device_service_enabled) === 1);
+  if (inService.length === 0) { card.style.display = 'none'; return; }
+
+  list.innerHTML = inService.map(d => {
+    const fu = d.follow_up_status && d.follow_up_status !== 'none'
+      ? d.follow_up_status : (d.device_taken_logs ? 'taken' : 'none');
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;">
+        <div style="min-width:0;">
+          <div style="font-weight:700;font-size:0.9rem;color:var(--primary);">${escapeHtml(d.ticket_no || '—')}</div>
+          <div style="font-size:0.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.full_name || 'Client')} · ${escapeHtml(d.service_item || 'Service')}</div>
+          <span class="badge" style="margin-top:4px;display:inline-block;">${FOLLOWUP_LABELS[fu] || fu}</span>
+        </div>
+        <button class="btn btn-secondary btn-sm dev-manage-btn" data-id="${d.id}" data-status="${escapeAttr(d.status || 'in_progress')}">Manage</button>
+      </div>`;
+  }).join('');
+  card.style.display = 'block';
+
+  list.querySelectorAll('.dev-manage-btn').forEach(btn => {
+    btn.onclick = () => openTaskModalWithLoader(btn, null, btn.dataset.id, btn.dataset.status, () => {
+      // Re-render the host view after the modal closes.
+      const tasksHost = document.querySelector('#task-list');
+      if (tasksHost) renderEmployeeTasks(container);
+      else populateDevicesInService(container, employeeId);
+    });
+  });
+}
+
 // Business info shown on every premium bill.
 const BUSINESS = {
   name: 'Networking Experts',
@@ -110,6 +186,7 @@ function statusText(status) {
     in_progress: 'in progress',
     resolved: 'resolved',
     issue_not_resolved: 'issue not resolved',
+    case_closed: 'case closed',
   };
   return labels[shown] || shown.replace('_', ' ');
 }
@@ -1039,6 +1116,15 @@ export async function renderEmployeeDashboard(container) {
       </div>
     ` : ''}
 
+    <div id="devices-in-service-card" style="display:none;margin-bottom:18px;">
+      <div class="card">
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.wrench}<span>Devices in Service</span></span></div>
+        <div class="card-body" id="devices-in-service-list">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:0.85rem;">Loading…</div>
+        </div>
+      </div>
+    </div>
+
     <div class="employee-work-grid">
       <!-- Attendance Card -->
       <div class="card">
@@ -1188,6 +1274,9 @@ export async function renderEmployeeDashboard(container) {
   container.querySelectorAll('.task-btn').forEach(btn => {
     btn.onclick = () => openTaskModalWithLoader(btn, btn.dataset.id, btn.dataset.inqId, btn.dataset.status, () => renderEmployeeDashboard(container));
   });
+
+  // Devices in Service container (tickets sent to the service center).
+  populateDevicesInService(container, user.id);
 
   // Accept/Decline logic
   container.querySelectorAll('.accept-btn').forEach(btn => {
@@ -2344,7 +2433,19 @@ export async function renderEmployeeTasks(container) {
           </div>
         `}
     </div>
+
+    <div id="devices-in-service-card" style="display:none;margin-top:16px;">
+      <div class="card">
+        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.wrench}<span>Devices in Service</span></span></div>
+        <div class="card-body emp-scroll-list" id="devices-in-service-list">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:0.85rem;">Loading…</div>
+        </div>
+      </div>
+    </div>
   `;
+
+  // Populate the "Devices in Service" container (tickets sent to the service center).
+  populateDevicesInService(container, user.id);
 
   // Refresh
   container.querySelector('#tasks-refresh').onclick = async () => {
@@ -2484,8 +2585,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const mainOptions = Object.keys(tree).sort();
     
     const normalizedCurrentStatus = displayStatus(currentStatus);
-    const isResolvedReadOnly = normalizedCurrentStatus === 'resolved';
+    const isResolvedReadOnly = isLocked(normalizedCurrentStatus);
     const isResolving = normalizedCurrentStatus === 'resolved';
+    // Device tracking feature flag (master) + per-ticket flag.
+    await loadDeviceTrackingEnabled();
+    const deviceFeatureOn = deviceTrackingEnabled;
+    let deviceTicketOn = Number(inquiryRow?.device_service_enabled) === 1;
     const serviceDeadline = inquiryRow?.created_at ? calculateSLA(inquiryRow.created_at) : null;
     const serviceElapsed = elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || new Date());
     const serviceResolvedTime = ['resolved', 'closed', 'issue_not_resolved'].includes(displayStatus(inquiryRow?.status))
@@ -2554,6 +2659,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <div class="mst-tabs" role="tablist">
             <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
             <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device Info</span></button>
+            ${deviceFeatureOn ? `<button type="button" class="mst-tab" data-tab="service">${ICONS.wrench}<span>Device Service</span></button>` : ''}
             <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
@@ -2647,11 +2753,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                 <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
                 <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
+                <option value="case_closed" ${normalizedCurrentStatus==='case_closed'?'selected':''}>Case Closed — customer didn't cooperate / no fee</option>
               </select>
+              <small id="case-closed-hint" style="display:${normalizedCurrentStatus==='case_closed'?'block':'none'}; margin-top:6px; color:var(--danger); font-size:0.75rem;">⚠️ Case Closed is final — the ticket will be locked and cannot be reopened.</small>
             </div>
 
             <div class="form-group">
-              <label>Work Details / Progress Update <span style="color:var(--danger)">*</span></label>
+              <label id="progress-detail-label">Work Details / Progress Update <span style="color:var(--danger)">*</span></label>
               <textarea id="progress-detail" rows="5" placeholder="Describe what you did... (Mandatory)"></textarea>
             </div>
 
@@ -2695,6 +2803,76 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
             <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes - and they appear on the bill template.</small>
           </div>
+
+          ${deviceFeatureOn ? `
+          <!-- TAB: DEVICE SERVICE -->
+          <div class="mst-pane" data-pane="service">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:12px;background:var(--bg-soft);border:1px solid var(--border);margin-bottom:14px;">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem;">Send device to service center</div>
+                <small style="color:var(--text-dim);font-size:0.76rem;">Turn on when you take the customer's device for off-site repair. The ticket stays In Progress.</small>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="device-service-toggle" ${deviceTicketOn ? 'checked' : ''}>
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+
+            <div id="device-service-body" style="display:${deviceTicketOn ? 'block' : 'none'};">
+              <div class="form-group">
+                <label>Device Photo (when taken)</label>
+                <input type="file" id="device-taken-image" accept="image/*">
+              </div>
+              <div class="form-group">
+                <label>Device Description / Condition on pickup</label>
+                <textarea id="device-taken-desc" rows="3" placeholder="e.g. CCTV DVR, power issue, scratches on top panel"></textarea>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="save-device-taken">Save device taken</button>
+
+              <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+
+              <div class="form-group">
+                <label>Follow-up status update</label>
+                <select id="device-followup-status">
+                  <option value="awaiting_parts">⏳ Awaiting Parts</option>
+                  <option value="repair_progress">🔧 Repair in Progress</option>
+                  <option value="ready_return">📦 Ready to Return</option>
+                  <option value="returned">✅ Returned to Client</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Update notes</label>
+                <textarea id="device-followup-notes" rows="2" placeholder="What's the latest on this device?"></textarea>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="save-device-followup">Add follow-up update</button>
+
+              <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+
+              <div class="form-group">
+                <label>Return photo (when handing back to client)</label>
+                <input type="file" id="device-return-image" accept="image/*">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label>Condition</label>
+                  <select id="device-return-condition">
+                    <option value="repaired">Repaired</option>
+                    <option value="good">Good</option>
+                    <option value="damaged">Damaged</option>
+                    <option value="lost">Lost</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Return notes</label>
+                  <input type="text" id="device-return-notes" placeholder="e.g. replaced adapter">
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="save-device-return">Mark returned / sent back to client</button>
+
+              <div id="device-history" style="margin-top:18px;"><div style="text-align:center;color:var(--text-dim);font-size:0.82rem;padding:10px;">Loading device history…</div></div>
+            </div>
+          </div>
+          ` : ''}
 
           <!-- TAB 3: BILL -->
           <div class="mst-pane" data-pane="bill">
@@ -3348,8 +3526,90 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       pricingSec.style.display = resolving ? 'block' : 'none';
       const lockHint = overlay.querySelector('#bill-locked-hint');
       if (lockHint) lockHint.style.display = resolving ? 'none' : 'block';
+      // Case Closed UX: warn it's final and relabel the mandatory note as a reason.
+      const closing = statusSel.value === 'case_closed';
+      const ccHint = overlay.querySelector('#case-closed-hint');
+      if (ccHint) ccHint.style.display = closing ? 'block' : 'none';
+      const pdLabel = overlay.querySelector('#progress-detail-label');
+      if (pdLabel) pdLabel.innerHTML = closing
+        ? 'Reason for closing (customer didn\'t cooperate / no fee) <span style="color:var(--danger)">*</span>'
+        : 'Work Details / Progress Update <span style="color:var(--danger)">*</span>';
       renderPayStatus();
     };
+
+    // ---- Device Service tab wiring ----
+    if (deviceFeatureOn && inqId) {
+      const dToggle = overlay.querySelector('#device-service-toggle');
+      const dBody = overlay.querySelector('#device-service-body');
+      const dHistory = overlay.querySelector('#device-history');
+      const empId = authUser?.id || null;
+
+      const refreshDeviceHistory = async () => {
+        if (!dHistory) return;
+        const { data } = await getDeviceStatus(inqId);
+        const taken = data?.device_taken_logs || null;
+        const returned = data?.device_return_logs || null;
+        const followups = data?.device_follow_up_logs || [];
+        dHistory.innerHTML = renderDeviceTrackingTab(inqId, taken, returned, followups) + renderFollowUpTab(followups);
+      };
+
+      if (dToggle) {
+        dToggle.onchange = async () => {
+          const on = dToggle.checked;
+          try {
+            await setTicketDeviceFlag(inqId, on);
+            deviceTicketOn = on;
+            if (dBody) dBody.style.display = on ? 'block' : 'none';
+            toast(on ? 'Device marked for service center' : 'Device service turned off', 'success');
+            if (on) refreshDeviceHistory();
+          } catch (e) {
+            dToggle.checked = !on;
+            toast(e.message || 'Could not update', 'error');
+          }
+        };
+      }
+
+      const takenBtn = overlay.querySelector('#save-device-taken');
+      if (takenBtn) takenBtn.onclick = async () => {
+        const file = overlay.querySelector('#device-taken-image')?.files?.[0] || null;
+        const desc = overlay.querySelector('#device-taken-desc')?.value.trim() || '';
+        if (!file && !desc) return toast('Add a photo or description first', 'info');
+        takenBtn.disabled = true; takenBtn.textContent = 'Saving…';
+        const { error } = await saveDeviceTaken(inqId, empId, file, desc);
+        takenBtn.disabled = false; takenBtn.textContent = 'Save device taken';
+        if (error) return toast(error.message || 'Could not save', 'error');
+        toast('Device taken saved', 'success');
+        refreshDeviceHistory();
+      };
+
+      const followBtn = overlay.querySelector('#save-device-followup');
+      if (followBtn) followBtn.onclick = async () => {
+        const status = overlay.querySelector('#device-followup-status')?.value;
+        const notes = overlay.querySelector('#device-followup-notes')?.value.trim() || '';
+        followBtn.disabled = true; followBtn.textContent = 'Saving…';
+        const { error } = await saveFollowUpStatus(inqId, status, notes, empId);
+        followBtn.disabled = false; followBtn.textContent = 'Add follow-up update';
+        if (error) return toast(error.message || 'Could not save', 'error');
+        const notesEl = overlay.querySelector('#device-followup-notes'); if (notesEl) notesEl.value = '';
+        toast('Follow-up update added', 'success');
+        refreshDeviceHistory();
+      };
+
+      const returnBtn = overlay.querySelector('#save-device-return');
+      if (returnBtn) returnBtn.onclick = async () => {
+        const file = overlay.querySelector('#device-return-image')?.files?.[0] || null;
+        const condition = overlay.querySelector('#device-return-condition')?.value || 'good';
+        const notes = overlay.querySelector('#device-return-notes')?.value.trim() || '';
+        returnBtn.disabled = true; returnBtn.textContent = 'Saving…';
+        const { error } = await saveDeviceReturn(inqId, file, condition, notes);
+        returnBtn.disabled = false; returnBtn.textContent = 'Mark returned / sent back to client';
+        if (error) return toast(error.message || 'Could not save', 'error');
+        toast('Device return recorded', 'success');
+        refreshDeviceHistory();
+      };
+
+      if (deviceTicketOn) refreshDeviceHistory();
+    }
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
     if (discountPresetInput) discountPresetInput.onchange = () => { calcTotal(); renderPayStatus(); };
     if (manualDiscountInput) manualDiscountInput.oninput = () => { calcTotal(); renderPayStatus(); };

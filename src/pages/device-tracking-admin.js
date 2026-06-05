@@ -1,7 +1,7 @@
 // Device Tracking Admin Panel View
 import { supabase } from '../supabase.js';
 import { toast, formatDateTime, formatDate } from '../utils.js';
-import { getAllDeviceTracking } from './device-tracking.js';
+import { getAllDeviceTracking, saveFollowUpStatus, saveDeviceReturn } from './device-tracking.js';
 import { ICONS } from '../icons.js';
 
 export async function renderDeviceTrackingTab(container) {
@@ -54,10 +54,12 @@ export async function renderDeviceTrackingTab(container) {
     return;
   }
 
+  const onRefresh = () => renderDeviceTrackingTab(container);
+
   allData = data;
   loadingEl.style.display = 'none';
   contentEl.style.display = 'block';
-  renderTable(contentEl, allData);
+  renderTable(contentEl, allData, onRefresh);
 
   // Filter functionality
   const applyFilters = () => {
@@ -77,7 +79,7 @@ export async function renderDeviceTrackingTab(container) {
       return matchesSearch && matchesDeviceStatus && matchesFollowupStatus;
     });
 
-    renderTable(contentEl, filtered);
+    renderTable(contentEl, filtered, onRefresh);
   };
 
   searchInput.addEventListener('input', applyFilters);
@@ -85,7 +87,7 @@ export async function renderDeviceTrackingTab(container) {
   followupStatusSelect.addEventListener('change', applyFilters);
 }
 
-function renderTable(container, data) {
+function renderTable(container, data, onRefresh) {
   if (data.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px; background: var(--bg-soft); border-radius: 12px;">
@@ -148,7 +150,7 @@ function renderTable(container, data) {
     btn.addEventListener('click', (e) => {
       const id = btn.getAttribute('data-id');
       const item = data.find(d => d.id === id);
-      if (item) showDeviceDetails(item);
+      if (item) showDeviceDetails(item, onRefresh);
     });
   });
 }
@@ -174,7 +176,7 @@ function renderFollowupStatusBadge(status) {
   return badges[status] || '<span style="padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">—</span>';
 }
 
-function showDeviceDetails(item) {
+function showDeviceDetails(item, onRefresh) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
@@ -272,6 +274,35 @@ function showDeviceDetails(item) {
             `).join('')}
           </div>
         ` : ''}
+
+        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
+          <h4 style="margin: 0 0 12px 0;">✏️ Admin Update</h4>
+
+          <div style="background: var(--bg-soft); padding: 14px; border-radius: 10px; margin-bottom: 12px;">
+            <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Add follow-up update</div>
+            <select id="admin-followup-status" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
+              <option value="awaiting_parts">⏳ Awaiting Parts</option>
+              <option value="repair_progress">🔧 Repair in Progress</option>
+              <option value="ready_return">📦 Ready to Return</option>
+              <option value="returned">✅ Returned to Client</option>
+            </select>
+            <textarea id="admin-followup-notes" rows="2" placeholder="Update notes..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;"></textarea>
+            <button class="btn btn-secondary btn-sm" id="admin-save-followup">Add update</button>
+          </div>
+
+          <div style="background: var(--bg-soft); padding: 14px; border-radius: 10px;">
+            <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Mark returned / sent back to client</div>
+            <input type="file" id="admin-return-image" accept="image/*" style="margin-bottom: 8px; display: block;">
+            <select id="admin-return-condition" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
+              <option value="repaired">Repaired</option>
+              <option value="good">Good</option>
+              <option value="damaged">Damaged</option>
+              <option value="lost">Lost</option>
+            </select>
+            <input type="text" id="admin-return-notes" placeholder="Return notes..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;">
+            <button class="btn btn-primary btn-sm" id="admin-save-return">Mark returned</button>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="close-modal-btn">Close</button>
@@ -281,4 +312,29 @@ function showDeviceDetails(item) {
 
   document.body.appendChild(modal);
   modal.querySelector('#close-modal').onclick = modal.querySelector('#close-modal-btn').onclick = () => modal.remove();
+
+  const followBtn = modal.querySelector('#admin-save-followup');
+  if (followBtn) followBtn.onclick = async () => {
+    const status = modal.querySelector('#admin-followup-status').value;
+    const notes = modal.querySelector('#admin-followup-notes').value.trim();
+    followBtn.disabled = true; followBtn.textContent = 'Saving…';
+    const { error } = await saveFollowUpStatus(item.id, status, notes);
+    if (error) { followBtn.disabled = false; followBtn.textContent = 'Add update'; return toast(error.message || 'Could not save', 'error'); }
+    toast('Follow-up update added', 'success');
+    modal.remove();
+    onRefresh?.();
+  };
+
+  const returnBtn = modal.querySelector('#admin-save-return');
+  if (returnBtn) returnBtn.onclick = async () => {
+    const file = modal.querySelector('#admin-return-image').files?.[0] || null;
+    const condition = modal.querySelector('#admin-return-condition').value;
+    const notes = modal.querySelector('#admin-return-notes').value.trim();
+    returnBtn.disabled = true; returnBtn.textContent = 'Saving…';
+    const { error } = await saveDeviceReturn(item.id, file, condition, notes);
+    if (error) { returnBtn.disabled = false; returnBtn.textContent = 'Mark returned'; return toast(error.message || 'Could not save', 'error'); }
+    toast('Device return recorded', 'success');
+    modal.remove();
+    onRefresh?.();
+  };
 }
