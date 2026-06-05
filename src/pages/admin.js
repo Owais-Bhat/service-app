@@ -2402,7 +2402,18 @@ async function showBillShareModal(row, billData) {
       const inr = (n) =>
         `\u20B9${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
       const b = billData || {};
-      const itemLines = (b.services || []).map((s) => `\u2022 ${s.name}: ${inr(s.cost)}`);
+      const billSvcs = b.services || [];
+      const itemLines = [];
+      if (billSvcs.length) {
+        billSvcs.forEach((s, i) => itemLines.push(`${i + 1}. ${s.name}: *${inr(s.cost)}*`));
+      } else {
+        itemLines.push(`- Services Subtotal: *${inr(b.servicesSubtotal)}*`);
+      }
+      if (Number(b.extra) > 0) itemLines.push(`- Additional Charges: *${inr(b.extra)}*${b.extraReason ? ` (${b.extraReason})` : ""}`);
+      itemLines.push(`- Platform Fee: *${inr(b.platform)}*`);
+      if (Number(b.km) > 0) itemLines.push(`- Transport (${b.km} km): *${inr(b.transport)}*`);
+      if (Number(b.discount) > 0) itemLines.push(`- Discount: *-${inr(b.discount)}*${b.discountLabel ? ` (${b.discountLabel})` : ""}`);
+      itemLines.push(`- GST (18%): *${inr(b.gst)}*`, `------------------------------`);
       const msg = [
         `Hi ${row.full_name || ""}!`,
         `Your service invoice from *Networking Experts* is ready.`,

@@ -652,6 +652,7 @@ function downloadBlob(blob, filename) {
 
 function billShortCaption(data, pdfUrl) {
   const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+  const services = Array.isArray(data.services) ? data.services : [];
   const lines = [
     `Hi ${data.customer?.name || 'Customer'}!`,
     `Your service invoice from *${BUSINESS.name}* is ready.`,
@@ -659,8 +660,12 @@ function billShortCaption(data, pdfUrl) {
     `Device: *${data.customer?.device_type || 'General Service'}*`,
     '',
     `*Bill Breakdown:*`,
-    `- Services Subtotal: *${inr(data.servicesSubtotal)}*`,
   ];
+  if (services.length) {
+    services.forEach((s, i) => lines.push(`${i + 1}. ${s.name}: *${inr(s.cost)}*`));
+  } else {
+    lines.push(`- Services Subtotal: *${inr(data.servicesSubtotal)}*`);
+  }
   if (data.extra > 0) {
     lines.push(`- Additional Charges: *${inr(data.extra)}*${data.extraReason ? ` (${data.extraReason})` : ''}`);
   }
