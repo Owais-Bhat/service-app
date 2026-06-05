@@ -38,7 +38,8 @@
       "Bash(git update-index *)",
       "Bash(git add *)",
       "Bash(git hash-object *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(node -c \"e:\\\\service app\\\\src\\\\pages\\\\device-tracking-admin.js\")"
     ]
   }
 }

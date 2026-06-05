@@ -223,7 +223,6 @@ export async function getAllDeviceTracking() {
           profiles(full_name)
         )
       `)
-      .neq('device_status', 'pending')
       .order('created_at', { ascending: false });
 
     return { data: data || [], error };
