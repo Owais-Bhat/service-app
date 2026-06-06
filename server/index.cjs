@@ -3017,6 +3017,48 @@ async function computeFinanceSummary(connection, from, to) {
             mo.billed += a; if (isPaid(r)) mo.received += a; byMonth.set(key, mo);
         });
 
+        // 12-month trend (independent of the selected range) — powers the trend chart.
+        const fmtDate = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        const trendStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+        const [trendRows] = await connection.query(
+            `SELECT DATE_FORMAT(COALESCE(i.bill_generated_at, i.created_at), '%Y-%m') AS month,
+                    SUM(COALESCE(NULLIF(i.bill_total,0), i.bill_amount, 0)) AS billed,
+                    SUM(CASE WHEN i.payment_status='paid' THEN COALESCE(NULLIF(i.bill_total,0), i.bill_amount,0) ELSE 0 END) AS received,
+                    COUNT(*) AS bills
+               FROM inquiries i
+              WHERE (i.bill_total > 0 OR i.bill_amount > 0)
+                AND COALESCE(i.bill_generated_at, i.created_at) >= ?
+              GROUP BY month ORDER BY month`,
+            [`${fmtDate(trendStart)} 00:00:00`]
+        );
+        const trend = trendRows.map(r => ({ month: r.month, billed: Number(r.billed) || 0, received: Number(r.received) || 0, bills: Number(r.bills) || 0 }));
+
+        // Previous equal-length period (for growth deltas) — only when range is bounded.
+        let previous = null;
+        if (from && to) {
+            const parse = (s) => { const [y, m, dd] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, dd); };
+            const f = parse(from), tt = parse(to), dayMs = 86400000;
+            const days = Math.max(1, Math.round((tt - f) / dayMs) + 1);
+            const prevTo = new Date(f.getTime() - dayMs);
+            const prevFrom = new Date(prevTo.getTime() - (days - 1) * dayMs);
+            const [[pr]] = await connection.query(
+                `SELECT SUM(COALESCE(NULLIF(i.bill_total,0), i.bill_amount, 0)) AS billed,
+                        SUM(CASE WHEN i.payment_status='paid' THEN COALESCE(NULLIF(i.bill_total,0), i.bill_amount,0) ELSE 0 END) AS received,
+                        COUNT(*) AS billsCount,
+                        SUM(CASE WHEN i.payment_status='paid' THEN 1 ELSE 0 END) AS paidCount
+                   FROM inquiries i
+                  WHERE (i.bill_total > 0 OR i.bill_amount > 0)
+                    AND COALESCE(i.bill_generated_at, i.created_at) >= ?
+                    AND COALESCE(i.bill_generated_at, i.created_at) <= ?`,
+                [`${fmtDate(prevFrom)} 00:00:00`, `${fmtDate(prevTo)} 23:59:59`]
+            );
+            previous = {
+                billed: Number(pr.billed) || 0, received: Number(pr.received) || 0,
+                billsCount: Number(pr.billsCount) || 0, paidCount: Number(pr.paidCount) || 0,
+                from: fmtDate(prevFrom), to: fmtDate(prevTo),
+            };
+        }
+
         return {
             range: { from: from || null, to: to || null },
             totals: {
@@ -3024,7 +3066,7 @@ async function computeFinanceSummary(connection, from, to) {
                 avgTicket: rows.length ? billed / rows.length : 0,
                 gst, discounts, platform, transport, cashInHand,
             },
-            byMethod, aging,
+            byMethod, aging, previous, trend,
             byTechnician: [...byTech.values()].sort((a, b) => b.billed - a.billed),
             byCompany: [...byCompany.values()].sort((a, b) => b.billed - a.billed),
             byCategory: catRows.map(c => ({ category: c.category, revenue: Number(c.revenue) || 0, items: Number(c.items) || 0 })),
