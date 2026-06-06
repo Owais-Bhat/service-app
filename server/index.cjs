@@ -2322,7 +2322,7 @@ function feedbackTokenHash(token) {
 }
 
 function feedbackLinkFromToken(token, req = null) {
-    return `${publicBaseUrl(req)}/f/${encodeURIComponent(token)}`;
+    return `${publicBaseUrl(req)}/feedback?token=${encodeURIComponent(token)}`;
 }
 
 async function createFeedbackToken(connection, inquiryId) {

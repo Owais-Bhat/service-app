@@ -245,7 +245,9 @@ function goToLanding() {
 
 function isFeedbackRoute() {
   const params = new URLSearchParams(window.location.search);
-  return window.location.pathname === '/feedback'
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+  return pathname === '/feedback'
+    || pathname.startsWith('/f/')
     || params.has('feedback')
     || params.has('f')
     || params.has('token');
