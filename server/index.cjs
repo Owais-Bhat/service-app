@@ -61,6 +61,23 @@ if (PUSH_ENABLED) {
     console.log('[push] Web Push disabled (set VAPID_PUBLIC / VAPID_PRIVATE in .env)');
 }
 
+// Server-side invoice PDF generation. Loaded defensively so a missing module
+// never crashes the server — the bill endpoint just falls back to client-side.
+let PDFDocument = null;
+try {
+    PDFDocument = require('pdfkit');
+    console.log('[bills] Server-side PDF generation enabled (pdfkit)');
+} catch {
+    console.warn('[bills] "pdfkit" not installed — server-side PDF disabled. Run `npm install` in /server to enable it.');
+}
+
+// Unicode font for the invoice so the ₹ glyph renders (built-in PDF fonts can't).
+// Falls back to Helvetica + "Rs." if the TTFs aren't present.
+const INVOICE_FONT_REG = path.join(__dirname, 'fonts', 'NotoSans-Regular.ttf');
+const INVOICE_FONT_BOLD = path.join(__dirname, 'fonts', 'NotoSans-Bold.ttf');
+const INVOICE_UNICODE_FONTS = !!(PDFDocument && fs.existsSync(INVOICE_FONT_REG) && fs.existsSync(INVOICE_FONT_BOLD));
+if (PDFDocument) console.log(`[bills] Invoice currency glyph: ${INVOICE_UNICODE_FONTS ? '₹ (Noto Sans)' : 'Rs. (fallback — NotoSans TTFs missing in /server/fonts)'}`);
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -4752,6 +4769,206 @@ app.post('/api/webhook/razorpay', async (req, res) => {
     }
 
     res.json({ status: 'ok' });
+});
+
+// --- SERVER-SIDE INVOICE PDF ---
+// Renders a premium tax invoice to a PDF Buffer with pdfkit. Built entirely on
+// the server so the output is identical every time (no browser/CDN rendering).
+// Uses the embedded Noto Sans font so the ₹ glyph renders; falls back to
+// Helvetica + "Rs." when the TTFs aren't present.
+async function buildInvoicePdfBuffer(billData) {
+    if (!PDFDocument) throw new Error('pdfkit not available');
+    const d = billData || {};
+    const cust = d.customer || {};
+    const services = Array.isArray(d.services) ? d.services : [];
+    const RUPEE = INVOICE_UNICODE_FONTS ? '₹' : 'Rs. ';
+    const inr = (n) => RUPEE + Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const GREEN = '#10B981', DGREEN = '#064E3B', DARK = '#0F172A', GRAY = '#6B7280', LIGHT = '#9CA3AF', BORDER = '#E5E7EB', SOFT = '#F9FAFB';
+
+    // Optional payment QR — fetched up front so drawing stays synchronous.
+    let qrBuf = null;
+    if (d.paymentLink) {
+        try {
+            const r = await fetch('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(d.paymentLink));
+            if (r.ok) qrBuf = Buffer.from(await r.arrayBuffer());
+        } catch { /* QR optional */ }
+    }
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const chunks = [];
+    const done = new Promise((resolve, reject) => {
+        doc.on('data', c => chunks.push(c));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+    });
+
+    // Font aliases — Noto Sans (₹-capable) when available, else built-in Helvetica.
+    let FONT = 'Helvetica', FONT_BOLD = 'Helvetica-Bold', FONT_OBL = 'Helvetica-Oblique';
+    if (INVOICE_UNICODE_FONTS) {
+        try {
+            doc.registerFont('inv', INVOICE_FONT_REG);
+            doc.registerFont('inv-bold', INVOICE_FONT_BOLD);
+            FONT = 'inv'; FONT_BOLD = 'inv-bold'; FONT_OBL = 'inv'; // Noto download has no italic
+        } catch { /* keep Helvetica */ }
+    }
+
+    const M = 40, W = doc.page.width, right = W - M, contentW = W - M * 2;
+    const dline = (x1, yy, x2, color, width = 0.5) => { doc.lineWidth(width).strokeColor(color).dash(2, { space: 2 }); doc.moveTo(x1, yy).lineTo(x2, yy).stroke(); doc.undash(); };
+    let y = M;
+
+    // Header — brand + logo
+    let brandX = M;
+    try {
+        const logoPath = path.join(__dirname, '..', 'src', 'assets', 'logo.png');
+        if (fs.existsSync(logoPath)) { doc.image(logoPath, M, y, { width: 46, height: 46 }); brandX = M + 58; }
+    } catch { /* logo optional */ }
+    doc.fillColor(DGREEN).font(FONT_BOLD).fontSize(18).text(BUSINESS.name, brandX, y + 2);
+    doc.fillColor(GRAY).font(FONT).fontSize(8).text(String(BUSINESS.tagline).toUpperCase(), brandX, y + 25, { characterSpacing: 1 });
+
+    // Header — invoice badge + meta (right)
+    const badgeW = 96, badgeX = right - badgeW;
+    doc.roundedRect(badgeX, y, badgeW, 18, 9).fill(GREEN);
+    doc.fillColor('#ffffff').font(FONT_BOLD).fontSize(9).text('TAX INVOICE', badgeX, y + 5, { width: badgeW, align: 'center' });
+    const billNo = 'NX-' + String(cust.ticket_no || Date.now()).slice(-8);
+    const t0 = new Date();
+    const issued = `${String(t0.getDate()).padStart(2, '0')}/${String(t0.getMonth() + 1).padStart(2, '0')}/${t0.getFullYear()}`;
+    doc.fillColor(GRAY).font(FONT).fontSize(9);
+    doc.text(`Bill #: ${billNo}`, badgeX - 60, y + 26, { width: badgeW + 60, align: 'right' });
+    doc.text(`Date: ${issued}`, badgeX - 60, y + 39, { width: badgeW + 60, align: 'right' });
+
+    y += 60; dline(M, y, right, BORDER); y += 16;
+
+    // Parties — two columns
+    const colW = (contentW - 30) / 2, col2X = M + colW + 30, pTop = y;
+    doc.fillColor(GREEN).font(FONT_BOLD).fontSize(8).text('BILLED TO', M, y);
+    doc.fillColor(DARK).font(FONT_BOLD).fontSize(13).text(cust.name || '-', M, y + 12, { width: colW });
+    let ly = doc.y + 1;
+    doc.font(FONT).fontSize(10);
+    if (cust.phone) { doc.fillColor(GRAY).text(String(cust.phone), M, ly, { width: colW }); ly = doc.y; }
+    if (cust.company) { doc.fillColor(GRAY).text(String(cust.company), M, ly, { width: colW }); ly = doc.y; }
+    if (cust.location) { doc.fillColor(LIGHT).font(FONT_OBL).text(String(cust.location), M, ly, { width: colW }); }
+
+    doc.fillColor(GREEN).font(FONT_BOLD).fontSize(8).text('SERVICE DETAILS', col2X, pTop);
+    let ry = pTop + 14;
+    const detail = (label, val) => { if (!val) return; doc.fillColor(GRAY).font(FONT).fontSize(10).text(`${label}: ${val}`, col2X, ry, { width: colW }); ry = doc.y + 2; };
+    detail('Ticket', cust.ticket_no);
+    detail('Service', cust.service_item);
+    detail('Device', cust.device_type);
+    detail('Technician', d.technician);
+
+    y = Math.max(doc.y, ry) + 12; dline(M, y, right, BORDER); y += 14;
+
+    // Items table
+    const amtW = 110, descX = M + 34, descW = contentW - 34 - amtW;
+    doc.rect(M, y, contentW, 22).fill(SOFT);
+    doc.lineWidth(1.5).strokeColor(GREEN); doc.moveTo(M, y + 22).lineTo(right, y + 22).stroke();
+    doc.fillColor(DGREEN).font(FONT_BOLD).fontSize(9);
+    doc.text('#', M + 8, y + 7);
+    doc.text('DESCRIPTION', descX, y + 7);
+    doc.text('AMOUNT', right - amtW - 8, y + 7, { width: amtW, align: 'right' });
+    y += 22;
+
+    const items = services.map((s, i) => ({ idx: i + 1, name: s.name, amt: s.cost }));
+    if (Number(d.extra) > 0) items.push({ idx: items.length + 1, name: 'Additional charges' + (d.extraReason ? ` (${d.extraReason})` : ''), amt: d.extra });
+    if (!items.length) {
+        doc.fillColor(LIGHT).font(FONT).fontSize(10).text('No itemised services', M, y + 8, { width: contentW, align: 'center' });
+        y += 28;
+    } else {
+        items.forEach(r => {
+            if (y > doc.page.height - 120) { doc.addPage(); y = M; }
+            const h = Math.max(22, doc.heightOfString(String(r.name || ''), { width: descW }) + 12);
+            doc.fillColor(LIGHT).font(FONT).fontSize(10).text(String(r.idx), M + 8, y + 6);
+            doc.fillColor(DARK).font(FONT).fontSize(10).text(String(r.name || ''), descX, y + 6, { width: descW });
+            doc.fillColor(DARK).font(FONT_BOLD).text(inr(r.amt), right - amtW - 8, y + 6, { width: amtW, align: 'right' });
+            y += h;
+            doc.lineWidth(0.5).strokeColor(BORDER); doc.moveTo(M, y).lineTo(right, y).stroke();
+        });
+    }
+    y += 16;
+
+    // Totals box (right)
+    const tRows = [['Services subtotal', inr(d.servicesSubtotal)]];
+    if (Number(d.extra) > 0) tRows.push(['Extra charges', inr(d.extra)]);
+    tRows.push(['Platform fee', inr(d.platform)]);
+    tRows.push(['Transport' + (Number(d.km) > 0 ? ` (${d.km} km)` : ''), inr(d.transport)]);
+    if (Number(d.discount) > 0) tRows.push([d.discountLabel || 'Discount', '-' + inr(d.discount), GREEN]);
+    const taxIdx = tRows.length; // separator drawn above this row
+    tRows.push(['Taxable', inr(d.taxable)]);
+    tRows.push(['GST (18%)', inr(d.gst)]);
+    const boxW = 270, boxX = right - boxW, pad = 12, lh = 18;
+    const boxH = pad + tRows.length * lh + 6 + 34 + pad;
+    if (y + boxH > doc.page.height - 70) { doc.addPage(); y = M; }
+    doc.roundedRect(boxX, y, boxW, boxH, 10).fill(SOFT);
+    let ty = y + pad;
+    tRows.forEach((row, i) => {
+        if (i === taxIdx) { doc.lineWidth(0.5).strokeColor(BORDER); doc.moveTo(boxX + pad, ty).lineTo(boxX + boxW - pad, ty).stroke(); ty += 5; }
+        const color = row[2] || null;
+        doc.font(FONT).fontSize(10).fillColor(color || GRAY).text(row[0], boxX + pad, ty, { width: boxW - pad * 2 - 70 });
+        doc.font(FONT_BOLD).fillColor(color || DARK).text(row[1], boxX + boxW / 2, ty, { width: boxW / 2 - pad, align: 'right' });
+        ty += lh;
+    });
+    doc.lineWidth(1.5).strokeColor(GREEN); doc.moveTo(boxX + pad, ty + 2).lineTo(boxX + boxW - pad, ty + 2).stroke(); ty += 9;
+    doc.font(FONT_BOLD).fontSize(13).fillColor(DGREEN).text('Total', boxX + pad, ty, { width: boxW / 2 });
+    doc.fillColor(GREEN).text(inr(d.total), boxX + boxW / 2, ty, { width: boxW / 2 - pad, align: 'right' });
+    y += boxH + 18;
+
+    // Payment box (optional)
+    if (d.paymentLink) {
+        const ph = qrBuf ? 150 : 60;
+        if (y + ph > doc.page.height - 80) { doc.addPage(); y = M; }
+        doc.lineWidth(1).strokeColor(GREEN).dash(3, { space: 2 }).roundedRect(M, y, contentW, ph, 10).stroke().undash();
+        doc.fillColor(DGREEN).font(FONT_BOLD).fontSize(9).text('SECURE PAYMENT', M, y + 12, { width: contentW, align: 'center' });
+        if (qrBuf) doc.image(qrBuf, W / 2 - 45, y + 28, { width: 90, height: 90 });
+        doc.fillColor('#2563EB').font(FONT).fontSize(8).text(String(d.paymentLink), M + 12, y + (qrBuf ? 124 : 34), { width: contentW - 24, align: 'center' });
+        y += ph + 14;
+    }
+
+    // Footer (bottom of current page)
+    const fy = doc.page.height - 58;
+    dline(M, fy, right, BORDER);
+    doc.fillColor(GREEN).font(FONT_BOLD).fontSize(11).text('Thank you for your business!', M, fy + 8, { width: contentW, align: 'center' });
+    doc.fillColor(GRAY).font(FONT).fontSize(8).text(`${BUSINESS.address}  |  ${BUSINESS.phone}  |  ${BUSINESS.email}`, M, fy + 24, { width: contentW, align: 'center' });
+    doc.fillColor(LIGHT).fontSize(7.5).text(`GSTIN: ${BUSINESS.gstin}  |  Computer Generated Invoice`, M, fy + 35, { width: contentW, align: 'center' });
+
+    doc.end();
+    return done;
+}
+
+// Generate the invoice PDF on the server and return a public URL.
+// Body: { billData, inquiry_id?, filename? }
+app.post('/api/bills/generate', authenticateToken, express.json({ limit: BILL_UPLOAD_LIMIT }), async (req, res) => {
+    if (!PDFDocument) return res.status(501).json({ error: 'Server PDF generation not available' });
+    try {
+        const { billData, inquiry_id, filename } = req.body || {};
+        if (!billData || typeof billData !== 'object') return res.status(400).json({ error: 'billData is required' });
+        const buf = await buildInvoicePdfBuffer(billData);
+        if (!buf || buf.length < 5) return res.status(500).json({ error: 'PDF generation failed' });
+
+        const token = uuidv4();
+        const safeName = (filename || `Invoice-${billData.customer?.ticket_no || 'service'}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+        const storedName = `${token}-${safeName.endsWith('.pdf') ? safeName : safeName + '.pdf'}`;
+        await fsp.writeFile(path.join(BILLS_DIR, storedName), buf);
+
+        const proto = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        const url = `${proto}://${host}/bills/${storedName}`;
+
+        if (inquiry_id) {
+            let connection;
+            try {
+                connection = await getConn();
+                await connection.execute('UPDATE inquiries SET bill_pdf_url = ? WHERE id = ?', [url, inquiry_id]);
+            } catch (err) {
+                console.error('[bills/generate] failed to persist URL:', err.message);
+            } finally {
+                if (connection) { try { connection.release(); } catch {} }
+            }
+        }
+        res.json({ url });
+    } catch (err) {
+        console.error('[bills/generate]', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // --- BILL PDF UPLOAD ---

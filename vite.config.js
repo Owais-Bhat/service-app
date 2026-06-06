@@ -15,6 +15,20 @@ export default defineConfig({
       registerType: 'autoUpdate',
       cleanupOutdatedCaches: true,
       devOptions: { enabled: false }, // don't cache in dev — avoids stale SW blank pages
+      // Server-rendered routes (feedback page, bill PDFs, uploads, API) must NOT
+      // be answered by the SPA navigate-fallback — otherwise customers opening the
+      // SMS feedback link or a bill PDF get the cached app shell (landing page).
+      workbox: {
+        cleanupOutdatedCaches: true,
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [
+          /^\/f\//,          // feedback short link  /f/<token>
+          /^\/feedback/,     // /feedback, /feedback.html, /feedback/<token>
+          /^\/api\//,        // backend API
+          /^\/bills\//,      // generated bill PDFs
+          /^\/uploads\//,    // uploaded images/files
+        ],
+      },
       includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'Networking Experts – Service Portal',

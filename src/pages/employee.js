@@ -650,12 +650,38 @@ async function uploadBillPdf(blob, filename, inquiry_id) {
  * If an existing pdfUrl is provided (already stored on the inquiry) it is returned immediately
  * without generating a new PDF.
  */
+// Ask the server to render the invoice PDF (consistent output, no CDN/browser
+// rendering). Throws if the server can't (e.g. pdfkit not installed) so the
+// caller can fall back to the in-browser renderer.
+async function generateBillPdfServer(billData, inquiryId) {
+  const token = localStorage.getItem('auth_token');
+  const filename = `Invoice-${billData.customer?.ticket_no || 'service'}.pdf`;
+  const res = await fetch('/api/bills/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ billData, inquiry_id: inquiryId || null, filename }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Server PDF generation failed');
+  }
+  const { url } = await res.json();
+  return url;
+}
+
 export async function shareBillToPublicLink(billData, { inquiryId = null, existingUrl = null } = {}) {
   if (existingUrl) return existingUrl;
-  const billHTML = renderPremiumBillHTML(billData);
-  const filename = `Invoice-${billData.customer?.ticket_no || 'service'}.pdf`;
-  const { blob } = await renderBillToPdfBlob(billHTML, filename);
-  return uploadBillPdf(blob, filename, inquiryId);
+  // Prefer the server-rendered PDF; fall back to the in-browser renderer if the
+  // server can't generate it (older deploy, pdfkit not installed, etc.).
+  try {
+    return await generateBillPdfServer(billData, inquiryId);
+  } catch (err) {
+    console.warn('[bill] server PDF unavailable, using browser render:', err.message);
+    const billHTML = renderPremiumBillHTML(billData);
+    const filename = `Invoice-${billData.customer?.ticket_no || 'service'}.pdf`;
+    const { blob } = await renderBillToPdfBlob(billHTML, filename);
+    return uploadBillPdf(blob, filename, inquiryId);
+  }
 }
 
 function downloadBlob(blob, filename) {
@@ -700,6 +726,11 @@ function billShortCaption(data, pdfUrl) {
     `------------------------------`,
     `Payment Status: *${String(data.paymentStatus || 'unpaid').toUpperCase()}*`
   );
+  // Always include the downloadable PDF invoice link so the customer gets the
+  // full tax invoice — not just this text summary.
+  if (pdfUrl) {
+    lines.push('', `View / download your invoice (PDF):`, pdfUrl);
+  }
   if (data.paymentStatus !== 'paid' && data.paymentLink) {
     lines.push('', `Pay here:`, data.paymentLink);
   }
@@ -776,11 +807,7 @@ export function openPremiumBillModal(data, opts = {}) {
 
       try {
         btn.innerHTML = `<span>... preparing PDF</span>`;
-        const pdfUrl = existingPdfUrl || await (async () => {
-          const { blob } = await renderBillToPdfBlob(billHTML, filename);
-          btn.innerHTML = `<span>... uploading bill</span>`;
-          return uploadBillPdf(blob, filename, inquiryId);
-        })();
+        const pdfUrl = await shareBillToPublicLink(data, { inquiryId, existingUrl: existingPdfUrl });
 
         const caption = billShortCaption(data, pdfUrl);
         const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
