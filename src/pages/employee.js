@@ -2208,6 +2208,12 @@ export async function renderEmployeeTasks(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
+  // Drop any previous live channel before (re)rendering to avoid duplicates.
+  if (container._tasksChannel) {
+    try { supabase.removeChannel(container._tasksChannel); } catch {}
+    container._tasksChannel = null;
+  }
+
   container.innerHTML = `
     <div class="employee-task-loader" role="status" aria-live="polite">
       <div class="employee-task-loader-card">
@@ -2558,6 +2564,40 @@ export async function renderEmployeeTasks(container) {
       restore();
     }
   };
+
+  // Live auto-refresh: re-render this view the moment admin assigns/updates a
+  // request for this employee — no manual refresh needed.
+  let _tasksRerenderTimer = null;
+  container._tasksChannel = supabase.channel(`employee-tasks-${user.id}`)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'inquiries',
+      filter: `assigned_employee_id=eq.${user.id}`,
+    }, (payload) => {
+      const row = payload.new;
+      if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && row?.assignment_status === 'pending')) {
+        showNotification({
+          title: '🔔 New Job Assigned',
+          body: `${row?.full_name || 'A client'} - ${row?.service_item || 'new service'}`,
+          type: 'alert',
+          tag: `assign-${row?.id || ''}`,
+        });
+      }
+      // Debounce so a burst of changes triggers a single re-render.
+      clearTimeout(_tasksRerenderTimer);
+      _tasksRerenderTimer = setTimeout(() => {
+        if (document.body.contains(container)) renderEmployeeTasks(container);
+      }, 400);
+    })
+    .subscribe();
+
+  // Clean up the channel once this view leaves the DOM.
+  const _tasksChannelWatch = setInterval(() => {
+    if (!document.body.contains(container)) {
+      try { supabase.removeChannel(container._tasksChannel); } catch {}
+      container._tasksChannel = null;
+      clearInterval(_tasksChannelWatch);
+    }
+  }, 5000);
 
   // Filter tabs
   let activeFilter = 'all';

@@ -576,7 +576,7 @@ async function runDeviceFollowupReminders() {
         );
         _lastDeviceReminderDate = today;
         for (const r of rows) {
-            broadcastNotify({
+            recordNotification({
                 subject: 'device_followup_reminder',
                 audience: { userId: r.emp },
                 title: 'Device follow-up reminder',
@@ -1127,12 +1127,12 @@ async function autoAssignInquiry(inquiryId) {
         const inq = inqRows[0];
         if (inq) broadcastChange('UPDATE', 'inquiries', inq);
 
-        broadcastNotify({
+        recordNotification({
             subject: 'new_assignment',
-            title: 'New Assignment',
-            body: 'You have been auto-assigned a new service request.',
+            title: '📋 New Assignment',
+            body: `New service request assigned to you${inq?.service_item ? ` — ${inq.service_item}` : ''}${inq?.ticket_no ? ` (${inq.ticket_no})` : ''}.`,
             audience: { userId: chosen.id },
-            data: { inquiry_id: inquiryId },
+            data: { inquiry_id: inquiryId, ticket_no: inq?.ticket_no },
         });
 
         if (inq) {
@@ -3510,6 +3510,13 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                 || (data.assignment_status === 'pending' && row.assigned_employee_id);
             if (empIdToNotify) {
                 console.log(`[SMS SMS_TID_ASSIGN_EMP] trigger → empId=${empIdToNotify} ticket=${row.ticket_no} (patch keys: ${Object.keys(data).join(',')})`);
+                recordNotification({
+                    subject: 'new_assignment',
+                    title: '📋 New Assignment',
+                    body: `${row.full_name || 'A client'} — ${row.service_item || 'service request'}${row.ticket_no ? ` (${row.ticket_no})` : ''}`,
+                    audience: { userId: empIdToNotify },
+                    data: { inquiry_id: row.id, ticket_no: row.ticket_no },
+                }).catch(() => {});
                 (async () => {
                     try {
                         const conn = await getConn();
