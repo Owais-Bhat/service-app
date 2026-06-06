@@ -7,6 +7,7 @@ import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderDeviceTrackingTab } from './pages/device-tracking-admin.js';
 import { renderFinanceReportTab } from './pages/finance.js';
 import { renderNotificationsTab } from './pages/notifications.js';
+import { renderTrainingCoursesAdmin, renderEmployeeCourses } from './pages/training.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
 import { renderPopupAdsTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab, mountEmployeePopupAds } from './pages/media-training.js';
@@ -14,6 +15,7 @@ import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmploye
 import { renderProfile } from './pages/profile.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
+import { initPush } from './push.js';
 import { ICONS } from './icons.js';
 import { registerSW } from 'virtual:pwa-register';
 
@@ -83,6 +85,7 @@ function getNavItems(role) {
       { id: 'my-salary', icon: ICONS.rupee, label: 'Salary' },
       { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
       { id: 'employee-training', icon: ICONS.play, label: 'Tutorials' },
+      { id: 'my-training-courses', icon: ICONS.shield, label: 'Training' },
     ];
     items.push({ id: 'device-followup', icon: ICONS.wrench, label: 'Device Follow-up' });
     items.push({ type: 'section', label: 'Services' });
@@ -108,6 +111,7 @@ function getNavItems(role) {
     { id: 'users', icon: ICONS.users, label: 'Users' },
     { id: 'popup-ads', icon: ICONS.box, label: 'Popup Ads' },
     { id: 'training-admin', icon: ICONS.play, label: 'Employee Tutorials' },
+    { id: 'training-courses', icon: ICONS.shield, label: 'Training Courses' },
     { id: 'device-tracking', icon: ICONS.wrench, label: 'Device Follow-up' },
     { type: 'section', label: 'Reports' },
     { id: 'finance', icon: ICONS.rupee, label: 'Finance Report' },
@@ -152,6 +156,7 @@ function getPageRenderer(role, page) {
       'service-pricing': renderEmployeePricingTab,
       'device-followup': renderEmployeeFollowUp,
       notifications: renderNotificationsTab,
+      'my-training-courses': renderEmployeeCourses,
       profile: renderProfile
     },
     admin: {
@@ -164,6 +169,7 @@ function getPageRenderer(role, page) {
       ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
       'auto-assignment': renderAutoAssignmentTab, 'device-tracking': renderDeviceTrackingTab,
       finance: renderFinanceReportTab, notifications: renderNotificationsTab,
+      'training-courses': renderTrainingCoursesAdmin,
     }
   };
   return (map[role] || map.admin)[page];
@@ -173,6 +179,7 @@ let _notifyUnsub = null;
 function startGlobalNotifications() {
   if (_notifyUnsub) return;
   ensureNotifyPermission();
+  initPush();
   _notifyUnsub = onNotification(null, (msg) => {
     // Don't double-toast if the active page already handles its own UI feedback.
     showNotification({
@@ -186,14 +193,24 @@ function startGlobalNotifications() {
           : msg.subject === 'employee_clock_in' ? 'alert'
           : msg.subject === 'employee_clock_out' ? 'alert'
           : msg.subject === 'device_followup_reminder' ? 'alert'
+          : msg.subject === 'sla_breach' ? 'alert'
           : 'info',
     });
   });
 }
 
-function navigate(page) {
+let _navHistoryStarted = false;
+function navigate(page, opts = {}) {
   hidePWAInstallBtn();
   activePage = page;
+  // Push to browser history so the phone's back button navigates within the app
+  // (in an installed PWA, without this the back button just backgrounds the app).
+  if (opts.push !== false) {
+    try {
+      if (!_navHistoryStarted) { history.replaceState({ page, app: true }, '', `#${page}`); _navHistoryStarted = true; }
+      else history.pushState({ page, app: true }, '', `#${page}`);
+    } catch { /* history unavailable */ }
+  }
   const navItems = getNavItems(currentRole);
   const renderer = getPageRenderer(currentRole, page);
   renderLayout({
@@ -203,6 +220,23 @@ function navigate(page) {
   startGlobalNotifications();
   if (currentRole === 'employee') mountEmployeePopupAds();
 }
+
+// Phone/browser back button: close an open popup first, otherwise go to the
+// previous in-app page instead of leaving/backgrounding the app.
+window.addEventListener('popstate', (e) => {
+  const overlays = document.querySelectorAll('.modal-overlay');
+  if (overlays.length) {
+    const top = overlays[overlays.length - 1];
+    const closeBtn = top.querySelector('.modal-close');
+    if (closeBtn) closeBtn.click(); else top.remove();
+    // Stay on the current page (replace the entry we just consumed).
+    try { history.pushState({ page: activePage, app: true }, '', `#${activePage}`); } catch {}
+    return;
+  }
+  if (e.state && e.state.app && e.state.page && currentRole) {
+    navigate(e.state.page, { push: false });
+  }
+});
 
 function goToLanding() {
   renderLandingPage(app, showAuth);

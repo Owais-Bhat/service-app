@@ -14,6 +14,8 @@ const SUBJECT_ICON = {
   new_service_request: '🆕',
   device_followup_reminder: '🔧',
   new_complaint: '⚠️',
+  sla_breach: '⏰',
+  finance_summary: '📊',
 };
 
 export async function renderNotificationsTab(container) {

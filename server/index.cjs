@@ -40,6 +40,18 @@ const multer = require('multer');
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+// Web Push (browser/OS notifications even when the app is closed).
+const webpush = require('web-push');
+const PUSH_ENABLED = !!(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE);
+if (PUSH_ENABLED) {
+    try {
+        webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@example.com', process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
+        console.log('[push] Web Push enabled');
+    } catch (e) { console.error('[push] VAPID config error:', e.message); }
+} else {
+    console.log('[push] Web Push disabled (set VAPID_PUBLIC / VAPID_PRIVATE in .env)');
+}
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -597,6 +609,138 @@ function startDeviceReminderJob() {
     setInterval(runDeviceFollowupReminders, 60_000).unref();
 }
 
+// Working-hours SLA deadline (10:00–18:00, Sundays skipped) — mirrors the client.
+function slaDeadline(createdAt, slaHours = 12) {
+    let date = new Date(createdAt);
+    let remaining = slaHours;
+    const startHour = 10, endHour = 18;
+    let guard = 0;
+    while (remaining > 0 && guard++ < 1000) {
+        const h = date.getHours();
+        if (date.getDay() === 0) { date.setDate(date.getDate() + 1); date.setHours(startHour, 0, 0, 0); continue; }
+        if (h < startHour) { date.setHours(startHour, 0, 0, 0); continue; }
+        if (h >= endHour) { date.setDate(date.getDate() + 1); date.setHours(startHour, 0, 0, 0); continue; }
+        const endOfDay = new Date(date); endOfDay.setHours(endHour, 0, 0, 0);
+        const left = (endOfDay - date) / 3600000;
+        if (remaining <= left) { date.setMilliseconds(date.getMilliseconds() + remaining * 3600000); remaining = 0; }
+        else { remaining -= left; date.setDate(date.getDate() + 1); date.setHours(startHour, 0, 0, 0); }
+    }
+    return date;
+}
+
+// Alert admin + the assigned employee when an open ticket is within 2h of (or past)
+// its SLA deadline. One alert per ticket (sla_breach_notified guard).
+async function runSlaChecks() {
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, ticket_no, full_name, service_item, created_at, assigned_employee_id
+               FROM inquiries
+              WHERE COALESCE(sla_breach_notified,0) = 0
+                AND status NOT IN ('resolved','closed','case_closed','issue_not_resolved')
+                AND created_at IS NOT NULL`
+        );
+        const now = Date.now();
+        for (const r of rows) {
+            const deadline = slaDeadline(r.created_at).getTime();
+            if (now < deadline - 2 * 3600000) continue; // not within the 2h warning window yet
+            const overdue = now >= deadline;
+            await connection.query('UPDATE inquiries SET sla_breach_notified = 1 WHERE id = ?', [r.id]);
+            const label = overdue ? 'SLA breached' : 'SLA due soon';
+            recordNotification({
+                subject: 'sla_breach',
+                title: `⏰ ${label}`,
+                body: `Ticket ${r.ticket_no || ''} (${r.full_name || 'client'} — ${r.service_item || 'service'}) ${overdue ? 'has missed' : 'is about to miss'} its SLA deadline.`,
+                audience: { role: 'admin' },
+                data: { inquiry_id: r.id, ticket_no: r.ticket_no, overdue },
+            }).catch(() => {});
+            if (r.assigned_employee_id) {
+                recordNotification({
+                    subject: 'sla_breach',
+                    title: `⏰ ${label}`,
+                    body: `Your ticket ${r.ticket_no || ''} ${overdue ? 'has passed' : 'is about to pass'} its deadline — please act now.`,
+                    audience: { userId: r.assigned_employee_id },
+                    data: { inquiry_id: r.id, ticket_no: r.ticket_no, overdue },
+                }).catch(() => {});
+            }
+        }
+        if (rows.length) console.log(`[sla] checked ${rows.length} open ticket(s)`);
+    } catch (err) {
+        console.error('[sla] check failed:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+function startSlaJob() {
+    console.log('[sla] SLA breach checks scheduled every 15 minutes');
+    runSlaChecks();
+    setInterval(runSlaChecks, 15 * 60_000).unref();
+}
+
+// Once per month, push an AI (or plain) finance summary for the month that just
+// ended to the admin notification feed. Dedup via app_settings.
+async function runMonthlyFinanceSummary() {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+    const lastDay = new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate();
+    const from = `${prevKey}-01`, to = `${prevKey}-${String(lastDay).padStart(2, '0')}`;
+    let connection;
+    try {
+        connection = await getConn();
+        const [setRows] = await connection.query("SELECT setting_value FROM app_settings WHERE setting_key = 'last_finance_summary_month'");
+        if (setRows[0]?.setting_value === prevKey) { connection.release(); return; }
+        const summary = await computeFinanceSummary(connection, from, to);
+        connection.release(); connection = null;
+
+        let text = '';
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (apiKey) {
+            try {
+                const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: process.env.OPENROUTER_MODEL || 'openrouter/free',
+                        messages: [
+                            { role: 'system', content: 'You are a finance analyst for an Indian field-service business. Currency INR (₹). Only use the JSON numbers. Write a short monthly summary: headline numbers, 2 insights, 1-2 actions. Plain text, under 120 words.' },
+                            { role: 'user', content: `Month ${prevKey} finance JSON:\n${JSON.stringify(summary)}` },
+                        ],
+                        temperature: 0.3,
+                    }),
+                });
+                const aiData = await aiRes.json();
+                if (aiRes.ok) text = aiData.choices?.[0]?.message?.content || '';
+            } catch (e) { console.error('[finance] monthly AI failed:', e.message); }
+        }
+        if (!text) {
+            const t = summary.totals;
+            text = `Billed ₹${Math.round(t.billed)}, Received ₹${Math.round(t.received)}, Pending ₹${Math.round(t.pending)} across ${t.billsCount} bills. GST ₹${Math.round(t.gst)}.`;
+        }
+        await recordNotification({
+            subject: 'finance_summary',
+            title: `📊 Finance summary — ${prevKey}`,
+            body: text.slice(0, 1500),
+            audience: { role: 'admin' },
+            data: { month: prevKey },
+        });
+        await saveAppSetting('last_finance_summary_month', prevKey);
+        console.log(`[finance] monthly summary sent for ${prevKey}`);
+    } catch (err) {
+        console.error('[finance] monthly summary failed:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+function startFinanceSummaryJob() {
+    console.log('[finance] monthly summary job active');
+    runMonthlyFinanceSummary();
+    setInterval(runMonthlyFinanceSummary, 60 * 60_000).unref();
+}
+
 const requiredColumns = {
     profiles: [
         { name: 'salary', definition: 'DECIMAL(10, 2) DEFAULT 0' },
@@ -661,6 +805,7 @@ const requiredColumns = {
         { name: 'device_status', definition: "VARCHAR(50) DEFAULT 'pending'" },
         { name: 'follow_up_status', definition: "VARCHAR(50) DEFAULT 'none'" },
         { name: 'device_service_enabled', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'sla_breach_notified', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -876,6 +1021,75 @@ const requiredTables = [
         INDEX idx_notif_user (audience_user),
         INDEX idx_notif_created (created_at)
     )`,
+    // Comprehensive training: courses → lessons + quiz, progress, assignments.
+    `CREATE TABLE IF NOT EXISTS training_courses (
+        id VARCHAR(36) PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        category VARCHAR(100) DEFAULT 'General',
+        active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_lessons (
+        id VARCHAR(36) PRIMARY KEY,
+        course_id VARCHAR(36) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        type VARCHAR(20) DEFAULT 'video',
+        media_url TEXT,
+        content TEXT,
+        position INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tl_course (course_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_quiz (
+        id VARCHAR(36) PRIMARY KEY,
+        course_id VARCHAR(36) NOT NULL,
+        question TEXT NOT NULL,
+        options TEXT,
+        correct_index INT DEFAULT 0,
+        position INT DEFAULT 0,
+        INDEX idx_tq_course (course_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_lesson_progress (
+        id VARCHAR(36) PRIMARY KEY,
+        course_id VARCHAR(36) NOT NULL,
+        lesson_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tlp_emp (employee_id),
+        INDEX idx_tlp_course (course_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_course_assignments (
+        id VARCHAR(36) PRIMARY KEY,
+        course_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) DEFAULT NULL,
+        due_date DATE DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tca_course (course_id),
+        INDEX idx_tca_emp (employee_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS training_course_completions (
+        id VARCHAR(36) PRIMARY KEY,
+        course_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        quiz_score INT DEFAULT NULL,
+        passed TINYINT(1) DEFAULT 1,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tcc_emp (employee_id),
+        INDEX idx_tcc_course (course_id)
+    )`,
+    // Web Push subscriptions (one row per browser/device per user).
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        role VARCHAR(20),
+        endpoint VARCHAR(500) UNIQUE,
+        p256dh TEXT,
+        auth TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_push_user (user_id),
+        INDEX idx_push_role (role)
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -1039,6 +1253,37 @@ async function recordNotification(payload) {
         if (conn) conn.release();
     }
     broadcastNotify(payload);
+    sendWebPush(audience, payload).catch(() => {});
+}
+
+// Deliver a Web Push to every saved subscription matching the audience.
+async function sendWebPush(audience, payload) {
+    if (!PUSH_ENABLED) return;
+    const aud = audience || 'all';
+    const userId = (typeof aud === 'object' && aud.userId) || null;
+    const role = (typeof aud === 'object' && aud.role) || null;
+    let conn;
+    try {
+        conn = await getConn();
+        let rows;
+        if (userId) [rows] = await conn.query('SELECT * FROM push_subscriptions WHERE user_id = ?', [userId]);
+        else if (role) [rows] = await conn.query('SELECT * FROM push_subscriptions WHERE role = ?', [role]);
+        else [rows] = await conn.query('SELECT * FROM push_subscriptions');
+        const body = JSON.stringify({ title: payload.title || 'Update', body: payload.body || '', data: payload.data || {} });
+        await Promise.all((rows || []).map(async (s) => {
+            try {
+                await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body);
+            } catch (err) {
+                if (err.statusCode === 404 || err.statusCode === 410) {
+                    try { await conn.query('DELETE FROM push_subscriptions WHERE id = ?', [s.id]); } catch {}
+                }
+            }
+        }));
+    } catch (e) {
+        console.error('[push] send failed:', e.message);
+    } finally {
+        if (conn) conn.release();
+    }
 }
 
 // Broadcast a domain-specific notification (payment received, new assignment, etc.)
@@ -2919,6 +3164,251 @@ app.post('/api/notifications/read-all', authenticateToken, async (req, res) => {
     }
 });
 
+// ── WEB PUSH ─────────────────────────────────────────────────────
+app.get('/api/push/vapid-public', (req, res) => {
+    res.json({ key: PUSH_ENABLED ? process.env.VAPID_PUBLIC : null });
+});
+
+app.post('/api/push/subscribe', authenticateToken, async (req, res) => {
+    if (!PUSH_ENABLED) return res.status(400).json({ error: 'Push not configured' });
+    const sub = req.body?.subscription;
+    if (!sub?.endpoint || !sub?.keys) return res.status(400).json({ error: 'Invalid subscription' });
+    let c;
+    try {
+        c = await getConn();
+        await c.query(
+            `INSERT INTO push_subscriptions (id, user_id, role, endpoint, p256dh, auth)
+             VALUES (?,?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), role = VALUES(role), p256dh = VALUES(p256dh), auth = VALUES(auth)`,
+            [uuidv4(), req.user.id, req.user.role, sub.endpoint, sub.keys.p256dh, sub.keys.auth]
+        );
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// ── TRAINING (courses → lessons + quiz, progress, assignments) ──
+const trainAdmin = (req, res) => { if (req.user.role !== 'admin') { res.sendStatus(403); return false; } return true; };
+
+// Admin: list courses with counts
+app.get('/api/training/courses', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    let c; try {
+        c = await getConn();
+        const [rows] = await c.query(`
+            SELECT co.*,
+                (SELECT COUNT(*) FROM training_lessons l WHERE l.course_id = co.id) AS lesson_count,
+                (SELECT COUNT(*) FROM training_quiz q WHERE q.course_id = co.id) AS quiz_count,
+                (SELECT COUNT(*) FROM training_course_assignments a WHERE a.course_id = co.id) AS assign_count
+            FROM training_courses co ORDER BY co.created_at DESC`);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Admin: full course (lessons + quiz with answers) for the editor
+app.get('/api/training/courses/:id/full', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    let c; try {
+        c = await getConn();
+        const [[course]] = await c.query('SELECT * FROM training_courses WHERE id = ?', [req.params.id]);
+        if (!course) return res.status(404).json({ error: 'Course not found' });
+        const [lessons] = await c.query('SELECT * FROM training_lessons WHERE course_id = ? ORDER BY position, created_at', [req.params.id]);
+        const [quiz] = await c.query('SELECT * FROM training_quiz WHERE course_id = ? ORDER BY position', [req.params.id]);
+        const [assignments] = await c.query('SELECT * FROM training_course_assignments WHERE course_id = ?', [req.params.id]);
+        res.json({ course, lessons, quiz: quiz.map(q => ({ ...q, options: safeJsonParse(q.options) || [] })), assignments });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.post('/api/training/courses', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    const { title, description, category } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+    let c; try {
+        c = await getConn();
+        const id = uuidv4();
+        await c.query('INSERT INTO training_courses (id, title, description, category) VALUES (?,?,?,?)',
+            [id, title, description || null, category || 'General']);
+        res.json({ id });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.patch('/api/training/courses/:id', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    const { title, description, category, active } = req.body || {};
+    let c; try {
+        c = await getConn();
+        await c.query('UPDATE training_courses SET title=COALESCE(?,title), description=COALESCE(?,description), category=COALESCE(?,category), active=COALESCE(?,active) WHERE id=?',
+            [title ?? null, description ?? null, category ?? null, active == null ? null : (active ? 1 : 0), req.params.id]);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.delete('/api/training/courses/:id', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    let c; try {
+        c = await getConn();
+        const id = req.params.id;
+        for (const t of ['training_lessons', 'training_quiz', 'training_lesson_progress', 'training_course_assignments', 'training_course_completions'])
+            await c.query(`DELETE FROM ${t} WHERE course_id = ?`, [id]);
+        await c.query('DELETE FROM training_courses WHERE id = ?', [id]);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.post('/api/training/courses/:id/lessons', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    const { title, type, media_url, content, position } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'Lesson title is required' });
+    let c; try {
+        c = await getConn();
+        const id = uuidv4();
+        await c.query('INSERT INTO training_lessons (id, course_id, title, type, media_url, content, position) VALUES (?,?,?,?,?,?,?)',
+            [id, req.params.id, title, type || 'video', media_url || null, content || null, Number(position) || 0]);
+        res.json({ id });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.delete('/api/training/lessons/:id', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    let c; try {
+        c = await getConn();
+        await c.query('DELETE FROM training_lessons WHERE id = ?', [req.params.id]);
+        await c.query('DELETE FROM training_lesson_progress WHERE lesson_id = ?', [req.params.id]);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.post('/api/training/courses/:id/quiz', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    const { question, options, correct_index, position } = req.body || {};
+    if (!question || !Array.isArray(options) || options.length < 2) return res.status(400).json({ error: 'Question and at least 2 options required' });
+    let c; try {
+        c = await getConn();
+        const id = uuidv4();
+        await c.query('INSERT INTO training_quiz (id, course_id, question, options, correct_index, position) VALUES (?,?,?,?,?,?)',
+            [id, req.params.id, question, JSON.stringify(options), Number(correct_index) || 0, Number(position) || 0]);
+        res.json({ id });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.delete('/api/training/quiz/:id', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    let c; try {
+        c = await getConn();
+        await c.query('DELETE FROM training_quiz WHERE id = ?', [req.params.id]);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Admin: (re)assign a course to specific employees or everyone, with optional due date
+app.post('/api/training/courses/:id/assign', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    const { employee_ids, all, due_date } = req.body || {};
+    let c; try {
+        c = await getConn();
+        await c.query('DELETE FROM training_course_assignments WHERE course_id = ?', [req.params.id]);
+        if (all) {
+            await c.query('INSERT INTO training_course_assignments (id, course_id, employee_id, due_date) VALUES (?,?,NULL,?)',
+                [uuidv4(), req.params.id, due_date || null]);
+        } else if (Array.isArray(employee_ids)) {
+            for (const eid of employee_ids)
+                await c.query('INSERT INTO training_course_assignments (id, course_id, employee_id, due_date) VALUES (?,?,?,?)',
+                    [uuidv4(), req.params.id, eid, due_date || null]);
+        }
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Admin: compliance — completion per course per employee
+app.get('/api/training/compliance', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    let c; try {
+        c = await getConn();
+        const [rows] = await c.query(`
+            SELECT co.id AS course_id, co.title, co.category,
+                (SELECT COUNT(*) FROM training_lessons l WHERE l.course_id = co.id) AS lessons,
+                (SELECT COUNT(DISTINCT cc.employee_id) FROM training_course_completions cc WHERE cc.course_id = co.id) AS completed,
+                (SELECT COUNT(*) FROM training_course_assignments a WHERE a.course_id = co.id AND a.employee_id IS NOT NULL) AS assigned
+            FROM training_courses co ORDER BY co.created_at DESC`);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Employee: my visible courses with progress
+app.get('/api/training/my', authenticateToken, async (req, res) => {
+    const emp = req.user.id;
+    let c; try {
+        c = await getConn();
+        const [rows] = await c.query(`
+            SELECT co.*,
+                (SELECT COUNT(*) FROM training_lessons l WHERE l.course_id = co.id) AS lesson_count,
+                (SELECT COUNT(*) FROM training_quiz q WHERE q.course_id = co.id) AS quiz_count,
+                (SELECT COUNT(*) FROM training_lesson_progress p WHERE p.course_id = co.id AND p.employee_id = ?) AS done_count,
+                (SELECT MIN(a.due_date) FROM training_course_assignments a WHERE a.course_id = co.id AND (a.employee_id = ? OR a.employee_id IS NULL)) AS due_date,
+                (SELECT COUNT(*) FROM training_course_completions cc WHERE cc.course_id = co.id AND cc.employee_id = ?) AS completed
+            FROM training_courses co
+            WHERE co.active = 1
+              AND EXISTS (SELECT 1 FROM training_course_assignments a2 WHERE a2.course_id = co.id AND (a2.employee_id = ? OR a2.employee_id IS NULL))
+            ORDER BY co.created_at DESC`, [emp, emp, emp, emp]);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Employee: full course to take (quiz without revealing answers) + my lesson progress
+app.get('/api/training/course/:id', authenticateToken, async (req, res) => {
+    const emp = req.user.id;
+    let c; try {
+        c = await getConn();
+        const [[course]] = await c.query('SELECT * FROM training_courses WHERE id = ?', [req.params.id]);
+        if (!course) return res.status(404).json({ error: 'Course not found' });
+        const [lessons] = await c.query('SELECT * FROM training_lessons WHERE course_id = ? ORDER BY position, created_at', [req.params.id]);
+        const [quiz] = await c.query('SELECT id, question, options, position FROM training_quiz WHERE course_id = ? ORDER BY position', [req.params.id]);
+        const [done] = await c.query('SELECT lesson_id FROM training_lesson_progress WHERE course_id = ? AND employee_id = ?', [req.params.id, emp]);
+        const [comp] = await c.query('SELECT * FROM training_course_completions WHERE course_id = ? AND employee_id = ? LIMIT 1', [req.params.id, emp]);
+        res.json({
+            course, lessons,
+            quiz: quiz.map(q => ({ id: q.id, question: q.question, options: safeJsonParse(q.options) || [] })),
+            doneLessonIds: done.map(d => d.lesson_id),
+            completion: comp[0] || null,
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.post('/api/training/lessons/:id/complete', authenticateToken, async (req, res) => {
+    const emp = req.user.id;
+    let c; try {
+        c = await getConn();
+        const [[lesson]] = await c.query('SELECT course_id FROM training_lessons WHERE id = ?', [req.params.id]);
+        if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
+        const [exists] = await c.query('SELECT id FROM training_lesson_progress WHERE lesson_id = ? AND employee_id = ?', [req.params.id, emp]);
+        if (!exists.length)
+            await c.query('INSERT INTO training_lesson_progress (id, course_id, lesson_id, employee_id) VALUES (?,?,?,?)',
+                [uuidv4(), lesson.course_id, req.params.id, emp]);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Employee: submit quiz answers → grade, record completion (pass ≥ 70%)
+app.post('/api/training/course/:id/quiz-submit', authenticateToken, async (req, res) => {
+    const emp = req.user.id;
+    const answers = req.body?.answers || {}; // { quizId: chosenIndex }
+    let c; try {
+        c = await getConn();
+        const [quiz] = await c.query('SELECT id, correct_index FROM training_quiz WHERE course_id = ?', [req.params.id]);
+        let score = 100, passed = 1;
+        if (quiz.length) {
+            const correct = quiz.filter(q => Number(answers[q.id]) === Number(q.correct_index)).length;
+            score = Math.round((correct / quiz.length) * 100);
+            passed = score >= 70 ? 1 : 0;
+        }
+        if (passed) {
+            await c.query('DELETE FROM training_course_completions WHERE course_id = ? AND employee_id = ?', [req.params.id, emp]);
+            await c.query('INSERT INTO training_course_completions (id, course_id, employee_id, quiz_score, passed) VALUES (?,?,?,?,1)',
+                [uuidv4(), req.params.id, emp, score]);
+        }
+        res.json({ score, passed: !!passed });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
 // Get employee's devices
 app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (req, res) => {
     const { employeeId } = req.params;
@@ -4235,6 +4725,8 @@ async function startServer() {
         connection.release();
         startAutoClockOutJob();
         startDeviceReminderJob();
+        startSlaJob();
+        startFinanceSummaryJob();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

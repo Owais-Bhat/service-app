@@ -112,6 +112,47 @@ function buildCsv(d) {
   return lines.join('\n');
 }
 
+// Open a clean print window (→ Save as PDF) of the current report.
+function printReport(d, preset) {
+  const t = d.totals;
+  const row = (k, v) => `<tr><td>${esc(k)}</td><td style="text-align:right">${esc(v)}</td></tr>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to export PDF', 'info'); return; }
+  w.document.write(`<!doctype html><html><head><title>Finance Report</title><meta charset="utf-8">
+    <style>
+      body{font-family:Arial,sans-serif;color:#0f172a;padding:32px;max-width:820px;margin:auto;}
+      h1{color:#064e3b;margin:0 0 4px;} .sub{color:#64748b;font-size:13px;margin-bottom:20px;}
+      h2{font-size:15px;border-bottom:2px solid #10b981;padding-bottom:4px;margin:22px 0 8px;}
+      table{width:100%;border-collapse:collapse;font-size:13px;} td,th{padding:6px 8px;border-bottom:1px solid #eee;text-align:left;}
+      th{color:#064e3b;text-transform:uppercase;font-size:11px;}
+      .tot{font-weight:800;color:#10b981;}
+    </style></head><body>
+    <h1>Networking Experts — Finance Report</h1>
+    <div class="sub">Period: ${esc(d.range.from || 'All time')} ${d.range.to ? '→ ' + esc(d.range.to) : ''} &nbsp;·&nbsp; Generated ${new Date().toLocaleString('en-IN')}</div>
+    <h2>Summary</h2>
+    <table>
+      ${row('Total Billed', inr(t.billed))}${row('Received', inr(t.received))}${row('Pending', inr(t.pending))}
+      ${row('Bills (paid/total)', `${t.paidCount} / ${t.billsCount}`)}${row('Average Ticket', inr(t.avgTicket))}
+      ${row('GST Collected', inr(t.gst))}${row('Discounts Given', inr(t.discounts))}${row('Cash In Hand', inr(t.cashInHand))}
+      <tr class="tot"><td>Net Received</td><td style="text-align:right">${esc(inr(t.received))}</td></tr>
+    </table>
+    <h2>By Technician</h2>
+    <table><thead><tr><th>Technician</th><th>Jobs</th><th>Billed</th><th>Received</th></tr></thead><tbody>
+      ${d.byTechnician.map(r => `<tr><td>${esc(r.name)}</td><td>${r.jobs}</td><td>${esc(inr(r.billed))}</td><td>${esc(inr(r.received))}</td></tr>`).join('') || '<tr><td colspan="4">No data</td></tr>'}
+    </tbody></table>
+    <h2>By Service Category</h2>
+    <table><thead><tr><th>Category</th><th>Items</th><th>Revenue</th></tr></thead><tbody>
+      ${d.byCategory.map(r => `<tr><td>${esc(r.category)}</td><td>${r.items}</td><td>${esc(inr(r.revenue))}</td></tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
+    </tbody></table>
+    <h2>Revenue by Month</h2>
+    <table><thead><tr><th>Month</th><th>Billed</th><th>Received</th></tr></thead><tbody>
+      ${d.byMonth.map(r => `<tr><td>${r.month}</td><td>${esc(inr(r.billed))}</td><td>${esc(inr(r.received))}</td></tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
+    </tbody></table>
+    <script>window.onload=()=>{window.print();}<\/script>
+    </body></html>`);
+  w.document.close();
+}
+
 export async function renderFinanceReportTab(container) {
   showLoader(container);
   let preset = 'this-month';
@@ -141,6 +182,7 @@ export async function renderFinanceReportTab(container) {
             <option value="this-year" ${preset === 'this-year' ? 'selected' : ''}>This Year</option>
             <option value="all" ${preset === 'all' ? 'selected' : ''}>All Time</option>
           </select>
+          <button class="btn btn-secondary" id="fin-pdf">${ICONS.receipt || ''}<span>PDF</span></button>
           <button class="btn btn-secondary" id="fin-csv">${ICONS.download || ''}<span>Export CSV</span></button>
           <button class="btn btn-secondary" id="fin-refresh">${ICONS.refresh}<span>Refresh</span></button>
         </div>
@@ -226,6 +268,7 @@ export async function renderFinanceReportTab(container) {
     container.querySelector('#fin-ai-q').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') container.querySelector('#fin-ai-ask').click();
     });
+    container.querySelector('#fin-pdf').onclick = () => { if (latest) printReport(latest, preset); };
     container.querySelector('#fin-csv').onclick = () => {
       if (!latest) return;
       const blob = new Blob([buildCsv(latest)], { type: 'text/csv;charset=utf-8;' });

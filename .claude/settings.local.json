@@ -40,7 +40,8 @@
       "Bash(git hash-object *)",
       "Bash(git commit -m ' *)",
       "Bash(node -c \"e:\\\\service app\\\\src\\\\pages\\\\device-tracking-admin.js\")",
-      "Bash(grep -v \"\\\\.png$\")"
+      "Bash(grep -v \"\\\\.png$\")",
+      "Bash(node --check server/index.cjs)"
     ]
   }
 }
