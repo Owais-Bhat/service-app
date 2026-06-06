@@ -4814,6 +4814,10 @@ async function buildInvoicePdfBuffer(billData) {
 
     const M = 40, W = doc.page.width, right = W - M, contentW = W - M * 2;
     const dline = (x1, yy, x2, color, width = 0.5) => { doc.lineWidth(width).strokeColor(color).dash(2, { space: 2 }); doc.moveTo(x1, yy).lineTo(x2, yy).stroke(); doc.undash(); };
+    const rightText = (text, rightX, yy) => {
+        const value = String(text);
+        doc.text(value, rightX - doc.widthOfString(value), yy, { lineBreak: false });
+    };
     let y = M;
 
     // Header — brand + logo
@@ -4900,16 +4904,19 @@ async function buildInvoicePdfBuffer(billData) {
     if (y + boxH > doc.page.height - 70) { doc.addPage(); y = M; }
     doc.roundedRect(boxX, y, boxW, boxH, 10).fill(SOFT);
     let ty = y + pad;
+    const amountRight = boxX + boxW - pad;
     tRows.forEach((row, i) => {
         if (i === taxIdx) { doc.lineWidth(0.5).strokeColor(BORDER); doc.moveTo(boxX + pad, ty).lineTo(boxX + boxW - pad, ty).stroke(); ty += 5; }
         const color = row[2] || null;
         doc.font(FONT).fontSize(10).fillColor(color || GRAY).text(row[0], boxX + pad, ty, { width: boxW - pad * 2 - 70 });
-        doc.font(FONT_BOLD).fillColor(color || DARK).text(row[1], boxX + boxW / 2, ty, { width: boxW / 2 - pad, align: 'right' });
+        doc.font(FONT_BOLD).fillColor(color || DARK);
+        rightText(row[1], amountRight, ty);
         ty += lh;
     });
     doc.lineWidth(1.5).strokeColor(GREEN); doc.moveTo(boxX + pad, ty + 2).lineTo(boxX + boxW - pad, ty + 2).stroke(); ty += 9;
     doc.font(FONT_BOLD).fontSize(13).fillColor(DGREEN).text('Total', boxX + pad, ty, { width: boxW / 2 });
-    doc.fillColor(GREEN).text(inr(d.total), boxX + boxW / 2, ty, { width: boxW / 2 - pad, align: 'right' });
+    doc.fillColor(GREEN);
+    rightText(inr(d.total), amountRight, ty);
     y += boxH + 18;
 
     // Payment box (optional)

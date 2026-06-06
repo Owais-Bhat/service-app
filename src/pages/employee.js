@@ -382,6 +382,21 @@ export function renderPremiumBillHTML(data) {
       <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#1F2937;">Additional charges${data.extraReason ? ` <small style="color:#6B7280">(${esc(data.extraReason)})</small>` : ''}</td>
       <td style="display:table-cell !important; padding:10px; border-bottom:1px solid #eee; color:#0F172A; text-align:right; font-weight:700;">${inr(data.extra)}</td>
     </tr>` : '';
+  const breakdownRow = (label, amount, { color = '#374151', bold = false, border = '', total = false } = {}) => `
+    <div style="display:flex !important; align-items:center !important; justify-content:space-between !important; gap:16px !important; min-height:${total ? '38px' : '28px'} !important; ${border}">
+      <span style="display:block !important; flex:1 1 auto !important; color:${color} !important; font-weight:${bold ? '700' : '400'} !important;">${label}</span>
+      <span style="display:block !important; flex:0 0 112px !important; width:112px !important; color:${total ? '#10B981' : color} !important; font-weight:${total ? '900' : '700'} !important; text-align:right !important; white-space:nowrap !important;">${amount}</span>
+    </div>`;
+  const breakdownRows = [
+    breakdownRow('Services subtotal', inr(data.servicesSubtotal)),
+    Number(data.extra) > 0 ? breakdownRow('Extra charges', inr(data.extra)) : '',
+    breakdownRow('Platform fee', inr(data.platform)),
+    breakdownRow('Transport', inr(data.transport)),
+    Number(data.discount) > 0 ? breakdownRow(esc(data.discountLabel || 'Discount'), `-${inr(data.discount)}`, { color: '#059669' }) : '',
+    breakdownRow('Taxable', inr(data.taxable), { bold: true, border: 'border-top:1px solid #eee !important; padding-top:5px !important;' }),
+    breakdownRow('GST (18%)', inr(data.gst)),
+    breakdownRow('Total', inr(data.total), { bold: true, total: true, border: 'border-top:2px solid #10B981 !important; margin-top:2px !important;' }),
+  ].join('');
 
   return `
   <div class="premium-bill" id="premium-bill-print" style="font-family:Arial, sans-serif !important; background:#ffffff !important; color:#0F172A !important; padding:40px !important; width:794px !important; box-sizing:border-box !important; display:block !important; visibility:visible !important; opacity:1 !important;">
@@ -430,16 +445,7 @@ export function renderPremiumBillHTML(data) {
 
     <div style="margin-left:auto; width:300px; background:#f9fafb; padding:15px; border-radius:12px; display:block !important;">
       <div style="display:inline-block; background:#10B981; color:#fff; padding:3px 10px; border-radius:15px; font-size:9px; font-weight:800; margin-bottom:12px;">AMOUNT BREAKDOWN</div>
-      <table style="width:100% !important; border-collapse:collapse !important; font-size:13px !important; color:#374151 !important; display:table !important;">
-        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Services subtotal</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.servicesSubtotal)}</td></tr>
-        ${Number(data.extra) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Extra charges</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.extra)}</td></tr>` : ''}
-        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Platform fee</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.platform)}</td></tr>
-        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">Transport</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.transport)}</td></tr>
-        ${Number(data.discount) > 0 ? `<tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0; color:#059669;">${esc(data.discountLabel || 'Discount')}</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#059669;">-${inr(data.discount)}</td></tr>` : ''}
-        <tr style="display:table-row !important; border-top:1px solid #eee !important;"><td style="display:table-cell !important; padding:6px 0; font-weight:700;">Taxable</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.taxable)}</td></tr>
-        <tr style="display:table-row !important;"><td style="display:table-cell !important; padding:4px 0;">GST (18%)</td><td style="display:table-cell !important; text-align:right; font-weight:700; color:#0F172A;">${inr(data.gst)}</td></tr>
-        <tr style="display:table-row !important; border-top:2px solid #10B981 !important; font-size:16px !important;"><td style="display:table-cell !important; padding:10px 0; font-weight:800; color:#064E3B;">Total</td><td style="display:table-cell !important; text-align:right; font-weight:900; color:#10B981;">${inr(data.total)}</td></tr>
-      </table>
+      <div style="display:block !important; width:100% !important; font-size:13px !important; color:#374151 !important;">${breakdownRows}</div>
     </div>
 
     ${data.paymentLink ? `

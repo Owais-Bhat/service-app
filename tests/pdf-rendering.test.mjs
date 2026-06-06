@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const employeeSource = readFileSync(new URL('../src/pages/employee.js', import.meta.url), 'utf8');
+const serverSource = readFileSync(new URL('../server/index.cjs', import.meta.url), 'utf8');
 
 test('bill PDF capture sandbox is not clipped by a tiny hidden wrapper', () => {
   const functionStart = employeeSource.indexOf('async function renderBillToPdfBlob');
@@ -25,4 +26,12 @@ test('bill modal also offers a native print/save-as-pdf path', () => {
   assert.match(employeeSource, /id="pb-print"/, 'modal should expose a print/save PDF button');
   assert.match(employeeSource, /@page \{ size: A4; margin: 0; \}/, 'print output should use A4 page setup');
   assert.match(employeeSource, /window\.print\(\)/, 'print path should invoke the browser print dialog');
+});
+
+test('amount breakdown reserves a visible fixed-width price column in both PDF renderers', () => {
+  assert.match(employeeSource, /flex:0 0 112px/, 'browser PDF rows should reserve width for amounts');
+  assert.match(employeeSource, /white-space:nowrap/, 'browser PDF amounts should not wrap or collapse');
+  assert.match(serverSource, /const rightText = \(text, rightX, yy\)/, 'server PDF should position amounts from a fixed right edge');
+  assert.match(serverSource, /rightText\(row\[1\], amountRight, ty\)/, 'server breakdown rows should use fixed right positioning');
+  assert.match(serverSource, /rightText\(inr\(d\.total\), amountRight, ty\)/, 'server total should use fixed right positioning');
 });
