@@ -40,15 +40,24 @@ const multer = require('multer');
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-// Web Push (browser/OS notifications even when the app is closed).
-const webpush = require('web-push');
-const PUSH_ENABLED = !!(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE);
+// Web Push (browser/OS notifications) — OPTIONAL. A missing module or bad VAPID
+// config must never take the whole server down, so load it defensively.
+let webpush = null;
+try {
+    webpush = require('web-push');
+} catch {
+    console.warn('[push] "web-push" not installed — push disabled. Run `npm install` in /server to enable it.');
+}
+let PUSH_ENABLED = !!(webpush && process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE);
 if (PUSH_ENABLED) {
     try {
         webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@example.com', process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
         console.log('[push] Web Push enabled');
-    } catch (e) { console.error('[push] VAPID config error:', e.message); }
-} else {
+    } catch (e) {
+        console.error('[push] VAPID config error — push disabled:', e.message);
+        PUSH_ENABLED = false;
+    }
+} else if (webpush) {
     console.log('[push] Web Push disabled (set VAPID_PUBLIC / VAPID_PRIVATE in .env)');
 }
 
