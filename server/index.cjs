@@ -3342,6 +3342,60 @@ app.get('/api/training/compliance', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
 });
 
+// Admin: detailed per-employee progress with timestamps (who did what, and when)
+app.get('/api/training/courses/:id/progress', authenticateToken, async (req, res) => {
+    if (!trainAdmin(req, res)) return;
+    const courseId = req.params.id;
+    let c; try {
+        c = await getConn();
+        const [[course]] = await c.query('SELECT * FROM training_courses WHERE id = ?', [courseId]);
+        if (!course) return res.status(404).json({ error: 'Course not found' });
+        const [lessons] = await c.query('SELECT id, title, position FROM training_lessons WHERE course_id = ? ORDER BY position, created_at', [courseId]);
+        const [[qc]] = await c.query('SELECT COUNT(*) AS n FROM training_quiz WHERE course_id = ?', [courseId]);
+        const quizCount = qc?.n || 0;
+        const [assignments] = await c.query('SELECT employee_id, due_date, created_at FROM training_course_assignments WHERE course_id = ?', [courseId]);
+        const globalAssign = assignments.find(a => !a.employee_id) || null;
+        const [allEmployees] = await c.query("SELECT id, full_name FROM profiles WHERE role = 'employee'");
+        const empName = new Map(allEmployees.map(e => [String(e.id), e.full_name]));
+        const assignMeta = new Map();
+        for (const a of assignments) if (a.employee_id) assignMeta.set(String(a.employee_id), a);
+        const targetIds = globalAssign
+            ? allEmployees.map(e => String(e.id))
+            : [...new Set(assignments.filter(a => a.employee_id).map(a => String(a.employee_id)))];
+
+        const [progress] = await c.query('SELECT lesson_id, employee_id, completed_at FROM training_lesson_progress WHERE course_id = ?', [courseId]);
+        const [comps] = await c.query('SELECT employee_id, quiz_score, passed, completed_at FROM training_course_completions WHERE course_id = ?', [courseId]);
+        const compMap = new Map(comps.map(x => [String(x.employee_id), x]));
+        const progByEmp = new Map();
+        for (const p of progress) {
+            const k = String(p.employee_id);
+            if (!progByEmp.has(k)) progByEmp.set(k, new Map());
+            progByEmp.get(k).set(String(p.lesson_id), p.completed_at);
+        }
+
+        const employees = targetIds.map(id => {
+            const lp = progByEmp.get(id) || new Map();
+            const lessonRows = lessons.map(l => ({ lesson_id: l.id, title: l.title, completed_at: lp.get(String(l.id)) || null }));
+            const doneCount = lessonRows.filter(l => l.completed_at).length;
+            const comp = compMap.get(id) || null;
+            const meta = globalAssign ? (assignMeta.get(id) || globalAssign) : assignMeta.get(id);
+            let lastActivity = null;
+            for (const l of lessonRows) if (l.completed_at && (!lastActivity || new Date(l.completed_at) > new Date(lastActivity))) lastActivity = l.completed_at;
+            if (comp?.completed_at && (!lastActivity || new Date(comp.completed_at) > new Date(lastActivity))) lastActivity = comp.completed_at;
+            let firstActivity = null;
+            for (const l of lessonRows) if (l.completed_at && (!firstActivity || new Date(l.completed_at) < new Date(firstActivity))) firstActivity = l.completed_at;
+            return {
+                employee_id: id, name: empName.get(id) || 'Unknown',
+                assigned_at: meta?.created_at || null, due_date: meta?.due_date || null,
+                lessons: lessonRows, done_count: doneCount, completion: comp,
+                first_activity: firstActivity, last_activity: lastActivity,
+            };
+        });
+        employees.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        res.json({ course, lessons, quizCount, employees });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
 // Employee: my visible courses with progress
 app.get('/api/training/my', authenticateToken, async (req, res) => {
     const emp = req.user.id;
@@ -3371,12 +3425,13 @@ app.get('/api/training/course/:id', authenticateToken, async (req, res) => {
         if (!course) return res.status(404).json({ error: 'Course not found' });
         const [lessons] = await c.query('SELECT * FROM training_lessons WHERE course_id = ? ORDER BY position, created_at', [req.params.id]);
         const [quiz] = await c.query('SELECT id, question, options, position FROM training_quiz WHERE course_id = ? ORDER BY position', [req.params.id]);
-        const [done] = await c.query('SELECT lesson_id FROM training_lesson_progress WHERE course_id = ? AND employee_id = ?', [req.params.id, emp]);
+        const [done] = await c.query('SELECT lesson_id, completed_at FROM training_lesson_progress WHERE course_id = ? AND employee_id = ?', [req.params.id, emp]);
         const [comp] = await c.query('SELECT * FROM training_course_completions WHERE course_id = ? AND employee_id = ? LIMIT 1', [req.params.id, emp]);
         res.json({
             course, lessons,
             quiz: quiz.map(q => ({ id: q.id, question: q.question, options: safeJsonParse(q.options) || [] })),
             doneLessonIds: done.map(d => d.lesson_id),
+            doneLessons: done,
             completion: comp[0] || null,
         });
     } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
