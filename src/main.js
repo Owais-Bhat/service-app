@@ -6,6 +6,7 @@ import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, 
 import { renderNoticesTab } from './pages/admin-notices.js';
 import { renderDeviceTrackingTab } from './pages/device-tracking-admin.js';
 import { renderFinanceReportTab } from './pages/finance.js';
+import { renderNotificationsTab } from './pages/notifications.js';
 import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
 import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
 import { renderPopupAdsTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab, mountEmployeePopupAds } from './pages/media-training.js';
@@ -72,6 +73,7 @@ function getNavItems(role) {
   if (role === 'employee') {
     const items = [...common,
       { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
+      { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
       { type: 'section', label: 'Work' },
       { id: 'my-attendance', icon: ICONS.clock, label: 'Attendance Records' },
       { id: 'my-leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
@@ -96,6 +98,7 @@ function getNavItems(role) {
   }
   return [...common,
     { id: 'all-tickets', icon: ICONS.ticket, label: 'All Tickets' },
+    { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
     { type: 'section', label: 'Operations' },
     { id: 'attendance', icon: ICONS.clock, label: 'Attendance' },
     { id: 'inquiries', icon: ICONS.inbox, label: 'Service Requests' },
@@ -148,6 +151,7 @@ function getPageRenderer(role, page) {
       estimator: renderEmployeeEstimatorTab,
       'service-pricing': renderEmployeePricingTab,
       'device-followup': renderEmployeeFollowUp,
+      notifications: renderNotificationsTab,
       profile: renderProfile
     },
     admin: {
@@ -159,7 +163,7 @@ function getPageRenderer(role, page) {
       'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
       ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
       'auto-assignment': renderAutoAssignmentTab, 'device-tracking': renderDeviceTrackingTab,
-      finance: renderFinanceReportTab,
+      finance: renderFinanceReportTab, notifications: renderNotificationsTab,
     }
   };
   return (map[role] || map.admin)[page];

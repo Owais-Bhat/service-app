@@ -861,6 +861,21 @@ const requiredTables = [
         data LONGBLOB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
+    // Persistent in-app notification feed (bell + notifications page).
+    `CREATE TABLE IF NOT EXISTS notifications (
+        id VARCHAR(36) PRIMARY KEY,
+        audience_role VARCHAR(20) DEFAULT NULL,
+        audience_user VARCHAR(36) DEFAULT NULL,
+        subject VARCHAR(50),
+        title VARCHAR(200),
+        body TEXT,
+        data TEXT,
+        read_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_notif_role (audience_role),
+        INDEX idx_notif_user (audience_user),
+        INDEX idx_notif_created (created_at)
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -1001,6 +1016,29 @@ function broadcastChange(type, table, row) {
     const event = { kind: 'db', type, table, row: row || null, ts: Date.now() };
     pushEvent('all', event);
     sseClients.forEach(c => sseSend(c, event));
+}
+
+// Persist a notification to the feed AND broadcast it live. Acquires its own
+// connection so it is safe to call from anywhere (even after the caller released
+// its connection). Use this instead of broadcastNotify when the notification
+// should also appear in the bell / notifications page.
+async function recordNotification(payload) {
+    const audience = payload.audience || 'all';
+    const role = (typeof audience === 'object' && audience.role) || null;
+    const userId = (typeof audience === 'object' && audience.userId) || null;
+    let conn;
+    try {
+        conn = await getConn();
+        await conn.query(
+            'INSERT INTO notifications (id, audience_role, audience_user, subject, title, body, data) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [uuidv4(), role, userId, payload.subject || null, payload.title || null, payload.body || null, payload.data ? JSON.stringify(payload.data) : null]
+        );
+    } catch (e) {
+        console.error('[notif] persist failed:', e.message);
+    } finally {
+        if (conn) conn.release();
+    }
+    broadcastNotify(payload);
 }
 
 // Broadcast a domain-specific notification (payment received, new assignment, etc.)
@@ -1147,6 +1185,10 @@ async function autoAssignUnassignedInquiries() {
 }
 
 async function markTicketPaid(connection, ticket_no, amountPaise = null) {
+    const [priorRows] = await connection.execute(
+        'SELECT payment_status FROM inquiries WHERE ticket_no = ? LIMIT 1', [ticket_no]
+    );
+    const alreadyPaid = priorRows[0]?.payment_status === 'paid';
     await connection.execute(
         `UPDATE inquiries
             SET payment_status = 'paid',
@@ -1175,21 +1217,24 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
 
     const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
-    broadcastNotify({
-        subject: 'payment_received',
-        title: '💰 Payment Received',
-        body: `${inqRow?.full_name || 'Client'} paid ₹${amount} for ticket ${ticket_no}`,
-        audience: { role: 'admin' },
-        data: { ticket_no, inquiry_id: inqRow?.id, amount },
-    });
-    if (inqRow?.assigned_employee_id) {
-        broadcastNotify({
+    if (!alreadyPaid) {
+        const method = (inqRow?.payment_method || '').toLowerCase().includes('cash') ? 'Cash' : 'Online';
+        await recordNotification({
             subject: 'payment_received',
-            title: '💰 Payment Received',
-            body: `Your ticket ${ticket_no} just got paid! Task auto-resolved.`,
-            audience: { userId: inqRow.assigned_employee_id },
-            data: { ticket_no, inquiry_id: inqRow.id, amount },
+            title: `💰 Payment Received (${method})`,
+            body: `${inqRow?.full_name || 'Client'} paid ₹${amount} via ${method} for ticket ${ticket_no}`,
+            audience: { role: 'admin' },
+            data: { ticket_no, inquiry_id: inqRow?.id, amount, method },
         });
+        if (inqRow?.assigned_employee_id) {
+            await recordNotification({
+                subject: 'payment_received',
+                title: '💰 Payment Received',
+                body: `Your ticket ${ticket_no} just got paid! Task auto-resolved.`,
+                audience: { userId: inqRow.assigned_employee_id },
+                data: { ticket_no, inquiry_id: inqRow.id, amount },
+            });
+        }
     }
 
     // SMS → client: payment confirmation with amount, ticket no, bill no
@@ -2755,7 +2800,7 @@ app.post('/api/ai/finance', authenticateToken, async (req, res) => {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) return res.status(400).json({ error: 'OPENROUTER_API_KEY is not set on the server.' });
     const { from, to, question } = req.body || {};
-    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    const model = process.env.OPENROUTER_MODEL || 'openrouter/free';
     let connection;
     try {
         connection = await getConn();
@@ -2787,6 +2832,88 @@ app.post('/api/ai/finance', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('[ai/finance] error:', err);
         res.status(500).json({ error: err.message || 'AI finance request failed' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// ── NOTIFICATIONS FEED ──────────────────────────────────────────
+// Notifications visible to a user: addressed to them, to their role, or broadcast.
+function notifAudienceClause(user) {
+    return {
+        sql: '(audience_user = ? OR audience_role = ? OR (audience_role IS NULL AND audience_user IS NULL))',
+        params: [user.id, user.role],
+    };
+}
+const safeJsonParse = (s) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
+
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const a = notifAudienceClause(req.user);
+        const [rows] = await connection.query(
+            `SELECT id, subject, title, body, data, read_at, created_at
+               FROM notifications WHERE ${a.sql}
+              ORDER BY created_at DESC LIMIT 100`,
+            a.params
+        );
+        const items = rows.map(r => ({ ...r, data: safeJsonParse(r.data) }));
+        res.json({ items, unread: items.filter(r => !r.read_at).length });
+    } catch (err) {
+        console.error('[notif] list error:', err);
+        res.status(500).json({ error: err.message || 'Could not load notifications' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/notifications/unread-count', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const a = notifAudienceClause(req.user);
+        const [rows] = await connection.query(
+            `SELECT COUNT(*) AS cnt FROM notifications WHERE read_at IS NULL AND ${a.sql}`,
+            a.params
+        );
+        res.json({ unread: Number(rows[0]?.cnt || 0) });
+    } catch {
+        res.json({ unread: 0 });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const a = notifAudienceClause(req.user);
+        await connection.query(
+            `UPDATE notifications SET read_at = NOW() WHERE id = ? AND read_at IS NULL AND ${a.sql}`,
+            [req.params.id, ...a.params]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/notifications/read-all', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const a = notifAudienceClause(req.user);
+        await connection.query(
+            `UPDATE notifications SET read_at = NOW() WHERE read_at IS NULL AND ${a.sql}`,
+            a.params
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     } finally {
         if (connection) connection.release();
     }
@@ -3342,6 +3469,20 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         // Trigger notification SMS based on what changed in the inquiry.
         if (table === 'inquiries' && updatedRows.length > 0) {
             const row = updatedRows[0];
+
+            // Manual / cash "Mark Paid" doesn't go through markTicketPaid, so raise
+            // the in-app admin notification here too.
+            if (data.payment_status === 'paid') {
+                const payAmount = row.bill_total || row.bill_amount || 0;
+                const method = (data.payment_method || row.payment_method || '').toLowerCase().includes('cash') ? 'Cash' : 'Online';
+                recordNotification({
+                    subject: 'payment_received',
+                    title: `💰 Payment Received (${method})`,
+                    body: `${row.full_name || 'Client'} paid ₹${Math.round(Number(payAmount) || 0)} via ${method} for ticket ${row.ticket_no || ''}`,
+                    audience: { role: 'admin' },
+                    data: { ticket_no: row.ticket_no, inquiry_id: row.id, amount: Math.round(Number(payAmount) || 0), method },
+                }).catch(() => {});
+            }
 
             // Any manual/admin/cash payment completion should also notify the client.
             // Template variables: {customer_name} {amount} {ticket_no} {bill_no} {feedback_link}
@@ -3968,15 +4109,15 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
 
                 const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
-                broadcastNotify({
+                await recordNotification({
                     subject: 'payment_received',
-                    title: '💰 Payment Received',
-                    body: `${inqRow?.full_name || 'Client'} paid ₹${amount} for ticket ${ticket_no}`,
+                    title: '💰 Payment Received (Online)',
+                    body: `${inqRow?.full_name || 'Client'} paid ₹${amount} via Online for ticket ${ticket_no}`,
                     audience: { role: 'admin' },
-                    data: { ticket_no, inquiry_id: inqRow?.id, amount },
+                    data: { ticket_no, inquiry_id: inqRow?.id, amount, method: 'Online' },
                 });
                 if (inqRow?.assigned_employee_id) {
-                    broadcastNotify({
+                    await recordNotification({
                         subject: 'payment_received',
                         title: '💰 Payment Received',
                         body: `Your ticket ${ticket_no} just got paid! Task auto-resolved.`,

@@ -1708,6 +1708,56 @@ tr:hover td {
   transform: translateX(20px);
 }
 
+/* ── Notification bell + dropdown ───────────────────────────── */
+#topbar-actions { display: flex; align-items: center; gap: 8px; }
+.notif-bell-wrap { position: relative; display: inline-flex; }
+#notif-bell { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: -2px; right: -2px;
+  min-width: 17px; height: 17px;
+  padding: 0 4px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 0.65rem; font-weight: 800;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 340px; max-width: 86vw;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  z-index: 1000;
+  overflow: hidden;
+}
+.notif-head, .notif-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.notif-foot { border-bottom: none; border-top: 1px solid var(--border); justify-content: center; }
+.notif-link {
+  background: none; border: none; cursor: pointer;
+  color: var(--primary); font-weight: 700; font-size: 0.8rem;
+}
+.notif-list { max-height: 360px; overflow-y: auto; }
+.notif-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.notif-item:hover { background: var(--bg-soft); }
+.notif-item.unread { background: rgba(16, 185, 129, 0.06); }
+.notif-item-title { font-weight: 700; font-size: 0.85rem; }
+.notif-item-body { font-size: 0.8rem; color: var(--text-soft); margin-top: 2px; }
+.notif-item-time { font-size: 0.7rem; color: var(--text-dim); margin-top: 4px; }
+.notif-empty { padding: 28px 14px; text-align: center; color: var(--text-dim); font-size: 0.85rem; }
+.ntf-row.unread { background: rgba(16, 185, 129, 0.05); }
+.ntf-row:hover { background: var(--bg-soft); }
+
 .badge-high {
   background: rgba(249, 115, 22, 0.12);
   color: #F97316;

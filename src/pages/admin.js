@@ -251,6 +251,8 @@ function matchesServiceReportFilters(
 function buildPaidUpdates(row, extra = {}) {
   const updates = {
     payment_status: "paid",
+    // Manual "Mark Paid" records a cash collection unless told otherwise.
+    payment_method: row?.payment_method || "cash",
     payment_received_at:
       row?.payment_received_at ||
       new Date().toISOString().slice(0, 19).replace("T", " "),
