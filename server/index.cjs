@@ -3171,6 +3171,30 @@ function youtubeId(input) {
     return m ? m[1] : '';
 }
 
+// Best-effort: find the top embeddable YouTube video for a query via the YouTube
+// Data API. Cached per-process to conserve the daily quota. Returns '' when no
+// YOUTUBE_API_KEY is configured or the lookup fails — the caller then falls back
+// to a plain YouTube search link card, so the feature degrades gracefully.
+const _ytSearchCache = new Map();
+async function youtubeSearchId(query) {
+    const key = String(query || '').trim().toLowerCase();
+    if (!key || !process.env.YOUTUBE_API_KEY) return '';
+    if (_ytSearchCache.has(key)) return _ytSearchCache.get(key);
+    try {
+        const url = 'https://www.googleapis.com/youtube/v3/search'
+            + '?part=id&type=video&maxResults=1&videoEmbeddable=true&safeSearch=strict'
+            + `&q=${encodeURIComponent(query)}&key=${process.env.YOUTUBE_API_KEY}`;
+        const r = await fetch(url);
+        const d = await r.json();
+        const id = d.items?.[0]?.id?.videoId || '';
+        _ytSearchCache.set(key, id);
+        return id;
+    } catch (e) {
+        console.error('[ai/assistant] youtube search failed:', e.message);
+        return '';
+    }
+}
+
 // Read the catalog fresh each request so admins can edit the JSON without a
 // server restart. Falls back to an empty list if the file is missing/invalid.
 function loadVideoCatalog() {
@@ -3255,17 +3279,27 @@ app.post('/api/ai/assistant', authenticateToken, async (req, res) => {
         }
 
         const byId = new Map(catalog.map(v => [v.id, v]));
-        const videos = videoIds
-            .map(id => byId.get(id))
-            .filter(Boolean)
-            .map(v => ({
+        const videos = [];
+        for (const id of videoIds) {
+            const v = byId.get(id);
+            if (!v) continue;
+            // Use the pasted video if present; otherwise auto-find a real
+            // embeddable one via the YouTube Data API (no-op without a key).
+            let ytId = v.ytId;
+            if (!ytId && v.search) {
+                let q = v.service;
+                try { q = new URL(v.search).searchParams.get('search_query') || v.service; } catch {}
+                ytId = await youtubeSearchId(q);
+            }
+            videos.push({
                 id: v.id,
                 title: v.service,
-                ytId: v.ytId,
-                url: v.ytId ? `https://www.youtube.com/watch?v=${v.ytId}` : '',
-                embed: v.ytId ? `https://www.youtube.com/embed/${v.ytId}` : '',
+                ytId,
+                url: ytId ? `https://www.youtube.com/watch?v=${ytId}` : '',
+                embed: ytId ? `https://www.youtube.com/embed/${ytId}` : '',
                 search: v.search || '',
-            }));
+            });
+        }
 
         res.json({ answer, videos, model });
     } catch (err) {
