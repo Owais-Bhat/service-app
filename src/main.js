@@ -253,14 +253,10 @@ function isFeedbackRoute() {
     || params.has('token');
 }
 
-async function loadCanAddService(userId) {
-  try {
-    const { data } = await supabase.from('profiles').select('can_add_service').eq('id', userId).single();
-    canAddService = data?.can_add_service === 1 || data?.can_add_service === true;
-  } catch {
-    canAddService = false;
-  }
-}
+// Read the "can add service" flag straight off the authenticated user object —
+// both /auth/signin and /auth/me already return it, so no extra round-trip is
+// needed on the login / boot critical path.
+const readCanAddService = (u) => (u?.can_add_service === 1 || u?.can_add_service === true);
 
 function showAuth() {
   renderAuth(
@@ -274,7 +270,7 @@ function showAuth() {
       }
       currentUser = user;
       currentRole = role;
-      if (role === 'employee') await loadCanAddService(user.id);
+      if (role === 'employee') canAddService = readCanAddService(user);
       navigate('dashboard');
     },
     () => goToLanding()
@@ -316,7 +312,7 @@ async function boot() {
         return;
       }
 
-      if (currentRole === 'employee') await loadCanAddService(currentUser.id);
+      if (currentRole === 'employee') canAddService = readCanAddService(currentUser);
       navigate('dashboard');
     } catch (err) {
       console.warn('[boot] dashboard load failed', err);
