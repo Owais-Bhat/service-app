@@ -17,12 +17,23 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
   const savedTheme = localStorage.getItem('theme') || 'light';
 
   app.innerHTML = `
-    <div class="portal-layout">
+    <div class="portal-layout" data-role="${role}">
+      <div class="portal-mesh" aria-hidden="true">
+        <span class="portal-mesh-1"></span>
+        <span class="portal-mesh-2"></span>
+        <span class="portal-mesh-3"></span>
+        <span class="portal-mesh-4"></span>
+      </div>
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-logo">
-          <img src="${LOGO}" alt="Networking Experts" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
-          <span class="logo-text" style="display:none">Networking Experts</span>
+          <div class="sidebar-logo-mark">
+            <img src="${LOGO}" alt="" onerror="this.style.display='none';this.parentElement.textContent='N'"/>
+          </div>
+          <span class="logo-text">
+            <b>NEST Portal</b>
+            <small>Networking Experts</small>
+          </span>
         </div>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
         <div class="sidebar-footer">
@@ -42,6 +53,10 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
           <button class="menu-toggle icon-btn" id="menu-toggle" aria-label="Toggle navigation">${ICONS.menu}</button>
           <div class="topbar-title" id="topbar-title"></div>
           <div id="topbar-actions">
+            <label class="topbar-search" for="portal-nav-search">
+              ${ICONS.search}
+              <input id="portal-nav-search" type="search" placeholder="Search menu..." autocomplete="off" />
+            </label>
             <div class="notif-bell-wrap">
               <button class="icon-btn" id="notif-bell" title="Notifications">
                 ${ICONS.bell}
@@ -57,6 +72,7 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
     </div>`;
 
   buildNav(navItems, activePage, onNav);
+  setupNavSearch();
   setupBell(onNav);
   mountAIAssistant(); // floating AI assistant — appears once across all portal pages
 
@@ -97,11 +113,40 @@ function buildNav(navItems, activePage, onNav) {
 
 function renderPage(pageContent, navItems, activePage) {
   const item = navItems.find(n => n.id === activePage);
-  document.getElementById('topbar-title').textContent = item?.label || '';
+  const title = item?.label || '';
+  const subtitle = activePage === 'dashboard'
+    ? 'Live overview of your operations'
+    : activePage === 'notifications'
+      ? 'Alerts, assignments and updates'
+      : activePage === 'profile'
+        ? 'Account details and preferences'
+        : 'NEST service portal';
+  document.getElementById('topbar-title').innerHTML = `<h1>${title}</h1><p>${subtitle}</p>`;
   const container = document.getElementById('page-content');
   container.innerHTML = '';
   if (typeof pageContent === 'function') pageContent(container);
   else container.innerHTML = pageContent || '';
+}
+
+function setupNavSearch() {
+  const input = document.getElementById('portal-nav-search');
+  const nav = document.getElementById('sidebar-nav');
+  if (!input || !nav) return;
+  input.addEventListener('input', () => {
+    const query = input.value.trim().toLowerCase();
+    nav.querySelectorAll('.nav-item').forEach(item => {
+      item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
+    });
+    nav.querySelectorAll('.nav-section').forEach(section => {
+      let next = section.nextElementSibling;
+      let hasVisibleItem = false;
+      while (next && !next.classList.contains('nav-section')) {
+        if (next.classList.contains('nav-item') && !next.hidden) hasVisibleItem = true;
+        next = next.nextElementSibling;
+      }
+      section.hidden = Boolean(query) && !hasVisibleItem;
+    });
+  });
 }
 
 // Notification bell: unread badge + dropdown of recent items, live-updated.
