@@ -35,6 +35,8 @@ const resendSmsOTP = (phone) => postPublicApi('/otp/resend', { phone });
 
 const AD_CACHE_KEY = 'nest_landing_ads_v2';
 const AD_CACHE_TTL_MS = 10 * 60 * 1000;
+const LANDING_CACHE_KEY = 'nest_landing_bootstrap_v1';
+const LANDING_CACHE_TTL_MS = 10 * 60 * 1000;
 
 function generateTicketNo() {
   // NE-YYMMDD-XXXX (4-digit random)
@@ -79,24 +81,6 @@ function slugify(s) {
   return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'option';
 }
 
-async function loadIssueOptionsFromPricing() {
-  try {
-    const { data, error } = await supabase.from('service_pricing').select('category');
-    if (error || !Array.isArray(data) || data.length === 0) return null;
-    const seen = new Map();
-    for (const r of data) {
-      const cat = (r?.category || '').trim();
-      if (!cat || cat.toLowerCase() === 'uncategorized') continue;
-      const key = slugify(cat);
-      if (!seen.has(key)) seen.set(key, { value: key, label: cat });
-    }
-    if (seen.size === 0) return null;
-    return [...seen.values(), OTHER_OPTION];
-  } catch {
-    return null;
-  }
-}
-
 function getCachedAds() {
   try {
     const cached = JSON.parse(localStorage.getItem(AD_CACHE_KEY) || 'null');
@@ -113,6 +97,24 @@ function cacheAds(ads) {
     localStorage.setItem(AD_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), ads }));
   } catch {
     // Storage can be disabled or full; ads still render from memory.
+  }
+}
+
+function getCachedLandingBootstrap() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(LANDING_CACHE_KEY) || 'null');
+    if (!cached || Date.now() - Number(cached.savedAt || 0) > LANDING_CACHE_TTL_MS) return null;
+    return cached.data || null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheLandingBootstrap(data) {
+  try {
+    localStorage.setItem(LANDING_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data }));
+  } catch {
+    // The public portal still works with defaults when storage is unavailable.
   }
 }
 
@@ -229,6 +231,7 @@ export function renderLandingPage(container, onPortalClick) {
     || pathFeedback
     || ''
   ).trim();
+  const cachedBootstrap = getCachedLandingBootstrap();
   const cachedAds = getCachedAds();
 
   const state = {
@@ -262,12 +265,15 @@ export function renderLandingPage(container, onPortalClick) {
     complaintLoading: false,
     complaintSubmitted: false,
     // Ads carousel state
-    ads: cachedAds,
-    adsLoading: cachedAds.length === 0,
-    popupAds: [],
+    ads: cachedBootstrap?.ads || cachedAds,
+    adsLoading: false,
+    popupAds: cachedBootstrap?.popupAds || [],
+    popupEnabled: cachedBootstrap?.popupEnabled !== false,
     adIndex: 0,
     _adTimer: null,
-    issueOptions: FALLBACK_ISSUE_OPTIONS,
+    issueOptions: Array.isArray(cachedBootstrap?.issueOptions) && cachedBootstrap.issueOptions.length
+      ? cachedBootstrap.issueOptions
+      : FALLBACK_ISSUE_OPTIONS,
     issueValue: '',
   };
 
@@ -512,15 +518,7 @@ export function renderLandingPage(container, onPortalClick) {
 
   async function maybeShowLandingPopup() {
     const item = state.popupAds.find(Boolean);
-    if (!item) return;
-
-    try {
-      const popupSettingsRes = await fetch(`${API_URL}/settings/popup`);
-      const popupSettings = await popupSettingsRes.json().catch(() => ({}));
-      if (popupSettings.enabled === false) return;
-    } catch (err) {
-      console.warn('Could not check popup settings:', err);
-    }
+    if (!item || state.popupEnabled === false) return;
 
     setTimeout(() => showPopupAd(item), 500);
   }
@@ -545,39 +543,50 @@ export function renderLandingPage(container, onPortalClick) {
     }
   }
 
-  async function loadAds() {
-    try {
-      const { data } = await supabase.from('ads')
-        .select('*')
-        .eq('active', 1)
-        .order('position', { ascending: true });
+  function filterAds(data) {
+    const now = Date.now();
+    const isMobileView = window.matchMedia('(max-width: 767px)').matches;
+    return (data || []).map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => {
+      if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
+      const target = a.device_target || 'both';
+      if (target === 'mobile' && !isMobileView) return false;
+      if (target === 'desktop' && isMobileView) return false;
+      if (a.starts_at && new Date(a.starts_at).getTime() > now) return false;
+      if (a.expires_at && new Date(a.expires_at).getTime() <= now) return false;
+      return true;
+    });
+  }
 
-      const now = new Date().getTime();
-      const isMobileView = window.matchMedia('(max-width: 767px)').matches;
-      const allAds = (data || []).map(a => ({ ...a, url: normalizeAdUrl(a.url) })).filter(a => {
-        if (!a.url || (a.kind !== 'image' && a.kind !== 'video')) return false;
-        const target = a.device_target || 'both';
-        if (target === 'mobile' && !isMobileView) return false;
-        if (target === 'desktop' && isMobileView) return false;
-        if (a.starts_at && new Date(a.starts_at).getTime() > now) return false;
-        if (a.expires_at && new Date(a.expires_at).getTime() <= now) return false;
-        return true;
-      });
+  async function loadLandingBootstrap() {
+    try {
+      const response = await fetch(`${API_URL}/landing/bootstrap`);
+      if (!response.ok) throw new Error(`Landing bootstrap failed (${response.status})`);
+      const data = await response.json();
+      const allAds = filterAds(data.ads);
       const ads = allAds.filter(a => (a.placement || 'landing') === 'landing');
       state.popupAds = allAds.filter(a => a.placement === 'popup_landing');
-
-      if (ads.length) {
-        await preloadAds(ads);
-        cacheAds(ads);
-        state.ads = ads;
-      }
+      state.popupEnabled = data.popupEnabled !== false;
+      const seen = new Map();
+      (data.categories || []).forEach(category => {
+        const label = String(category || '').trim();
+        if (!label) return;
+        const value = slugify(label);
+        if (!seen.has(value)) seen.set(value, { value, label });
+      });
+      state.issueOptions = seen.size ? [...seen.values(), OTHER_OPTION] : FALLBACK_ISSUE_OPTIONS;
+      state.ads = ads;
+      cacheAds(ads);
+      cacheLandingBootstrap({
+        ads,
+        popupAds: state.popupAds,
+        issueOptions: state.issueOptions,
+        popupEnabled: state.popupEnabled,
+      });
+      render();
+      preloadAds(ads).catch(() => {});
+      maybeShowLandingPopup();
     } catch (err) {
-      console.warn('Could not load ads:', err);
-    } finally {
-      state.adsLoading = false;
-      // Update carousel & show popup without full re-render
-      mountAdCarousel();
-      if (!state.isFeedbackPage) maybeShowLandingPopup();
+      console.warn('Could not refresh landing content:', err);
     }
   }
 
@@ -1291,15 +1300,6 @@ export function renderLandingPage(container, onPortalClick) {
     });
   }
 
-  async function loadIssueOptions() {
-    const loadedOptions = await loadIssueOptionsFromPricing();
-    state.issueOptions = loadedOptions || FALLBACK_ISSUE_OPTIONS;
-    if (state.issueValue && !state.issueOptions.some(o => o.value === state.issueValue)) {
-      state.issueValue = '';
-    }
-    render();
-  }
-
   function bindSuccess() {
     bind('#srf-copy-ticket', async () => {
       try {
@@ -1568,8 +1568,7 @@ export function renderLandingPage(container, onPortalClick) {
       state.feedbackLoading = false;
       state.trackResult = null;
       render();
-      loadIssueOptions();
-      loadAds();
+      loadLandingBootstrap();
     };
     bind('#srf-feedback-home', openPortal);
     bind('#srf-feedback-home-2', openPortal);
@@ -1702,8 +1701,7 @@ export function renderLandingPage(container, onPortalClick) {
 
   render();
   if (!state.isFeedbackPage) {
-    loadIssueOptions();
-    loadAds();
+    loadLandingBootstrap();
   }
 
   if (urlFeedback) {

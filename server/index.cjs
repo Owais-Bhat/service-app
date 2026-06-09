@@ -31,6 +31,72 @@ if (process.env.JWT_SECRET.length < 32) {
     process.exit(1);
 }
 
+// Optional shared cache. Redis is used when REDIS_URL is configured; the
+// in-process TTL map keeps the same code path fast on single-instance installs.
+let redisClient = null;
+let redisReady = null;
+try {
+    const { createClient } = require('redis');
+    if (process.env.REDIS_URL) {
+        redisClient = createClient({ url: process.env.REDIS_URL });
+        redisClient.on('error', err => console.warn('[cache] Redis error:', err.message));
+        redisReady = redisClient.connect()
+            .then(() => console.log('[cache] Redis connected'))
+            .catch(err => {
+                console.warn('[cache] Redis unavailable; using memory cache:', err.message);
+                redisClient = null;
+            });
+    }
+} catch {
+    console.warn('[cache] redis package unavailable; using memory cache');
+}
+const memoryCache = new Map();
+
+async function cacheGet(key) {
+    try {
+        if (redisReady) await redisReady;
+        if (redisClient?.isReady) {
+            const value = await redisClient.get(key);
+            if (value != null) return JSON.parse(value);
+        }
+    } catch (err) {
+        console.warn('[cache] Redis read failed:', err.message);
+    }
+    const entry = memoryCache.get(key);
+    if (!entry || entry.expiresAt <= Date.now()) {
+        memoryCache.delete(key);
+        return null;
+    }
+    return entry.value;
+}
+
+async function cacheSet(key, value, ttlSeconds) {
+    memoryCache.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    try {
+        if (redisReady) await redisReady;
+        if (redisClient?.isReady) {
+            await redisClient.set(key, JSON.stringify(value), { EX: ttlSeconds });
+        }
+    } catch (err) {
+        console.warn('[cache] Redis write failed:', err.message);
+    }
+}
+
+async function cacheDelete(key) {
+    memoryCache.delete(key);
+    try {
+        if (redisReady) await redisReady;
+        if (redisClient?.isReady) await redisClient.del(key);
+    } catch (err) {
+        console.warn('[cache] Redis delete failed:', err.message);
+    }
+}
+
+const LANDING_BOOTSTRAP_CACHE_KEY = 'nest:landing:bootstrap:v1';
+const invalidateLandingBootstrap = () => cacheDelete(LANDING_BOOTSTRAP_CACHE_KEY).catch(err => {
+    console.warn('[cache] landing invalidation failed:', err.message);
+});
+
 // Bills folder — stores generated invoice PDFs that we serve back as
 // public URLs so they can be sent via wa.me/<phone>?text=<bill-url>.
 const BILLS_DIR = path.join(__dirname, '..', 'bills');
@@ -505,6 +571,7 @@ async function saveAppSetting(key, value) {
     } finally {
         connection.release();
     }
+    if (key === 'popup_enabled') invalidateLandingBootstrap();
 }
 
 function generateRegistrationKey(role) {
@@ -2883,6 +2950,51 @@ app.post('/api/settings/registration-keys/regenerate', authenticateToken, async 
 });
 
 // Popup settings endpoints
+app.get('/api/landing/bootstrap', async (_, res) => {
+    try {
+        const cached = await cacheGet(LANDING_BOOTSTRAP_CACHE_KEY);
+        if (cached) {
+            res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+            res.setHeader('X-Cache', 'HIT');
+            return res.json(cached);
+        }
+
+        const connection = await getConn();
+        try {
+            const [[ads], [categories], [popupRows]] = await Promise.all([
+                connection.query('SELECT * FROM ads WHERE active = 1 ORDER BY position ASC'),
+                connection.query(
+                    `SELECT DISTINCT category
+                       FROM service_pricing
+                      WHERE category IS NOT NULL
+                        AND TRIM(category) <> ''
+                        AND LOWER(TRIM(category)) <> 'uncategorized'
+                      ORDER BY category ASC`
+                ),
+                connection.execute(
+                    'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
+                    ['popup_enabled']
+                ),
+            ]);
+            const payload = {
+                ads,
+                categories: categories.map(row => row.category).filter(Boolean),
+                popupEnabled: popupRows.length === 0
+                    || (popupRows[0].setting_value !== '0' && popupRows[0].setting_value !== 'false'),
+            };
+            await cacheSet(LANDING_BOOTSTRAP_CACHE_KEY, payload, 300);
+            res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+            res.setHeader('X-Cache', 'MISS');
+            return res.json(payload);
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error('Landing bootstrap load error:', error);
+        res.status(500).json({ error: 'Could not load landing content' });
+    }
+});
+
 app.get('/api/settings/popup', async (_, res) => {
     try {
         const connection = await getConn();
@@ -4246,6 +4358,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         connection.release();
         updatedRows.forEach(row => broadcastChange('UPDATE', table, row));
         if (updatedRows.length === 0) broadcastChange('UPDATE', table, { ...data, _filter: eqs });
+        if (table === 'ads' || table === 'service_pricing') invalidateLandingBootstrap();
 
         // Trigger notification SMS based on what changed in the inquiry.
         if (table === 'inquiries' && updatedRows.length > 0) {
@@ -4444,6 +4557,7 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
         connection.release();
 
         deletedRows.forEach(row => broadcastChange('DELETE', table, row));
+        if (table === 'ads' || table === 'service_pricing') invalidateLandingBootstrap();
         res.json({ success: true, affectedRows: result.affectedRows || 0 });
     } catch (error) {
         console.error('Error deleting data:', error);
@@ -4561,6 +4675,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
         }
         connection.release();
         rowsToInsert.forEach(row => broadcastChange('INSERT', table, row));
+        if (table === 'ads' || table === 'service_pricing') invalidateLandingBootstrap();
         if (table === 'inquiries') {
             rowsToInsert.forEach(inquiry => {
                 broadcastNotify({
