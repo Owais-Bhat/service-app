@@ -18,3 +18,14 @@ test('new SMS feedback links use the explicit feedback route', () => {
     'new feedback links should use /feedback?token=<token>'
   );
 });
+
+test('payment notifications never substitute the landing page for a missing feedback token', () => {
+  assert.doesNotMatch(
+    serverSource,
+    /feedbackToken\s*\?\s*feedbackLinkFromToken\([^;]+:\s*publicBaseUrl/,
+    'a missing token must not produce a homepage link'
+  );
+  assert.match(serverSource, /const becamePaid = data\.payment_status === 'paid'/, 'manual payments should detect the first paid transition');
+  assert.match(serverSource, /if \(!alreadyPaid && inqRow\?\.phone\)/, 'gateway payments should send feedback only once');
+  assert.match(serverSource, /const alreadyPaid = priorRows\[0\]\?\.payment_status === 'paid'/, 'webhook retries should detect an existing payment');
+});

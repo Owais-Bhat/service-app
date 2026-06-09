@@ -2,17 +2,9 @@ import './style.css';
 import { supabase, getUserRole, signOut, onNotification } from './supabase.js';
 import { renderAuth } from './auth.js';
 import { renderLayout } from './layout.js';
-import { renderAdminDashboard, renderAllTickets, renderUsers, renderAttendance, renderInquiries, renderContacts, renderPaymentsTab, renderBillsTab, renderCashCollectionsTab, renderDeviceTypesTab, renderLeaveRequests, renderEODReports, renderPricingTab, renderSalaryOverview, renderFeedbackTab, renderComplaintsTab, renderAdsTab, renderSettingsTab, renderAutoAssignmentTab } from './pages/admin.js';
-import { renderNoticesTab } from './pages/admin-notices.js';
-import { renderDeviceTrackingTab } from './pages/device-tracking-admin.js';
-import { renderFinanceReportTab } from './pages/finance.js';
-import { renderNotificationsTab } from './pages/notifications.js';
-import { renderTrainingCoursesAdmin, renderEmployeeCourses } from './pages/training.js';
-import { renderEmployeeCollections, renderAdminCollections } from './pages/collections.js';
-import { renderDiscountsTab, renderDiscountRequestsTab } from './pages/discounts.js';
-import { renderPopupAdsTab, renderTrainingAdminTab, renderEmployeeTrainingTab, renderAIReportTab, mountEmployeePopupAds } from './pages/media-training.js';
-import { renderEmployeeDashboard, renderEmployeeAttendanceRecords, renderEmployeeLeaveRequests, renderEmployeeEODReports, renderEmployeeSalary, renderEmployeeCash, renderEmployeeTasks, renderEmployeeLeaderboard, renderEmployeeEstimatorTab, renderEmployeePricingTab, renderEmployeeFollowUp } from './pages/employee.js';
-import { renderProfile } from './pages/profile.js';
+// Page modules are loaded on demand (see PAGE_LOADERS below) so the initial
+// bundle is just the shell + auth + landing instead of every admin/employee
+// screen at once. Each role only downloads the code it actually opens.
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
 import { initPush } from './push.js';
@@ -138,41 +130,87 @@ function getNavItems(role) {
   ];
 }
 
-// ── PAGE RENDERER ─────────────────────────────────────
+// ── PAGE RENDERER (lazy) ──────────────────────────────
+// Each entry dynamically imports its module the first time the page is opened,
+// so Vite splits admin/employee/secondary screens into separate chunks. The
+// shell renders instantly; only the chunk for the active page is downloaded.
+const PAGE_LOADERS = {
+  employee: {
+    dashboard: () => import('./pages/employee.js').then(m => m.renderEmployeeDashboard),
+    'all-tickets': () => import('./pages/employee.js').then(m => m.renderEmployeeTasks),
+    'my-attendance': () => import('./pages/employee.js').then(m => m.renderEmployeeAttendanceRecords),
+    'my-leaves': () => import('./pages/employee.js').then(m => m.renderEmployeeLeaveRequests),
+    'my-eod': () => import('./pages/employee.js').then(m => m.renderEmployeeEODReports),
+    'my-cash': () => import('./pages/employee.js').then(m => m.renderEmployeeCash),
+    'my-collections': () => import('./pages/collections.js').then(m => m.renderEmployeeCollections),
+    'my-salary': () => import('./pages/employee.js').then(m => m.renderEmployeeSalary),
+    leaderboard: () => import('./pages/employee.js').then(m => m.renderEmployeeLeaderboard),
+    'employee-training': () => import('./pages/media-training.js').then(m => m.renderEmployeeTrainingTab),
+    estimator: () => import('./pages/employee.js').then(m => m.renderEmployeeEstimatorTab),
+    'service-pricing': () => import('./pages/employee.js').then(m => m.renderEmployeePricingTab),
+    'device-followup': () => import('./pages/employee.js').then(m => m.renderEmployeeFollowUp),
+    notifications: () => import('./pages/notifications.js').then(m => m.renderNotificationsTab),
+    'my-training-courses': () => import('./pages/training.js').then(m => m.renderEmployeeCourses),
+    profile: () => import('./pages/profile.js').then(m => m.renderProfile),
+  },
+  admin: {
+    dashboard: () => import('./pages/admin.js').then(m => m.renderAdminDashboard),
+    'all-tickets': () => import('./pages/admin.js').then(m => m.renderAllTickets),
+    attendance: () => import('./pages/admin.js').then(m => m.renderAttendance),
+    inquiries: () => import('./pages/admin.js').then(m => m.renderInquiries),
+    contacts: () => import('./pages/admin.js').then(m => m.renderContacts),
+    users: () => import('./pages/admin.js').then(m => m.renderUsers),
+    profile: () => import('./pages/profile.js').then(m => m.renderProfile),
+    payments: () => import('./pages/admin.js').then(m => m.renderPaymentsTab),
+    bills: () => import('./pages/admin.js').then(m => m.renderBillsTab),
+    cash: () => import('./pages/admin.js').then(m => m.renderCashCollectionsTab),
+    salary: () => import('./pages/admin.js').then(m => m.renderSalaryOverview),
+    leaves: () => import('./pages/admin.js').then(m => m.renderLeaveRequests),
+    eod: () => import('./pages/admin.js').then(m => m.renderEODReports),
+    pricing: () => import('./pages/admin.js').then(m => m.renderPricingTab),
+    collections: () => import('./pages/collections.js').then(m => m.renderAdminCollections),
+    discounts: () => import('./pages/discounts.js').then(m => m.renderDiscountsTab),
+    'discount-details': () => import('./pages/discounts.js').then(m => m.renderDiscountRequestsTab),
+    'popup-ads': () => import('./pages/media-training.js').then(m => m.renderPopupAdsTab),
+    'training-admin': () => import('./pages/media-training.js').then(m => m.renderTrainingAdminTab),
+    'ai-report': () => import('./pages/media-training.js').then(m => m.renderAIReportTab),
+    'device-types': () => import('./pages/admin.js').then(m => m.renderDeviceTypesTab),
+    feedback: () => import('./pages/admin.js').then(m => m.renderFeedbackTab),
+    complaints: () => import('./pages/admin.js').then(m => m.renderComplaintsTab),
+    ads: () => import('./pages/admin.js').then(m => m.renderAdsTab),
+    notices: () => import('./pages/admin-notices.js').then(m => m.renderNoticesTab),
+    settings: () => import('./pages/admin.js').then(m => m.renderSettingsTab),
+    'auto-assignment': () => import('./pages/admin.js').then(m => m.renderAutoAssignmentTab),
+    'device-tracking': () => import('./pages/device-tracking-admin.js').then(m => m.renderDeviceTrackingTab),
+    finance: () => import('./pages/finance.js').then(m => m.renderFinanceReportTab),
+    notifications: () => import('./pages/notifications.js').then(m => m.renderNotificationsTab),
+    'training-courses': () => import('./pages/training.js').then(m => m.renderTrainingCoursesAdmin),
+  },
+};
+
 function getPageRenderer(role, page) {
-  const map = {
-    employee: {
-      dashboard: renderEmployeeDashboard,
-      'all-tickets': renderEmployeeTasks,
-      'my-attendance': renderEmployeeAttendanceRecords,
-      'my-leaves': renderEmployeeLeaveRequests,
-      'my-eod': renderEmployeeEODReports,
-      'my-cash': renderEmployeeCash,
-      'my-collections': renderEmployeeCollections,
-      'my-salary': renderEmployeeSalary,
-      leaderboard: renderEmployeeLeaderboard,
-      'employee-training': renderEmployeeTrainingTab,
-      estimator: renderEmployeeEstimatorTab,
-      'service-pricing': renderEmployeePricingTab,
-      'device-followup': renderEmployeeFollowUp,
-      notifications: renderNotificationsTab,
-      'my-training-courses': renderEmployeeCourses,
-      profile: renderProfile
-    },
-    admin: {
-      dashboard: renderAdminDashboard, 'all-tickets': renderAllTickets, attendance: renderAttendance,
-      inquiries: renderInquiries, contacts: renderContacts, users: renderUsers, profile: renderProfile,
-      payments: renderPaymentsTab, bills: renderBillsTab, cash: renderCashCollectionsTab, salary: renderSalaryOverview, leaves: renderLeaveRequests, eod: renderEODReports, pricing: renderPricingTab,
-      collections: renderAdminCollections, discounts: renderDiscountsTab, 'discount-details': renderDiscountRequestsTab,
-      'popup-ads': renderPopupAdsTab, 'training-admin': renderTrainingAdminTab, 'ai-report': renderAIReportTab,
-      'device-types': renderDeviceTypesTab, feedback: renderFeedbackTab, complaints: renderComplaintsTab,
-      ads: renderAdsTab, notices: renderNoticesTab, settings: renderSettingsTab,
-      'auto-assignment': renderAutoAssignmentTab, 'device-tracking': renderDeviceTrackingTab,
-      finance: renderFinanceReportTab, notifications: renderNotificationsTab,
-      'training-courses': renderTrainingCoursesAdmin,
-    }
+  const loader = (PAGE_LOADERS[role] || PAGE_LOADERS.admin)[page];
+  if (!loader) return null;
+  // Returns a sync render fn (so renderLayout stays sync): it paints a spinner,
+  // lazy-loads the page module, then renders — unless the user already navigated
+  // elsewhere while the chunk was downloading.
+  return (container) => {
+    const wanted = page;
+    container.innerHTML = `<div class="loading-screen"><div class="spinner"></div></div>`;
+    loader()
+      .then((fn) => {
+        if (activePage !== wanted) return;
+        if (typeof fn === 'function') fn(container);
+        else container.innerHTML = '';
+      })
+      .catch((err) => {
+        console.error('[page] failed to load', page, err);
+        if (activePage !== wanted) return;
+        container.innerHTML = `<div class="card" style="padding:28px;text-align:center;"><p style="color:var(--danger);font-weight:600;margin:0 0 10px;">Couldn't load this page.</p><button class="btn btn-secondary" id="page-reload">Reload</button></div>`;
+        const btn = container.querySelector('#page-reload');
+        if (btn) btn.onclick = () => location.reload();
+      });
   };
-  return (map[role] || map.admin)[page];
 }
 
 let _notifyUnsub = null;
@@ -218,7 +256,9 @@ function navigate(page, opts = {}) {
     onNav: navigate, pageContent: renderer || (() => {})
   });
   startGlobalNotifications();
-  if (currentRole === 'employee') mountEmployeePopupAds();
+  if (currentRole === 'employee') {
+    import('./pages/media-training.js').then(m => m.mountEmployeePopupAds()).catch(() => {});
+  }
 }
 
 // Phone/browser back button: close an open popup first, otherwise go to the

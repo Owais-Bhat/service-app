@@ -1508,19 +1508,24 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
         }
     }
 
-    // SMS → client: payment confirmation with amount, ticket no, bill no
-    // Template variables: {customer_name} {amount} {ticket_no} {bill_no}
-    if (inqRow?.phone) {
+    // SMS → client: payment confirmation with a real one-time feedback URL.
+    // Do this only for the first paid transition so later updates cannot
+    // invalidate the token that was already sent to the customer.
+    if (!alreadyPaid && inqRow?.phone) {
         const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
         const feedbackToken = await createFeedbackToken(connection, inqRow.id);
-        const feedbackLink = feedbackToken ? feedbackLinkFromToken(feedbackToken) : publicBaseUrl();
-        smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
-            smsVar(inqRow.full_name, 'Customer', 60),
-            smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
-            smsVar(ticket_no, 'N/A', 20),
-            smsVar(inqRow.bill_no, 'N/A', 30),
-            smsVar(feedbackLink, publicBaseUrl(), 140),
-        ]);
+        if (feedbackToken) {
+            const feedbackLink = feedbackLinkFromToken(feedbackToken);
+            smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
+                smsVar(inqRow.full_name, 'Customer', 60),
+                smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
+                smsVar(ticket_no, 'N/A', 20),
+                smsVar(inqRow.bill_no, 'N/A', 30),
+                smsVar(feedbackLink, 'Feedback unavailable', 140),
+            ]);
+        } else {
+            console.warn(`[feedback] Payment SMS skipped for ${ticket_no}: no feedback token was created`);
+        }
     }
 
     return inqRow;
@@ -4181,6 +4186,16 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         });
         params.push(...whereParams);
 
+        let previousRows = [];
+        try {
+            const selectWhere = whereClauses.join(' AND ');
+            const [rows] = await connection.query(
+                `SELECT * FROM ?? WHERE ${selectWhere}`,
+                [table, ...whereParams]
+            );
+            previousRows = rows;
+        } catch { /* notification transition check remains best-effort */ }
+
         await connection.query(query, params);
 
         // Fetch the updated rows so subscribers can update their cached view.
@@ -4201,10 +4216,12 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
         // Trigger notification SMS based on what changed in the inquiry.
         if (table === 'inquiries' && updatedRows.length > 0) {
             const row = updatedRows[0];
+            const previousRow = previousRows.find(prev => prev.id === row.id);
+            const becamePaid = data.payment_status === 'paid' && previousRow?.payment_status !== 'paid';
 
             // Manual / cash "Mark Paid" doesn't go through markTicketPaid, so raise
             // the in-app admin notification here too.
-            if (data.payment_status === 'paid') {
+            if (becamePaid) {
                 const payAmount = row.bill_total || row.bill_amount || 0;
                 const method = (data.payment_method || row.payment_method || '').toLowerCase().includes('cash') ? 'Cash' : 'Online';
                 recordNotification({
@@ -4218,19 +4235,23 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
             // Any manual/admin/cash payment completion should also notify the client.
             // Template variables: {customer_name} {amount} {ticket_no} {bill_no} {feedback_link}
-            if (data.payment_status === 'paid' && row.phone) {
+            if (becamePaid && row.phone) {
                 const amount = row.bill_total || row.bill_amount || 0;
                 const smsConn = await getConn();
                 const feedbackToken = await createFeedbackToken(smsConn, row.id);
                 smsConn.release();
-                const feedbackLink = feedbackToken ? feedbackLinkFromToken(feedbackToken, req) : publicBaseUrl(req);
-                smsNotify(row.phone, 'SMS_TID_PAYMENT', [
-                    smsVar(row.full_name, 'Customer', 60),
-                    smsVar(`Rs.${Math.round(Number(amount) || 0)}`, 'Rs.0', 20),
-                    smsVar(row.ticket_no, 'N/A', 20),
-                    smsVar(row.bill_no, 'N/A', 30),
-                    smsVar(feedbackLink, publicBaseUrl(req), 140),
-                ]);
+                if (feedbackToken) {
+                    const feedbackLink = feedbackLinkFromToken(feedbackToken, req);
+                    smsNotify(row.phone, 'SMS_TID_PAYMENT', [
+                        smsVar(row.full_name, 'Customer', 60),
+                        smsVar(`Rs.${Math.round(Number(amount) || 0)}`, 'Rs.0', 20),
+                        smsVar(row.ticket_no, 'N/A', 20),
+                        smsVar(row.bill_no, 'N/A', 30),
+                        smsVar(feedbackLink, 'Feedback unavailable', 140),
+                    ]);
+                } else {
+                    console.warn(`[feedback] Payment SMS skipped for ${row.ticket_no || row.id}: no feedback token was created`);
+                }
             }
 
             // Admin assigns employee → SMS to employee with full job details
@@ -4809,6 +4830,12 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 connection = await getConn();
                 await connection.beginTransaction();
 
+                const [priorRows] = await connection.execute(
+                    'SELECT payment_status FROM inquiries WHERE ticket_no = ? LIMIT 1',
+                    [ticket_no]
+                );
+                const alreadyPaid = priorRows[0]?.payment_status === 'paid';
+
                 // Mark inquiry paid and auto-resolve (don't downgrade an already-closed ticket).
                 await connection.execute(
                     `UPDATE inquiries
@@ -4848,14 +4875,16 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
 
                 const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
-                await recordNotification({
-                    subject: 'payment_received',
-                    title: '💰 Payment Received (Online)',
-                    body: `${inqRow?.full_name || 'Client'} paid ₹${amount} via Online for ticket ${ticket_no}`,
-                    audience: { role: 'admin' },
-                    data: { ticket_no, inquiry_id: inqRow?.id, amount, method: 'Online' },
-                });
-                if (inqRow?.assigned_employee_id) {
+                if (!alreadyPaid) {
+                    await recordNotification({
+                        subject: 'payment_received',
+                        title: '💰 Payment Received (Online)',
+                        body: `${inqRow?.full_name || 'Client'} paid ₹${amount} via Online for ticket ${ticket_no}`,
+                        audience: { role: 'admin' },
+                        data: { ticket_no, inquiry_id: inqRow?.id, amount, method: 'Online' },
+                    });
+                }
+                if (!alreadyPaid && inqRow?.assigned_employee_id) {
                     await recordNotification({
                         subject: 'payment_received',
                         title: '💰 Payment Received',
@@ -4866,17 +4895,21 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                 }
 
                 // SMS → client: payment confirmation
-                if (inqRow?.phone) {
+                if (!alreadyPaid && inqRow?.phone) {
                     const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
                     const feedbackToken = await createFeedbackToken(connection, inqRow.id);
-                    const feedbackLink = feedbackToken ? feedbackLinkFromToken(feedbackToken, req) : publicBaseUrl(req);
-                    smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
-                        smsVar(inqRow.full_name, 'Customer', 60),
-                        smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
-                        smsVar(ticket_no, 'N/A', 20),
-                        smsVar(inqRow.bill_no, 'N/A', 30),
-                        smsVar(feedbackLink, publicBaseUrl(req), 140),
-                    ]);
+                    if (feedbackToken) {
+                        const feedbackLink = feedbackLinkFromToken(feedbackToken, req);
+                        smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
+                            smsVar(inqRow.full_name, 'Customer', 60),
+                            smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
+                            smsVar(ticket_no, 'N/A', 20),
+                            smsVar(inqRow.bill_no, 'N/A', 30),
+                            smsVar(feedbackLink, 'Feedback unavailable', 140),
+                        ]);
+                    } else {
+                        console.warn(`[feedback] Payment SMS skipped for ${ticket_no}: no feedback token was created`);
+                    }
                 }
             } catch (err) {
                 if (connection) { try { await connection.rollback(); } catch {} }
