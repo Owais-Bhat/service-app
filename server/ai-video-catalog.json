@@ -1,0 +1,1289 @@
+{
+  "_README": "Service -> solution video catalog for the AI Assistant, generated from build-video-catalog.cjs. Each entry is a main-category/sub-category topic. Claude matches a technician's problem to the best topic. The 'search' link opens real YouTube results for that topic; paste a specific YouTube link into 'youtube' to embed one video instead. Edit DATA in build-video-catalog.cjs and re-run to regenerate.",
+  "videos": [
+    {
+      "id": "cctv__camera-issues",
+      "service": "CCTV — Camera Issues",
+      "summary": "Troubleshooting and service for camera issues on CCTV systems. Covers: no video from camera, black screen, image rolling, flickering.",
+      "keywords": [
+        "cctv",
+        "camera",
+        "no video from camera",
+        "black screen",
+        "image rolling",
+        "flickering",
+        "blurry image",
+        "night vision not working",
+        "camera offline",
+        "color issue",
+        "PTZ not rotating",
+        "camera reset"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20no%20video%20from%20camera%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__dvr-nvr-issues",
+      "service": "CCTV — DVR/NVR Issues",
+      "summary": "Troubleshooting and service for dvr/nvr issues on CCTV systems. Covers: dvr not working, nvr dead, channel not showing, date and time.",
+      "keywords": [
+        "cctv",
+        "dvr/nvr",
+        "dvr not working",
+        "nvr dead",
+        "channel not showing",
+        "date and time",
+        "reboot repeatedly",
+        "overheating",
+        "hdmi vga output",
+        "password reset",
+        "firmware update",
+        "recording schedule"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20dvr%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__recording-storage-issues",
+      "service": "CCTV — Recording & Storage Issues",
+      "summary": "Troubleshooting and service for recording & storage issues on CCTV systems. Covers: hard disk error, hard disk not detecting, recording not working, storage full.",
+      "keywords": [
+        "cctv",
+        "recording",
+        "storage",
+        "hard disk error",
+        "hard disk not detecting",
+        "recording not working",
+        "storage full",
+        "hard disk formatting",
+        "playback not working",
+        "backup export to usb",
+        "recording days"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20hard%20disk%20error%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__network-ip-issues",
+      "service": "CCTV — Network/IP Issues",
+      "summary": "Troubleshooting and service for network/ip issues on CCTV systems. Covers: ip camera not connecting, ddns setup, dhcp, static ip.",
+      "keywords": [
+        "cctv",
+        "network/ip",
+        "ip camera not connecting",
+        "ddns setup",
+        "dhcp",
+        "static ip",
+        "port forwarding",
+        "p2p cloud setup",
+        "poe switch setup",
+        "onvif adding",
+        "ip conflict",
+        "router configuration"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20ip%20camera%20not%20connecting%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__ip-cctv-specific-issues",
+      "service": "CCTV — IP CCTV Specific Issues",
+      "summary": "Troubleshooting and service for ip cctv specific issues on CCTV systems. Covers: ip camera web access, poe camera no power, rtsp stream, onvif protocol.",
+      "keywords": [
+        "cctv",
+        "ip",
+        "specific",
+        "ip camera web access",
+        "poe camera no power",
+        "rtsp stream",
+        "onvif protocol",
+        "duplicate ip",
+        "firmware upgrade",
+        "camera activation",
+        "ntp time sync",
+        "not added to nvr"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20ip%20camera%20web%20access%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__mobile-app-remote-view-issues",
+      "service": "CCTV — Mobile App & Remote View Issues",
+      "summary": "Troubleshooting and service for mobile app & remote view issues on CCTV systems. Covers: device offline in app, live view not working on phone, app password reset, cloud binding.",
+      "keywords": [
+        "cctv",
+        "mobile",
+        "app",
+        "remote",
+        "view",
+        "device offline in app",
+        "live view not working on phone",
+        "app password reset",
+        "cloud binding",
+        "push notification",
+        "qr code scan",
+        "remote playback",
+        "motion alert",
+        "mobile app setup"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20device%20offline%20in%20app%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__analog-cctv-specific-issues",
+      "service": "CCTV — Analog CCTV Specific Issues",
+      "summary": "Troubleshooting and service for analog cctv specific issues on CCTV systems. Covers: analog camera no signal, dvr channel issue, ahd tvi cvi mismatch, bnc signal loss.",
+      "keywords": [
+        "cctv",
+        "analog",
+        "specific",
+        "analog camera no signal",
+        "dvr channel issue",
+        "ahd tvi cvi mismatch",
+        "bnc signal loss",
+        "coaxial signal loss",
+        "compatibility check"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20analog%20camera%20no%20signal%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__smart-detection-analytics",
+      "service": "CCTV — Smart Detection & Analytics",
+      "summary": "Troubleshooting and service for smart detection & analytics on CCTV systems. Covers: number plate camera, face detection, motion detection, line crossing.",
+      "keywords": [
+        "cctv",
+        "smart",
+        "detection",
+        "analytics",
+        "number plate camera",
+        "face detection",
+        "motion detection",
+        "line crossing",
+        "human detection",
+        "intrusion detection",
+        "privacy mask",
+        "alarm output"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20number%20plate%20camera%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__video-quality-issues",
+      "service": "CCTV — Video Quality Issues",
+      "summary": "Troubleshooting and service for video quality issues on CCTV systems. Covers: wrong resolution, frame rate, wdr blc, exposure brightness.",
+      "keywords": [
+        "cctv",
+        "video",
+        "quality",
+        "wrong resolution",
+        "frame rate",
+        "wdr blc",
+        "exposure brightness",
+        "video freezing",
+        "night video not clear",
+        "low quality",
+        "video lagging"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20wrong%20resolution%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__display-monitor-issues",
+      "service": "CCTV — Display/Monitor Issues",
+      "summary": "Troubleshooting and service for display/monitor issues on CCTV systems. Covers: no display on monitor, hdmi cable, vga cable, monitor resolution.",
+      "keywords": [
+        "cctv",
+        "display/monitor",
+        "no display on monitor",
+        "hdmi cable",
+        "vga cable",
+        "monitor resolution",
+        "live view layout",
+        "camera sequence",
+        "display flickering"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20no%20display%20on%20monitor%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__cable-connector-issues",
+      "service": "CCTV — Cable & Connector Issues",
+      "summary": "Troubleshooting and service for cable & connector issues on CCTV systems. Covers: rj45 crimping, bnc connector, dc connector, cable fault tracing.",
+      "keywords": [
+        "cctv",
+        "cable",
+        "connector",
+        "rj45 crimping",
+        "bnc connector",
+        "dc connector",
+        "cable fault tracing",
+        "short circuit",
+        "continuity testing",
+        "cat6 cable",
+        "coaxial cable"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20rj45%20crimping%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__power-issues",
+      "service": "CCTV — Power Issues",
+      "summary": "Troubleshooting and service for power issues on CCTV systems. Covers: fuse burnt, ups backup, power supply, power fluctuation.",
+      "keywords": [
+        "cctv",
+        "power",
+        "fuse burnt",
+        "ups backup",
+        "power supply",
+        "power fluctuation",
+        "poe switch power",
+        "camera no power",
+        "smps replacement",
+        "adapter replacement"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20fuse%20burnt%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__installation-services",
+      "service": "CCTV — Installation Services",
+      "summary": "Troubleshooting and service for installation services on CCTV systems. Covers: analog camera install, ip camera install, wifi camera, bullet camera.",
+      "keywords": [
+        "cctv",
+        "installation",
+        "analog camera install",
+        "ip camera install",
+        "wifi camera",
+        "bullet camera",
+        "dome camera",
+        "ptz install",
+        "4 8 16 32 channel setup",
+        "site survey",
+        "shifting reinstall"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20analog%20camera%20install%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__replacement-services",
+      "service": "CCTV — Replacement Services",
+      "summary": "Troubleshooting and service for replacement services on CCTV systems. Covers: camera replacement, monitor, poe switch, dvr replacement.",
+      "keywords": [
+        "cctv",
+        "replacement",
+        "camera replacement",
+        "monitor",
+        "poe switch",
+        "dvr replacement",
+        "nvr replacement",
+        "hard disk replacement",
+        "smps",
+        "router"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20camera%20replacement%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__maintenance-services",
+      "service": "CCTV — Maintenance Services",
+      "summary": "Troubleshooting and service for maintenance services on CCTV systems. Covers: dvr nvr cleaning, camera cleaning, health check, preventive maintenance.",
+      "keywords": [
+        "cctv",
+        "maintenance",
+        "dvr nvr cleaning",
+        "camera cleaning",
+        "health check",
+        "preventive maintenance",
+        "amc",
+        "system optimization",
+        "audit report"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20dvr%20nvr%20cleaning%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__accessory-services",
+      "service": "CCTV — Accessory Services",
+      "summary": "Troubleshooting and service for accessory services on CCTV systems. Covers: microphone install, audio recording, pole bracket, weatherproof box.",
+      "keywords": [
+        "cctv",
+        "accessory",
+        "microphone install",
+        "audio recording",
+        "pole bracket",
+        "weatherproof box",
+        "junction box",
+        "surge protector",
+        "rack arrangement"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20microphone%20install%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__security-user-access-issues",
+      "service": "CCTV — Security & User Access Issues",
+      "summary": "Troubleshooting and service for security & user access issues on CCTV systems. Covers: admin password reset, unauthorized access, user account, default password change.",
+      "keywords": [
+        "cctv",
+        "security",
+        "user",
+        "access",
+        "admin password reset",
+        "unauthorized access",
+        "user account",
+        "default password change",
+        "permission setup",
+        "device hardening",
+        "unbind from old account",
+        "account transfer"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20admin%20password%20reset%20how%20to%20fix"
+    },
+    {
+      "id": "cctv__troubleshooting-services",
+      "service": "CCTV — Troubleshooting Services",
+      "summary": "Troubleshooting and service for troubleshooting services on CCTV systems. Covers: site revisit, full system diagnosis, single camera diagnosis, multiple camera diagnosis.",
+      "keywords": [
+        "cctv",
+        "troubleshooting",
+        "site revisit",
+        "full system diagnosis",
+        "single camera diagnosis",
+        "multiple camera diagnosis",
+        "emergency visit",
+        "intermittent issue"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=CCTV%20site%20revisit%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__biometric-issues",
+      "service": "Access Control — Biometric Issues",
+      "summary": "Troubleshooting and service for biometric issues on Access Control systems. Covers: slow fingerprint response, device hang, fingerprint not detecting, face recognition not working.",
+      "keywords": [
+        "access control",
+        "biometric",
+        "slow fingerprint response",
+        "device hang",
+        "fingerprint not detecting",
+        "face recognition not working"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20slow%20fingerprint%20response%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__door-lock-issues",
+      "service": "Access Control — Door Lock Issues",
+      "summary": "Troubleshooting and service for door lock issues on Access Control systems. Covers: electric strike, door not unlocking, magnetic lock failure, door sensor.",
+      "keywords": [
+        "access control",
+        "door",
+        "lock",
+        "electric strike",
+        "door not unlocking",
+        "magnetic lock failure",
+        "door sensor"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20electric%20strike%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__rfid-card-issues",
+      "service": "Access Control — RFID/Card Issues",
+      "summary": "Troubleshooting and service for rfid/card issues on Access Control systems. Covers: rfid card not reading, card enrollment, access denied.",
+      "keywords": [
+        "access control",
+        "rfid/card",
+        "rfid card not reading",
+        "card enrollment",
+        "access denied"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20rfid%20card%20not%20reading%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__attendance-issues",
+      "service": "Access Control — Attendance Issues",
+      "summary": "Troubleshooting and service for attendance issues on Access Control systems. Covers: shift setup, wrong attendance timing, attendance not recording.",
+      "keywords": [
+        "access control",
+        "attendance",
+        "shift setup",
+        "wrong attendance timing",
+        "attendance not recording"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20shift%20setup%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__network-issues",
+      "service": "Access Control — Network Issues",
+      "summary": "Troubleshooting and service for network issues on Access Control systems. Covers: lan connectivity, ip configuration, remote access, wifi connection.",
+      "keywords": [
+        "access control",
+        "network",
+        "lan connectivity",
+        "ip configuration",
+        "remote access",
+        "wifi connection"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20lan%20connectivity%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__software-issues",
+      "service": "Access Control — Software Issues",
+      "summary": "Troubleshooting and service for software issues on Access Control systems. Covers: software installation, user database, attendance software, password reset.",
+      "keywords": [
+        "access control",
+        "software",
+        "software installation",
+        "user database",
+        "attendance software",
+        "password reset"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20software%20installation%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__display-issues",
+      "service": "Access Control — Display Issues",
+      "summary": "Troubleshooting and service for display issues on Access Control systems. Covers: display flickering, blank display, touch not working.",
+      "keywords": [
+        "access control",
+        "display",
+        "display flickering",
+        "blank display",
+        "touch not working"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20display%20flickering%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__power-issues",
+      "service": "Access Control — Power Issues",
+      "summary": "Troubleshooting and service for power issues on Access Control systems. Covers: battery backup, adaptor failure, device not powering on, fuse burnt.",
+      "keywords": [
+        "access control",
+        "power",
+        "battery backup",
+        "adaptor failure",
+        "device not powering on",
+        "fuse burnt"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20battery%20backup%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__installation-issues",
+      "service": "Access Control — Installation Issues",
+      "summary": "Troubleshooting and service for installation issues on Access Control systems. Covers: rfid reader install, standalone access control, magnetic lock install, biometric device install.",
+      "keywords": [
+        "access control",
+        "installation",
+        "rfid reader install",
+        "standalone access control",
+        "magnetic lock install",
+        "biometric device install"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20rfid%20reader%20install%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__maintenance-services",
+      "service": "Access Control — Maintenance Services",
+      "summary": "Troubleshooting and service for maintenance services on Access Control systems. Covers: preventive maintenance, device cleaning, amc, firmware update.",
+      "keywords": [
+        "access control",
+        "maintenance",
+        "preventive maintenance",
+        "device cleaning",
+        "amc",
+        "firmware update"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20preventive%20maintenance%20how%20to%20fix"
+    },
+    {
+      "id": "access-control__physical-damage",
+      "service": "Access Control — Physical Damage",
+      "summary": "Troubleshooting and service for physical damage on Access Control systems. Covers: water damage, loose wiring, broken device body.",
+      "keywords": [
+        "access control",
+        "physical",
+        "damage",
+        "water damage",
+        "loose wiring",
+        "broken device body"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Access%20Control%20water%20damage%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__calling-ringing-issues",
+      "service": "Video Door Phone — Calling & Ringing Issues",
+      "summary": "Troubleshooting and service for calling & ringing issues on Video Door Phone systems. Covers: call button not working, indoor monitor not ringing, delayed ringing, continuous ringing.",
+      "keywords": [
+        "video door phone",
+        "calling",
+        "ringing",
+        "call button not working",
+        "indoor monitor not ringing",
+        "delayed ringing",
+        "continuous ringing",
+        "wrong flat calling"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20call%20button%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__audio-issues",
+      "service": "Video Door Phone — Audio Issues",
+      "summary": "Troubleshooting and service for audio issues on Video Door Phone systems. Covers: no audio, one way audio, low voice, echo noise.",
+      "keywords": [
+        "video door phone",
+        "audio",
+        "no audio",
+        "one way audio",
+        "low voice",
+        "echo noise",
+        "mic not working",
+        "speaker issue",
+        "distorted voice"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20no%20audio%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__display-video-issues",
+      "service": "Video Door Phone — Display & Video Issues",
+      "summary": "Troubleshooting and service for display & video issues on Video Door Phone systems. Covers: no video from outdoor unit, blank screen, flickering display, black and white image.",
+      "keywords": [
+        "video door phone",
+        "display",
+        "video",
+        "no video from outdoor unit",
+        "blank screen",
+        "flickering display",
+        "black and white image",
+        "night vision failure",
+        "low video quality",
+        "camera blur"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20no%20video%20from%20outdoor%20unit%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__door-lock-access-issues",
+      "service": "Video Door Phone — Door Lock & Access Issues",
+      "summary": "Troubleshooting and service for door lock & access issues on Video Door Phone systems. Covers: door lock not opening, magnetic lock failure, relay issue, rfid card not detecting.",
+      "keywords": [
+        "video door phone",
+        "door",
+        "lock",
+        "access",
+        "door lock not opening",
+        "magnetic lock failure",
+        "relay issue",
+        "rfid card not detecting",
+        "exit switch not working",
+        "fingerprint failure",
+        "password unlock"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20door%20lock%20not%20opening%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__mobile-app-issues",
+      "service": "Video Door Phone — Mobile App Issues",
+      "summary": "Troubleshooting and service for mobile app issues on Video Door Phone systems. Covers: app not connecting, remote unlock not working, device not adding, qr setup failed.",
+      "keywords": [
+        "video door phone",
+        "mobile",
+        "app",
+        "app not connecting",
+        "remote unlock not working",
+        "device not adding",
+        "qr setup failed",
+        "push notification failure",
+        "live view failure",
+        "app crash"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20app%20not%20connecting%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__network-connectivity-issues",
+      "service": "Video Door Phone — Network & Connectivity Issues",
+      "summary": "Troubleshooting and service for network & connectivity issues on Video Door Phone systems. Covers: wifi not connecting, lan disconnected, ip conflict, offline device.",
+      "keywords": [
+        "video door phone",
+        "network",
+        "connectivity",
+        "wifi not connecting",
+        "lan disconnected",
+        "ip conflict",
+        "offline device",
+        "cloud p2p offline",
+        "poe issue",
+        "internet unavailable"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20wifi%20not%20connecting%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__intercom-issues",
+      "service": "Video Door Phone — Intercom Issues",
+      "summary": "Troubleshooting and service for intercom issues on Video Door Phone systems. Covers: indoor unit not calling, call drop, outdoor panel issue.",
+      "keywords": [
+        "video door phone",
+        "intercom",
+        "indoor unit not calling",
+        "call drop",
+        "outdoor panel issue"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20indoor%20unit%20not%20calling%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__power-issues",
+      "service": "Video Door Phone — Power Issues",
+      "summary": "Troubleshooting and service for power issues on Video Door Phone systems. Covers: no power, device dead, fuse burnt, adaptor smps failure.",
+      "keywords": [
+        "video door phone",
+        "power",
+        "no power",
+        "device dead",
+        "fuse burnt",
+        "adaptor smps failure",
+        "battery backup",
+        "short circuit",
+        "voltage drop"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20no%20power%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__camera-issues",
+      "service": "Video Door Phone — Camera Issues",
+      "summary": "Troubleshooting and service for camera issues on Video Door Phone systems. Covers: camera not working, night vision issue, blur video, camera water damage.",
+      "keywords": [
+        "video door phone",
+        "camera",
+        "camera not working",
+        "night vision issue",
+        "blur video",
+        "camera water damage"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20camera%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__software-configuration-issues",
+      "service": "Video Door Phone — Software & Configuration Issues",
+      "summary": "Troubleshooting and service for software & configuration issues on Video Door Phone systems. Covers: firmware corruption, sip registration, indoor monitor pairing, factory reset.",
+      "keywords": [
+        "video door phone",
+        "software",
+        "configuration",
+        "firmware corruption",
+        "sip registration",
+        "indoor monitor pairing",
+        "factory reset",
+        "configuration mismatch",
+        "time date reset",
+        "device hanging"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20firmware%20corruption%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__hardware-damage-issues",
+      "service": "Video Door Phone — Hardware Damage Issues",
+      "summary": "Troubleshooting and service for hardware damage issues on Video Door Phone systems. Covers: motherboard damaged, touch panel damaged, mic damaged, speaker failure.",
+      "keywords": [
+        "video door phone",
+        "hardware",
+        "damage",
+        "motherboard damaged",
+        "touch panel damaged",
+        "mic damaged",
+        "speaker failure",
+        "button damaged",
+        "relay burnt",
+        "camera module faulty"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20motherboard%20damaged%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__wiring-cable-issues",
+      "service": "Video Door Phone — Wiring & Cable Issues",
+      "summary": "Troubleshooting and service for wiring & cable issues on Video Door Phone systems. Covers: shorted cable, cable cut, loose connection, poor crimping.",
+      "keywords": [
+        "video door phone",
+        "wiring",
+        "cable",
+        "shorted cable",
+        "cable cut",
+        "loose connection",
+        "poor crimping",
+        "wrong wiring polarity",
+        "long distance signal loss",
+        "connector rust"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20shorted%20cable%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__installation-issues",
+      "service": "Video Door Phone — Installation Issues",
+      "summary": "Troubleshooting and service for installation issues on Video Door Phone systems. Covers: wrong power supply, improper lock alignment, improper cable routing, wrong mounting.",
+      "keywords": [
+        "video door phone",
+        "installation",
+        "wrong power supply",
+        "improper lock alignment",
+        "improper cable routing",
+        "wrong mounting",
+        "poor earthing",
+        "weak signal due to distance"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20wrong%20power%20supply%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__environmental-issues",
+      "service": "Video Door Phone — Environmental Issues",
+      "summary": "Troubleshooting and service for environmental issues on Video Door Phone systems. Covers: moisture inside panel, heat overheating, rust corrosion, dust accumulation.",
+      "keywords": [
+        "video door phone",
+        "environmental",
+        "moisture inside panel",
+        "heat overheating",
+        "rust corrosion",
+        "dust accumulation",
+        "rain water damage",
+        "insect damage"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20moisture%20inside%20panel%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__physical-damage",
+      "service": "Video Door Phone — Physical Damage",
+      "summary": "Troubleshooting and service for physical damage on Video Door Phone systems. Covers: broken panel, screen damaged, water leakage damage, loose wiring.",
+      "keywords": [
+        "video door phone",
+        "physical",
+        "damage",
+        "broken panel",
+        "screen damaged",
+        "water leakage damage",
+        "loose wiring"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20broken%20panel%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__user-operation-issues",
+      "service": "Video Door Phone — User Operation Issues",
+      "summary": "Troubleshooting and service for user operation issues on Video Door Phone systems. Covers: wrong app usage, user forgot password, incorrect settings, unauthorized access attempt.",
+      "keywords": [
+        "video door phone",
+        "user",
+        "operation",
+        "wrong app usage",
+        "user forgot password",
+        "incorrect settings",
+        "unauthorized access attempt",
+        "wrong card usage"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20wrong%20app%20usage%20how%20to%20fix"
+    },
+    {
+      "id": "video-door-phone__maintenance-service-issues",
+      "service": "Video Door Phone — Maintenance & Service Issues",
+      "summary": "Troubleshooting and service for maintenance & service issues on Video Door Phone systems. Covers: preventive maintenance, periodic testing, loose terminals, dirty camera lens.",
+      "keywords": [
+        "video door phone",
+        "maintenance",
+        "service",
+        "preventive maintenance",
+        "periodic testing",
+        "loose terminals",
+        "dirty camera lens",
+        "firmware not updated",
+        "backup battery weak"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Video%20Door%20Phone%20preventive%20maintenance%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__detector-issues",
+      "service": "Fire Alarm — Detector Issues",
+      "summary": "Troubleshooting and service for detector issues on Fire Alarm systems. Covers: smoke detector not working, heat detector failure, false alarm, dust in detector.",
+      "keywords": [
+        "fire alarm",
+        "detector",
+        "smoke detector not working",
+        "heat detector failure",
+        "false alarm",
+        "dust in detector"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20smoke%20detector%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__panel-issues",
+      "service": "Fire Alarm — Panel Issues",
+      "summary": "Troubleshooting and service for panel issues on Fire Alarm systems. Covers: panel hang, display not working, beeping continuously, zone not detecting.",
+      "keywords": [
+        "fire alarm",
+        "panel",
+        "panel hang",
+        "display not working",
+        "beeping continuously",
+        "zone not detecting"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20panel%20hang%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__siren-hooter-issues",
+      "service": "Fire Alarm — Siren/Hooter Issues",
+      "summary": "Troubleshooting and service for siren/hooter issues on Fire Alarm systems. Covers: hooter not sounding, low siren sound, continuous hooter.",
+      "keywords": [
+        "fire alarm",
+        "siren/hooter",
+        "hooter not sounding",
+        "low siren sound",
+        "continuous hooter"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20hooter%20not%20sounding%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__wiring-issues",
+      "service": "Fire Alarm — Wiring Issues",
+      "summary": "Troubleshooting and service for wiring issues on Fire Alarm systems. Covers: short circuit, loose wiring, loop wiring fault, cable disconnected.",
+      "keywords": [
+        "fire alarm",
+        "wiring",
+        "short circuit",
+        "loose wiring",
+        "loop wiring fault",
+        "cable disconnected"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20short%20circuit%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__power-issues",
+      "service": "Fire Alarm — Power Issues",
+      "summary": "Troubleshooting and service for power issues on Fire Alarm systems. Covers: panel not powering on, battery backup, power supply failure, fuse burnt.",
+      "keywords": [
+        "fire alarm",
+        "power",
+        "panel not powering on",
+        "battery backup",
+        "power supply failure",
+        "fuse burnt"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20panel%20not%20powering%20on%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__network-issues",
+      "service": "Fire Alarm — Network Issues",
+      "summary": "Troubleshooting and service for network issues on Fire Alarm systems. Covers: addressable panel communication, remote monitoring, lan wifi configuration.",
+      "keywords": [
+        "fire alarm",
+        "network",
+        "addressable panel communication",
+        "remote monitoring",
+        "lan wifi configuration"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20addressable%20panel%20communication%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__software-issues",
+      "service": "Fire Alarm — Software Issues",
+      "summary": "Troubleshooting and service for software issues on Fire Alarm systems. Covers: panel programming, device mapping, firmware update, password reset.",
+      "keywords": [
+        "fire alarm",
+        "software",
+        "panel programming",
+        "device mapping",
+        "firmware update",
+        "password reset"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20panel%20programming%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__installation-issues",
+      "service": "Fire Alarm — Installation Issues",
+      "summary": "Troubleshooting and service for installation issues on Fire Alarm systems. Covers: fire alarm panel install, smoke detector install, heat detector install, manual call point.",
+      "keywords": [
+        "fire alarm",
+        "installation",
+        "fire alarm panel install",
+        "smoke detector install",
+        "heat detector install",
+        "manual call point",
+        "hooter siren install"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20fire%20alarm%20panel%20install%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__maintenance-services",
+      "service": "Fire Alarm — Maintenance Services",
+      "summary": "Troubleshooting and service for maintenance services on Fire Alarm systems. Covers: fire alarm testing, detector cleaning, preventive maintenance, annual maintenance contract.",
+      "keywords": [
+        "fire alarm",
+        "maintenance",
+        "fire alarm testing",
+        "detector cleaning",
+        "preventive maintenance",
+        "annual maintenance contract"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20fire%20alarm%20testing%20how%20to%20fix"
+    },
+    {
+      "id": "fire-alarm__physical-damage",
+      "service": "Fire Alarm — Physical Damage",
+      "summary": "Troubleshooting and service for physical damage on Fire Alarm systems. Covers: water damage, broken detector, damaged panel.",
+      "keywords": [
+        "fire alarm",
+        "physical",
+        "damage",
+        "water damage",
+        "broken detector",
+        "damaged panel"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Fire%20Alarm%20water%20damage%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__motor-issues",
+      "service": "Gate Automation & Barriers — Motor Issues",
+      "summary": "Troubleshooting and service for motor issues on Gate Automation & Barriers systems. Covers: gate motor not working, motor overheating, motor noise, slow gate movement.",
+      "keywords": [
+        "gate automation & barriers",
+        "motor",
+        "gate motor not working",
+        "motor overheating",
+        "motor noise",
+        "slow gate movement"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20gate%20motor%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__gate-movement-issues",
+      "service": "Gate Automation & Barriers — Gate Movement Issues",
+      "summary": "Troubleshooting and service for gate movement issues on Gate Automation & Barriers systems. Covers: gate not closing, gate stuck, track alignment, wheel damage.",
+      "keywords": [
+        "gate automation & barriers",
+        "gate",
+        "movement",
+        "gate not closing",
+        "gate stuck",
+        "track alignment",
+        "wheel damage"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20gate%20not%20closing%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__barrier-issues",
+      "service": "Gate Automation & Barriers — Barrier Issues",
+      "summary": "Troubleshooting and service for barrier issues on Gate Automation & Barriers systems. Covers: boom barrier not opening, barrier arm damaged, barrier control board, barrier sensor.",
+      "keywords": [
+        "gate automation & barriers",
+        "barrier",
+        "boom barrier not opening",
+        "barrier arm damaged",
+        "barrier control board",
+        "barrier sensor"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20boom%20barrier%20not%20opening%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__sensor-issues",
+      "service": "Gate Automation & Barriers — Sensor Issues",
+      "summary": "Troubleshooting and service for sensor issues on Gate Automation & Barriers systems. Covers: safety sensor not detecting, infrared beam, false trigger.",
+      "keywords": [
+        "gate automation & barriers",
+        "sensor",
+        "safety sensor not detecting",
+        "infrared beam",
+        "false trigger"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20safety%20sensor%20not%20detecting%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__remote-issues",
+      "service": "Gate Automation & Barriers — Remote Issues",
+      "summary": "Troubleshooting and service for remote issues on Gate Automation & Barriers systems. Covers: remote not working, remote programming, rf receiver.",
+      "keywords": [
+        "gate automation & barriers",
+        "remote",
+        "remote not working",
+        "remote programming",
+        "rf receiver"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20remote%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__power-issues",
+      "service": "Gate Automation & Barriers — Power Issues",
+      "summary": "Troubleshooting and service for power issues on Gate Automation & Barriers systems. Covers: gate motor not powering on, battery backup, power supply failure, fuse burnt.",
+      "keywords": [
+        "gate automation & barriers",
+        "power",
+        "gate motor not powering on",
+        "battery backup",
+        "power supply failure",
+        "fuse burnt"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20gate%20motor%20not%20powering%20on%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__networking-issues",
+      "service": "Gate Automation & Barriers — Networking Issues",
+      "summary": "Troubleshooting and service for networking issues on Gate Automation & Barriers systems. Covers: smart app connection, remote access, wifi connectivity.",
+      "keywords": [
+        "gate automation & barriers",
+        "networking",
+        "smart app connection",
+        "remote access",
+        "wifi connectivity"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20smart%20app%20connection%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__software-issues",
+      "service": "Gate Automation & Barriers — Software Issues",
+      "summary": "Troubleshooting and service for software issues on Gate Automation & Barriers systems. Covers: automation programming, firmware update, password reset.",
+      "keywords": [
+        "gate automation & barriers",
+        "software",
+        "automation programming",
+        "firmware update",
+        "password reset"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20automation%20programming%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__installation-issues",
+      "service": "Gate Automation & Barriers — Installation Issues",
+      "summary": "Troubleshooting and service for installation issues on Gate Automation & Barriers systems. Covers: swing gate automation, sliding gate automation, boom barrier install, industrial gate motor.",
+      "keywords": [
+        "gate automation & barriers",
+        "installation",
+        "swing gate automation",
+        "sliding gate automation",
+        "boom barrier install",
+        "industrial gate motor",
+        "rfid barrier integration"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20swing%20gate%20automation%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__maintenance-services",
+      "service": "Gate Automation & Barriers — Maintenance Services",
+      "summary": "Troubleshooting and service for maintenance services on Gate Automation & Barriers systems. Covers: track cleaning lubrication, sensor cleaning, preventive maintenance, annual maintenance contract.",
+      "keywords": [
+        "gate automation & barriers",
+        "maintenance",
+        "track cleaning lubrication",
+        "sensor cleaning",
+        "preventive maintenance",
+        "annual maintenance contract"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20track%20cleaning%20lubrication%20how%20to%20fix"
+    },
+    {
+      "id": "gate-automation-barriers__physical-damage",
+      "service": "Gate Automation & Barriers — Physical Damage",
+      "summary": "Troubleshooting and service for physical damage on Gate Automation & Barriers systems. Covers: gear damage, broken arm, water damage.",
+      "keywords": [
+        "gate automation & barriers",
+        "physical",
+        "damage",
+        "gear damage",
+        "broken arm",
+        "water damage"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=Gate%20Automation%20%26%20Barriers%20gear%20damage%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__internet-issues",
+      "service": "IT & Networking — Internet Issues",
+      "summary": "Troubleshooting and service for internet issues on IT & Networking systems. Covers: internet not working, slow internet speed, frequent disconnection, isp configuration.",
+      "keywords": [
+        "it & networking",
+        "internet",
+        "internet not working",
+        "slow internet speed",
+        "frequent disconnection",
+        "isp configuration"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20internet%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__wifi-issues",
+      "service": "IT & Networking — WiFi Issues",
+      "summary": "Troubleshooting and service for wifi issues on IT & Networking systems. Covers: wifi not connecting, weak wifi signal, wifi password reset, access point issue.",
+      "keywords": [
+        "it & networking",
+        "wifi",
+        "wifi not connecting",
+        "weak wifi signal",
+        "wifi password reset",
+        "access point issue"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20wifi%20not%20connecting%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__router-issues",
+      "service": "IT & Networking — Router Issues",
+      "summary": "Troubleshooting and service for router issues on IT & Networking systems. Covers: router not powering on, router configuration, router overheating, firmware update.",
+      "keywords": [
+        "it & networking",
+        "router",
+        "router not powering on",
+        "router configuration",
+        "router overheating",
+        "firmware update"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20router%20not%20powering%20on%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__lan-issues",
+      "service": "IT & Networking — LAN Issues",
+      "summary": "Troubleshooting and service for lan issues on IT & Networking systems. Covers: network port not working, lan cable fault, rj45 connector, switch port.",
+      "keywords": [
+        "it & networking",
+        "lan",
+        "network port not working",
+        "lan cable fault",
+        "rj45 connector",
+        "switch port"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20network%20port%20not%20working%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__server-issues",
+      "service": "IT & Networking — Server Issues",
+      "summary": "Troubleshooting and service for server issues on IT & Networking systems. Covers: server not connecting, dhcp configuration, ip conflict, dns issue.",
+      "keywords": [
+        "it & networking",
+        "server",
+        "server not connecting",
+        "dhcp configuration",
+        "ip conflict",
+        "dns issue"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20server%20not%20connecting%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__network-security-issues",
+      "service": "IT & Networking — Network Security Issues",
+      "summary": "Troubleshooting and service for network security issues on IT & Networking systems. Covers: firewall configuration, vpn setup, unauthorized access.",
+      "keywords": [
+        "it & networking",
+        "network",
+        "security",
+        "firewall configuration",
+        "vpn setup",
+        "unauthorized access"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20firewall%20configuration%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__software-issues",
+      "service": "IT & Networking — Software Issues",
+      "summary": "Troubleshooting and service for software issues on IT & Networking systems. Covers: network printer setup, remote desktop, email configuration, shared folder.",
+      "keywords": [
+        "it & networking",
+        "software",
+        "network printer setup",
+        "remote desktop",
+        "email configuration",
+        "shared folder"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20network%20printer%20setup%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__installation-issues",
+      "service": "IT & Networking — Installation Issues",
+      "summary": "Troubleshooting and service for installation issues on IT & Networking systems. Covers: new network setup, router install, switch install, access point install.",
+      "keywords": [
+        "it & networking",
+        "installation",
+        "new network setup",
+        "router install",
+        "switch install",
+        "access point install",
+        "server network setup",
+        "rack install"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20new%20network%20setup%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__maintenance-services",
+      "service": "IT & Networking — Maintenance Services",
+      "summary": "Troubleshooting and service for maintenance services on IT & Networking systems. Covers: network health check, preventive maintenance, rack cleaning, annual maintenance contract.",
+      "keywords": [
+        "it & networking",
+        "maintenance",
+        "network health check",
+        "preventive maintenance",
+        "rack cleaning",
+        "annual maintenance contract"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20network%20health%20check%20how%20to%20fix"
+    },
+    {
+      "id": "it-networking__physical-damage",
+      "service": "IT & Networking — Physical Damage",
+      "summary": "Troubleshooting and service for physical damage on IT & Networking systems. Covers: cable damage, water damage, broken router switch.",
+      "keywords": [
+        "it & networking",
+        "physical",
+        "damage",
+        "cable damage",
+        "water damage",
+        "broken router switch"
+      ],
+      "youtube": "",
+      "search": "https://www.youtube.com/results?search_query=IT%20%26%20Networking%20cable%20damage%20how%20to%20fix"
+    }
+  ]
+}

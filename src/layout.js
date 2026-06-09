@@ -1,6 +1,7 @@
 import { signOut, onNotification } from './supabase.js';
 import { initials, toggleTheme } from './utils.js';
 import { ICONS } from './icons.js';
+import { mountAIAssistant } from './pages/ai-assistant.js';
 
 const LOGO = new URL('./assets/logo.png', import.meta.url).href;
 
@@ -57,6 +58,7 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   buildNav(navItems, activePage, onNav);
   setupBell(onNav);
+  mountAIAssistant(); // floating AI assistant — appears once across all portal pages
 
   app.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);
 

@@ -3150,6 +3150,124 @@ app.post('/api/ai/finance', authenticateToken, async (req, res) => {
     }
 });
 
+// ── AI SOLUTION ASSISTANT ───────────────────────────────────────
+// Floating assistant available to admin + employees. Claude reads the
+// service->YouTube video catalog and recommends the most relevant solution
+// video for the user's problem, plus a short troubleshooting answer.
+const AI_VIDEO_CATALOG_PATH = path.join(__dirname, 'ai-video-catalog.json');
+
+// Pull the 11-char video id out of any YouTube URL, or accept a bare id.
+function youtubeId(input) {
+    const s = String(input || '').trim();
+    if (!s) return '';
+    if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+    const m = s.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : '';
+}
+
+// Read the catalog fresh each request so admins can edit the JSON without a
+// server restart. Falls back to an empty list if the file is missing/invalid.
+function loadVideoCatalog() {
+    try {
+        const raw = fs.readFileSync(AI_VIDEO_CATALOG_PATH, 'utf8');
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed) ? parsed : (parsed.videos || []);
+        return list.map(v => ({
+            id: String(v.id || '').trim(),
+            service: String(v.service || '').trim(),
+            summary: String(v.summary || '').trim(),
+            keywords: Array.isArray(v.keywords) ? v.keywords : [],
+            ytId: youtubeId(v.youtube),
+            search: String(v.search || '').trim(),
+        })).filter(v => v.id && v.service);
+    } catch (e) {
+        console.error('[ai/assistant] catalog load failed:', e.message);
+        return [];
+    }
+}
+
+app.post('/api/ai/assistant', authenticateToken, async (req, res) => {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'AI assistant is not configured. Set OPENROUTER_API_KEY on the server.' });
+
+    // A Claude model via OpenRouter; admins can override via env.
+    const model = process.env.AI_ASSISTANT_MODEL || process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku';
+
+    // Accept either a single question or a short chat history from the client.
+    let history = Array.isArray(req.body?.messages) ? req.body.messages : [];
+    if (!history.length && req.body?.question) {
+        history = [{ role: 'user', content: String(req.body.question) }];
+    }
+    history = history
+        .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .slice(-10)
+        .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+    if (!history.length) return res.status(400).json({ error: 'Ask a question first.' });
+
+    const catalog = loadVideoCatalog();
+    const catalogForModel = catalog.map(v => ({ id: v.id, service: v.service, summary: v.summary, keywords: v.keywords }));
+
+    const system = [
+        'You are the AI Solution Assistant for "Networking Experts", a field-service company in India that installs and services CCTV, networking/WiFi, video door phones, biometric and access-control systems.',
+        'You help admins and field technicians solve on-site service problems.',
+        'Reply with ONLY a JSON object: {"answer": string, "videoIds": string[]}. No prose outside the JSON.',
+        '"answer": clear, practical steps a technician can follow on site, concise (under 180 words), INR (₹) for any cost. If you need more detail to diagnose, ask one short follow-up question instead.',
+        '"videoIds": the catalog ids of the 0-3 most relevant solution videos (empty array if none of the catalog entries fit). Never invent ids that are not in the catalog.',
+        '',
+        'VIDEO CATALOG (JSON):',
+        JSON.stringify(catalogForModel),
+    ].join('\n');
+
+    try {
+        const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model,
+                messages: [{ role: 'system', content: system }, ...history],
+                response_format: { type: 'json_object' },
+                temperature: 0.4,
+            }),
+        });
+        const aiData = await aiRes.json();
+        if (!aiRes.ok) {
+            console.error('[ai/assistant] OpenRouter error:', aiData);
+            return res.status(502).json({ error: aiData.error?.message || 'AI request failed' });
+        }
+
+        const raw = aiData.choices?.[0]?.message?.content || '';
+        let answer = 'Sorry, I could not generate an answer.';
+        let videoIds = [];
+        try {
+            // The model may wrap the JSON in ```json fences — strip them first.
+            const parsed = JSON.parse(raw.replace(/^```(?:json)?|```$/g, '').trim() || '{}');
+            if (typeof parsed.answer === 'string' && parsed.answer.trim()) answer = parsed.answer.trim();
+            if (Array.isArray(parsed.videoIds)) videoIds = parsed.videoIds;
+        } catch {
+            // Model returned prose instead of JSON — show it as the answer.
+            if (raw.trim()) answer = raw.trim();
+        }
+
+        const byId = new Map(catalog.map(v => [v.id, v]));
+        const videos = videoIds
+            .map(id => byId.get(id))
+            .filter(Boolean)
+            .map(v => ({
+                id: v.id,
+                title: v.service,
+                ytId: v.ytId,
+                url: v.ytId ? `https://www.youtube.com/watch?v=${v.ytId}` : '',
+                embed: v.ytId ? `https://www.youtube.com/embed/${v.ytId}` : '',
+                search: v.search || '',
+            }));
+
+        res.json({ answer, videos, model });
+    } catch (err) {
+        console.error('[ai/assistant] error:', err);
+        res.status(500).json({ error: err.message || 'AI assistant request failed' });
+    }
+});
+
 // ── NOTIFICATIONS FEED ──────────────────────────────────────────
 // Notifications visible to a user: addressed to them, to their role, or broadcast.
 function notifAudienceClause(user) {
