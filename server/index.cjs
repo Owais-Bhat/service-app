@@ -4131,6 +4131,86 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// Admin "Manage service request" bootstrap. This replaces four broad client
+// queries with one scoped response and computes technician availability on the
+// server, close to the database.
+app.get('/api/admin/inquiries/:id/manage-context', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [inquiryRows] = await connection.execute(
+            'SELECT * FROM inquiries WHERE id = ? LIMIT 1',
+            [req.params.id]
+        );
+        const inquiry = inquiryRows[0];
+        if (!inquiry) return res.status(404).json({ error: 'Service request not found' });
+
+        const today = localDateKey();
+        const afterCutoff = isAfterAutoClockOutCutoff(new Date());
+        const [employeeRows] = await connection.execute(
+            `SELECT p.id, p.full_name, p.phone, p.always_assign,
+                    CASE WHEN EXISTS (
+                        SELECT 1
+                          FROM attendance active
+                         WHERE active.user_id = p.id
+                           AND active.date = ?
+                           AND active.clock_in IS NOT NULL
+                           AND active.clock_out IS NULL
+                    ) AND ? = 0 THEN 1 ELSE 0 END AS clocked_in,
+                    (
+                        SELECT COUNT(*)
+                          FROM attendance attended
+                         WHERE attended.user_id = p.id
+                           AND attended.clock_in IS NOT NULL
+                           AND (attended.date <> ? OR ? = 1)
+                           AND NOT EXISTS (
+                               SELECT 1
+                                 FROM eod_reports report
+                                WHERE report.employee_id = p.id
+                                  AND report.date = attended.date
+                           )
+                    ) AS missed_eod_count
+               FROM profiles p
+              WHERE p.role = 'employee'
+              ORDER BY p.full_name ASC`,
+            [today, afterCutoff ? 1 : 0, today, afterCutoff ? 1 : 0]
+        );
+
+        let billServices = [];
+        if (Number(inquiry.bill_total) > 0) {
+            const [serviceRows] = await connection.execute(
+                `SELECT sp.id, sp.name, sp.category, sp.sub_category, sp.sub_sub_category, sp.cost
+                   FROM inquiry_services linked
+                   JOIN service_pricing sp ON sp.id = linked.service_id
+                  WHERE linked.inquiry_id = ?`,
+                [inquiry.id]
+            );
+            billServices = serviceRows;
+        }
+
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.json({
+            inquiry,
+            employees: employeeRows.map(row => ({
+                id: row.id,
+                full_name: row.full_name,
+                phone: row.phone,
+                always_assign: Boolean(row.always_assign),
+                clockedIn: Boolean(row.clocked_in),
+                restricted: Number(row.missed_eod_count) >= 4,
+                missedEodCount: Number(row.missed_eod_count) || 0,
+            })),
+            billServices,
+        });
+    } catch (error) {
+        console.error('Inquiry manage context error:', error);
+        res.status(500).json({ error: error.message || 'Could not load service request' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;

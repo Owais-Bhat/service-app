@@ -16,6 +16,14 @@ import {
   showLoader,
 } from "../utils.js";
 import { openPremiumBillModal, shareBillToPublicLink } from "./employee.js";
+const API_BASE =
+  window.location.hostname !== "localhost" &&
+  window.location.hostname !== "127.0.0.1"
+    ? "/api"
+    : "http://localhost:5000/api";
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
+});
 function setButtonLoading(btn, label = "Loading...") {
   if (!btn) return () => {};
   const originalHTML = btn.innerHTML;
@@ -792,41 +800,22 @@ export async function renderAdminDashboard(container) {
   container._adminDashboardCleanup = checkRemoval;
 }
 async function openInquiryDetail(id, onDone) {
-  const { data: i } = await supabase
-    .from("inquiries")
-    .select("*")
-    .eq("id", id)
-    .single();
-  const { data: employees } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("role", "employee");
-  const today = new Date().toLocaleDateString("en-CA");
-  const [{ data: activeAttendance }, { data: eodReports }] = await Promise.all([
-    supabase.from("attendance").select("user_id,clock_in,clock_out,date"),
-    supabase.from("eod_reports").select("employee_id,date,created_at"),
-  ]);
-  const missedByEmployee = groupedMissedEods(
-    activeAttendance || [],
-    eodReports || [],
+  const contextRes = await fetch(
+    `${API_BASE}/admin/inquiries/${encodeURIComponent(id)}/manage-context`,
+    { headers: authHeaders() },
   );
+  const context = await contextRes.json().catch(() => ({}));
+  if (!contextRes.ok) {
+    throw new Error(context.error || "Could not load service request");
+  }
+  const i = context.inquiry;
+  const employees = Array.isArray(context.employees) ? context.employees : [];
   const restrictedEmployeeIds = new Set(
-    [...missedByEmployee.entries()]
-      .filter(([, rows]) => rows.length >= STRICT_EOD_LIMIT)
-      .map(([userId]) => userId),
-  );
-  const activeEmployeeIds = new Set(
-    (activeAttendance || [])
-      .filter(
-        (row) =>
-          isValidActiveAttendance(row, today) &&
-          !restrictedEmployeeIds.has(row.user_id),
-      )
-      .map((row) => row.user_id),
+    employees.filter((employee) => employee.restricted).map((employee) => employee.id),
   );
   const availableEmployees = (employees || []).map((e) => ({
     ...e,
-    _clockedIn: activeEmployeeIds.has(e.id),
+    _clockedIn: e.clockedIn && !e.restricted,
   }));
   const technicianName =
     (employees || []).find((e) => e.id === i.assigned_employee_id)?.full_name ||
@@ -842,14 +831,7 @@ async function openInquiryDetail(id, onDone) {
     : `${technicianName || "This technician"} is already assigned. Reassignment is locked unless the employee declines.`;
   let billServices = [];
   if (i.bill_total) {
-    const { data: links } = await supabase
-      .from("inquiry_services")
-      .select(
-        "service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)",
-      )
-      .eq("inquiry_id", i.id);
-    billServices = (links || []).map((row) => {
-      const p = row.service_pricing || {};
+    billServices = (context.billServices || []).map((p) => {
       const parts = [
         p.category,
         p.sub_category,
