@@ -1379,7 +1379,7 @@ export async function renderInquiries(container) {
     ["paid", "Paid"],
     ["all", "All"],
   ];
-  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Service Requests</h1>        <p>Manage customer service requests, billing and payments</p>      </div>      <div style="display:flex;gap:10px;flex-wrap:wrap;">        <button class="btn btn-primary" id="sr-new">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="sr-export">${ICONS.clipboard}<span>Export</span></button>        <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>      </div>    </div>    <div class="sr-filter-bar">      ${tabs.map(([k, label]) => `        <button class="sr-filter ${k === filterKey ? "active" : ""}" data-key="${k}">          <span>${label}</span><span class="sr-filter-count">${counts[k]}</span>        </button>      `).join("")}    </div>    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">      <div class="search-input-wrap" style="flex:1; min-width:220px;">        <span>${ICONS.search}</span>        <input class="search-input" id="sr-company-filter" placeholder="Filter by company..." value="${companyFilter}"/>      </div>      <button class="btn btn-secondary" id="sr-company-clear">Clear Company</button>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead>            <tr>              <th>Ticket</th><th>Service Date</th><th>Company</th><th>Customer</th><th>Phone</th><th>Service</th>              <th>Assigned Employee</th><th>Status</th><th>Payment</th><th></th>            </tr>          </thead>          <tbody>            ${filtered.length === 0 ? `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>` : filtered.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0, 8)}</code></td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td><small style="color:var(--text-dim)">${x.phone || "—"}</small></td>                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || "—"}</td>                  <td>${x.assigned_employee_id ? `<b>${employeeNames.get(x.assigned_employee_id) || "Assigned"}</b>` : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>                  <td>${statusBadge(x.status)}</td>                  <td>${x.bill_amount ? (x.payment_status === "paid" ? '<span class="badge badge-resolved">Paid</span>' : '<span class="badge badge-medium">Unpaid</span>') : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
+  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Service Requests</h1>        <p>Manage customer service requests, billing and payments</p>      </div>      <div style="display:flex;gap:10px;flex-wrap:wrap;">        <button class="btn btn-primary" id="sr-new">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="sr-export">${ICONS.clipboard}<span>Export</span></button>        <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>      </div>    </div>    <div class="sr-filter-bar">      ${tabs.map(([k, label]) => `        <button class="sr-filter ${k === filterKey ? "active" : ""}" data-key="${k}">          <span>${label}</span><span class="sr-filter-count">${counts[k]}</span>        </button>      `).join("")}    </div>    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">      <div class="search-input-wrap" style="flex:1; min-width:220px;">        <span>${ICONS.search}</span>        <input class="search-input" id="sr-company-filter" placeholder="Filter by company..." value="${companyFilter}"/>      </div>      <button class="btn btn-secondary" id="sr-company-clear">Clear Company</button>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead>            <tr>              <th>Ticket</th><th>Service Date</th><th>Company</th><th>Customer</th><th>Phone</th><th>Service</th>              <th>Assigned Employee</th><th>Status</th><th>Payment</th><th></th>            </tr>          </thead>          <tbody>            ${filtered.length === 0 ? `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>` : filtered.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0, 8)}</code></td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td><small style="color:var(--text-dim)">${x.phone || "—"}</small></td>                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || "—"}</td>                  <td>${x.assigned_employee_id ? `<b>${employeeNames.get(x.assigned_employee_id) || "Assigned"}</b>` : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>                  <td>${statusBadge(x.status)}</td>                  <td>${x.bill_amount ? (x.payment_status === "paid" ? '<span class="badge badge-resolved">Paid</span>' : '<span class="badge badge-medium">Unpaid</span>') : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td style="display:flex;gap:6px;white-space:nowrap;"><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button><button class="btn btn-danger btn-sm inq-del" data-id="${x.id}" title="Delete request">${ICONS.close}</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
   container.querySelector("#sr-refresh").onclick = () =>
     renderInquiries(container);
   container.querySelector("#sr-new").onclick = () =>
@@ -1431,6 +1431,34 @@ export async function renderInquiries(container) {
       openInquiryDetailWithLoader(btn, btn.dataset.id, () =>
         renderInquiries(container),
       );
+  });
+  container.querySelectorAll(".inq-del").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      const row = filtered.find((x) => x.id === id);
+      const label = row?.ticket_no || (id ? id.slice(0, 8) : "this request");
+      if (
+        !confirm(
+          `Delete service request ${label}? This permanently removes the request along with its bill, payment and feedback records, and cannot be undone.`,
+        )
+      )
+        return;
+      btn.disabled = true;
+      // inquiry_services has no cascade FK — remove its rows first; feedback &
+      // payments are removed automatically by ON DELETE CASCADE.
+      await supabase.from("inquiry_services").delete().eq("inquiry_id", id);
+      const { error } = await supabase
+        .from("inquiries")
+        .delete()
+        .eq("id", id);
+      if (error) {
+        toast(error.message || "Could not delete request", "error");
+        btn.disabled = false;
+      } else {
+        toast("Service request deleted", "success");
+        renderInquiries(container);
+      }
+    };
   });
 }
 export async function renderStocks(container) {
