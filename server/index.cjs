@@ -145,6 +145,7 @@ const INVOICE_UNICODE_FONTS = !!(PDFDocument && fs.existsSync(INVOICE_FONT_REG) 
 if (PDFDocument) console.log(`[bills] Invoice currency glyph: ${INVOICE_UNICODE_FONTS ? '₹ (Noto Sans)' : 'Rs. (fallback — NotoSans TTFs missing in /server/fonts)'}`);
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1705,6 +1706,72 @@ setInterval(() => {
     for (const [k, v] of _rateBuckets) if (now >= v.resetAt) _rateBuckets.delete(k);
 }, 60_000).unref();
 
+const _securityBuckets = new Map();
+
+function securityMemoryClaim(key, ttlSeconds) {
+    const now = Date.now();
+    const entry = _securityBuckets.get(key);
+    if (entry && entry.expiresAt > now) {
+        return { allowed: false, retryAfter: Math.max(1, Math.ceil((entry.expiresAt - now) / 1000)) };
+    }
+    _securityBuckets.set(key, { count: 1, expiresAt: now + ttlSeconds * 1000 });
+    return { allowed: true, retryAfter: ttlSeconds };
+}
+
+function securityMemoryIncrement(key, ttlSeconds, max) {
+    const now = Date.now();
+    let entry = _securityBuckets.get(key);
+    if (!entry || entry.expiresAt <= now) {
+        entry = { count: 0, expiresAt: now + ttlSeconds * 1000 };
+        _securityBuckets.set(key, entry);
+    }
+    entry.count += 1;
+    return {
+        allowed: entry.count <= max,
+        retryAfter: Math.max(1, Math.ceil((entry.expiresAt - now) / 1000)),
+    };
+}
+
+async function claimSecurityCooldown(key, ttlSeconds) {
+    try {
+        if (redisReady) await redisReady;
+        if (redisClient?.isReady) {
+            const result = await redisClient.set(key, '1', { EX: ttlSeconds, NX: true });
+            if (result === 'OK') return { allowed: true, retryAfter: ttlSeconds };
+            const ttl = await redisClient.ttl(key);
+            return { allowed: false, retryAfter: ttl > 0 ? ttl : ttlSeconds };
+        }
+    } catch (err) {
+        console.warn('[security] Redis cooldown failed:', err.message);
+    }
+    return securityMemoryClaim(key, ttlSeconds);
+}
+
+async function incrementSecurityLimit(key, ttlSeconds, max) {
+    try {
+        if (redisReady) await redisReady;
+        if (redisClient?.isReady) {
+            const count = await redisClient.incr(key);
+            if (count === 1) await redisClient.expire(key, ttlSeconds);
+            const ttl = await redisClient.ttl(key);
+            return {
+                allowed: count <= max,
+                retryAfter: ttl > 0 ? ttl : ttlSeconds,
+            };
+        }
+    } catch (err) {
+        console.warn('[security] Redis rate limit failed:', err.message);
+    }
+    return securityMemoryIncrement(key, ttlSeconds, max);
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of _securityBuckets) {
+        if (entry.expiresAt <= now) _securityBuckets.delete(key);
+    }
+}, 60_000).unref();
+
 // Middleware to verify JWT
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
@@ -2160,13 +2227,76 @@ function fast2SmsConfig() {
     };
 }
 
+const OTP_LIMITS = {
+    cooldownSeconds: Number(process.env.OTP_COOLDOWN_SECONDS) || 60,
+    phonePerHour: Number(process.env.OTP_MAX_PER_PHONE_HOUR) || 4,
+    phonePerDay: Number(process.env.OTP_MAX_PER_PHONE_DAY) || 10,
+    ipPerHour: Number(process.env.OTP_MAX_PER_IP_HOUR) || 12,
+    ipPerDay: Number(process.env.OTP_MAX_PER_IP_DAY) || 40,
+    globalPerHour: Number(process.env.OTP_MAX_GLOBAL_HOUR) || 300,
+};
+
+function otpLimitKey(scope, value) {
+    const digest = crypto.createHash('sha256').update(String(value || 'unknown')).digest('hex').slice(0, 24);
+    return `nest:security:otp:${scope}:${digest}`;
+}
+
+async function enforceOtpDeliveryLimits(req, normalizedMobile) {
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    const phoneKey = otpLimitKey('phone', normalizedMobile);
+    const ipKey = otpLimitKey('ip', ip);
+    const checks = [
+        { key: `${ipKey}:hour`, ttl: 60 * 60, max: OTP_LIMITS.ipPerHour },
+        { key: `${ipKey}:day`, ttl: 24 * 60 * 60, max: OTP_LIMITS.ipPerDay },
+        { key: `${phoneKey}:hour`, ttl: 60 * 60, max: OTP_LIMITS.phonePerHour },
+        { key: `${phoneKey}:day`, ttl: 24 * 60 * 60, max: OTP_LIMITS.phonePerDay },
+        { key: 'nest:security:otp:global:hour', ttl: 60 * 60, max: OTP_LIMITS.globalPerHour },
+    ];
+
+    const cooldown = await claimSecurityCooldown(
+        `${phoneKey}:cooldown`,
+        OTP_LIMITS.cooldownSeconds,
+    );
+    if (!cooldown.allowed) {
+        return {
+            allowed: false,
+            retryAfter: cooldown.retryAfter,
+            error: `Please wait ${cooldown.retryAfter} seconds before requesting another OTP.`,
+        };
+    }
+
+    for (const check of checks) {
+        const result = await incrementSecurityLimit(check.key, check.ttl, check.max);
+        if (!result.allowed) {
+            return {
+                allowed: false,
+                retryAfter: result.retryAfter,
+                error: 'OTP request limit reached. Please try again later.',
+            };
+        }
+    }
+    return { allowed: true };
+}
+
+async function rejectLimitedOtpRequest(req, res, normalizedMobile) {
+    const limit = await enforceOtpDeliveryLimits(req, normalizedMobile);
+    if (limit.allowed) return false;
+    res.setHeader('Retry-After', String(limit.retryAfter));
+    res.status(429).json({
+        ok: false,
+        error: limit.error,
+        retryAfter: limit.retryAfter,
+    });
+    return true;
+}
+
 const localOtpStore = new Map();
 const LOCAL_OTP_EXPIRY_MS = 10 * 60 * 1000;
 
 function generateOtpCode(length = 6) {
     const min = 10 ** (length - 1);
     const max = (10 ** length) - 1;
-    return String(Math.floor(min + Math.random() * (max - min + 1)));
+    return String(crypto.randomInt(min, max + 1));
 }
 
 function cleanupLocalOtpStore() {
@@ -2434,6 +2564,7 @@ app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' 
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
         if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
+        if (await rejectLimitedOtpRequest(req, res, normalizedMobile)) return;
 
         const result = await sendFast2SmsOtp({ mobile: normalizedMobile, apiKey, otpId });
         if (result.ok) return sendOtpResponse(res, result);
@@ -2484,6 +2615,7 @@ app.post('/api/otp/resend', rateLimit({ windowMs: 60_000, max: 3, key: 'otp-rese
         if (!normalizedMobile) return res.status(400).json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' });
         if (!apiKey) return res.status(503).json({ ok: false, error: 'SMS_API is not configured on the server.' });
         if (!otpId) return res.status(503).json({ ok: false, error: 'OTP message id is required. Set FAST2SMS_OTP_ID or SMS_TID_OTP.' });
+        if (await rejectLimitedOtpRequest(req, res, normalizedMobile)) return;
 
         if (localOtpStore.has(normalizedMobile)) {
             const fallback = await sendLocalDltOtp({

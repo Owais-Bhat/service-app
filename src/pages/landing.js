@@ -1146,8 +1146,17 @@ export function renderLandingPage(container, onPortalClick) {
     });
 
     bind('#srf-resend', async () => {
+      const resendBtn = container.querySelector('#srf-resend');
+      if (resendBtn) {
+        resendBtn.disabled = true;
+        resendBtn.textContent = 'Sending...';
+      }
       const res = await resendSmsOTP('+91' + state.phone);
-      if (!res.ok) return toast(res.error || 'Could not resend OTP', 'error');
+      if (!res.ok) {
+        toast(res.error || 'Could not resend OTP', 'error');
+        render();
+        return;
+      }
       toast('New code sent', 'success');
       render();
     });

@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -10,6 +11,7 @@ const {
   resendFast2SmsOtp,
   sendDltSms,
 } = require('../server/fast2sms.cjs');
+const serverSource = readFileSync(new URL('../server/index.cjs', import.meta.url), 'utf8');
 
 test('normalizeIndianMobile returns a 10 digit Indian mobile number', () => {
   assert.equal(normalizeIndianMobile('+91 98765 43210'), '9876543210');
@@ -133,4 +135,15 @@ test('sendDltSms sends Fast2SMS DLT message id and variables to bulk route', asy
   assert.equal(url.searchParams.get('message'), '123456');
   assert.equal(url.searchParams.get('variables_values'), 'Customer|Rs.500|NE-123|BILL-123');
   assert.equal(url.searchParams.get('flash'), '0');
+});
+
+test('OTP delivery is protected by Redis-backed phone and IP limits', () => {
+  assert.match(serverSource, /OTP_COOLDOWN_SECONDS/);
+  assert.match(serverSource, /OTP_MAX_PER_PHONE_HOUR/);
+  assert.match(serverSource, /OTP_MAX_PER_PHONE_DAY/);
+  assert.match(serverSource, /OTP_MAX_PER_IP_HOUR/);
+  assert.match(serverSource, /claimSecurityCooldown/);
+  assert.match(serverSource, /redisClient\.incr/);
+  assert.match(serverSource, /rejectLimitedOtpRequest\(req, res, normalizedMobile\)/);
+  assert.match(serverSource, /res\.setHeader\('Retry-After'/);
 });
