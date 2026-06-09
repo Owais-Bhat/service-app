@@ -3269,7 +3269,7 @@ app.post('/api/ai/finance', authenticateToken, async (req, res) => {
 });
 
 // ── AI SOLUTION ASSISTANT ───────────────────────────────────────
-// Floating assistant available to admin + employees. Claude reads the
+// Floating assistant available to admin + employees. The configured model reads the
 // service->YouTube video catalog and recommends the most relevant solution
 // video for the user's problem, plus a short troubleshooting answer.
 const AI_VIDEO_CATALOG_PATH = path.join(__dirname, 'ai-video-catalog.json');
@@ -3329,11 +3329,22 @@ function loadVideoCatalog() {
 }
 
 app.post('/api/ai/assistant', authenticateToken, async (req, res) => {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: 'AI assistant is not configured. Set OPENROUTER_API_KEY on the server.' });
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    if (!nvidiaKey && !openRouterKey) {
+        return res.status(400).json({
+            error: 'AI assistant is not configured. Set NVIDIA_API_KEY or OPENROUTER_API_KEY on the server.',
+        });
+    }
 
-    // A Claude model via OpenRouter; admins can override via env.
-    const model = process.env.AI_ASSISTANT_MODEL || process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku';
+    const provider = nvidiaKey ? 'nvidia' : 'openrouter';
+    const apiKey = nvidiaKey || openRouterKey;
+    const endpoint = provider === 'nvidia'
+        ? (process.env.NVIDIA_AI_URL || 'https://integrate.api.nvidia.com/v1/chat/completions')
+        : 'https://openrouter.ai/api/v1/chat/completions';
+    const model = provider === 'nvidia'
+        ? (process.env.NVIDIA_AI_MODEL || 'moonshotai/kimi-k2.6')
+        : (process.env.AI_ASSISTANT_MODEL || process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku');
 
     // Accept either a single question or a short chat history from the client.
     let history = Array.isArray(req.body?.messages) ? req.body.messages : [];
@@ -3361,19 +3372,26 @@ app.post('/api/ai/assistant', authenticateToken, async (req, res) => {
     ].join('\n');
 
     try {
-        const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const aiRes = await fetch(endpoint, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify({
                 model,
                 messages: [{ role: 'system', content: system }, ...history],
                 response_format: { type: 'json_object' },
-                temperature: 0.4,
+                max_tokens: Math.min(4096, Math.max(256, Number(process.env.AI_ASSISTANT_MAX_TOKENS) || 2048)),
+                temperature: Number(process.env.AI_ASSISTANT_TEMPERATURE) || 0.4,
+                top_p: 1,
+                stream: false,
             }),
         });
         const aiData = await aiRes.json();
         if (!aiRes.ok) {
-            console.error('[ai/assistant] OpenRouter error:', aiData);
+            console.error(`[ai/assistant] ${provider} error:`, aiData);
             return res.status(502).json({ error: aiData.error?.message || 'AI request failed' });
         }
 
@@ -3413,7 +3431,7 @@ app.post('/api/ai/assistant', authenticateToken, async (req, res) => {
             });
         }
 
-        res.json({ answer, videos, model });
+        res.json({ answer, videos, model, provider });
     } catch (err) {
         console.error('[ai/assistant] error:', err);
         res.status(500).json({ error: err.message || 'AI assistant request failed' });

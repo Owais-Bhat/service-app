@@ -1,5 +1,5 @@
 // Floating "AI Solution Assistant" available on every admin & employee page.
-// Tap the button -> chat panel. Claude (via the backend) answers the service
+// Tap the button -> chat panel. The configured backend model answers the service
 // problem and recommends solution videos for the matched service topic.
 
 const API_BASE = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
