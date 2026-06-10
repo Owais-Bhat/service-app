@@ -5548,12 +5548,11 @@ input, select, textarea { max-width: 100%; }
   --portal-radius-sm: 12px;
   --portal-radius-md: 18px;
   --portal-radius-lg: 26px;
-  --portal-glass: rgba(255, 255, 255, 0.68);
-  --portal-glass-strong: rgba(255, 255, 255, 0.84);
-  --portal-glass-border: rgba(255, 255, 255, 0.72);
-  --portal-line: rgba(6, 78, 59, 0.10);
-  --portal-shadow: 0 18px 50px -20px rgba(6, 78, 59, 0.28),
-    0 2px 8px -4px rgba(6, 78, 59, 0.16);
+  --portal-glass: rgba(255, 255, 255, 0.96);
+  --portal-glass-strong: rgba(255, 255, 255, 0.99);
+  --portal-glass-border: rgba(21, 160, 90, 0.13);
+  --portal-line: rgba(21, 160, 90, 0.10);
+  --portal-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme="dark"] {
@@ -5591,7 +5590,7 @@ input, select, textarea { max-width: 100%; }
   position: absolute;
   border-radius: 50%;
   filter: blur(68px);
-  opacity: 0.72;
+  opacity: 0.48;
   animation: portal-float 22s cubic-bezier(.22, 1, .36, 1) infinite alternate;
 }
 
@@ -6002,6 +6001,9 @@ input, select, textarea { max-width: 100%; }
 .dash-charts { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
 @media (max-width: 900px) { .dash-charts { grid-template-columns: 1fr; } }
 .kpi-chart-card { margin-bottom: 0; }
+
+/* area/line chart label */
+.ac-lbl { font-size: 11px; fill: var(--text-dim); font-weight: 600; font-family: var(--font-body); }
 
 /* bar chart */
 .bc { display: flex; align-items: flex-end; gap: 10px; height: 190px; padding-top: 18px; }

@@ -526,6 +526,29 @@ export async function renderAdminDashboard(container) {
       { label: "EOD Warn", value: eodWarnings.length, color: "#7c5cfc" },
     ];
 
+    // Service category breakdown from service_item field
+    const _catMap = new Map([['CCTV', 0], ['Networking', 0], ['Biometric', 0], ['Gate Automation', 0], ['Other', 0]]);
+    allRows.forEach(x => {
+      const s = (x.service_item || '').toLowerCase();
+      if (s.includes('cctv') || s.includes('camera') || s.includes('dvr') || s.includes('nvr') || s.includes('hikvision'))
+        _catMap.set('CCTV', _catMap.get('CCTV') + 1);
+      else if (s.includes('network') || s.includes('wifi') || s.includes('switch') || s.includes('router') || s.includes('lan'))
+        _catMap.set('Networking', _catMap.get('Networking') + 1);
+      else if (s.includes('biometric') || s.includes('attendance') || s.includes('fingerprint') || s.includes('face'))
+        _catMap.set('Biometric', _catMap.get('Biometric') + 1);
+      else if (s.includes('gate') || s.includes('barrier') || s.includes('boom') || s.includes('automation'))
+        _catMap.set('Gate Automation', _catMap.get('Gate Automation') + 1);
+      else
+        _catMap.set('Other', _catMap.get('Other') + 1);
+    });
+    const categorySegs = [
+      { label: 'CCTV', value: _catMap.get('CCTV'), color: '#15a05a' },
+      { label: 'Networking', value: _catMap.get('Networking'), color: '#0ea5a5' },
+      { label: 'Biometric', value: _catMap.get('Biometric'), color: '#6366f1' },
+      { label: 'Gate Auto', value: _catMap.get('Gate Automation'), color: '#e08a14' },
+      { label: 'Other', value: _catMap.get('Other'), color: '#94a3b8' },
+    ].filter(s => s.value > 0);
+
     // Top technicians by resolved job count
     const _techMap = new Map();
     allRows.forEach(x => {
@@ -546,7 +569,7 @@ export async function renderAdminDashboard(container) {
       resolved: resolvedCount, totalReq, assigned: assignedCount,
       paid: paidCount, billed: billedCount, inCount: a.length, empTotal,
       trendLabels, trendValues, statusSegs,
-      pipeline, alerts, companies: companyRows.slice(0, 8), topTechs,
+      pipeline, alerts, companies: companyRows.slice(0, 8), topTechs, categorySegs,
     });
   }
 

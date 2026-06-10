@@ -30,6 +30,44 @@ function kpiCard(pct, label, sub, color) {
   </div>`;
 }
 
+// Smooth SVG area/line chart. values[] + labels[] arrays.
+function areaChart(values, labels, color = 'var(--primary)') {
+  const n = values.length;
+  if (n < 2) return vbars(values, labels, color);
+  const W = 540, H = 148;
+  const pad = { l: 8, r: 8, t: 14, b: 30 };
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+  const max = Math.max(1, ...values);
+  const pts = values.map((v, i) => [
+    pad.l + (i / (n - 1)) * pw,
+    pad.t + ph - (v / max) * ph,
+  ]);
+  let linePath = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [px, py] = pts[i - 1], [cx, cy] = pts[i];
+    const mx = ((px + cx) / 2).toFixed(1);
+    linePath += ` C ${mx},${py.toFixed(1)} ${mx},${cy.toFixed(1)} ${cx.toFixed(1)},${cy.toFixed(1)}`;
+  }
+  const base = (pad.t + ph).toFixed(1);
+  const areaPath = `${linePath} L ${pts[pts.length-1][0].toFixed(1)},${base} L ${pts[0][0].toFixed(1)},${base} Z`;
+  const gid = 'acg' + Math.abs(color.charCodeAt(0) || 0);
+  const dots = pts.map(([x, y]) =>
+    `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="${color}" stroke="#fff" stroke-width="2"/>`
+  ).join('');
+  const xlbls = pts.map(([x], i) =>
+    `<text x="${x.toFixed(1)}" y="${H - 6}" text-anchor="middle" class="ac-lbl">${esc(labels[i] || '')}</text>`
+  ).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;overflow:visible">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.20"/>
+      <stop offset="90%" stop-color="${color}" stop-opacity="0.02"/>
+    </linearGradient></defs>
+    <path d="${areaPath}" fill="url(#${gid})"/>
+    <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}${xlbls}
+  </svg>`;
+}
+
 // Vertical bar chart. items: [{label, value, color}] (per-bar colour), OR pass
 // (values, labels, color) for a single-colour series.
 function vbars(items, labels, color) {
@@ -127,8 +165,8 @@ export function renderDashboardHero(p) {
       ${kpiCard(p.attendanceRate, 'Attendance', `${p.inCount} / ${p.empTotal} clocked in`, 'var(--warning)')}
     </div>
     <div class="dash-charts">
-      ${chartCard('Service Requests · last 6 months', vbars(p.trendValues, p.trendLabels, 'var(--primary)'))}
-      ${chartCard('By Status', donut(p.statusSegs))}
+      ${chartCard('Service Requests Trend', areaChart(p.trendValues, p.trendLabels, 'var(--primary)'))}
+      ${chartCard('By Category', donut(p.categorySegs && p.categorySegs.length ? p.categorySegs : p.statusSegs))}
     </div>
     <div class="dash-charts">
       ${chartCard("Today's Pipeline", vbars(p.pipeline))}
