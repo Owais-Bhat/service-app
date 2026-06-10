@@ -52,7 +52,7 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
         <div class="topbar">
           <button class="menu-toggle icon-btn" id="menu-toggle" aria-label="Toggle navigation">${ICONS.menu}</button>
           <div class="topbar-title" id="topbar-title"></div>
-          <div id="topbar-actions">
+          <div id="topbar-actions" class="topbar-actions">
             <label class="topbar-search" for="portal-nav-search">
               ${ICONS.search}
               <input id="portal-nav-search" type="search" placeholder="Search menu..." autocomplete="off" />
@@ -100,9 +100,11 @@ function buildNav(navItems, activePage, onNav) {
   nav.innerHTML = navItems.map(item => {
     if (item.type === 'section') return `<div class="nav-section">${item.label}</div>`;
     const active = item.id === activePage ? 'active' : '';
+    const badge = item.badge ? `<span class="nav-badge">${item.badge}</span>` : '';
     return `<div class="nav-item ${active}" data-nav="${item.id}">
       <span class="nav-icon">${item.icon}</span>
-      <span>${item.label}</span>
+      <span style="flex:1">${item.label}</span>
+      ${badge}
     </div>`;
   }).join('');
 

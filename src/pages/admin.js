@@ -570,6 +570,27 @@ export async function renderAdminDashboard(container) {
   swapCard("resolved", listCard(ICONS.check, "Resolved Services", resolvedInquiries.length,
     resolvedInquiries.map((x) => inqRow(x, ICONS.check)).join("")));
 
+  // Pair list-cards into grid-2-1 rows matching design layout
+  {
+    const _lc = [...container.querySelectorAll(".list-card")];
+    if (_lc.length >= 2) {
+      const _g1 = document.createElement("div");
+      _g1.className = "grid-2-1";
+      _g1.style.cssText = "margin-top:18px;align-items:start";
+      _lc[0].before(_g1);
+      _g1.appendChild(_lc[0]);
+      if (_lc[1]) _g1.appendChild(_lc[1]);
+    }
+    if (_lc.length >= 4) {
+      const _g2 = document.createElement("div");
+      _g2.className = "grid-2-1";
+      _g2.style.cssText = "margin-top:18px;align-items:start";
+      _lc[2].before(_g2);
+      _g2.appendChild(_lc[2]);
+      if (_lc[3]) _g2.appendChild(_lc[3]);
+    }
+  }
+
   const bind = (sel, cb) => {
     const el = container.querySelector(sel);
     if (el) el.onclick = cb;

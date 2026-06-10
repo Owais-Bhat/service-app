@@ -6059,3 +6059,18 @@ input, select, textarea { max-width: 100%; }
 
 .grid-2-1 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
 @media (max-width: 1040px) { .grid-2-1 { grid-template-columns: 1fr; } }
+
+/* ── Nav badge (sidebar count chip) ────────────────────────────── */
+.portal-layout .nav-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  border-radius: 20px;
+  background: var(--primary);
+  color: #fff;
+  line-height: 1.6;
+}
+
+/* ── Limit scroll height inside grid columns ────────────────────── */
+.grid-2-1 .list-scroll { max-height: 380px; }
