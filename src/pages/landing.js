@@ -1114,9 +1114,11 @@ export function renderLandingPage(container, onPortalClick) {
   function bindOTP() {
     const boxes = [...container.querySelectorAll('.srf-otp-box')];
     boxes[0]?.focus();
+    const syncFilled = () => boxes.forEach(bx => bx.classList.toggle('filled', bx.value.length > 0));
     boxes.forEach((b, i) => {
       b.addEventListener('input', () => {
         b.value = b.value.replace(/\D/g, '');
+        syncFilled();
         if (b.value && i < boxes.length - 1) boxes[i + 1].focus();
       });
       b.addEventListener('keydown', e => {
@@ -1126,7 +1128,8 @@ export function renderLandingPage(container, onPortalClick) {
         const txt = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
         if (!txt) return;
         e.preventDefault();
-        boxes.forEach((bx, ix) => bx.value = txt[ix] || '');
+        boxes.forEach((bx, ix) => { bx.value = txt[ix] || ''; });
+        syncFilled();
         boxes[Math.min(txt.length, 5)].focus();
       });
     });

@@ -18,11 +18,11 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   app.innerHTML = `
     <div class="portal-layout" data-role="${role}">
-      <div class="portal-mesh" aria-hidden="true">
-        <span class="portal-mesh-1"></span>
-        <span class="portal-mesh-2"></span>
-        <span class="portal-mesh-3"></span>
-        <span class="portal-mesh-4"></span>
+      <div class="portal-mesh bg-mesh" aria-hidden="true">
+        <span class="portal-mesh-1 m1"></span>
+        <span class="portal-mesh-2 m2"></span>
+        <span class="portal-mesh-3 m3"></span>
+        <span class="portal-mesh-4 m4"></span>
       </div>
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
