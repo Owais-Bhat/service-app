@@ -15,7 +15,15 @@ export function toast(message, type = 'info', duration = 3500) {
   const el = document.createElement('div');
   const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
   el.className = `toast ${type}`;
-  el.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
+  // Build with textContent (not innerHTML) so a message containing HTML — e.g. a
+  // server error, customer name or complaint text — can never inject markup.
+  // Non-string values are coerced so an accidental object shows readable text
+  // instead of "[object Object]".
+  const iconSpan = document.createElement('span');
+  iconSpan.textContent = icons[type] || 'ℹ️';
+  const msgSpan = document.createElement('span');
+  msgSpan.textContent = message == null ? '' : String(message);
+  el.append(iconSpan, msgSpan);
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; el.style.transition = '0.3s'; setTimeout(() => el.remove(), 300); }, duration);
 }

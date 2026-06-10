@@ -10,6 +10,10 @@ const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const {
+    DEFAULT_CACHE_UTC_OFFSET_MINUTES,
+    cacheTtlUntilMidnight,
+} = require('./cache-expiry.cjs');
+const {
     sendFast2SmsOtp,
     verifyFast2SmsOtp,
     resendFast2SmsOtp,
@@ -51,6 +55,10 @@ try {
     console.warn('[cache] redis package unavailable; using memory cache');
 }
 const memoryCache = new Map();
+const configuredCacheOffset = Number(process.env.CACHE_UTC_OFFSET_MINUTES);
+const cacheUtcOffsetMinutes = Number.isFinite(configuredCacheOffset)
+    ? configuredCacheOffset
+    : DEFAULT_CACHE_UTC_OFFSET_MINUTES;
 
 async function cacheGet(key) {
     try {
@@ -71,11 +79,20 @@ async function cacheGet(key) {
 }
 
 async function cacheSet(key, value, ttlSeconds) {
-    memoryCache.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    const now = Date.now();
+    const effectiveTtlSeconds = cacheTtlUntilMidnight(
+        ttlSeconds,
+        now,
+        cacheUtcOffsetMinutes
+    );
+    memoryCache.set(key, {
+        value,
+        expiresAt: now + effectiveTtlSeconds * 1000,
+    });
     try {
         if (redisReady) await redisReady;
         if (redisClient?.isReady) {
-            await redisClient.set(key, JSON.stringify(value), { EX: ttlSeconds });
+            await redisClient.set(key, JSON.stringify(value), { EX: effectiveTtlSeconds });
         }
     } catch (err) {
         console.warn('[cache] Redis write failed:', err.message);
@@ -92,7 +109,7 @@ async function cacheDelete(key) {
     }
 }
 
-const LANDING_BOOTSTRAP_CACHE_KEY = 'nest:landing:bootstrap:v1';
+const LANDING_BOOTSTRAP_CACHE_KEY = 'nest:cache:landing:bootstrap:v1';
 const invalidateLandingBootstrap = () => cacheDelete(LANDING_BOOTSTRAP_CACHE_KEY).catch(err => {
     console.warn('[cache] landing invalidation failed:', err.message);
 });
