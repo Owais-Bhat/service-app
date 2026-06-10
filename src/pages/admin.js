@@ -526,6 +526,18 @@ export async function renderAdminDashboard(container) {
       { label: "EOD Warn", value: eodWarnings.length, color: "#7c5cfc" },
     ];
 
+    // Top technicians by resolved job count
+    const _techMap = new Map();
+    allRows.forEach(x => {
+      if (!x.assigned_employee_id || !['resolved', 'closed'].includes(x.status)) return;
+      const prof = profileById.get(x.assigned_employee_id);
+      if (!prof?.full_name || prof.role === 'admin') return;
+      const k = x.assigned_employee_id;
+      if (!_techMap.has(k)) _techMap.set(k, { name: prof.full_name, jobs: 0 });
+      _techMap.get(k).jobs++;
+    });
+    const topTechs = [..._techMap.values()].sort((a, b) => b.jobs - a.jobs).slice(0, 6);
+
     heroEl.innerHTML = renderDashboardHero({
       resolutionRate: totalReq ? (resolvedCount / totalReq) * 100 : 0,
       assignmentRate: totalReq ? (assignedCount / totalReq) * 100 : 0,
@@ -534,7 +546,7 @@ export async function renderAdminDashboard(container) {
       resolved: resolvedCount, totalReq, assigned: assignedCount,
       paid: paidCount, billed: billedCount, inCount: a.length, empTotal,
       trendLabels, trendValues, statusSegs,
-      pipeline, alerts, companies: companyRows.slice(0, 8),
+      pipeline, alerts, companies: companyRows.slice(0, 8), topTechs,
     });
   }
 

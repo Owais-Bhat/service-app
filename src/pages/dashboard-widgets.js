@@ -95,9 +95,30 @@ function chartCard(title, body, extraHead = '') {
   </div>`;
 }
 
+// Top Technicians leaderboard card — ranked by resolved job count with inline bar.
+function techLeaderboard(techs) {
+  if (!techs || !techs.length) return '';
+  const max = Math.max(1, ...techs.map(t => t.jobs));
+  const rows = techs.map((t, i) => `<div class="lrow" style="gap:10px;align-items:center">
+    <div class="lrow-ico" style="background:${i === 0 ? 'rgba(21,160,90,0.15)' : 'var(--row-hover)'};color:${i === 0 ? 'var(--primary)' : 'var(--text-dim)'};font-family:\'Space Grotesk\',sans-serif;font-weight:700;font-size:0.8rem;width:32px;height:32px;flex-shrink:0">#${i + 1}</div>
+    <div class="lrow-main" style="min-width:0">
+      <b style="font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">${esc(t.name)}</b>
+      <div style="margin-top:6px;height:4px;border-radius:3px;background:var(--border);overflow:hidden">
+        <div style="height:100%;width:${Math.round(t.jobs / max * 100)}%;background:var(--primary);border-radius:3px;transition:width 0.6s ease"></div>
+      </div>
+    </div>
+    <span style="font-size:0.8rem;font-weight:700;color:var(--primary);white-space:nowrap;min-width:46px;text-align:right;flex-shrink:0">${t.jobs} jobs</span>
+  </div>`).join('');
+  return `<div class="card kpi-chart-card">
+    <div class="card-header"><span class="card-title">Top Technicians</span><span class="chip">${techs.length}</span></div>
+    <div class="card-body"><div class="list" style="gap:6px">${rows}</div></div>
+  </div>`;
+}
+
 // Full analytics hero: gauges + every summarisable metric as a chart.
 export function renderDashboardHero(p) {
   const legend = `<span class="hb-legend"><span class="dn-li"><i style="background:var(--success)"></i>Resolved</span><span class="dn-li"><i style="background:var(--warning)"></i>Active</span></span>`;
+  const hasTechs = p.topTechs && p.topTechs.length > 0;
   return `
     <div class="dash-kpis">
       ${kpiCard(p.resolutionRate, 'Resolution Rate', `${p.resolved} / ${p.totalReq} resolved`, 'var(--success)')}
@@ -113,5 +134,8 @@ export function renderDashboardHero(p) {
       ${chartCard("Today's Pipeline", vbars(p.pipeline))}
       ${chartCard('Alerts &amp; Health', vbars(p.alerts))}
     </div>
-    ${p.companies.length ? chartCard('Services by Company', companyBars(p.companies), legend) : ''}`;
-}
+    ${(p.companies.length || hasTechs) ? `<div class="dash-charts">
+      ${p.companies.length ? chartCard('Services by Company', companyBars(p.companies), legend) : ''}
+      ${hasTechs ? techLeaderboard(p.topTechs) : ''}
+    </div>` : ''}`;}
+
