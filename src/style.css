@@ -5560,6 +5560,124 @@ input, select, textarea { max-width: 100%; }
 .tr-quiz-result.pass { padding: 12px; color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
 .tr-quiz-result.fail { padding: 12px; color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
 
+/* ── Quiz player (employee) — type-aware, polished ─────────────── */
+.qz-progress {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 0.82rem; font-weight: 700; color: var(--text-soft);
+  margin: 4px 0 14px;
+}
+.qz-progress-bar { flex: 1; height: 8px; border-radius: 20px; background: var(--row-hover, rgba(16,50,36,0.06)); overflow: hidden; }
+.qz-progress-bar i { display: block; height: 100%; width: 0; border-radius: 20px; background: linear-gradient(90deg, var(--primary), var(--teal, #11b5ae)); transition: width 0.4s var(--ease, ease); }
+
+.qz-card {
+  border: 1px solid var(--line, var(--border));
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: var(--glass-bg-strong, var(--bg-soft));
+  box-shadow: 0 4px 18px -10px rgba(16, 40, 28, 0.18);
+  transition: border-color 0.2s var(--ease, ease), box-shadow 0.2s var(--ease, ease);
+}
+.qz-card:hover { border-color: var(--accent-soft); }
+.qz-q-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; line-height: 1.5; }
+.qz-q-head b { flex: 1; min-width: 200px; }
+.qz-num {
+  width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%;
+  background: linear-gradient(140deg, var(--primary), var(--accent, #0c6f3d));
+  color: #fff; font-weight: 800; font-size: 0.78rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+}
+.qz-type {
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.02em;
+  padding: 3px 9px; border-radius: 20px;
+  border: 1px solid currentColor; opacity: 0.85; white-space: nowrap;
+}
+.qz-img {
+  display: block; max-width: 100%; max-height: 280px; object-fit: contain;
+  border-radius: 12px; margin: 12px 0 4px; background: var(--bg);
+  border: 1px solid var(--line, var(--border));
+}
+
+/* MCQ / image options with letter badges */
+.qz-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+@media (max-width: 640px) { .qz-opts { grid-template-columns: 1fr; } }
+.qz-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-radius: 13px; cursor: pointer;
+  border: 1.5px solid var(--line, var(--border));
+  background: var(--bg, transparent);
+  transition: all 0.18s var(--ease, ease);
+  font-size: 0.88rem; font-weight: 600;
+}
+.qz-opt:hover { border-color: var(--primary); transform: translateY(-1px); }
+.qz-opt input { display: none; }
+.qz-letter {
+  width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.74rem; font-family: var(--font-display);
+  background: var(--row-hover, rgba(16,50,36,0.06)); color: var(--text-soft);
+  transition: all 0.18s var(--ease, ease);
+}
+.qz-opt.sel {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+  box-shadow: 0 4px 14px -6px var(--accent-glow);
+}
+.qz-opt.sel .qz-letter { background: var(--primary); color: #fff; }
+
+/* Fill-in-the-blank inline dropdown */
+.qz-fill-text { font-weight: 600; }
+.qz-blank {
+  display: inline-block; margin: 0 6px; padding: 7px 12px;
+  border-radius: 10px; border: 1.5px dashed var(--primary);
+  background: var(--accent-soft); color: var(--text);
+  font-weight: 700; font-size: 0.86rem; font-family: var(--font-body);
+  outline: none; cursor: pointer; min-width: 140px;
+  transition: all 0.18s var(--ease, ease);
+}
+.qz-blank.filled { border-style: solid; background: var(--bg-soft); }
+.qz-blank:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Match the following */
+.qz-match { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.qz-match-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 13px;
+  border: 1px solid var(--line, var(--border)); background: var(--bg, transparent);
+}
+.qz-match-left { flex: 1; min-width: 0; font-weight: 700; font-size: 0.88rem; }
+.qz-match-arrow { color: var(--primary); font-weight: 800; flex-shrink: 0; }
+.qz-match-sel { flex: 1.2; min-width: 150px; margin: 0; }
+@media (max-width: 560px) {
+  .qz-match-row { flex-wrap: wrap; }
+  .qz-match-sel { flex-basis: 100%; }
+}
+
+.qz-submit {
+  width: 100%; margin-top: 10px; min-height: 48px;
+  background: linear-gradient(135deg, var(--primary), var(--accent, #0c6f3d));
+  box-shadow: 0 10px 26px -10px var(--accent-glow);
+}
+
+/* ── Admin quiz Excel-upload card ── */
+.qx-card { border: 1px dashed var(--primary) !important; }
+.qx-hint { font-size: 0.8rem; color: var(--text-soft); line-height: 1.5; margin: 4px 0 10px; }
+.qx-hint code { background: var(--row-hover, rgba(16,50,36,0.06)); padding: 1px 6px; border-radius: 6px; font-family: var(--font-mono); font-size: 0.75rem; }
+.qx-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.qx-status { margin-top: 10px; font-size: 0.82rem; font-weight: 600; line-height: 1.5; }
+.qx-spin {
+  display: inline-block; width: 13px; height: 13px; vertical-align: -2px;
+  border: 2px solid var(--accent-soft); border-top-color: var(--primary);
+  border-radius: 50%; animation: nest-spin 0.7s linear infinite;
+}
+@keyframes nest-spin { to { transform: rotate(360deg); } }
+.qx-chip {
+  font-size: 0.64rem; font-weight: 800; padding: 2px 8px; border-radius: 20px;
+  border: 1px solid; margin-left: 6px; white-space: nowrap; vertical-align: 1px;
+}
+.qx-thumb { max-height: 110px; border-radius: 10px; margin: 8px 0 2px; border: 1px solid var(--line, var(--border)); }
+
 /* Confetti */
 .tr-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; }
 .tr-confetti i { position: absolute; top: -10px; width: 9px; height: 14px; border-radius: 2px; animation: trFall linear forwards; }

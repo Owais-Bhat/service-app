@@ -92,6 +92,108 @@ function burstConfetti(host) {
   setTimeout(() => wrap.remove(), 2200);
 }
 
+/* ─────────────── quiz question types (envelope helpers) ───────────────
+   The DB stores every question as (question TEXT, options JSON, correct_index).
+   Rich types pack metadata into the question column as a JSON envelope:
+   { _qz:1, t:'mcq'|'fill'|'image'|'match', text, img, group, gtitle, left }
+   Match-the-following uploads create ONE row PER PAIR (same group id) so the
+   server's index-based grading keeps working untouched. */
+const packQ = (o) => JSON.stringify({ _qz: 1, ...o });
+function parseQ(raw) {
+  const s = String(raw || '');
+  if (s[0] === '{' && s.includes('"_qz"')) {
+    try {
+      const o = JSON.parse(s);
+      return { t: o.t || 'mcq', text: o.text || '', img: o.img || null, group: o.group || null, gtitle: o.gtitle || '', left: o.left || '' };
+    } catch (_) { /* fall through */ }
+  }
+  return { t: 'mcq', text: s, img: null, group: null, gtitle: '', left: '' };
+}
+const QTYPE_META = {
+  mcq:   { chip: '🎯 MCQ',            color: 'var(--primary)' },
+  fill:  { chip: '✍️ Fill in the blank', color: '#A78BFA' },
+  image: { chip: '🖼️ Image question',  color: '#38BDF8' },
+  match: { chip: '🧩 Match the following', color: '#F59E0B' },
+};
+
+// SheetJS loaded on demand from CDN — no build dependency needed.
+async function loadXLSX() {
+  if (window.__XLSX) return window.__XLSX;
+  window.__XLSX = await import(/* @vite-ignore */ 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
+  return window.__XLSX;
+}
+
+// Parse uploaded workbook rows → array of { question, options, correct_index } bodies.
+function rowsToQuizBodies(rows) {
+  const bodies = [];
+  const errors = [];
+  const norm = (row) => {
+    const out = {};
+    Object.keys(row).forEach(k => { out[String(k).toLowerCase().replace(/[^a-z]/g, '')] = row[k]; });
+    return out;
+  };
+  rows.forEach((rawRow, idx) => {
+    const r = norm(rawRow);
+    const line = idx + 2; // header is row 1
+    const type = String(r.type || 'mcq').trim().toLowerCase();
+    const text = String(r.question || '').trim();
+    const img = String(r.imageurl || r.image || '').trim() || null;
+    const opts = ['optiona', 'optionb', 'optionc', 'optiond'].map(k => String(r[k] ?? '').trim()).filter(Boolean);
+    if (!text) { errors.push(`Row ${line}: question is empty`); return; }
+
+    if (type === 'match') {
+      const pairs = opts.map(p => {
+        const i = p.indexOf('=');
+        return i > 0 ? [p.slice(0, i).trim(), p.slice(i + 1).trim()] : null;
+      }).filter(p => p && p[0] && p[1]);
+      if (pairs.length < 2) { errors.push(`Row ${line}: match needs at least 2 "Left=Right" pairs in the Option columns`); return; }
+      const group = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+      const rights = pairs.map(p => p[1]);
+      pairs.forEach((p, i) => bodies.push({
+        question: packQ({ t: 'match', text, gtitle: text, left: p[0], group }),
+        options: rights,
+        correct_index: i,
+      }));
+      return;
+    }
+
+    if (opts.length < 2) { errors.push(`Row ${line}: needs at least 2 options`); return; }
+    const cRaw = String(r.correct ?? r.correctanswer ?? 'A').trim();
+    let correct_index = 'ABCD'.indexOf(cRaw.toUpperCase());
+    if (correct_index === -1 && /^[1-4]$/.test(cRaw)) correct_index = Number(cRaw) - 1;
+    if (correct_index === -1) correct_index = opts.findIndex(o => o.toLowerCase() === cRaw.toLowerCase());
+    if (correct_index < 0 || correct_index >= opts.length) { errors.push(`Row ${line}: Correct must be A–D, 1–4, or match an option`); return; }
+
+    if (type === 'fill' && !/_{2,}/.test(text)) { errors.push(`Row ${line}: fill questions need a blank written as ___ in the question`); return; }
+    const t = type === 'image' || (img && type === 'mcq') ? 'image' : (type === 'fill' ? 'fill' : 'mcq');
+    bodies.push({
+      question: (t === 'mcq') ? text : packQ({ t, text, img }),
+      options: opts,
+      correct_index,
+    });
+  });
+  return { bodies, errors };
+}
+
+// Build + download the sample workbook covering every question type.
+async function downloadQuizSample() {
+  const XLSX = await loadXLSX();
+  const rows = [
+    ['Type', 'Question', 'OptionA', 'OptionB', 'OptionC', 'OptionD', 'Correct', 'ImageURL'],
+    ['mcq', 'Which cable carries video for an analog CCTV camera?', 'Coaxial', 'HDMI', 'Audio', 'VGA', 'A', ''],
+    ['mcq', 'What does PoE stand for?', 'Power over Ethernet', 'Point of Entry', 'Port of Exchange', '', 'A', ''],
+    ['fill', 'The default RTSP port is ___', '554', '80', '8080', '443', 'A', ''],
+    ['fill', 'A ___ assigns IP addresses automatically on a network', 'DHCP server', 'DNS server', 'Firewall', 'Repeater', 'A', ''],
+    ['image', 'Which device is shown in the image?', 'DVR', 'NVR', 'Network Switch', 'Router', 'C', 'https://example.com/your-image.jpg'],
+    ['match', 'Match the device to its purpose', 'DVR=Records analog CCTV footage', 'Switch=Connects LAN devices', 'Biometric=Marks attendance', 'VDP=Video door communication', '', ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 8 }, { wch: 48 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 9 }, { wch: 34 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Quiz');
+  XLSX.writeFile(wb, 'quiz-upload-sample.xlsx');
+}
+
 /* ───────────────────────────── ADMIN ───────────────────────────── */
 
 export async function renderTrainingCoursesAdmin(container) {
@@ -268,13 +370,36 @@ async function openCourseEditor(courseId, onClose, startTab = 'lessons') {
       </div>
 
       <div class="ce-pane" data-p="quiz" style="display:none;">
+        <div class="tr-form-card qx-card">
+          <div class="tr-form-card-h">📊 Bulk upload from Excel</div>
+          <p class="qx-hint">One file, all question types: <b>mcq</b>, <b>fill</b> (write the blank as <code>___</code>), <b>image</b> (image URL column) and <b>match</b> (pairs as <code>Left=Right</code> in the option columns). Download the sample, fill it the same way, upload — done.</p>
+          <div class="qx-actions">
+            <button class="btn btn-secondary btn-sm" id="qx-sample">${miniIcon(ICONS.download || ICONS.clipboard)}<span>Download sample Excel</span></button>
+            <input type="file" id="qx-file" accept=".xlsx,.xls,.csv" hidden>
+            <button class="btn btn-primary btn-sm" id="qx-upload">${miniIcon(ICONS.plus)}<span>Upload Excel</span></button>
+          </div>
+          <div id="qx-status" class="qx-status"></div>
+        </div>
+
         <div id="ce-quiz" class="tr-list"></div>
+
         <div class="tr-form-card">
-          <div class="tr-form-card-h">${miniIcon(ICONS.plus)} Add a quiz question</div>
-          <div class="form-group tr-fg"><label>Question</label><input id="q-text" placeholder="Type the question"></div>
+          <div class="tr-form-card-h">${miniIcon(ICONS.plus)} Add a single question</div>
+          <div class="tr-2col">
+            <div class="form-group tr-fg"><label>Type</label>
+              <select id="q-type">
+                <option value="mcq">🎯 Multiple choice</option>
+                <option value="fill">✍️ Fill in the blank (dropdown)</option>
+                <option value="image">🖼️ Image question</option>
+              </select>
+            </div>
+            <div class="form-group tr-fg" id="q-img-wrap" style="display:none;"><label>Question image</label><input type="file" id="q-img" accept="image/*"></div>
+          </div>
+          <div class="form-group tr-fg"><label>Question <small id="q-text-hint" style="color:var(--text-dim);font-weight:400;"></small></label><input id="q-text" placeholder="Type the question"></div>
           <label style="font-size:.78rem;color:var(--text-dim);">Tap the circle to mark the correct answer</label>
           ${[0, 1, 2, 3].map(i => `<div class="tr-opt-row"><input type="radio" name="q-correct" value="${i}" ${i === 0 ? 'checked' : ''} title="Mark correct"><input id="q-opt-${i}" placeholder="Option ${i + 1}${i < 2 ? ' (required)' : ' (optional)'}"></div>`).join('')}
           <button class="btn btn-primary btn-sm" id="q-add" style="margin-top:6px;">${miniIcon(ICONS.plus)}<span>Add question</span></button>
+          <p class="qx-hint" style="margin-top:8px;">Need match-the-following? Use the Excel upload above — pairs go in as <code>Left=Right</code>.</p>
         </div>
       </div>
 
@@ -329,11 +454,20 @@ async function openCourseEditor(courseId, onClose, startTab = 'lessons') {
   };
   const renderQuiz = () => {
     const box = ov.querySelector('#ce-quiz');
-    box.innerHTML = data.quiz.length ? data.quiz.map((q, i) => `
+    box.innerHTML = data.quiz.length ? data.quiz.map((q, i) => {
+      const p = parseQ(q.question);
+      const meta = QTYPE_META[p.t] || QTYPE_META.mcq;
+      const heading = p.t === 'match' ? `${esc(p.gtitle)} — <i>${esc(p.left)}</i>` : esc(p.text);
+      return `
       <div class="tr-q tr-in" style="--d:${(i * 0.03).toFixed(2)}s">
-        <div class="tr-q-top"><b>${i + 1}. ${esc(q.question)}</b><button class="btn btn-icon btn-danger btn-sm q-del" data-id="${q.id}" title="Delete">${ICONS.close}</button></div>
+        <div class="tr-q-top">
+          <b>${i + 1}. ${heading} <span class="qx-chip" style="color:${meta.color};border-color:${meta.color}">${meta.chip}</span></b>
+          <button class="btn btn-icon btn-danger btn-sm q-del" data-id="${q.id}" title="Delete">${ICONS.close}</button>
+        </div>
+        ${p.img ? `<img src="${esc(p.img)}" class="qx-thumb" alt="">` : ''}
         <div class="tr-q-opts">${q.options.map((o, oi) => `<span class="${oi === q.correct_index ? 'tr-q-correct' : ''}">${oi === q.correct_index ? '✓' : '○'} ${esc(o)}</span>`).join('')}</div>
-      </div>`).join('') : '<div class="tr-empty-mini">No quiz questions yet.</div>';
+      </div>`;
+    }).join('') : '<div class="tr-empty-mini">No quiz questions yet. Upload an Excel or add one below.</div>';
     box.querySelectorAll('.q-del').forEach(b => b.onclick = async () => {
       try { await api(`/training/quiz/${b.dataset.id}`, { method: 'DELETE', headers: authH() }); data.quiz = data.quiz.filter(x => x.id !== b.dataset.id); renderQuiz(); } catch (e) { toast(e.message, 'error'); }
     });
@@ -357,17 +491,78 @@ async function openCourseEditor(courseId, onClose, startTab = 'lessons') {
     btn.disabled = false; btn.innerHTML = `${miniIcon(ICONS.plus)}<span>Add lesson</span>`;
   };
 
+  // Manual add — type-aware (mcq / fill / image with photo upload).
+  const qType = ov.querySelector('#q-type');
+  qType.onchange = () => {
+    ov.querySelector('#q-img-wrap').style.display = qType.value === 'image' ? '' : 'none';
+    ov.querySelector('#q-text-hint').textContent = qType.value === 'fill' ? '— write the blank as ___' : '';
+  };
   ov.querySelector('#q-add').onclick = async () => {
-    const question = ov.querySelector('#q-text').value.trim();
+    const text = ov.querySelector('#q-text').value.trim();
     const options = [0, 1, 2, 3].map(i => ov.querySelector(`#q-opt-${i}`).value.trim()).filter(Boolean);
-    if (!question || options.length < 2) return toast('Question and at least 2 options required', 'info');
+    if (!text || options.length < 2) return toast('Question and at least 2 options required', 'info');
+    const t = qType.value;
+    if (t === 'fill' && !/_{2,}/.test(text)) return toast('Fill-in-the-blank questions need a ___ in the question text', 'info');
     const correct_index = Number(ov.querySelector('input[name="q-correct"]:checked')?.value || 0);
+    if (correct_index >= options.length) return toast('The marked correct option is empty', 'info');
+    const btn = ov.querySelector('#q-add'); btn.disabled = true;
     try {
+      let img = null;
+      const imgFile = ov.querySelector('#q-img')?.files?.[0];
+      if (t === 'image') {
+        if (!imgFile) { btn.disabled = false; return toast('Pick an image for the question', 'info'); }
+        img = await uploadFile(imgFile);
+      }
+      const question = t === 'mcq' ? text : packQ({ t, text, img });
       const { id } = await api(`/training/courses/${courseId}/quiz`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ question, options, correct_index, position: data.quiz.length }) });
       data.quiz.push({ id, question, options, correct_index });
       ov.querySelector('#q-text').value = ''; [0, 1, 2, 3].forEach(i => ov.querySelector(`#q-opt-${i}`).value = '');
+      if (ov.querySelector('#q-img')) ov.querySelector('#q-img').value = '';
       renderQuiz(); toast('Question added', 'success');
     } catch (e) { toast(e.message, 'error'); }
+    btn.disabled = false;
+  };
+
+  // Excel bulk upload + sample download.
+  ov.querySelector('#qx-sample').onclick = async () => {
+    try { await downloadQuizSample(); } catch (e) { toast('Could not build sample: ' + e.message, 'error'); }
+  };
+  const qxFile = ov.querySelector('#qx-file');
+  ov.querySelector('#qx-upload').onclick = () => qxFile.click();
+  qxFile.onchange = async () => {
+    const file = qxFile.files?.[0];
+    if (!file) return;
+    const status = ov.querySelector('#qx-status');
+    status.innerHTML = '<span class="qx-spin"></span> Reading workbook…';
+    try {
+      const XLSX = await loadXLSX();
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const { bodies, errors } = rowsToQuizBodies(rows);
+      if (!bodies.length) {
+        status.innerHTML = `<span style="color:var(--danger)">No valid questions found.${errors.length ? ' ' + esc(errors[0]) : ''}</span>`;
+        qxFile.value = ''; return;
+      }
+      let added = 0;
+      for (const body of bodies) {
+        status.innerHTML = `<span class="qx-spin"></span> Uploading question ${added + 1}/${bodies.length}…`;
+        const { id } = await api(`/training/courses/${courseId}/quiz`, {
+          method: 'POST', headers: jsonH(),
+          body: JSON.stringify({ ...body, position: data.quiz.length }),
+        });
+        data.quiz.push({ id, ...body });
+        added++;
+      }
+      renderQuiz();
+      status.innerHTML = `<span style="color:var(--success)">✓ ${added} question${added === 1 ? '' : 's'} added.</span>` +
+        (errors.length ? ` <span style="color:var(--warning)">${errors.length} row${errors.length === 1 ? '' : 's'} skipped: ${esc(errors.join(' · '))}</span>` : '');
+      toast(`${added} quiz questions uploaded`, 'success');
+    } catch (e) {
+      status.innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`;
+      toast(e.message, 'error');
+    }
+    qxFile.value = '';
   };
 
   const asAll = ov.querySelector('#as-all');
@@ -552,21 +747,71 @@ async function openCoursePlayer(courseId, onClose) {
         </div>`;
       }).join('') || '<div class="tr-empty-mini">No lessons.</div>'}
 
-      ${d.quiz.length ? `
+      ${d.quiz.length ? (() => {
+        // Group match rows (same group id) into one visual unit.
+        const units = [];
+        const groups = new Map();
+        d.quiz.forEach(q => {
+          const p = parseQ(q.question);
+          if (p.t === 'match' && p.group) {
+            if (!groups.has(p.group)) { const u = { t: 'match', gtitle: p.gtitle, rows: [] }; groups.set(p.group, u); units.push(u); }
+            groups.get(p.group).rows.push({ q, p });
+          } else units.push({ t: p.t, q, p });
+        });
+        const blank = (q) => {
+          // Render fill-in-the-blank text with an inline dropdown at the ___.
+          const p = parseQ(q.question);
+          const parts = p.text.split(/_{2,}/);
+          const sel = `<select class="qz-blank" data-q="${q.id}"><option value="">— choose —</option>${q.options.map((o, oi) => `<option value="${oi}">${esc(o)}</option>`).join('')}</select>`;
+          return parts.map(esc).join(sel);
+        };
+        let n = 0;
+        return `
         <h4 class="tr-section-h">${miniIcon(ICONS.check)} Quiz <small style="color:var(--text-dim);font-weight:400;">(pass ≥ 70%)</small></h4>
         ${d.completion ? `<div class="tr-pass-banner">${miniIcon(ICONS.check)} Passed — score ${d.completion.quiz_score}%${d.completion.completed_at ? ` on ${esc(formatDateTime(d.completion.completed_at))}` : ''}</div>` : ''}
+        <div class="qz-progress"><span id="qz-done">0</span>/${d.quiz.length} answered<div class="qz-progress-bar"><i id="qz-progress-fill"></i></div></div>
         <div id="cp-quiz">
-          ${d.quiz.map((q, qi) => `
-            <div class="tr-quiz-q" data-q="${q.id}">
-              <b>${qi + 1}. ${esc(q.question)}</b>
-              <div class="tr-quiz-opts">
-                ${q.options.map((o, oi) => `<label class="tr-quiz-opt"><input type="radio" name="q-${q.id}" value="${oi}"><span>${esc(o)}</span></label>`).join('')}
-              </div>
-            </div>`).join('')}
+          ${units.map(u => {
+            n++;
+            const meta = QTYPE_META[u.t] || QTYPE_META.mcq;
+            const chip = `<span class="qz-type" style="color:${meta.color}">${meta.chip}</span>`;
+            if (u.t === 'match') return `
+              <div class="qz-card">
+                <div class="qz-q-head"><span class="qz-num">${n}</span><b>${esc(u.gtitle)}</b>${chip}</div>
+                <div class="qz-match">
+                  ${u.rows.map(({ q, p }) => `
+                    <div class="qz-match-row">
+                      <span class="qz-match-left">${esc(p.left)}</span>
+                      <span class="qz-match-arrow">⟶</span>
+                      <select class="qz-blank qz-match-sel" data-q="${q.id}">
+                        <option value="">— select match —</option>
+                        ${q.options.map((o, oi) => `<option value="${oi}">${esc(o)}</option>`).join('')}
+                      </select>
+                    </div>`).join('')}
+                </div>
+              </div>`;
+            if (u.t === 'fill') return `
+              <div class="qz-card">
+                <div class="qz-q-head"><span class="qz-num">${n}</span><b class="qz-fill-text">${blank(u.q)}</b>${chip}</div>
+              </div>`;
+            return `
+              <div class="qz-card" data-q="${u.q.id}">
+                <div class="qz-q-head"><span class="qz-num">${n}</span><b>${esc(u.p.text)}</b>${chip}</div>
+                ${u.p.img ? `<img class="qz-img" src="${esc(u.p.img)}" alt="Question image" loading="lazy">` : ''}
+                <div class="qz-opts">
+                  ${u.q.options.map((o, oi) => `
+                    <label class="qz-opt">
+                      <input type="radio" name="q-${u.q.id}" value="${oi}">
+                      <span class="qz-letter">${'ABCD'[oi] || oi + 1}</span>
+                      <span class="qz-opt-text">${esc(o)}</span>
+                    </label>`).join('')}
+                </div>
+              </div>`;
+          }).join('')}
         </div>
-        <button class="btn btn-primary" id="cp-submit" style="width:100%;margin-top:6px;">${miniIcon(ICONS.check)}<span>Submit quiz</span></button>
-        <div id="cp-result" class="tr-quiz-result"></div>
-      ` : (total && doneCount === total ? '<div class="tr-pass-banner" style="margin-top:14px;">🎉 All lessons completed!</div>' : '')}
+        <button class="btn btn-primary qz-submit" id="cp-submit">${miniIcon(ICONS.check)}<span>Submit quiz</span></button>
+        <div id="cp-result" class="tr-quiz-result"></div>`;
+      })() : (total && doneCount === total ? '<div class="tr-pass-banner" style="margin-top:14px;">🎉 All lessons completed!</div>' : '')}
     `;
     animateRings(body);
 
@@ -589,16 +834,40 @@ async function openCoursePlayer(courseId, onClose) {
       } catch (e) { toast(e.message, 'error'); b.disabled = false; }
     });
 
-    // visual selection for quiz options
-    body.querySelectorAll('.tr-quiz-opt input').forEach(inp => inp.onchange = () => {
-      const q = inp.closest('.tr-quiz-q');
-      q.querySelectorAll('.tr-quiz-opt').forEach(o => o.classList.toggle('sel', o.contains(inp)));
+    // Collect answers from radios (mcq/image) and dropdowns (fill/match).
+    const collectAnswers = () => {
+      const answers = {};
+      d.quiz.forEach(q => {
+        const radio = body.querySelector(`input[name="q-${q.id}"]:checked`);
+        if (radio) { answers[q.id] = Number(radio.value); return; }
+        const sel = body.querySelector(`.qz-blank[data-q="${q.id}"]`);
+        if (sel && sel.value !== '') answers[q.id] = Number(sel.value);
+      });
+      return answers;
+    };
+    const updateProgress = () => {
+      const doneEl = body.querySelector('#qz-done');
+      const fill = body.querySelector('#qz-progress-fill');
+      if (!doneEl) return;
+      const count = Object.keys(collectAnswers()).length;
+      doneEl.textContent = count;
+      if (fill) fill.style.width = (d.quiz.length ? (count / d.quiz.length) * 100 : 0) + '%';
+    };
+
+    // visual selection + live progress
+    body.querySelectorAll('.qz-opt input').forEach(inp => inp.onchange = () => {
+      const card = inp.closest('.qz-card');
+      card.querySelectorAll('.qz-opt').forEach(o => o.classList.toggle('sel', o.contains(inp)));
+      updateProgress();
+    });
+    body.querySelectorAll('.qz-blank').forEach(sel => sel.onchange = () => {
+      sel.classList.toggle('filled', sel.value !== '');
+      updateProgress();
     });
 
     const sub = body.querySelector('#cp-submit');
     if (sub) sub.onclick = async () => {
-      const answers = {};
-      d.quiz.forEach(q => { const sel = body.querySelector(`input[name="q-${q.id}"]:checked`); if (sel) answers[q.id] = Number(sel.value); });
+      const answers = collectAnswers();
       if (Object.keys(answers).length < d.quiz.length) return toast('Please answer all questions', 'info');
       sub.disabled = true; sub.innerHTML = '<span>Submitting…</span>';
       try {
