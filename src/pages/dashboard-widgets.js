@@ -5,26 +5,37 @@
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function clampPct(v) { return Math.max(0, Math.min(100, Number(v) || 0)); }
 
-// Circular progress ring with a centered percentage.
-function gauge(pct, color, size = 92, stroke = 9) {
+// DESIGN GaugeRing: 270° open arc (needle-free fill) with centered value.
+export function gauge(pct, color, size = 92, stroke = 9, suffix = '%') {
   const p = clampPct(pct);
   const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const off = c * (1 - p / 100);
   const cx = size / 2;
+  const polar = (ang) => {
+    const a = (ang - 90) * Math.PI / 180;
+    return [cx + r * Math.cos(a), cx + r * Math.sin(a)];
+  };
+  const arc = (from, to) => {
+    const [x1, y1] = polar(from), [x2, y2] = polar(to);
+    const large = to - from > 180 ? 1 : 0;
+    return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+  };
+  const start = 135, sweep = 270;
+  const fillEnd = start + Math.max(sweep * (p / 100), 0.6);
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="kpi-gauge-svg" role="img" aria-label="${Math.round(p)} percent">
-    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${stroke}"/>
-    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
-      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${cx} ${cx})" class="kpi-gauge-arc"/>
-    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="kpi-gauge-txt">${Math.round(p)}%</text>
+    <path d="${arc(start, start + sweep)}" fill="none" stroke="var(--panel-3, var(--border))" stroke-width="${stroke}" stroke-linecap="round"/>
+    ${p > 0 ? `<path d="${arc(start, fillEnd)}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" class="kpi-gauge-arc"/>` : ''}
+    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="kpi-gauge-txt">${Math.round(p)}<tspan class="kpi-gauge-suffix">${suffix}</tspan></text>
   </svg>`;
 }
 
-function kpiCard(pct, label, sub, color) {
-  return `<div class="card kpi-card">
+// DESIGN KpiCard: gauge ring left · label / big value / context line right.
+export function kpiCard(pct, label, sub, color, value) {
+  const big = value != null ? value : `${Math.round(clampPct(pct))}<small>%</small>`;
+  return `<div class="card kpi kpi-card">
     ${gauge(pct, color)}
-    <div class="kpi-meta">
+    <div class="kpi-info">
       <div class="kpi-label">${label}</div>
+      <div class="kpi-value">${big}</div>
       <div class="kpi-sub">${sub}</div>
     </div>
   </div>`;
@@ -102,14 +113,15 @@ function companyBars(rows) {
   }).join('')}</div>`;
 }
 
-// Donut from segments [{label, value, color}] with a legend + center total.
-function donut(segs) {
+// DESIGN Donut: 168px ring (stroke 26), center total + "total", legend below.
+export function donut(segs, size = 168, sw = 26) {
   const total = segs.reduce((s, x) => s + x.value, 0) || 0;
-  const r = 54, c = 2 * Math.PI * r, cx = 64, sw = 18;
+  const r = (size - sw) / 2, c = 2 * Math.PI * r, cx = size / 2;
   let acc = 0;
   const arcs = total === 0
-    ? `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${sw}"/>`
-    : segs.filter(s => s.value > 0).map(s => {
+    ? `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--panel-3, var(--border))" stroke-width="${sw}"/>`
+    : `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--panel-3, var(--border))" stroke-width="${sw}"/>` +
+      segs.filter(s => s.value > 0).map(s => {
         const frac = s.value / total;
         const len = c * frac;
         const off = -c * acc;
@@ -119,9 +131,10 @@ function donut(segs) {
       }).join('');
   const legend = segs.map(s => `<span class="dn-li"><i style="background:${s.color}"></i>${esc(s.label)} · <b>${s.value}</b></span>`).join('');
   return `<div class="dn-wrap">
-    <svg width="128" height="128" viewBox="0 0 128 128" class="dn-svg">${arcs}
-      <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="dn-total">${total}</text>
-    </svg>
+    <div class="dn-fig">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="dn-svg">${arcs}</svg>
+      <div class="dn-center"><b>${total}</b><span>total</span></div>
+    </div>
     <div class="dn-legend">${legend}</div>
   </div>`;
 }
@@ -159,10 +172,10 @@ export function renderDashboardHero(p) {
   const hasTechs = p.topTechs && p.topTechs.length > 0;
   return `
     <div class="dash-kpis">
-      ${kpiCard(p.resolutionRate, 'Resolution Rate', `${p.resolved} / ${p.totalReq} resolved`, 'var(--success)')}
-      ${kpiCard(p.assignmentRate, 'Assignment Rate', `${p.assigned} / ${p.totalReq} assigned`, 'var(--info)')}
-      ${kpiCard(p.collectionRate, 'Collection Rate', `${p.paid} / ${p.billed} bills paid`, 'var(--primary)')}
-      ${kpiCard(p.attendanceRate, 'Attendance', `${p.inCount} / ${p.empTotal} clocked in`, 'var(--warning)')}
+      ${kpiCard(p.resolutionRate, 'Resolution Rate', `of ${p.totalReq} total requests`, 'var(--success)', `${p.resolved}<small> resolved</small>`)}
+      ${kpiCard(p.assignmentRate, 'Assignment Rate', `of ${p.totalReq} total requests`, 'var(--info)', `${p.assigned}<small> assigned</small>`)}
+      ${kpiCard(p.collectionRate, 'Collection Rate', `of ${p.billed} bills raised`, 'var(--primary)', `${p.paid}<small> paid</small>`)}
+      ${kpiCard(p.attendanceRate, 'Attendance', `of ${p.empTotal} employees`, 'var(--warning)', `${p.inCount}<small> in</small>`)}
     </div>
     <div class="dash-charts">
       ${chartCard('Service Requests Trend', areaChart(p.trendValues, p.trendLabels, 'var(--primary)'))}

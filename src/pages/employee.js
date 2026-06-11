@@ -3,6 +3,7 @@ import { toast, formatDate, formatDateTime, formatTime, showNotification, calcul
 import { ICONS } from '../icons.js';
 import { saveDeviceTaken, saveDeviceReturn, saveFollowUpStatus, loadDeviceTakenLog, loadDeviceReturnLog, loadDeviceFollowUpLogs } from './device-tracking.js';
 import { getEmployeeDevices, getDeviceStatus, renderDeviceTrackingTab, renderFollowUpTab } from './device-tracking-employee.js';
+import { kpiCard } from './dashboard-widgets.js';
 
 // Device tracking master on/off (admin-controlled). Cached after first fetch.
 let deviceTrackingEnabled = true;
@@ -1117,36 +1118,20 @@ export async function renderEmployeeDashboard(container) {
       </div>
     ` : ''}
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value stat-value-inline" style="color:${isClockedIn ? 'var(--success)' : 'var(--text-dim)'};">
-          <span style="width:24px; height:24px; display:flex;">${isClockedIn ? ICONS.check : ICONS.pause}</span>
-          <span>${isClockedIn ? 'Clocked In' : 'Not Started'}</span>
-        </div>
-        <div class="stat-label">${isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : clockInClosed ? `Closed after ${clockOutSetting.label}` : 'Tap Clock In to start'}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value stat-value-inline" style="color:var(--warning)">
-          <span style="width:24px; height:24px; display:flex;">${ICONS.wrench}</span>
-          <span>${activeTasks.length}</span>
-        </div>
-        <div class="stat-label">Active Tasks</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value stat-value-inline" style="color:var(--primary)">
-          <span style="width:24px; height:24px; display:flex;">${ICONS.ticket}</span>
-          <span>${acceptedInquiries.length}</span>
-        </div>
-        <div class="stat-label">Accepted Requests</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value stat-value-inline" style="color:var(--success)">
-          <span style="width:24px; height:24px; display:flex;">${ICONS.check}</span>
-          <span>${t.filter(x => displayStatus(x.status) === 'resolved').length}</span>
-        </div>
-        <div class="stat-label">Completed</div>
-      </div>
-    </div>
+    ${(() => {
+      const completedCount = t.filter(x => displayStatus(x.status) === 'resolved').length;
+      const workTotal = activeTasks.length + acceptedInquiries.length + completedCount;
+      const share = (n) => workTotal ? (n / workTotal) * 100 : 0;
+      return `<div class="dash-kpis">
+        ${kpiCard(isClockedIn ? 100 : 0, 'Clock Status',
+          isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : clockInClosed ? `Closed after ${clockOutSetting.label}` : 'Tap Clock In to start',
+          isClockedIn ? 'var(--success)' : 'var(--text-dim)',
+          isClockedIn ? 'IN' : 'OUT')}
+        ${kpiCard(share(activeTasks.length), 'Active Tasks', `of ${workTotal} total jobs`, 'var(--warning)', `${activeTasks.length}`)}
+        ${kpiCard(share(acceptedInquiries.length), 'Accepted Requests', 'awaiting completion', 'var(--info)', `${acceptedInquiries.length}`)}
+        ${kpiCard(share(completedCount), 'Completed', `${completedCount} of ${workTotal} resolved`, 'var(--success)', `${completedCount}`)}
+      </div>`;
+    })()}
 
     <div class="employee-dash-band">
       <section class="notice-board">
