@@ -1052,11 +1052,11 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
       supabase.from('notices').select('*').eq('active', 1).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
-      supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at').not('feedback_rating', 'is', null),
+      supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at'),
       supabase.from('profiles').select('id,full_name,role'),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
-    feedbackRows = res[7]?.data || [];
+    feedbackRows = (res[7]?.data || []).filter(r => r.feedback_rating != null);
     allProfiles = res[8]?.data || [];
     attendanceHistory = res[4].data || [];
     notices = (res[5].data || [])
