@@ -666,9 +666,9 @@ export async function renderEmployeeCourses(container) {
         </div>
       </div>
       ${courses.length ? `<div class="tr-stats tr-in" style="--d:.05s">
-        ${statCard(ICONS.clipboard, courses.length, 'Assigned', 'var(--primary)')}
-        ${statCard(ICONS.check, totalDone, 'Completed', 'var(--success)')}
-        ${statCard(ICONS.clock, avg + '%', 'Avg progress', '#A78BFA')}
+        ${statCard(ICONS.shield, courses.length, 'Courses assigned', 'var(--primary)')}
+        ${statCard(ICONS.star, totalDone, 'Completed', '#A78BFA')}
+        ${statCard(ICONS.clock, avg + '%', 'Average progress', 'var(--amber, #f5a524)')}
       </div>` : ''}
       ${courses.length === 0 ? '<div class="tr-empty card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-dim)">No courses assigned to you yet. Check back soon!</div></div>'
         : `<div class="tr-grid">
@@ -676,20 +676,49 @@ export async function renderEmployeeCourses(container) {
           const total = co.lesson_count || 0;
           const pct = total ? Math.round((co.done_count / total) * 100) : (Number(co.completed) ? 100 : 0);
           const done = Number(co.completed) > 0;
+          const cat = (co.category || 'General');
+          const cl = cat.toLowerCase();
+          const theme = cl.includes('cctv') || cl.includes('camera') ? 't1'
+            : cl.includes('network') || cl.includes('wifi') ? 't2'
+            : cl.includes('biometric') || cl.includes('attendance') ? 't3'
+            : cl.includes('gate') || cl.includes('automation') ? 't4'
+            : ['t1', 't2', 't3', 't4', 't5'][i % 5];
+          const bico = cl.includes('cctv') || cl.includes('camera') ? ICONS.shield
+            : cl.includes('network') || cl.includes('wifi') ? ICONS.link
+            : cl.includes('biometric') || cl.includes('attendance') ? ICONS.users
+            : cl.includes('gate') || cl.includes('automation') ? ICONS.box
+            : ICONS.clipboard;
+          const ringC = 2 * Math.PI * 21;
+          const ringOff = ringC * (1 - Math.min(pct, 100) / 100);
           return `
           <div class="tr-card tr-card-clickable tr-in" style="--d:${(0.08 + i * 0.05).toFixed(2)}s" data-id="${co.id}">
-            <div class="tr-card-accent" style="background:${done ? 'var(--success)' : 'var(--primary)'}"></div>
+            <div class="tr-banner ${theme}">
+              <div class="tr-pat"></div>
+              <div class="tr-bico">${bico}</div>
+              <span class="tr-cat">${esc(cat)}</span>
+            </div>
             <div class="tr-card-body">
-              <div class="tr-card-top">
-                <span class="tr-chip">${esc(co.category || 'General')}</span>
-                ${done ? '<span class="badge badge-resolved">✓ Completed</span>' : (co.due_date ? `<span class="badge badge-medium">Due ${formatDate(co.due_date)}</span>` : '')}
-              </div>
               <h3 class="tr-card-title">${esc(co.title)}</h3>
               <p class="tr-card-desc">${esc(co.description || '')}</p>
-              <div class="tr-card-meta"><span>${miniIcon(ICONS.inbox)} ${total} lessons</span>${co.quiz_count ? `<span>${miniIcon(ICONS.check)} ${co.quiz_count} quiz</span>` : ''}</div>
-              <div class="tr-prog"><div class="tr-prog-top"><span>${pct}% complete</span><b>${co.done_count || 0}/${total}</b></div><div class="tr-bar"><div class="tr-bar-fill" data-w="${pct}" style="background:${done ? 'var(--success)' : ''}"></div></div></div>
+              <div class="tr-card-meta">
+                <span>${miniIcon(ICONS.inbox)} ${total} lessons</span>
+                ${co.quiz_count ? `<span>${miniIcon(ICONS.check)} ${co.quiz_count} quiz</span>` : ''}
+                ${!done && co.due_date ? `<span style="color:var(--amber, #f5a524);font-weight:700;">${miniIcon(ICONS.clock)} Due ${formatDate(co.due_date)}</span>` : ''}
+              </div>
             </div>
-            <div class="tr-card-foot"><button class="btn btn-primary btn-sm" style="flex:1;">${done ? 'Review' : 'Start / Continue'} ${ICONS.arrowRight}</button></div>
+            <div class="tr-card-foot">
+              <svg class="tr-ring" width="48" height="48" viewBox="0 0 48 48">
+                <circle cx="24" cy="24" r="21" fill="none" stroke="var(--border)" stroke-width="5"/>
+                <circle cx="24" cy="24" r="21" fill="none" stroke="${done ? 'var(--success)' : 'var(--primary)'}" stroke-width="5" stroke-linecap="round"
+                  stroke-dasharray="${ringC.toFixed(2)}" stroke-dashoffset="${ringOff.toFixed(2)}" transform="rotate(-90 24 24)"/>
+                <text x="24" y="28" text-anchor="middle" font-size="11" font-weight="800" fill="var(--text)">${pct}%</text>
+              </svg>
+              <div class="tr-prog-text">
+                <div class="tr-prog-top"><span>${done ? 'Completed' : pct > 0 ? 'In progress' : 'Not started'}</span><b>${co.done_count || 0}/${total}</b></div>
+                <div class="tr-bar"><div class="tr-bar-fill" data-w="${pct}" style="${done ? 'background:var(--success)' : ''}"></div></div>
+              </div>
+              <button class="tr-fab" title="${done ? 'Review course' : 'Start / continue'}">${done ? ICONS.eye : ICONS.play}</button>
+            </div>
           </div>`;
         }).join('')}</div>`}`;
 
