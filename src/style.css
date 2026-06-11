@@ -5336,6 +5336,49 @@ input, select, textarea { max-width: 100%; }
 .tr-card:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(0,0,0,.1); border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
 .tr-card-clickable { cursor: pointer; }
 .tr-card-accent { height: 4px; background: var(--primary); }
+
+/* ── Design-style gradient course banner ── */
+.tr-banner {
+  height: 92px; position: relative; overflow: hidden;
+  display: flex; align-items: flex-end; padding: 14px 18px;
+  background: linear-gradient(135deg, #15a05a, #0c6f3d);
+}
+.tr-banner.t1 { background: linear-gradient(135deg, #15a05a, #0c6f3d); }
+.tr-banner.t2 { background: linear-gradient(135deg, #11b5ae, #0a6f8f); }
+.tr-banner.t3 { background: linear-gradient(135deg, #7c5cfc, #4b2fb0); }
+.tr-banner.t4 { background: linear-gradient(135deg, #f5a524, #d2691e); }
+.tr-banner.t5 { background: linear-gradient(135deg, #2e9bff, #1857c4); }
+.tr-banner::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: radial-gradient(circle at 80% 20%, rgba(255,255,255,0.22), transparent 45%);
+}
+.tr-pat {
+  position: absolute; inset: 0; opacity: 0.18;
+  background-image: linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.tr-cat {
+  position: relative; z-index: 1; color: #fff; font-size: 0.72rem; font-weight: 700;
+  background: rgba(0,0,0,0.22); backdrop-filter: blur(6px); padding: 4px 11px; border-radius: 20px;
+}
+.tr-bico { position: absolute; top: 12px; right: 14px; z-index: 1; color: rgba(255,255,255,0.9); }
+.tr-bico svg { width: 26px; height: 26px; }
+.tr-hidden {
+  position: absolute; top: 12px; left: 14px; z-index: 1; color: #fff; font-size: 0.68rem; font-weight: 800;
+  background: rgba(0,0,0,0.4); padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tr-ring { flex: 0 0 auto; }
+.tr-ring text { font-family: var(--font-display); }
+.tr-prog-text { flex: 1; min-width: 0; }
+.tr-fab {
+  width: 38px; height: 38px; flex: 0 0 auto; border: none; cursor: pointer;
+  border-radius: 50%; display: grid; place-items: center;
+  background: var(--primary); color: #fff; transition: transform 0.18s var(--ease), box-shadow 0.18s;
+}
+.tr-fab:hover { transform: translateY(-2px); box-shadow: 0 8px 18px var(--accent-glow); }
+.tr-fab svg { width: 17px; height: 17px; }
+.tr-fab-ghost { background: var(--bg); color: var(--text-soft); border: 1px solid var(--border); }
+.tr-fab-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
 .tr-card-body { padding: 16px 16px 14px; flex: 1; }
 .tr-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
 .tr-chip { font-size: .72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
@@ -5349,7 +5392,7 @@ input, select, textarea { max-width: 100%; }
 .tr-prog-top { display: flex; justify-content: space-between; font-size: .76rem; color: var(--text-dim); margin-bottom: 5px; }
 .tr-bar { height: 8px; background: var(--bg); border-radius: 6px; overflow: hidden; }
 .tr-bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--primary-light)); border-radius: 6px; transition: width 1s cubic-bezier(.2,.7,.3,1); }
-.tr-card-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.tr-card-foot { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-top: 1px solid var(--border); }
 .tr-card-foot .btn svg { width: 14px; height: 14px; }
 .btn-icon { padding: 6px; aspect-ratio: 1; display: grid; place-items: center; }
 .btn-icon svg { width: 15px; height: 15px; }
@@ -6342,7 +6385,8 @@ input, select, textarea { max-width: 100%; }
 .kpi-meta { min-width: 0; }
 .kpi-sub { display: inline-flex; align-items: center; gap: 4px; font-size: 0.76rem; font-weight: 700; margin-top: 8px; color: var(--text-3, var(--text-dim)); }
 
-.dash-charts { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+.dash-charts { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; margin-bottom: 18px; }
+.dash-charts:last-child { margin-bottom: 0; }
 @media (max-width: 900px) { .dash-charts { grid-template-columns: 1fr; } }
 .kpi-chart-card { margin-bottom: 0; }
 
@@ -6406,8 +6450,11 @@ input, select, textarea { max-width: 100%; }
 .section-h { font-family: 'Space Grotesk', sans-serif; font-size: 0.96rem; font-weight: 700; margin: 24px 0 12px; display: flex; align-items: center; gap: 9px; }
 .section-h svg { width: 17px; height: 17px; color: var(--primary); }
 
-.grid-2-1 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
+.grid-2-1 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: stretch; }
 @media (max-width: 1040px) { .grid-2-1 { grid-template-columns: 1fr; } }
+/* Cards in a paired row stretch to equal height; the list area absorbs the slack */
+.grid-2-1 > .list-card { display: flex; flex-direction: column; }
+.grid-2-1 > .list-card .list { flex: 1; }
 
 /* ── Nav badge (sidebar count chip) ────────────────────────────── */
 .portal-layout .nav-badge {

@@ -504,7 +504,7 @@ export async function renderAdminDashboard(container) {
       opsGrid.outerHTML = `
         <div class="card list-card" style="margin-top:18px">
           <div class="card-head"><h3>${ICONS.clipboard} Today's Operations</h3><span class="chip">${tot}</span></div>
-          <div style="display:flex; align-items:center; justify-content:center; gap:28px; flex-wrap:wrap; padding:20px;">
+          <div style="flex:1; display:flex; align-items:center; justify-content:center; gap:28px; flex-wrap:wrap; padding:20px;">
             <svg width="150" height="150" viewBox="0 0 120 120" role="img" aria-label="Today's operations breakdown">
               <g transform="rotate(-90 60 60)">
                 <circle cx="60" cy="60" r="44" fill="none" stroke="var(--line, var(--border))" stroke-width="14"/>
@@ -667,24 +667,17 @@ export async function renderAdminDashboard(container) {
   swapCard("resolved", listCard(ICONS.check, "Resolved Services", resolvedInquiries.length,
     resolvedInquiries.map((x) => inqRow(x, ICONS.check)).join("")));
 
-  // Pair list-cards into grid-2-1 rows matching design layout
+  // Pair list-cards into grid-2-1 rows matching design layout.
+  // Cards in the same row stretch to equal height (grid default).
   {
     const _lc = [...container.querySelectorAll(".list-card")];
-    if (_lc.length >= 2) {
-      const _g1 = document.createElement("div");
-      _g1.className = "grid-2-1";
-      _g1.style.cssText = "margin-top:18px;align-items:start";
-      _lc[0].before(_g1);
-      _g1.appendChild(_lc[0]);
-      if (_lc[1]) _g1.appendChild(_lc[1]);
-    }
-    if (_lc.length >= 4) {
-      const _g2 = document.createElement("div");
-      _g2.className = "grid-2-1";
-      _g2.style.cssText = "margin-top:18px;align-items:start";
-      _lc[2].before(_g2);
-      _g2.appendChild(_lc[2]);
-      if (_lc[3]) _g2.appendChild(_lc[3]);
+    for (let k = 0; k + 1 < _lc.length; k += 2) {
+      const g = document.createElement("div");
+      g.className = "grid-2-1";
+      g.style.cssText = "margin-top:18px";
+      _lc[k].before(g);
+      g.appendChild(_lc[k]);
+      g.appendChild(_lc[k + 1]);
     }
   }
 
