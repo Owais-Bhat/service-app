@@ -1041,7 +1041,7 @@ export async function renderEmployeeDashboard(container) {
 
   const today = new Date().toLocaleDateString('en-CA');
   const clockOutSetting = await loadEmployeeClockOutTime();
-  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [];
+  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [];
 
   try {
     const res = await Promise.all([
@@ -1052,8 +1052,12 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
       supabase.from('notices').select('*').eq('active', 1).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
+      supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at').not('feedback_rating', 'is', null),
+      supabase.from('profiles').select('id,full_name,role'),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
+    feedbackRows = res[7]?.data || [];
+    allProfiles = res[8]?.data || [];
     attendanceHistory = res[4].data || [];
     notices = (res[5].data || [])
       .filter(n => !n.expires_at || new Date(n.expires_at) >= new Date())
@@ -1092,6 +1096,45 @@ export async function renderEmployeeDashboard(container) {
     ...activeTasks.filter(task => dateKey(task.inquiries?.[0]?.created_at || task.created_at) === today),
     ...acceptedInquiries.filter(inq => dateKey(inq.created_at) === today),
   ].sort(byNewestCreated).slice(0, 5);
+
+  // ── Leaderboard (DESIGN third column) — monthly feedback ratings ──
+  const _empMap = new Map((allProfiles || []).filter(p => p.role === 'employee').map(p => [p.id, p]));
+  const _monthKey = getMonthKey();
+  const _monthFb = (feedbackRows || []).filter(r => String(r.feedback_at || r.updated_at || '').startsWith(_monthKey));
+  const _agg = new Map();
+  _monthFb.forEach(r => {
+    const empId = r.feedback_employee_id || r.assigned_employee_id;
+    if (!empId || !_empMap.has(empId)) return;
+    const score = Number(r.employee_rating || r.feedback_rating || 0);
+    if (!score) return;
+    if (!_agg.has(empId)) _agg.set(empId, { total: 0, count: 0 });
+    const e = _agg.get(empId);
+    e.total += score; e.count += 1;
+  });
+  const leaderboard = [..._agg.entries()]
+    .map(([id, a]) => ({ id, name: _empMap.get(id)?.full_name || 'Employee', avg: a.total / a.count, count: a.count }))
+    .sort((a, b) => b.avg - a.avg || b.count - a.count)
+    .map((e, i) => ({ ...e, rank: i + 1, you: e.id === user.id }));
+  const lbTop = leaderboard.slice(0, 3);
+  const myLb = leaderboard.find(e => e.you);
+  if (myLb && !lbTop.some(e => e.you)) lbTop.push(myLb);
+  const lbInitials = (name) => String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+  // ── Jobs/day (DESIGN third column) — tasks per day, last 7 days ──
+  const jobsDays = Array.from({ length: 7 }, (_, k) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - k));
+    return d;
+  });
+  const jobsData = jobsDays.map(d => {
+    const key = d.toLocaleDateString('en-CA');
+    return t.filter(x => dateKey(x.inquiries?.[0]?.created_at || x.created_at) === key).length;
+  });
+  const jobsMax = Math.max(1, ...jobsData);
+  const jobsBars = jobsDays.map((d, i) => `
+    <div class="bc-col">
+      <div class="bc-bar" style="height:${Math.round(jobsData[i] / jobsMax * 100)}%;background:${i === 6 ? 'linear-gradient(180deg, var(--accent, var(--primary)), var(--accent-700, #0c6f3d))' : 'var(--accent-soft)'};${i === 6 ? '' : 'border:1px solid var(--line, var(--border));'}border-radius:8px 8px 4px 4px;"><span>${jobsData[i] || ''}</span></div>
+      <div class="bc-lbl">${'SMTWTFS'[d.getDay()]}</div>
+    </div>`).join('');
 
   container.innerHTML = `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -1183,49 +1226,73 @@ export async function renderEmployeeDashboard(container) {
         </div>
       </div>
 
-      <!-- Stack: Notice Board + EOD (DESIGN third column) -->
+      <!-- Stack: Leaderboard + Jobs/day (DESIGN third column) -->
       <div class="stack">
         <div class="card list-card">
-          <div class="card-head">
-            <h3>${ICONS.clipboard} Notice Board</h3>
-            ${notices.length ? `<span class="chip">${notices.length}</span>` : ''}
-          </div>
-          <div class="list-scroll" style="max-height:300px;">
-            ${notices.length === 0 ? `
-              <div style="text-align:center;padding:24px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No active notices right now.</div>
-            ` : notices.map(n => `
-              <div class="notice">
-                <div class="n-ic" style="${n.priority === 'urgent' ? 'background:rgba(240,85,109,0.14);color:var(--rose,#f0556d);' : n.priority === 'high' ? 'background:rgba(245,165,36,0.16);color:var(--amber,#f5a524);' : ''}">${n.priority === 'urgent' ? ICONS.alert : n.priority === 'high' ? ICONS.star : ICONS.clipboard}</div>
-                <div class="n-body">
-                  <b>${escapeHtml(n.title)}</b>
-                  <p>${escapeHtml(n.body)}</p>
-                  <div class="n-time">${formatDateTime(n.created_at)}${n.expires_at ? ` · Until ${formatDateTime(n.expires_at)}` : ''}</div>
-                </div>
+          <div class="card-head"><h3>${ICONS.star} Leaderboard</h3></div>
+          <div class="stack" style="gap:12px;">
+            ${lbTop.length === 0 ? `
+              <div style="text-align:center;padding:18px;color:var(--text-3, var(--text-dim));font-size:0.84rem;">No feedback this month yet.</div>
+            ` : lbTop.map(p => `
+              <div style="display:flex;align-items:center;gap:11px;padding:6px 8px;border-radius:12px;background:${p.you ? 'var(--accent-soft)' : 'transparent'};">
+                <b style="font-family:var(--font-display);width:22px;color:${p.rank === 1 ? 'var(--amber, #f5a524)' : 'var(--text-3, var(--text-dim))'};">#${p.rank}</b>
+                <div class="av-sm" style="background:linear-gradient(140deg, var(--accent, var(--primary)), var(--accent-700, #0c6f3d));color:#fff;font-weight:700;font-size:0.72rem;font-family:var(--font-display);">${lbInitials(p.name)}</div>
+                <b style="flex:1;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.you ? 'You' : escapeHtml(p.name)}</b>
+                <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-2, var(--text-soft));font-weight:700;">${p.avg.toFixed(1)}★</span>
               </div>
             `).join('')}
           </div>
         </div>
 
         <div class="card list-card">
-          <div class="card-head"><h3>${ICONS.clipboard} End of Day</h3></div>
-          ${eodReport ? `
-            <div class="eod-done">
-              <div class="eod-done-ring">${ICONS.check}</div>
-              <h3 class="eod-done-title">All caught up!</h3>
-              <p class="eod-done-sub">Your EOD report has been submitted.</p>
-              <div class="eod-done-time">Submitted at ${formatTime(eodReport.created_at)}</div>
-            </div>
-          ` : `
-            <div class="field">
-              <label>Today's progress</label>
-              <textarea id="eod-content" rows="5" placeholder="What did you achieve today? Break it down briefly..."></textarea>
-            </div>
-            <button class="btn btn-primary" id="btn-submit-eod" style="width:100%;">
-              <span>Submit Daily Report</span>${ICONS.arrowRight}
-            </button>
-            <p class="eod-fineprint">Reports are visible to your manager immediately.</p>
-          `}
+          <div class="card-head"><h3>${ICONS.chart || ICONS.clipboard} Jobs / day</h3></div>
+          <div class="bc" style="height:130px;">${jobsBars}</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Notice Board + EOD (themed, below the design row) -->
+    <div class="grid grid-2-1" style="margin-bottom:18px;align-items:start;">
+      <div class="card list-card">
+        <div class="card-head">
+          <h3>${ICONS.clipboard} Notice Board</h3>
+          ${notices.length ? `<span class="chip">${notices.length}</span>` : ''}
+        </div>
+        <div class="list-scroll" style="max-height:300px;">
+          ${notices.length === 0 ? `
+            <div style="text-align:center;padding:24px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No active notices right now.</div>
+          ` : notices.map(n => `
+            <div class="notice">
+              <div class="n-ic" style="${n.priority === 'urgent' ? 'background:rgba(240,85,109,0.14);color:var(--rose,#f0556d);' : n.priority === 'high' ? 'background:rgba(245,165,36,0.16);color:var(--amber,#f5a524);' : ''}">${n.priority === 'urgent' ? ICONS.alert : n.priority === 'high' ? ICONS.star : ICONS.clipboard}</div>
+              <div class="n-body">
+                <b>${escapeHtml(n.title)}</b>
+                <p>${escapeHtml(n.body)}</p>
+                <div class="n-time">${formatDateTime(n.created_at)}${n.expires_at ? ` · Until ${formatDateTime(n.expires_at)}` : ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="card list-card">
+        <div class="card-head"><h3>${ICONS.clipboard} End of Day</h3></div>
+        ${eodReport ? `
+          <div class="eod-done">
+            <div class="eod-done-ring">${ICONS.check}</div>
+            <h3 class="eod-done-title">All caught up!</h3>
+            <p class="eod-done-sub">Your EOD report has been submitted.</p>
+            <div class="eod-done-time">Submitted at ${formatTime(eodReport.created_at)}</div>
+          </div>
+        ` : `
+          <div class="field">
+            <label>Today's progress</label>
+            <textarea id="eod-content" rows="5" placeholder="What did you achieve today? Break it down briefly..."></textarea>
+          </div>
+          <button class="btn btn-primary" id="btn-submit-eod" style="width:100%;">
+            <span>Submit Daily Report</span>${ICONS.arrowRight}
+          </button>
+          <p class="eod-fineprint">Reports are visible to your manager immediately.</p>
+        `}
       </div>
     </div>
 
