@@ -129,15 +129,15 @@ const FOLLOWUP_LABELS = {
   none: 'Not started', awaiting_parts: '⏳ Awaiting Parts', repair_progress: '🔧 In Repair',
   ready_return: '📦 Ready to Return', returned: '✅ Returned', taken: '📸 Taken',
 };
-async function populateDevicesInService(container, employeeId) {
+async function populateDevicesInService(container, employeeId, opts = {}) {
   const card = container.querySelector('#devices-in-service-card');
   const list = container.querySelector('#devices-in-service-list');
   if (!card || !list) return;
-  if (!(await loadDeviceTrackingEnabled())) { card.style.display = 'none'; return; }
+  if (!(await loadDeviceTrackingEnabled())) { card.dataset.hasDevices = '0'; if (!opts.deferShow) card.style.display = 'none'; return; }
 
   const { data } = await getEmployeeDevices(employeeId);
   const inService = (data || []).filter(d => Number(d.device_service_enabled) === 1);
-  if (inService.length === 0) { card.style.display = 'none'; return; }
+  if (inService.length === 0) { card.dataset.hasDevices = '0'; if (!opts.deferShow) card.style.display = 'none'; return; }
 
   list.innerHTML = inService.map(d => {
     const fu = d.follow_up_status && d.follow_up_status !== 'none'
@@ -152,7 +152,10 @@ async function populateDevicesInService(container, employeeId) {
         <button class="btn btn-secondary btn-sm dev-manage-btn" data-id="${d.id}" data-status="${escapeAttr(d.status || 'in_progress')}">Manage</button>
       </div>`;
   }).join('');
-  card.style.display = 'block';
+  card.dataset.hasDevices = '1';
+  // On the My Tasks page the card's visibility is controlled by the
+  // "Device Follow Up" filter tab; elsewhere it shows as soon as data loads.
+  if (!opts.deferShow) card.style.display = 'block';
 
   // Daily nudge: remind the employee once per day (per device set) to update the
   // follow-up status of devices still in service.
@@ -2324,12 +2327,18 @@ export async function renderEmployeeTasks(container) {
   const resolvedAcceptedInquiries = acceptedInquiries.filter(x => ['resolved', 'closed'].includes(x.status));
   const issueAcceptedInquiries = acceptedInquiries.filter(x => x.status === 'issue_not_resolved');
 
-  const filterCounts = {
-    all: tasks.length + acceptedInquiries.length,
-    active: activeTasks.length + activeAcceptedInquiries.length,
-    completed: completedTasks.length + resolvedAcceptedInquiries.length,
-    issues: issueTasks.length + issueAcceptedInquiries.length,
+  // Status group for the filter tabs. data-status on cards is displayStatus()
+  // output, so 'closed' already maps to 'resolved'.
+  const groupOf = (s) => {
+    if (s === 'in_progress') return 'in_progress';
+    if (s === 'resolved') return 'resolved';
+    if (s === 'issue_not_resolved') return 'issue_not_resolved';
+    if (s === 'case_closed') return 'case_closed';
+    return 'active'; // open / assigned / pending
   };
+  const allServiceItems = [...acceptedInquiries, ...tasks].sort(byNewestCreated);
+  const statusCounts = { active: 0, in_progress: 0, resolved: 0, issue_not_resolved: 0, case_closed: 0 };
+  allServiceItems.forEach(item => { statusCounts[groupOf(displayStatus(item.status))]++; });
 
   const jobCard = (inq) => {
     const shownStatus = displayStatus(inq.status);
@@ -2607,6 +2616,16 @@ export async function renderEmployeeTasks(container) {
       </div>
     ` : ''}
 
+    <div class="filter-bar" style="margin-bottom:16px;">
+      <div class="sr-filter-bar" id="task-filter-tabs">
+        <button class="sr-filter active" data-filter="active"><span>Active</span><span class="sr-filter-count">${statusCounts.active}</span></button>
+        <button class="sr-filter" data-filter="in_progress"><span>In Progress</span><span class="sr-filter-count">${statusCounts.in_progress}</span></button>
+        <button class="sr-filter" data-filter="resolved"><span>Resolved</span><span class="sr-filter-count">${statusCounts.resolved}</span></button>
+        <button class="sr-filter" data-filter="issue_not_resolved"><span>Issue Not Resolved</span><span class="sr-filter-count">${statusCounts.issue_not_resolved}</span></button>
+        <button class="sr-filter" data-filter="device_followup"><span>Device Follow Up</span></button>
+        <button class="sr-filter" data-filter="case_closed"><span>Case Closed</span><span class="sr-filter-count">${statusCounts.case_closed}</span></button>
+      </div>
+    </div>
     <div class="emp-task-search" style="margin-bottom:24px;">
       <span class="emp-task-search-ico">${ICONS.search}</span>
       <input id="task-search" type="search" placeholder="Search by title, client, or ticket number..." autocomplete="off"/>
@@ -2616,28 +2635,11 @@ export async function renderEmployeeTasks(container) {
       ${(tasks.length === 0 && acceptedInquiries.length === 0)
         ? '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:2rem;margin-bottom:12px;"></div><p style="font-weight:600;">No tasks assigned yet</p><p style="font-size:0.85rem;">Tasks will appear here once admin assigns service requests to you.</p></div></div>'
         : `
-          <div class="card">
-            <div class="card-header"><span class="card-title">Active Services</span></div>
-            <div class="card-body emp-scroll-list emp-grid-2">
-              ${activeServiceCards.length === 0
-                ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No active services</div>'
-                : activeServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header"><span class="card-title">Resolved Services</span></div>
-            <div class="card-body emp-scroll-list emp-grid-2">
-              ${resolvedServiceCards.length === 0
-                ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No resolved services yet</div>'
-                : resolvedServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header"><span class="card-title">Issue Not Resolved Services</span></div>
-            <div class="card-body emp-scroll-list emp-grid-2">
-              ${issueServiceCards.length === 0
-                ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No unresolved issue services</div>'
-                : issueServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
+          <div class="card" id="services-card">
+            <div class="card-header"><span class="card-title" id="services-card-title">Active Services</span></div>
+            <div class="card-body emp-scroll-list emp-grid-2" id="services-list">
+              ${allServiceItems.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
+              <div id="services-empty" style="display:none;text-align:center;padding:28px;color:var(--text-dim)">Nothing here for this status.</div>
             </div>
           </div>
         `}
@@ -2653,8 +2655,9 @@ export async function renderEmployeeTasks(container) {
     </div>
   `;
 
-  // Populate the "Devices in Service" container (tickets sent to the service center).
-  populateDevicesInService(container, user.id);
+  // Populate the "Devices in Service" container (tickets sent to the service
+  // center). Visibility is controlled by the "Device Follow Up" filter tab.
+  populateDevicesInService(container, user.id, { deferShow: true });
 
   // Refresh
   container.querySelector('#tasks-refresh').onclick = async () => {
@@ -2700,22 +2703,64 @@ export async function renderEmployeeTasks(container) {
     }
   }, 5000);
 
-  // Search (filter tabs removed — each section already shows only its own jobs)
+  // Status filters — each tab shows only its own services.
+  const FILTER_TITLES = {
+    active: 'Active Services',
+    in_progress: 'In Progress Services',
+    resolved: 'Resolved Services',
+    issue_not_resolved: 'Issue Not Resolved Services',
+    case_closed: 'Case Closed Services',
+  };
+  let activeFilter = 'active';
   let searchQuery = '';
 
   const applyFilters = () => {
-    const cards = container.querySelectorAll('.emp-task-card, .emp-job-card');
+    const servicesCard = container.querySelector('#services-card');
+    const devicesCard = container.querySelector('#devices-in-service-card');
     const q = searchQuery.toLowerCase();
-    cards.forEach(card => {
-      const text = card.textContent.toLowerCase();
-      card.style.display = (!q || text.includes(q)) ? '' : 'none';
+
+    if (activeFilter === 'device_followup') {
+      if (servicesCard) servicesCard.style.display = 'none';
+      if (devicesCard) {
+        devicesCard.style.display = 'block';
+        if (devicesCard.dataset.hasDevices !== '1') {
+          const list = devicesCard.querySelector('#devices-in-service-list');
+          if (list) list.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-dim)">No devices in the service center right now.</div>';
+        }
+      }
+      return;
+    }
+
+    if (devicesCard) devicesCard.style.display = 'none';
+    if (servicesCard) servicesCard.style.display = '';
+    const title = container.querySelector('#services-card-title');
+    if (title) title.textContent = FILTER_TITLES[activeFilter] || 'Services';
+
+    let shown = 0;
+    container.querySelectorAll('#services-list .emp-task-card, #services-list .emp-job-card').forEach(card => {
+      const ok = groupOf(card.dataset.status) === activeFilter
+        && (!q || card.textContent.toLowerCase().includes(q));
+      card.style.display = ok ? '' : 'none';
+      if (ok) shown++;
     });
+    const empty = container.querySelector('#services-empty');
+    if (empty) empty.style.display = shown ? 'none' : '';
   };
+
+  container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(btn => {
+    btn.onclick = () => {
+      container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = btn.dataset.filter;
+      applyFilters();
+    };
+  });
 
   const searchInput = container.querySelector('#task-search');
   if (searchInput) {
     searchInput.oninput = (e) => { searchQuery = e.target.value; applyFilters(); };
   }
+  applyFilters();
 
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {
