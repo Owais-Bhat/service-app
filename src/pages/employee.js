@@ -2481,6 +2481,47 @@ export async function renderEmployeeTasks(container) {
     ...issueTasks,
   ].sort(byNewestCreated);
 
+  // ── Donut chart of job status distribution ──
+  const donutSegs = [
+    { label: 'Active', value: activeTasks.length + activeAcceptedInquiries.length, color: 'var(--warning)' },
+    { label: 'Completed', value: completedTasks.length + resolvedAcceptedInquiries.length, color: 'var(--success)' },
+    { label: 'Issues', value: issueTasks.length + issueAcceptedInquiries.length, color: 'var(--danger)' },
+  ];
+  const donutTotal = donutSegs.reduce((s, x) => s + x.value, 0);
+  const DONUT_C = 2 * Math.PI * 44;
+  let donutAcc = 0;
+  const donutArcs = donutSegs.filter(s => s.value > 0).map(s => {
+    const dash = (s.value / donutTotal) * DONUT_C;
+    const arc = `<circle cx="60" cy="60" r="44" fill="none" stroke="${s.color}" stroke-width="14"
+      stroke-dasharray="${dash.toFixed(2)} ${(DONUT_C - dash).toFixed(2)}" stroke-dashoffset="${(-donutAcc).toFixed(2)}"/>`;
+    donutAcc += dash;
+    return arc;
+  }).join('');
+  const donutHtml = `
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Jobs Overview</span></div>
+      <div class="card-body" style="display:flex; align-items:center; justify-content:center; gap:28px; flex-wrap:wrap;">
+        <svg width="150" height="150" viewBox="0 0 120 120" role="img" aria-label="Job status distribution">
+          <g transform="rotate(-90 60 60)">
+            <circle cx="60" cy="60" r="44" fill="none" stroke="var(--border)" stroke-width="14"/>
+            ${donutArcs}
+          </g>
+          <text x="60" y="58" text-anchor="middle" font-size="24" font-weight="800" fill="var(--text)" font-family="var(--font-display)">${donutTotal}</text>
+          <text x="60" y="74" text-anchor="middle" font-size="8" font-weight="700" letter-spacing="1" fill="var(--text-dim)">TOTAL JOBS</text>
+        </svg>
+        <div style="display:flex; flex-direction:column; gap:10px; min-width:160px;">
+          ${donutSegs.map(s => `
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="width:10px; height:10px; border-radius:50%; background:${s.color}; flex-shrink:0;"></span>
+              <span style="flex:1; font-size:0.85rem; font-weight:600; color:var(--text-soft);">${s.label}</span>
+              <span style="font-size:0.9rem; font-weight:800;">${s.value}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div>
@@ -2513,6 +2554,8 @@ export async function renderEmployeeTasks(container) {
         <div class="stat-label">Issues</div>
       </div>
     </div>
+
+    ${donutHtml}
 
     ${pendingInquiries.length > 0 ? `
       <div style="margin-bottom:24px;">
