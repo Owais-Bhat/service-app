@@ -7029,11 +7029,16 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .portal-layout .card,
 .portal-layout .stat-card,
 .portal-layout .notice-board,
-.portal-layout .employee-today-panel,
-.portal-layout .glass {
+.portal-layout .employee-today-panel {
   background:
     linear-gradient(160deg, var(--glass-inner, rgba(255,255,255,0.22)), transparent 42%),
     var(--glass-bg);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.portal-layout .glass {
+  background: var(--glass-bg);
   border-color: var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
@@ -7108,6 +7113,11 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 
   .portal-layout > .sidebar {
     width: min(var(--sidebar-w, 260px), calc(100vw - 20px));
+    transform: translateX(calc(-100% - 20px));
+  }
+
+  .portal-layout > .sidebar.open {
+    transform: translateX(0);
   }
 }
 
