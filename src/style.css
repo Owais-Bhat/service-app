@@ -6325,7 +6325,13 @@ input, select, textarea { max-width: 100%; }
 .dash-hero { margin-bottom: 22px; }
 .dash-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 18px; }
 @media (max-width: 1100px) { .dash-kpis { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 560px) { .dash-kpis { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .dash-kpis { grid-template-columns: repeat(2, 1fr); }
+  .dash-kpis .kpi { padding: 14px 10px; flex-direction: column; text-align: center; gap: 10px; }
+  .dash-kpis .kpi-info, .dash-kpis .kpi-meta { text-align: center; }
+  .dash-kpis .kpi-value { font-size: 1.35rem; }
+  .dash-kpis .kpi-label { font-size: 0.72rem; }
+}
 
 /* DESIGN KpiCard: gauge ring left · label / value / context right */
 .kpi-card { margin-bottom: 0; overflow: visible; }
@@ -7178,4 +7184,24 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   .portal-layout .grid-stats {
     gap: 14px;
   }
+}
+
+/* ── Sidebar: solid (not see-through) when it overlays content ── */
+@media (max-width: 1024px) {
+  .sidebar,
+  .portal-layout > .sidebar {
+    background: #ffffff;
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+  }
+  [data-theme="dark"] .sidebar,
+  [data-theme="dark"] .portal-layout > .sidebar {
+    background: #0e1c15;
+  }
+}
+/* Blur + dim the page behind the open sidebar so it reads clearly */
+.sidebar-overlay {
+  background: rgba(15, 30, 22, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
