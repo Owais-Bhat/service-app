@@ -6559,6 +6559,12 @@ input, select, textarea { max-width: 100%; }
 .clock-card { text-align: center; padding: 26px; }
 .clock-time { font-family: var(--font-mono); font-size: 2.6rem; font-weight: 700; letter-spacing: -0.02em; }
 .clock-date { font-size: 0.84rem; color: var(--text-3, var(--text-dim)); margin-bottom: 18px; }
+.emp-clock-card .clock-time { font-size: clamp(1.6rem, 2.4vw, 2.2rem); white-space: nowrap; }
+.emp-clock-card .attendance-lock-note,
+.emp-clock-card .attendance-location { justify-content: center; }
+
+/* cards inside design grids shouldn't carry the legacy bottom margin */
+.grid > .card, .stack > .card { margin-bottom: 0; }
 
 /* ── Entrance animations ── */
 .in { opacity: 1; }

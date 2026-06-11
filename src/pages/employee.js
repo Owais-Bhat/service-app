@@ -1133,145 +1133,81 @@ export async function renderEmployeeDashboard(container) {
       </div>`;
     })()}
 
-    <div class="employee-dash-band">
-      <section class="notice-board">
-        <div class="notice-board-head">
-          <span class="notice-board-icon">${ICONS.clipboard}</span>
-          <div>
-            <h2>Notice Board</h2>
-            <p>Latest updates from admin</p>
-          </div>
+    <div class="grid grid-emp" style="margin-bottom:18px;align-items:start;">
+      <!-- Clock card (DESIGN .clock-card) -->
+      <div class="card clock-card emp-clock-card">
+        <div class="chip" style="margin:0 auto 14px;width:fit-content;color:${isClockedIn && !isClockedOut ? 'var(--accent, var(--primary))' : 'var(--text-3, var(--text-dim))'};">
+          <i style="width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;"></i>
+          ${isClockedOut ? 'Clocked out' : isClockedIn ? 'Clocked in' : 'Not started'}
         </div>
-        <div class="notice-list">
-          ${notices.length === 0 ? `
-            <div class="notice-empty">${ICONS.check}<span>No active notices right now.</span></div>
-          ` : notices.map(n => `
-            <article class="notice-item notice-${escapeAttr(n.priority || 'normal')}">
-              <div class="notice-pin">${n.priority === 'urgent' ? ICONS.alert : n.priority === 'high' ? ICONS.star : ICONS.clipboard}</div>
-              <div>
-                <div class="notice-title">${escapeHtml(n.title)}</div>
-                <p>${escapeHtml(n.body)}</p>
-                <small>${formatDateTime(n.created_at)}${n.expires_at ? `  ?  Until ${formatDateTime(n.expires_at)}` : ''}</small>
-              </div>
-            </article>
-          `).join('')}
+        <div id="live-clock" class="clock-time">--:--:--</div>
+        <div class="clock-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-primary" id="btn-clock-in" style="width:100%;" ${isClockedIn || strictEodBlock || clockInClosed ? 'disabled' : ''}>
+            ${ICONS.play}<span>Clock In</span>
+          </button>
+          <button class="btn btn-ghost" id="btn-clock-out" style="width:100%;" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
+            ${ICONS.pause}<span>Clock Out</span>
+          </button>
         </div>
-      </section>
+        ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Submit today's EOD report to enable Clock Out.</span></p>` : ''}
+        ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note">${ICONS.clock}<span>Clock-in is closed after ${clockOutSetting.label}. Please contact admin.</span></p>` : ''}
+        ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
+        ${isClockedOut ? `<div class="chip" style="margin:14px auto 0;width:fit-content;color:var(--accent, var(--primary));">${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span></div>` : ''}
+      </div>
 
-      <section class="employee-today-panel">
-        <div class="employee-panel-head">
-          <span>${ICONS.wrench}</span>
-          <div>
-            <h2>Today's Tasks</h2>
-            <p>${todayTasks.length} assigned today</p>
-          </div>
+      <!-- Today's Route (DESIGN list card) -->
+      <div class="card list-card">
+        <div class="card-head">
+          <h3>${ICONS.wrench} Today's Route</h3>
+          <span class="chip">${todayTasks.length} stop${todayTasks.length === 1 ? '' : 's'}</span>
         </div>
-        <div class="employee-mini-list">
-          ${todayTasks.length === 0 ? `<div class="employee-mini-empty">${ICONS.check}<span>No new task assigned today.</span></div>` : todayTasks.map(item => {
+        <div class="list">
+          ${todayTasks.length === 0 ? `<div style="text-align:center;padding:28px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No new task assigned today.</div>` : todayTasks.map(item => {
             const inq = item.inquiries?.[0] || item;
             const id = item.inquiries ? item.id : (inq.ticket_id || '');
+            const st = displayStatus(inq.status || item.status || 'assigned');
+            const badgeCls = st === 'in_progress' ? 'progress' : st === 'resolved' ? 'resolved' : st === 'assigned' ? 'assigned' : 'open';
             return `
-              <div class="employee-mini-row">
-                <div>
+              <div class="lrow">
+                <div class="lrow-ico">${ICONS.wrench}</div>
+                <div class="lrow-main">
                   <b>${escapeHtml(inq.full_name || item.title || 'Service task')}</b>
-                  <span>${escapeHtml(inq.service_item || item.description || 'Service request')}</span>
-                  <small>${escapeHtml(inq.ticket_no || 'No ticket')}  ?  ${formatDateTime(inq.created_at || item.created_at)}</small>
+                  <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || item.description || 'Service request')} · ${formatDateTime(inq.created_at || item.created_at)}</span>
                 </div>
+                <span class="badge ${badgeCls} hide-sm">${statusText(inq.status || item.status || 'assigned')}</span>
                 <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
               </div>
             `;
           }).join('')}
         </div>
-      </section>
-    </div>
-
-    ${pendingInquiries.length ? `
-      <div class="card" style="margin-bottom:18px;border:1px solid rgba(245,158,11,0.28);">
-        <div class="card-header">
-          <span class="card-title sr-icon-title">${ICONS.alert}<span>Requests Waiting For Accept</span></span>
-        </div>
-        <div class="card-body">
-          ${pendingInquiries.map(inq => `
-            <div class="employee-request-row">
-              <div>
-                <div class="employee-request-title">${escapeHtml(inq.full_name || 'Client')}</div>
-                <div class="employee-request-sub">${escapeHtml(inq.service_item || 'Service request')}</div>
-                <small>${escapeHtml(inq.ticket_no || 'No ticket')}  ?  ${formatDateTime(inq.created_at)}</small>
-              </div>
-              <div class="employee-request-actions">
-                <button class="btn btn-primary btn-sm accept-btn" data-id="${escapeAttr(inq.id)}" data-ticket-id="${escapeAttr(inq.ticket_id || '')}">${ICONS.check}<span>Accept</span></button>
-                <button class="btn btn-secondary btn-sm decline-btn" data-id="${escapeAttr(inq.id)}">${ICONS.close}<span>Decline</span></button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
       </div>
-    ` : ''}
 
-    ${acceptedInquiries.length ? `
-      <div class="card" style="margin-bottom:18px;">
-        <div class="card-header">
-          <span class="card-title sr-icon-title">${ICONS.ticket}<span>Accepted Requests</span></span>
-        </div>
-        <div class="card-body">
-          ${acceptedInquiries.map(inq => `
-            <div class="emp-job-card" data-status="${displayStatus(inq.status)}" style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);">
-              <div style="min-width:0;">
-                <div style="font-weight:800;color:var(--primary);">${inq.full_name || 'Client'}</div>
-                <div style="font-size:0.86rem;color:var(--text-soft);margin-top:3px;">${inq.service_item || 'Service request'}</div>
-                <div style="font-size:0.78rem;color:var(--text-dim);margin-top:3px;">${inq.ticket_no || 'No ticket'} &bull; ${formatDateTime(inq.created_at)}</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-                <span class="badge badge-${displayStatus(inq.status)}">${statusText(inq.status)}</span>
-                <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id || ''}" data-inq-id="${inq.id}" data-status="${inq.status}">
-                  ${ICONS.edit}<span>Update</span>
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')">
-                  ${ICONS.pin}<span>Map</span>
-                </button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
-
-    <div id="devices-in-service-card" style="display:none;margin-bottom:18px;">
-      <div class="card">
-        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.wrench}<span>Devices in Service</span></span></div>
-        <div class="card-body" id="devices-in-service-list">
-          <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:0.85rem;">Loading…</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="employee-work-grid">
-      <!-- Attendance Card -->
-      <div class="card">
-        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clock}<span>Attendance</span></span></div>
-        <div class="card-body attendance-card-body">
-          <div id="live-clock" class="live-clock">--:--:--</div>
-          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-clock-in" ${isClockedIn || strictEodBlock || clockInClosed ? 'disabled' : ''}>
-              ${ICONS.play}<span>Clock In</span>
-            </button>
-            <button class="btn btn-secondary" id="btn-clock-out" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
-              ${ICONS.pause}<span>Clock Out</span>
-            </button>
+      <!-- Stack: Notice Board + EOD (DESIGN third column) -->
+      <div class="stack">
+        <div class="card list-card">
+          <div class="card-head">
+            <h3>${ICONS.clipboard} Notice Board</h3>
+            ${notices.length ? `<span class="chip">${notices.length}</span>` : ''}
           </div>
-          ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Submit today's EOD report to enable Clock Out.</span></p>` : ''}
-          ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note">${ICONS.clock}<span>Clock-in is closed after ${clockOutSetting.label}. Please contact admin.</span></p>` : ''}
-          ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
-          ${isClockedOut ? `<div style="margin-top:20px;padding:14px;border-radius:14px;box-shadow:var(--neu-in);background:var(--bg);font-size:.88rem;color:var(--success);font-weight:600;display:inline-flex;align-items:center;gap:8px;">
-            ${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span>
-          </div>` : ''}
+          <div class="list-scroll" style="max-height:300px;">
+            ${notices.length === 0 ? `
+              <div style="text-align:center;padding:24px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No active notices right now.</div>
+            ` : notices.map(n => `
+              <div class="notice">
+                <div class="n-ic" style="${n.priority === 'urgent' ? 'background:rgba(240,85,109,0.14);color:var(--rose,#f0556d);' : n.priority === 'high' ? 'background:rgba(245,165,36,0.16);color:var(--amber,#f5a524);' : ''}">${n.priority === 'urgent' ? ICONS.alert : n.priority === 'high' ? ICONS.star : ICONS.clipboard}</div>
+                <div class="n-body">
+                  <b>${escapeHtml(n.title)}</b>
+                  <p>${escapeHtml(n.body)}</p>
+                  <div class="n-time">${formatDateTime(n.created_at)}${n.expires_at ? ` · Until ${formatDateTime(n.expires_at)}` : ''}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
         </div>
-      </div>
 
-      <!-- EOD Report Card -->
-      <div class="card">
-        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clipboard}<span>End of Day Summary</span></span></div>
-        <div class="card-body">
+        <div class="card list-card">
+          <div class="card-head"><h3>${ICONS.clipboard} End of Day</h3></div>
           ${eodReport ? `
             <div class="eod-done">
               <div class="eod-done-ring">${ICONS.check}</div>
@@ -1280,29 +1216,86 @@ export async function renderEmployeeDashboard(container) {
               <div class="eod-done-time">Submitted at ${formatTime(eodReport.created_at)}</div>
             </div>
           ` : `
-            <div class="form-group">
-              <label class="sr-icon-label">${ICONS.edit}<span>Today's progress</span></label>
-              <textarea id="eod-content" rows="6"
-                placeholder="What did you achieve today? Break it down briefly..."></textarea>
+            <div class="field">
+              <label>Today's progress</label>
+              <textarea id="eod-content" rows="5" placeholder="What did you achieve today? Break it down briefly..."></textarea>
             </div>
-            <button class="btn btn-primary btn-wide" id="btn-submit-eod" style="display:flex; align-items:center; justify-content:center; gap:10px;">
-              <span>Submit Daily Report</span>
-              <span style="width:18px; height:18px; display:flex;">${ICONS.arrowRight}</span>
+            <button class="btn btn-primary" id="btn-submit-eod" style="width:100%;">
+              <span>Submit Daily Report</span>${ICONS.arrowRight}
             </button>
             <p class="eod-fineprint">Reports are visible to your manager immediately.</p>
           `}
         </div>
       </div>
+    </div>
 
-      <!-- Leave Request Card -->
-      <div class="card" style="display:none">
-        <div class="card-header"><span class="card-title sr-icon-title">${ICONS.clock}<span>Request Leave</span></span></div>
-        <div class="card-body">
-          <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:16px;">Need time off? Submit your request here for approval.</p>
-          <button class="btn btn-secondary btn-wide" id="btn-open-leave-modal">
-            ${ICONS.plus}<span>Submit Leave Request</span>
-          </button>
+    ${pendingInquiries.length ? `
+      <div class="card list-card" style="margin-bottom:18px;border-color:rgba(245,165,36,0.4);">
+        <div class="card-head">
+          <h3>${ICONS.alert} Requests Waiting For Accept</h3>
+          <span class="chip" style="color:var(--amber, #f5a524);">${pendingInquiries.length} pending</span>
         </div>
+        <div class="list">
+          ${pendingInquiries.map(inq => `
+            <div class="lrow">
+              <div class="lrow-ico" style="background:rgba(245,165,36,0.16);color:var(--amber, #f5a524);">${ICONS.alert}</div>
+              <div class="lrow-main">
+                <b>${escapeHtml(inq.full_name || 'Client')}</b>
+                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || 'Service request')} · ${formatDateTime(inq.created_at)}</span>
+              </div>
+              <button class="btn btn-primary btn-sm accept-btn" data-id="${escapeAttr(inq.id)}" data-ticket-id="${escapeAttr(inq.ticket_id || '')}">${ICONS.check}<span>Accept</span></button>
+              <button class="btn btn-secondary btn-sm decline-btn" data-id="${escapeAttr(inq.id)}">${ICONS.close}<span class="hide-sm">Decline</span></button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${acceptedInquiries.length ? `
+      <div class="card list-card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h3>${ICONS.ticket} Accepted Requests</h3>
+          <span class="chip">${acceptedInquiries.length}</span>
+        </div>
+        <div class="list">
+          ${acceptedInquiries.map(inq => {
+            const st = displayStatus(inq.status);
+            const badgeCls = st === 'in_progress' ? 'progress' : st === 'resolved' ? 'resolved' : st === 'assigned' ? 'assigned' : 'open';
+            return `
+            <div class="lrow emp-job-card" data-status="${st}">
+              <div class="lrow-ico">${ICONS.ticket}</div>
+              <div class="lrow-main">
+                <b>${escapeHtml(inq.full_name || 'Client')}</b>
+                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || 'Service request')} · ${formatDateTime(inq.created_at)}</span>
+              </div>
+              <span class="badge ${badgeCls} hide-sm">${statusText(inq.status)}</span>
+              <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id || ''}" data-inq-id="${inq.id}" data-status="${inq.status}">
+                ${ICONS.edit}<span>Update</span>
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')">
+                ${ICONS.pin}<span class="hide-sm">Map</span>
+              </button>
+            </div>
+          `;}).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div id="devices-in-service-card" style="display:none;margin-bottom:18px;">
+      <div class="card list-card">
+        <div class="card-head"><h3>${ICONS.wrench} Devices in Service</h3></div>
+        <div id="devices-in-service-list">
+          <div style="text-align:center;padding:20px;color:var(--text-3, var(--text-dim));font-size:0.85rem;">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leave Request (hidden; opened from Attendance page) -->
+    <div class="card" style="display:none">
+      <div class="card-body">
+        <button class="btn btn-secondary btn-wide" id="btn-open-leave-modal">
+          ${ICONS.plus}<span>Submit Leave Request</span>
+        </button>
       </div>
     </div>
   `;
