@@ -6738,7 +6738,13 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .grid-stats.g5 { grid-template-columns: repeat(5,1fr); }
 .grid-stats.g3 { grid-template-columns: repeat(3,1fr); }
 @media (max-width: 1100px) { .grid-stats, .grid-stats.g5, .grid-stats.g3 { grid-template-columns: repeat(2,1fr); } }
-@media (max-width: 560px) { .grid-stats, .grid-stats.g5, .grid-stats.g3 { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .grid-stats, .grid-stats.g5, .grid-stats.g3 { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .stat-mini { padding: 14px; }
+  .stat-mini .v { font-size: 1.4rem; }
+  .stat-mini .ic { width: 32px; height: 32px; border-radius: 9px; margin-bottom: 10px; }
+  .stat-mini .l { font-size: 0.72rem; }
+}
 
 /* ── Toolbar ── */
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
