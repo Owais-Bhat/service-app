@@ -1089,7 +1089,9 @@ export async function renderEmployeeDashboard(container) {
   const isClockedIn = !!attendance?.clock_in;
   const isClockedOut = !!attendance?.clock_out;
   const clockInClosed = isPastAutoClockOut();
-  const canClockOut = isClockedIn && !isClockedOut && !!eodReport;
+  // Clock Out is always clickable once clocked in — clicking it opens the EOD
+  // popup first (if not yet submitted), then clocks out.
+  const canClockOut = isClockedIn && !isClockedOut;
   const missedEods = getMissedEodRows(attendanceHistory, eodHistory, today);
   const strictEodBlock = missedEods.length >= STRICT_EOD_LIMIT;
   const todayTasks = [
@@ -1166,7 +1168,29 @@ export async function renderEmployeeDashboard(container) {
       </div>`;
     })()}
 
-    <div class="grid grid-emp" style="margin-bottom:18px;align-items:start;">
+    ${pendingInquiries.length ? `
+      <div class="card list-card" style="margin-bottom:18px;border-color:rgba(245,165,36,0.4);">
+        <div class="card-head">
+          <h3>${ICONS.alert} Requests Waiting For Accept</h3>
+          <span class="chip" style="color:var(--amber, #f5a524);">${pendingInquiries.length} pending</span>
+        </div>
+        <div class="list">
+          ${pendingInquiries.map(inq => `
+            <div class="lrow">
+              <div class="lrow-ico" style="background:rgba(245,165,36,0.16);color:var(--amber, #f5a524);">${ICONS.alert}</div>
+              <div class="lrow-main">
+                <b>${escapeHtml(inq.full_name || 'Client')}</b>
+                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || 'Service request')} · ${formatDateTime(inq.created_at)}</span>
+              </div>
+              <button class="btn btn-primary btn-sm accept-btn" data-id="${escapeAttr(inq.id)}" data-ticket-id="${escapeAttr(inq.ticket_id || '')}">${ICONS.check}<span>Accept</span></button>
+              <button class="btn btn-secondary btn-sm decline-btn" data-id="${escapeAttr(inq.id)}">${ICONS.close}<span class="hide-sm">Decline</span></button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="grid grid-emp-2" style="margin-bottom:18px;align-items:start;">
       <!-- Clock card (DESIGN .clock-card) -->
       <div class="card clock-card emp-clock-card">
         <div class="chip" style="margin:0 auto 14px;width:fit-content;color:${isClockedIn && !isClockedOut ? 'var(--accent, var(--primary))' : 'var(--text-3, var(--text-dim))'};">
@@ -1179,11 +1203,11 @@ export async function renderEmployeeDashboard(container) {
           <button class="btn btn-primary" id="btn-clock-in" style="width:100%;" ${isClockedIn || strictEodBlock || clockInClosed ? 'disabled' : ''}>
             ${ICONS.play}<span>Clock In</span>
           </button>
-          <button class="btn btn-ghost" id="btn-clock-out" style="width:100%;" ${canClockOut ? '' : 'disabled'} title="${!eodReport && isClockedIn && !isClockedOut ? 'Submit EOD report before clocking out' : ''}">
+          <button class="btn btn-ghost" id="btn-clock-out" style="width:100%;" ${canClockOut ? '' : 'disabled'}>
             ${ICONS.pause}<span>Clock Out</span>
           </button>
         </div>
-        ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Submit today's EOD report to enable Clock Out.</span></p>` : ''}
+        ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Clock Out will ask for your EOD report first.</span></p>` : ''}
         ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note">${ICONS.clock}<span>Clock-in is closed after ${clockOutSetting.label}. Please contact admin.</span></p>` : ''}
         ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
         ${isClockedOut ? `<div class="chip" style="margin:14px auto 0;width:fit-content;color:var(--accent, var(--primary));">${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span></div>` : ''}
@@ -1216,97 +1240,7 @@ export async function renderEmployeeDashboard(container) {
         </div>
       </div>
 
-      <!-- Stack: Leaderboard + Jobs/day (DESIGN third column) -->
-      <div class="stack">
-        <div class="card list-card">
-          <div class="card-head"><h3>${ICONS.star} Leaderboard</h3></div>
-          <div class="stack" style="gap:12px;">
-            ${lbTop.length === 0 ? `
-              <div style="text-align:center;padding:18px;color:var(--text-3, var(--text-dim));font-size:0.84rem;">No feedback this month yet.</div>
-            ` : lbTop.map(p => `
-              <div style="display:flex;align-items:center;gap:11px;padding:6px 8px;border-radius:12px;background:${p.you ? 'var(--accent-soft)' : 'transparent'};">
-                <b style="font-family:var(--font-display);width:22px;color:${p.rank === 1 ? 'var(--amber, #f5a524)' : 'var(--text-3, var(--text-dim))'};">#${p.rank}</b>
-                <div class="av-sm" style="background:linear-gradient(140deg, var(--accent, var(--primary)), var(--accent-700, #0c6f3d));color:#fff;font-weight:700;font-size:0.72rem;font-family:var(--font-display);">${lbInitials(p.name)}</div>
-                <b style="flex:1;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.you ? 'You' : escapeHtml(p.name)}</b>
-                <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-2, var(--text-soft));font-weight:700;">${p.avg.toFixed(1)}★</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-
-        <div class="card list-card">
-          <div class="card-head"><h3>${ICONS.chart || ICONS.clipboard} Jobs / day</h3></div>
-          <div class="bc" style="height:130px;">${jobsBars}</div>
-        </div>
-      </div>
     </div>
-
-    <!-- Notice Board + EOD (themed, below the design row) -->
-    <div class="grid grid-2-1" style="margin-bottom:18px;align-items:start;">
-      <div class="card list-card">
-        <div class="card-head">
-          <h3>${ICONS.clipboard} Notice Board</h3>
-          ${notices.length ? `<span class="chip">${notices.length}</span>` : ''}
-        </div>
-        <div class="list-scroll" style="max-height:300px;">
-          ${notices.length === 0 ? `
-            <div style="text-align:center;padding:24px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No active notices right now.</div>
-          ` : notices.map(n => `
-            <div class="notice">
-              <div class="n-ic" style="${n.priority === 'urgent' ? 'background:rgba(240,85,109,0.14);color:var(--rose,#f0556d);' : n.priority === 'high' ? 'background:rgba(245,165,36,0.16);color:var(--amber,#f5a524);' : ''}">${n.priority === 'urgent' ? ICONS.alert : n.priority === 'high' ? ICONS.star : ICONS.clipboard}</div>
-              <div class="n-body">
-                <b>${escapeHtml(n.title)}</b>
-                <p>${escapeHtml(n.body)}</p>
-                <div class="n-time">${formatDateTime(n.created_at)}${n.expires_at ? ` · Until ${formatDateTime(n.expires_at)}` : ''}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <div class="card list-card">
-        <div class="card-head"><h3>${ICONS.clipboard} End of Day</h3></div>
-        ${eodReport ? `
-          <div class="eod-done">
-            <div class="eod-done-ring">${ICONS.check}</div>
-            <h3 class="eod-done-title">All caught up!</h3>
-            <p class="eod-done-sub">Your EOD report has been submitted.</p>
-            <div class="eod-done-time">Submitted at ${formatTime(eodReport.created_at)}</div>
-          </div>
-        ` : `
-          <div class="field">
-            <label>Today's progress</label>
-            <textarea id="eod-content" rows="5" placeholder="What did you achieve today? Break it down briefly..."></textarea>
-          </div>
-          <button class="btn btn-primary" id="btn-submit-eod" style="width:100%;">
-            <span>Submit Daily Report</span>${ICONS.arrowRight}
-          </button>
-          <p class="eod-fineprint">Reports are visible to your manager immediately.</p>
-        `}
-      </div>
-    </div>
-
-    ${pendingInquiries.length ? `
-      <div class="card list-card" style="margin-bottom:18px;border-color:rgba(245,165,36,0.4);">
-        <div class="card-head">
-          <h3>${ICONS.alert} Requests Waiting For Accept</h3>
-          <span class="chip" style="color:var(--amber, #f5a524);">${pendingInquiries.length} pending</span>
-        </div>
-        <div class="list">
-          ${pendingInquiries.map(inq => `
-            <div class="lrow">
-              <div class="lrow-ico" style="background:rgba(245,165,36,0.16);color:var(--amber, #f5a524);">${ICONS.alert}</div>
-              <div class="lrow-main">
-                <b>${escapeHtml(inq.full_name || 'Client')}</b>
-                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || 'Service request')} · ${formatDateTime(inq.created_at)}</span>
-              </div>
-              <button class="btn btn-primary btn-sm accept-btn" data-id="${escapeAttr(inq.id)}" data-ticket-id="${escapeAttr(inq.ticket_id || '')}">${ICONS.check}<span>Accept</span></button>
-              <button class="btn btn-secondary btn-sm decline-btn" data-id="${escapeAttr(inq.id)}">${ICONS.close}<span class="hide-sm">Decline</span></button>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
 
     ${acceptedInquiries.length ? `
       <div class="card list-card" style="margin-bottom:18px;">
@@ -1415,12 +1349,51 @@ export async function renderEmployeeDashboard(container) {
     else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
   });
 
-  // Clock Out
-  bind('#btn-clock-out', async () => {
+  // Clock Out — EOD report popup appears first; clock-out happens after submit.
+  const doClockOut = async () => {
     const { error } = await supabase.from('attendance').update({ clock_out: new Date().toISOString() })
       .eq('user_id', user.id).eq('date', today);
     if (error) toast(error.message, 'error');
     else { toast('Clocked out!', 'success'); renderEmployeeDashboard(container); }
+  };
+  const openEodClockOutModal = () => {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.innerHTML = `
+      <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+          <span class="modal-title">End of Day Report</span>
+          <button class="modal-close" id="eod-modal-x">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="color:var(--text-soft);font-size:0.88rem;margin:0 0 14px;">Submit your EOD report to clock out for today.</p>
+          <div class="field">
+            <label>Today's progress</label>
+            <textarea id="eod-modal-content" rows="5" placeholder="What did you achieve today? Break it down briefly..."></textarea>
+          </div>
+          <button class="btn btn-primary" id="eod-modal-submit" style="width:100%;">
+            <span>Submit Report &amp; Clock Out</span>${ICONS.arrowRight}
+          </button>
+          <p class="eod-fineprint" style="margin-top:10px;">Reports are visible to your manager immediately.</p>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#eod-modal-x').onclick = () => ov.remove();
+    ov.querySelector('#eod-modal-submit').onclick = async () => {
+      const content = ov.querySelector('#eod-modal-content').value.trim();
+      if (!content) { toast('Please write your report', 'warning'); return; }
+      const b = ov.querySelector('#eod-modal-submit');
+      b.disabled = true; b.textContent = 'Submitting...';
+      const { error } = await supabase.from('eod_reports').insert({ employee_id: user.id, content, date: today });
+      if (error) { toast(error.message, 'error'); b.disabled = false; b.innerHTML = `<span>Submit Report &amp; Clock Out</span>${ICONS.arrowRight}`; return; }
+      toast('EOD Report submitted!', 'success');
+      ov.remove();
+      await doClockOut();
+    };
+  };
+  bind('#btn-clock-out', async () => {
+    if (!eodReport) { openEodClockOutModal(); return; }
+    await doClockOut();
   });
 
   // EOD
@@ -1435,6 +1408,31 @@ export async function renderEmployeeDashboard(container) {
       if (error) { toast(error.message, 'error'); eodBtnActual.disabled = false; eodBtnActual.textContent = 'Submit Report →'; }
       else { toast('EOD Report submitted!', 'success'); renderEmployeeDashboard(container); }
     });
+  }
+
+  // ── Forced clock-in popup ──────────────────────────────────────
+  // Shown right after login (dashboard is the landing page) until the
+  // employee clocks in. No close button — clocking in is mandatory.
+  document.querySelectorAll('.clockin-gate').forEach(el => el.remove());
+  if (!isClockedIn && !isClockedOut && !clockInClosed && !strictEodBlock) {
+    const gate = document.createElement('div');
+    gate.className = 'modal-overlay clockin-gate';
+    gate.innerHTML = `
+      <div class="modal" style="max-width:430px;">
+        <div class="modal-body" style="padding:32px;text-align:center;">
+          <div style="width:68px;height:68px;border-radius:50%;background:var(--accent-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+            <span style="width:30px;height:30px;display:flex;">${ICONS.clock}</span>
+          </div>
+          <h3 style="margin:0 0 6px;font-family:var(--font-display);">Clock in to start your day</h3>
+          <p style="color:var(--text-soft);font-size:0.9rem;margin:0 0 20px;line-height:1.5;">You must clock in before using the portal. Your location will be recorded.</p>
+          <button class="btn btn-primary" id="gate-clock-in" style="width:100%;">${ICONS.play}<span>Clock In Now</span></button>
+        </div>
+      </div>`;
+    document.body.appendChild(gate);
+    gate.querySelector('#gate-clock-in').onclick = () => {
+      gate.remove();
+      container.querySelector('#btn-clock-in')?.click();
+    };
   }
 
   // Leave Request
@@ -2609,17 +2607,9 @@ export async function renderEmployeeTasks(container) {
       </div>
     ` : ''}
 
-    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-      <div class="sr-filter-bar" id="task-filter-tabs">
-        <button class="sr-filter active" data-filter="all"><span>All</span><span class="sr-filter-count">${filterCounts.all}</span></button>
-        <button class="sr-filter" data-filter="active"><span>Active</span><span class="sr-filter-count">${filterCounts.active}</span></button>
-        <button class="sr-filter" data-filter="completed"><span>Completed</span><span class="sr-filter-count">${filterCounts.completed}</span></button>
-        <button class="sr-filter" data-filter="issues"><span>Issues</span><span class="sr-filter-count">${filterCounts.issues}</span></button>
-      </div>
-      <div class="search-input-wrap" style="flex:1; min-width:200px;">
-        <span>${ICONS.search}</span>
-        <input class="search-input" id="task-search" placeholder="Search tasks by title, client, or ticket..."/>
-      </div>
+    <div class="emp-task-search" style="margin-bottom:24px;">
+      <span class="emp-task-search-ico">${ICONS.search}</span>
+      <input id="task-search" type="search" placeholder="Search by title, client, or ticket number..." autocomplete="off"/>
     </div>
 
     <div id="task-list">
@@ -2710,33 +2700,17 @@ export async function renderEmployeeTasks(container) {
     }
   }, 5000);
 
-  // Filter tabs
-  let activeFilter = 'all';
+  // Search (filter tabs removed — each section already shows only its own jobs)
   let searchQuery = '';
 
   const applyFilters = () => {
     const cards = container.querySelectorAll('.emp-task-card, .emp-job-card');
     const q = searchQuery.toLowerCase();
     cards.forEach(card => {
-      const status = card.dataset.status;
       const text = card.textContent.toLowerCase();
-      const matchFilter = activeFilter === 'all'
-        || (activeFilter === 'active' && status !== 'resolved' && status !== 'issue_not_resolved')
-        || (activeFilter === 'completed' && status === 'resolved')
-        || (activeFilter === 'issues' && status === 'issue_not_resolved');
-      const matchSearch = !q || text.includes(q);
-      card.style.display = (matchFilter && matchSearch) ? '' : 'none';
+      card.style.display = (!q || text.includes(q)) ? '' : 'none';
     });
   };
-
-  container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(btn => {
-    btn.onclick = () => {
-      container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeFilter = btn.dataset.filter;
-      applyFilters();
-    };
-  });
 
   const searchInput = container.querySelector('#task-search');
   if (searchInput) {

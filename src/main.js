@@ -311,12 +311,39 @@ function showAuth() {
       }
       currentUser = user;
       currentRole = role;
+      localStorage.setItem(SESSION_DAY_KEY, todayKey());
       if (role === 'employee') canAddService = readCanAddService(user);
       navigate('dashboard');
     },
     () => goToLanding()
   );
 }
+
+// ── DAILY SESSION EXPIRY (employees) ─────────────────
+// Employee sessions end at midnight: next time the app is opened (or while it
+// stays open past midnight) the employee is signed out and must log in again,
+// which re-triggers the forced clock-in popup for the new day.
+const SESSION_DAY_KEY = 'nest-session-day';
+const todayKey = () => new Date().toLocaleDateString('en-CA');
+
+function isEmployeeSessionExpired() {
+  const saved = localStorage.getItem(SESSION_DAY_KEY);
+  return !!saved && saved !== todayKey();
+}
+
+async function expireEmployeeSession() {
+  localStorage.setItem(SESSION_DAY_KEY, todayKey());
+  try { await signOut(); } catch (_) {}
+  currentUser = null;
+  currentRole = null;
+  toast('Your daily session has ended. Please log in and clock in again.', 'info');
+  goToLanding();
+}
+
+// While the app stays open, check every minute whether the day has rolled over.
+setInterval(() => {
+  if (currentRole === 'employee' && isEmployeeSessionExpired()) expireEmployeeSession();
+}, 60 * 1000);
 
 // ── BOOT ─────────────────────────────────────────────
 async function boot() {
@@ -352,6 +379,14 @@ async function boot() {
         goToLanding();
         return;
       }
+
+      // Employee sessions are valid for one day only — force re-login (and a
+      // fresh clock-in) when the saved session belongs to a previous day.
+      if (currentRole === 'employee' && isEmployeeSessionExpired()) {
+        await expireEmployeeSession();
+        return;
+      }
+      localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
       if (currentRole === 'employee') canAddService = readCanAddService(currentUser);
       navigate('dashboard');

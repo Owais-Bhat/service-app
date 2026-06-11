@@ -1725,6 +1725,47 @@ a,
   -webkit-overflow-scrolling: touch;
 }
 
+/* ── Employee My Tasks: professional search bar ── */
+.emp-task-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 720px;
+}
+.emp-task-search-ico {
+  position: absolute;
+  left: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-dim);
+  pointer-events: none;
+  display: flex;
+}
+.emp-task-search-ico svg { width: 18px; height: 18px; }
+.emp-task-search input {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 18px 14px 48px;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border, var(--border));
+  background: var(--glass-bg-strong, var(--bg-soft));
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  outline: none;
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s var(--ease, ease), box-shadow 0.2s var(--ease, ease);
+}
+.emp-task-search input::placeholder { color: var(--text-dim); font-weight: 500; }
+.emp-task-search input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-card);
+}
+
+/* My Tasks service sections: no height cap so every card is fully visible */
+.emp-grid-2.emp-scroll-list { max-height: none; overflow: visible; }
+
 /* Two task/job cards per row in My Tasks sections */
 .emp-grid-2 {
   display: grid;
@@ -6545,11 +6586,12 @@ input, select, textarea { max-width: 100%; }
 .grid { display: grid; gap: 18px; }
 .grid-kpi { grid-template-columns: repeat(4,1fr); }
 .grid-emp { grid-template-columns: 1.1fr 1.7fr 1fr; }
+.grid-emp-2 { grid-template-columns: 1.1fr 1.9fr; }
 .grid-client { grid-template-columns: 1.5fr 1fr; }
 .row { display: flex; gap: 18px; }
 .stack { display: flex; flex-direction: column; gap: 18px; }
 @media (max-width: 1280px) { .grid-kpi { grid-template-columns: repeat(2,1fr); } .grid-emp { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 1040px) { .grid-client, .grid-emp { grid-template-columns: 1fr; } }
+@media (max-width: 1040px) { .grid-client, .grid-emp, .grid-emp-2 { grid-template-columns: 1fr; } }
 
 /* ── Progress bar ── */
 .bar { height: 8px; border-radius: 20px; background: var(--panel-3, var(--row-hover)); overflow: hidden; }
