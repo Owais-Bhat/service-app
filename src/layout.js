@@ -16,6 +16,26 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
   const savedTheme = localStorage.getItem('theme') || 'light';
 
+  // Fast path: the portal shell already exists for this role. Keep the shell
+  // (so the sidebar keeps its scroll position instead of jumping back to the
+  // top on every click) and only refresh the nav state + page content.
+  const existing = app.querySelector('.portal-layout');
+  if (existing && existing.dataset.role === role) {
+    const navEl = document.getElementById('sidebar-nav');
+    const keepScroll = navEl ? navEl.scrollTop : 0;
+    buildNav(navItems, activePage, onNav);
+    if (navEl) navEl.scrollTop = keepScroll;
+
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const closeSidebar = () => { sidebar?.classList.remove('open'); overlay?.classList.remove('active'); };
+    closeSidebar(); // mobile: close the drawer after choosing a page
+    document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', closeSidebar));
+
+    renderPage(pageContent, navItems, activePage);
+    return;
+  }
+
   app.innerHTML = `
     <div class="portal-layout" data-role="${role}">
       <div class="portal-mesh bg-mesh" aria-hidden="true">
@@ -126,6 +146,7 @@ function renderPage(pageContent, navItems, activePage) {
   document.getElementById('topbar-title').innerHTML = `<h1>${title}</h1><p>${subtitle}</p>`;
   const container = document.getElementById('page-content');
   container.innerHTML = '';
+  container.scrollTop = 0; // new page starts at the top (sidebar scroll is preserved separately)
   if (typeof pageContent === 'function') pageContent(container);
   else container.innerHTML = pageContent || '';
 }
