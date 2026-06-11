@@ -1,0 +1,20 @@
+﻿E:\service app\src\utils.js
+E:\service app\src\pages\admin.js
+E:\service app\src\pages\dashboard-widgets.js
+E:\service app\src\pages\employee.js
+E:\service app\src\pages\landing.js
+E:\service app\tests\cache-expiry.test.mjs
+E:\service app\tests\manage-task-context.test.mjs
+E:\service app\index.html
+E:\service app\design-reference\service\README.md
+E:\service app\design-reference\service\chats\chat1.md
+E:\service app\design-reference\service\project\admin.html
+E:\service app\design-reference\service\project\employee.html
+E:\service app\design-reference\service\project\index-print.html
+E:\service app\design-reference\service\project\index.html
+E:\service app\design-reference\service\project\Screenshot 2026-06-03 150803.png
+E:\service app\design-reference\service\project\src\assets\logo.png
+E:\service app\design-reference\service\project\uploads\logo-1780741540196.png
+E:\service app\design-reference\service\project\uploads\pasted-1780824286646-0.png
+E:\service app\design-reference\service\project\uploads\pasted-1780824305293-0.png
+E:\service app\design-reference\service\project\uploads\pasted-1780824339007-0.png

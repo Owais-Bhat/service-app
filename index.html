@@ -1,27 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Networking Experts – Service Portal</title>
-  <meta name="description" content="Networking Experts Client & Staff Portal – Manage tickets, services, and network infrastructure." />
+  <title>NEST — Service Portal</title>
+  <meta name="description" content="NEST Service Portal – Manage tickets, services, and network infrastructure." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/style.css" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#15a05a" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/favicon.svg" />
 </head>
 <body>
+  <div class="bg-mesh"><span class="m1"></span><span class="m2"></span><span class="m3"></span><span class="m4"></span></div>
   <div id="app">
     <!-- Instant inline splash so users never see a blank white screen while the
          app bundle downloads on a slow connection. main.js replaces #app. -->
-    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0f172a;">
-      <div style="width:44px;height:44px;border:4px solid rgba(255,255,255,0.18);border-top-color:#10b981;border-radius:50%;animation:nest-spin .8s linear infinite;"></div>
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#f0faf5);">
+      <div style="width:44px;height:44px;border:4px solid rgba(21,160,90,0.25);border-top-color:#15a05a;border-radius:50%;animation:nest-spin .8s linear infinite;"></div>
     </div>
   </div>
   <style>@keyframes nest-spin{to{transform:rotate(360deg)}}</style>
+  <script>
+    /* Restore persisted theme before first paint to avoid flash */
+    (function () {
+      var t = localStorage.getItem('nest-theme');
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    })();
+    /* Enable entrance animations only when page is genuinely on-screen */
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      document.documentElement.classList.add('anim-ready');
+    }); });
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
