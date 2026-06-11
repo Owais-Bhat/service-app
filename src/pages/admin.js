@@ -968,6 +968,11 @@ async function openInquiryDetail(id, onDone) {
     ...e,
     _clockedIn: e.clockedIn && !e.restricted,
   }));
+  const activeEmployeeIds = new Set(
+    availableEmployees
+      .filter((employee) => employee._clockedIn)
+      .map((employee) => employee.id),
+  );
   const technicianName =
     (employees || []).find((e) => e.id === i.assigned_employee_id)?.full_name ||
     "";

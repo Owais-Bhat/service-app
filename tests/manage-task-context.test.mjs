@@ -25,3 +25,15 @@ test('manage-context endpoint is admin-only and computes employee availability',
   assert.match(serverSource, /missed_eod_count/, 'endpoint should calculate EOD restrictions');
   assert.match(serverSource, /clockedIn: Boolean\(row\.clocked_in\)/, 'endpoint should return online state');
 });
+
+test('admin assignment handler defines the active employee set before validating selection', () => {
+  const start = adminSource.indexOf('async function openInquiryDetail(id, onDone) {');
+  const end = adminSource.indexOf('export async function renderAttendance', start);
+  const source = adminSource.slice(start, end);
+  const declaration = source.indexOf('const activeEmployeeIds = new Set(');
+  const lookup = source.indexOf('activeEmployeeIds.has(empId)');
+
+  assert.notEqual(declaration, -1, 'active employee IDs should be derived from manage-context data');
+  assert.notEqual(lookup, -1, 'assignment should validate the selected employee');
+  assert.ok(declaration < lookup, 'active employee IDs must exist before the save handler uses them');
+});
