@@ -2585,7 +2585,7 @@ export async function renderEmployeeTasks(container) {
         : `
           <div class="card">
             <div class="card-header"><span class="card-title">Active Services</span></div>
-            <div class="card-body emp-scroll-list">
+            <div class="card-body emp-scroll-list emp-grid-2">
               ${activeServiceCards.length === 0
                 ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No active services</div>'
                 : activeServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
@@ -2593,7 +2593,7 @@ export async function renderEmployeeTasks(container) {
           </div>
           <div class="card">
             <div class="card-header"><span class="card-title">Resolved Services</span></div>
-            <div class="card-body emp-scroll-list">
+            <div class="card-body emp-scroll-list emp-grid-2">
               ${resolvedServiceCards.length === 0
                 ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No resolved services yet</div>'
                 : resolvedServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}
@@ -2601,7 +2601,7 @@ export async function renderEmployeeTasks(container) {
           </div>
           <div class="card">
             <div class="card-header"><span class="card-title">Issue Not Resolved Services</span></div>
-            <div class="card-body emp-scroll-list">
+            <div class="card-body emp-scroll-list emp-grid-2">
               ${issueServiceCards.length === 0
                 ? '<div style="text-align:center;padding:28px;color:var(--text-dim)">No unresolved issue services</div>'
                 : issueServiceCards.map(item => item.inquiries ? taskCard(item) : jobCard(item)).join('')}

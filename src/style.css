@@ -1725,6 +1725,25 @@ a,
   -webkit-overflow-scrolling: touch;
 }
 
+/* Two task/job cards per row in My Tasks sections */
+.emp-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.emp-grid-2 > .emp-task-card,
+.emp-grid-2 > .emp-job-card {
+  margin-bottom: 0 !important;
+}
+/* Empty-state / non-card children span the full row */
+.emp-grid-2 > :not(.emp-task-card):not(.emp-job-card) {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1100px) {
+  .emp-grid-2 { grid-template-columns: 1fr; }
+}
+
 .recent-requests-scroll thead th {
   position: sticky;
   top: 0;
