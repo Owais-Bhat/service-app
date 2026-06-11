@@ -309,16 +309,18 @@ export function renderLandingPage(container, onPortalClick) {
             </div>
           </div>
         ` : ''}
-        <div class="srf-bg-orb srf-orb-1"></div>
-        <div class="srf-bg-orb srf-orb-2"></div>
-        <div class="srf-bg-orb srf-orb-3"></div>
+        <div class="bg-mesh" aria-hidden="true"><span class="m1"></span><span class="m2"></span><span class="m3"></span><span class="m4"></span></div>
 
         <nav class="srf-nav">
-          <img src="${LOGO}" alt="Networking Experts" class="srf-logo"
-               onerror="this.outerHTML='<span class=\\'srf-brand\\'>Networking Experts</span>'"/>
+          <div class="srf-brand-wrap">
+            <div class="srf-logo-mark">
+              <img src="${LOGO}" alt="" onerror="this.style.display='none';this.parentElement.textContent='N'"/>
+            </div>
+            <span class="srf-logo-word"><b>Networking Experts</b><small>Service Portal</small></span>
+          </div>
           <div class="srf-nav-actions">
             <button class="srf-icon-btn theme-toggle-btn" title="Toggle theme">${themeIcon}</button>
-            <button class="srf-icon-btn srf-staff-btn" title="Staff Login">${ICONS.staff}</button>
+            <button class="staff-btn srf-staff-btn" title="Staff Login">${ICONS.staff}<span>Staff login</span></button>
           </div>
         </nav>
 
@@ -333,30 +335,43 @@ export function renderLandingPage(container, onPortalClick) {
             ${state.ads.length > 0 ? `
               <div id="srf-ad-slot"></div>
             ` : `
-               <div class="srf-ad-empty">
-                  <h2 style="font-size:1.5rem; font-weight:800; color:var(--text); margin-bottom:12px;">Welcome to Networking Experts</h2>
-                  <p style="color:var(--text-soft); font-size:1rem;">Your trusted partner for all networking needs.</p>
-               </div>
+              <div class="promo">
+                <div class="grid-pat"></div>
+                <div class="promo-top">
+                  <span class="promo-tag">${ICONS.shield}<span style="margin-left:6px">NEST Smart Security</span></span>
+                </div>
+                <div class="promo-body">
+                  <h3>CCTV, networking &amp; automation — installed and supported by experts.</h3>
+                  <p>From a single camera to a full smart-security setup, our certified technicians have you covered across the valley.</p>
+                </div>
+                <div class="promo-stats">
+                  <div class="ps"><b>12 hr</b><span>Avg. resolution</span></div>
+                  <div class="ps"><b>4,200+</b><span>Jobs completed</span></div>
+                  <div class="ps"><b>4.9★</b><span>Customer rating</span></div>
+                </div>
+              </div>
             `}
           </section>
 
           <section class="srf-card-wrap">
-            <div class="srf-mode-tabs" role="tablist">
-              <button class="srf-mode-tab ${state.mode === 'new' ? 'active' : ''}" data-mode="new" role="tab">
-                ${ICONS.wrench}<span>New Request</span>
-              </button>
-              <button class="srf-mode-tab ${state.mode === 'track' ? 'active' : ''}" data-mode="track" role="tab">
-                ${ICONS.search}<span>Track Request</span>
-              </button>
-              <button class="srf-mode-tab ${state.mode === 'complaint' ? 'active' : ''}" data-mode="complaint" role="tab">
-                ${ICONS.shield}<span>Complaint</span>
-              </button>
-            </div>
-
-            <div id="srf-stepper-wrap">${stepperHtml()}</div>
-
-            <div class="srf-card" id="srf-card">
-              ${renderStep()}
+            <div class="srf-req-card glass">
+              <div class="srf-mode-tabs" role="tablist">
+                <button class="srf-mode-tab ${state.mode === 'new' ? 'active' : ''}" data-mode="new" role="tab">
+                  ${ICONS.wrench}<span>New Request</span>
+                </button>
+                <button class="srf-mode-tab ${state.mode === 'track' ? 'active' : ''}" data-mode="track" role="tab">
+                  ${ICONS.search}<span>Track Request</span>
+                </button>
+                <button class="srf-mode-tab ${state.mode === 'complaint' ? 'active' : ''}" data-mode="complaint" role="tab">
+                  ${ICONS.shield}<span>Complaint</span>
+                </button>
+              </div>
+              <div class="srf-req-body">
+                <div id="srf-stepper-wrap">${stepperHtml()}</div>
+                <div class="srf-card" id="srf-card">
+                  ${renderStep()}
+                </div>
+              </div>
             </div>
           </section>
         </main>
@@ -397,8 +412,7 @@ export function renderLandingPage(container, onPortalClick) {
 
     container.innerHTML = `
       <div class="srf-page srf-feedback-page">
-        <div class="srf-bg-orb srf-orb-1"></div>
-        <div class="srf-bg-orb srf-orb-2"></div>
+        <div class="bg-mesh" aria-hidden="true"><span class="m1"></span><span class="m2"></span><span class="m3"></span><span class="m4"></span></div>
 
         <nav class="srf-nav">
           <img src="${LOGO}" alt="Networking Experts" class="srf-logo"

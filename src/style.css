@@ -6814,3 +6814,123 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
 .legend span { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--text-2, var(--text-soft)); font-weight: 600; }
 .legend i { width: 10px; height: 10px; border-radius: 4px; }
+
+/* ============================================================
+   LANDING — match DESIGN index.html (landing-top / hero /
+   landing-grid / req-card / urgent-bar)
+   ============================================================ */
+
+/* top bar → DESIGN .landing-top */
+.srf-nav {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 22px 26px;
+  gap: 14px;
+}
+.promo-tag svg { width: 14px; height: 14px; }
+.srf-brand-wrap { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.srf-logo-mark {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  background: linear-gradient(140deg, var(--accent, var(--primary)), var(--accent-700, #0c6f3d));
+  display: grid; place-items: center; color: #fff;
+  font-family: var(--font-display); font-weight: 800;
+  box-shadow: 0 6px 18px -4px var(--accent-glow);
+  overflow: hidden;
+}
+.srf-logo-mark img { width: 30px; height: 30px; object-fit: contain; filter: brightness(0) invert(1); }
+.srf-logo-word { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
+.srf-logo-word b { font-family: var(--font-display); font-weight: 700; font-size: 1.24rem; letter-spacing: -0.02em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srf-logo-word small { font-size: 0.66rem; color: var(--text-3, var(--text-dim)); letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.srf-nav .srf-icon-btn {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur, 20px));
+  border-radius: 13px;
+}
+.srf-staff-btn.staff-btn span { white-space: nowrap; }
+@media (max-width: 560px) { .srf-staff-btn.staff-btn span { display: none; } .srf-logo-word b { font-size: 1.05rem; } }
+
+/* hero → DESIGN .landing-hero */
+.srf-top-banner { position: relative; z-index: 5; }
+.srf-badge {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur, 20px));
+  box-shadow: var(--glass-shadow);
+  padding: 9px 18px;
+  font-size: 0.9rem;
+}
+.srf-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.srf-grad {
+  background: none;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  color: var(--accent, var(--primary));
+  display: block;
+}
+.srf-sub { font-size: 1.08rem; color: var(--text-2, var(--text-soft)); line-height: 1.55; }
+
+/* grid → DESIGN .landing-grid (1fr / 1.05fr, 26px gap, 1240px) */
+.srf-main {
+  max-width: 1240px;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 26px;
+  padding: 40px 26px 0;
+}
+.srf-intro { max-width: none; justify-self: stretch; }
+.srf-card-wrap { max-width: none; justify-self: stretch; gap: 0; }
+@media (max-width: 940px) {
+  .srf-main { grid-template-columns: 1fr; }
+  .srf-intro { order: 2; }
+  .srf-intro .promo { min-height: 240px; }
+}
+
+/* request card → DESIGN .req-card (tabs inside one glass card) */
+.srf-req-card { padding: 0; overflow: hidden; border-radius: var(--r-xl, 34px); }
+.srf-req-body { padding: 30px; position: relative; }
+.srf-req-body .srf-stepper { margin-bottom: 28px; }
+.srf-req-card .srf-card {
+  background: none;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+  padding: 0;
+  animation: none;
+}
+@media (max-width: 560px) { .srf-req-body { padding: 22px 18px; } }
+
+/* contact card → DESIGN .urgent-bar */
+.srf-contact-section { position: relative; z-index: 5; display: flex; justify-content: center; padding: 36px 26px 40px; }
+.srf-contact-card {
+  width: min(100%, 1240px);
+  padding: 22px 28px;
+  border-radius: var(--r-lg, 26px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur, 20px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 20px)) saturate(160%);
+  box-shadow: var(--glass-shadow);
+}
+.srf-contact-kicker { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3, var(--text-dim)); }
+.srf-contact-number { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--text); text-decoration: none; display: block; margin: 6px 0 4px; }
+.srf-contact-note { font-size: 0.86rem; color: var(--text-2, var(--text-soft)); }
+.srf-contact-actions { display: flex; gap: 12px; }
+.srf-contact-action {
+  display: flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: 14px;
+  font-weight: 700; font-size: 0.92rem; color: #fff !important; text-decoration: none;
+  transition: transform 0.18s var(--ease, ease);
+}
+.srf-contact-action:hover { transform: translateY(-2px); }
+.srf-contact-action .srf-contact-icon { display: flex; }
+.srf-contact-action .srf-contact-icon svg { width: 19px; height: 19px; }
+.srf-contact-call { background: linear-gradient(140deg, var(--accent, #15a05a), var(--accent-700, #0c6f3d)); }
+.srf-contact-whatsapp { background: linear-gradient(140deg, #25d366, #128c4a); }
