@@ -6099,7 +6099,13 @@ input, select, textarea { max-width: 100%; }
   }
 }
 @media (max-width: 1100px) { .portal-layout .stats-grid { grid-template-columns: repeat(2, 1fr) !important; } }
-@media (max-width: 560px) { .portal-layout .stats-grid { grid-template-columns: 1fr !important; } }
+/* Mobile: keep stat cards 3 per row, compact */
+@media (max-width: 560px) {
+  .portal-layout .stats-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 10px; }
+  .portal-layout .stat-card { padding: 14px 12px; }
+  .portal-layout .stat-value { font-size: 1.35rem; }
+  .portal-layout .stat-label { font-size: 0.66rem; }
+}
 
 .portal-layout .stat-value {
   position: relative;
