@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>NEST Service Portal — Design Specification</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --accent:#15a05a; --accent-600:#0f8a4c; --accent-700:#0c6f3d;
+  --accent-glow:rgba(21,160,90,.45); --accent-soft:rgba(21,160,90,.12);
+  --teal:#11b5ae; --violet:#7c5cfc; --amber:#f5a524; --rose:#f0556d; --sky:#2e9bff;
+  --font-display:'Space Grotesk',sans-serif; --font-body:'Manrope',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  --r-sm:12px; --r-md:18px; --r-lg:26px; --r-xl:34px;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font-body);background:#f8faf9;color:#0e1d16;-webkit-font-smoothing:antialiased;font-size:13px;line-height:1.5}
+@media print{
+  body{background:#fff;font-size:11px}
+  .page-break{page-break-before:always}
+  .no-print{display:none}
+  h2.section-title{page-break-after:avoid}
+  .spec-card{break-inside:avoid}
+}
+
+/* ── COVER ── */
+.cover{background:linear-gradient(150deg,#0e1d16 0%,#15a05a 60%,#0c6f3d 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 40px;position:relative;overflow:hidden}
+.cover::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:30px 30px;pointer-events:none}
+.cover-logo{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.15);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;margin:0 auto 28px;font-family:var(--font-display);font-size:1.8rem;font-weight:700;color:#fff}
+.cover h1{font-family:var(--font-display);font-size:3.2rem;font-weight:700;color:#fff;letter-spacing:-.04em;line-height:1.05;margin-bottom:16px}
+.cover h1 span{color:rgba(255,255,255,.55);display:block;font-size:1.6rem;letter-spacing:-.02em;margin-bottom:8px}
+.cover p{color:rgba(255,255,255,.75);font-size:1.05rem;max-width:520px;margin:0 auto 36px;line-height:1.6}
+.cover-meta{display:flex;gap:32px;justify-content:center;flex-wrap:wrap}
+.cover-meta div{text-align:center;color:rgba(255,255,255,.6);font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.cover-meta div b{display:block;color:#fff;font-size:1.4rem;font-family:var(--font-display);letter-spacing:-.02em;margin-bottom:4px}
+
+/* ── LAYOUT ── */
+.doc{max-width:1100px;margin:0 auto;padding:60px 40px}
+h2.section-title{font-family:var(--font-display);font-size:1.8rem;font-weight:700;letter-spacing:-.025em;color:#0e1d16;margin:56px 0 28px;padding-bottom:14px;border-bottom:3px solid var(--accent);display:flex;align-items:center;gap:12px}
+h2.section-title .num{background:var(--accent);color:#fff;width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;flex-shrink:0}
+h3.sub-title{font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:#0e1d16;margin:28px 0 14px;letter-spacing:-.01em}
+p.desc{color:#41584d;font-size:.9rem;line-height:1.6;margin-bottom:14px;max-width:700px}
+
+/* ── SPEC CARD ── */
+.spec-card{background:#fff;border:1px solid rgba(16,50,36,.1);border-radius:20px;padding:28px;margin-bottom:20px;box-shadow:0 4px 20px -8px rgba(16,50,36,.12)}
+.spec-card h4{font-family:var(--font-display);font-weight:700;font-size:.95rem;color:#0e1d16;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.spec-card h4::before{content:'';width:4px;height:18px;background:var(--accent);border-radius:2px;display:inline-block}
+
+/* ── TWO COL ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:700px){.two-col,.three-col{grid-template-columns:1fr}}
+
+/* ── TOKEN TABLE ── */
+.token-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.token-table th{text-align:left;font-weight:700;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:#7a8d84;padding:8px 12px;border-bottom:2px solid rgba(16,50,36,.08)}
+.token-table td{padding:9px 12px;border-bottom:1px solid rgba(16,50,36,.06);vertical-align:middle}
+.token-table tr:last-child td{border-bottom:none}
+.token-table tr:hover td{background:rgba(21,160,90,.04)}
+.swatch{width:28px;height:28px;border-radius:8px;display:inline-block;vertical-align:middle;border:1px solid rgba(0,0,0,.06)}
+.code{font-family:var(--font-mono);font-size:.78rem;background:rgba(16,50,36,.05);padding:2px 7px;border-radius:6px;color:#0c6f3d}
+
+/* ── COMPONENT PREVIEWS ── */
+/* Glass card */
+.demo-glass{background:rgba(255,255,255,.62);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.55);border-radius:26px;box-shadow:0 18px 50px -18px rgba(16,40,28,.3),0 2px 8px -4px rgba(16,40,28,.16);padding:24px;position:relative;overflow:hidden}
+.demo-glass::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(160deg,rgba(255,255,255,.55),transparent 42%);opacity:.9}
+.demo-glass-dark{background:rgba(22,38,31,.58);border:1px solid rgba(255,255,255,.07);border-radius:26px;box-shadow:0 22px 60px -22px rgba(0,0,0,.65);padding:24px;position:relative;overflow:hidden}
+.demo-glass-dark::before{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(160deg,rgba(255,255,255,.04),transparent 42%);opacity:.9}
+.demo-glass-dark *{color:#e9f1ec}
+
+/* Sidebar mockup */
+.sidebar-demo{background:rgba(255,255,255,.62);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.55);border-radius:26px;box-shadow:0 18px 50px -18px rgba(16,40,28,.3);padding:0;overflow:hidden;width:220px}
+.sidebar-demo-logo{display:flex;align-items:center;gap:10px;padding:18px 18px 14px;border-bottom:1px solid rgba(16,50,36,.1)}
+.logo-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(140deg,#15a05a,#0c6f3d);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-display);font-weight:700;font-size:.85rem;flex-shrink:0;box-shadow:0 6px 18px -4px rgba(21,160,90,.45)}
+.logo-word b{font-family:var(--font-display);font-size:.95rem;font-weight:700;color:#0e1d16;display:block;letter-spacing:-.01em}
+.logo-word small{font-size:.6rem;color:#7a8d84;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.nav-section-demo{font-size:.6rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#7a8d84;padding:12px 18px 6px}
+.nav-item-demo{display:flex;align-items:center;gap:10px;padding:8px 14px;margin:1px 6px;border-radius:10px;font-size:.82rem;font-weight:600;color:#41584d;cursor:pointer;position:relative}
+.nav-item-demo svg{width:16px;height:16px;flex-shrink:0}
+.nav-item-demo.active{background:rgba(21,160,90,.12);color:#15a05a}
+.nav-item-demo.active::before{content:'';position:absolute;left:-14px;top:50%;transform:translateY(-50%);width:4px;height:18px;border-radius:0 4px 4px 0;background:#15a05a}
+.sidebar-footer-demo{padding:10px;border-top:1px solid rgba(16,50,36,.08)}
+.user-card-demo{display:flex;align-items:center;gap:8px;padding:8px;border-radius:14px;background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.08)}
+.avatar-demo{width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,#15a05a,#0c6f3d);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700;font-family:var(--font-display);flex-shrink:0}
+
+/* Topbar mockup */
+.topbar-demo{background:rgba(255,255,255,.62);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.55);border-radius:18px;box-shadow:0 18px 50px -18px rgba(16,40,28,.3);padding:0 20px;height:60px;display:flex;align-items:center;gap:14px;margin:14px 14px 0}
+.topbar-title-demo h1{font-family:var(--font-display);font-size:1.15rem;font-weight:700;letter-spacing:-.025em;color:#0e1d16}
+.topbar-title-demo p{font-size:.72rem;color:#7a8d84;margin-top:1px}
+.search-pill-demo{display:flex;align-items:center;gap:8px;padding:0 12px;height:36px;border-radius:12px;background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.1);color:#7a8d84;min-width:160px;font-size:.82rem}
+.search-pill-demo svg{width:15px;height:15px}
+.ml-auto{margin-left:auto}
+.icon-btn-demo{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#41584d;background:transparent}
+.icon-btn-demo svg{width:17px;height:17px}
+
+/* KPI card */
+.kpi-demo{display:flex;align-items:center;gap:16px;padding:20px}
+.kpi-gauge-wrap svg{width:80px;height:80px}
+.kpi-info-demo .kpi-label{font-size:.72rem;color:#7a8d84;font-weight:600;margin-bottom:3px}
+.kpi-info-demo .kpi-value{font-family:var(--font-display);font-size:1.7rem;font-weight:700;letter-spacing:-.03em;line-height:1;color:#0e1d16}
+.kpi-info-demo .kpi-value small{font-size:.85rem;color:#7a8d84;font-weight:600}
+.kpi-trend{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:700;margin-top:7px;color:#15a05a}
+
+/* Badges */
+.badge-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;font-weight:700;padding:4px 10px;border-radius:8px;letter-spacing:.01em}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.open{color:#2e9bff;background:rgba(46,155,255,.14)}
+.badge.progress{color:#f5a524;background:rgba(245,165,36,.16)}
+.badge.resolved{color:#15a05a;background:rgba(21,160,90,.12)}
+.badge.assigned{color:#7c5cfc;background:rgba(124,92,252,.14)}
+.badge.high{color:#f0556d;background:rgba(240,85,109,.14)}
+
+/* Buttons */
+.btn-demo{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:.84rem;padding:11px 18px;border-radius:13px;border:none;cursor:pointer;font-family:var(--font-body)}
+.btn-primary-demo{background:linear-gradient(140deg,#15a05a,#0f8a4c);color:#fff;box-shadow:0 8px 20px -8px rgba(21,160,90,.45)}
+.btn-ghost-demo{background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.12);color:#0e1d16}
+.btn-sm-demo{padding:8px 13px;font-size:.78rem;border-radius:11px}
+
+/* Filter tabs */
+.ftab-demo{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:11px;font-weight:700;font-size:.8rem;color:#41584d;background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.1)}
+.ftab-demo.on{background:rgba(21,160,90,.12);color:#15a05a;border-color:transparent}
+.ftab-count-demo{font-family:var(--font-mono);font-size:.68rem;padding:1px 6px;border-radius:20px;background:rgba(16,50,36,.06)}
+.ftab-demo.on .ftab-count-demo{background:#15a05a;color:#fff}
+
+/* Table */
+.tbl-demo{width:100%;border-collapse:collapse;font-size:.82rem}
+.tbl-demo th{text-align:left;font-weight:700;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:#7a8d84;padding:9px 12px;border-bottom:1px solid rgba(16,50,36,.1)}
+.tbl-demo td{padding:12px 12px;border-bottom:1px solid rgba(16,50,36,.07);vertical-align:middle}
+.tbl-demo tr:last-child td{border-bottom:none}
+.tbl-demo tr:hover td{background:rgba(16,50,36,.025)}
+.tk{font-family:var(--font-mono);font-size:.76rem;color:#15a05a;font-weight:600}
+.cell-stack{display:flex;flex-direction:column;gap:2px}
+.cell-stack small{font-size:.72rem;color:#7a8d84}
+.muted{color:#7a8d84}
+
+/* Form */
+.field-demo{margin-bottom:14px}
+.field-demo label{display:block;font-size:.76rem;font-weight:700;margin-bottom:6px;color:#41584d}
+.field-demo input,.field-demo select,.field-demo textarea{width:100%;background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.1);border-radius:13px;padding:11px 14px;color:#0e1d16;font-size:.88rem;font-family:var(--font-body);outline:none}
+.field-demo input:focus{border-color:#15a05a;box-shadow:0 0 0 4px rgba(21,160,90,.12)}
+
+/* Modal */
+.modal-demo{background:rgba(255,255,255,.92);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.55);border-radius:34px;box-shadow:0 40px 80px -20px rgba(0,0,0,.3);overflow:hidden;max-width:640px}
+.modal-head-demo{display:flex;align-items:center;gap:12px;padding:20px 24px;border-bottom:1px solid rgba(16,50,36,.1)}
+.modal-head-demo h3{font-family:var(--font-display);font-size:1.1rem;font-weight:700;letter-spacing:-.02em;flex:1}
+.modal-body-demo{padding:22px 24px}
+
+/* Timeline */
+.timeline-demo{position:relative;padding-left:24px}
+.timeline-demo::before{content:'';position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:rgba(16,50,36,.1)}
+.tl-item{position:relative;padding-bottom:14px}
+.tl-item:last-child{padding-bottom:0}
+.tl-item::before{content:'';position:absolute;left:-21px;top:3px;width:12px;height:12px;border-radius:50%;background:#15a05a;box-shadow:0 0 0 4px rgba(21,160,90,.12)}
+.tl-item.muted::before{background:#7a8d84;box-shadow:0 0 0 4px rgba(122,141,132,.12)}
+.tl-item b{font-size:.84rem;font-weight:700;color:#0e1d16}
+.tl-item span{display:block;font-size:.74rem;color:#7a8d84;margin-top:1px}
+
+/* SLA / Bill */
+.sla-box-demo{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;background:rgba(21,160,90,.1)}
+.bill-demo{background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.1);border-radius:16px;padding:16px}
+.bill-row{display:flex;justify-content:space-between;align-items:center;font-size:.84rem;padding:6px 0;color:#41584d}
+.bill-row b{color:#0e1d16;font-weight:700}
+.bill-row.item{border-bottom:1px dashed rgba(16,50,36,.1)}
+.bill-total-demo{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:10px;border-top:2px solid rgba(16,50,36,.12)}
+.bill-total-demo b{font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:#15a05a}
+
+/* Gauge SVG ring */
+.gauge-track{fill:none;stroke:rgba(16,50,36,.08);stroke-linecap:round}
+.gauge-arc{fill:none;stroke-linecap:round}
+.gauge-txt{font-family:var(--font-display);font-size:18px;font-weight:700;fill:#0e1d16;text-anchor:middle;dominant-baseline:central}
+.gauge-suffix{font-size:10px;font-weight:600;fill:#7a8d84}
+
+/* OTP / Stepper / Landing */
+.stepper-demo{display:flex;align-items:center;margin-bottom:24px}
+.step{display:flex;align-items:center;gap:8px}
+.step-dot{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.82rem;font-family:var(--font-mono);background:rgba(16,50,36,.06);color:#7a8d84}
+.step.on .step-dot{background:#15a05a;color:#fff;box-shadow:0 6px 16px -4px rgba(21,160,90,.45)}
+.step.done .step-dot{background:#15a05a;color:#fff}
+.step-label{font-size:.82rem;font-weight:700;color:#7a8d84}
+.step.on .step-label,.step.done .step-label{color:#0e1d16}
+.step-line{flex:1;height:2px;background:rgba(16,50,36,.1);margin:0 10px;border-radius:2px}
+.step-line.fill{background:#15a05a}
+
+.otp-row-demo{display:flex;gap:8px;margin-bottom:6px}
+.otp-box{width:48px;height:52px;text-align:center;font-family:var(--font-mono);font-size:1.3rem;font-weight:700;background:rgba(255,255,255,.5);border:1.5px solid rgba(16,50,36,.12);border-radius:12px;color:#0e1d16}
+.otp-box.filled{border-color:#15a05a}
+
+/* Color palette swatches */
+.palette{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+.pal-swatch{text-align:center}
+.pal-swatch .sw{width:60px;height:60px;border-radius:14px;margin-bottom:6px;box-shadow:0 4px 12px -4px rgba(0,0,0,.15)}
+.pal-swatch .sw-label{font-size:.7rem;font-weight:700;color:#41584d;font-family:var(--font-mono)}
+
+/* Screen layout diagrams */
+.layout-diagram{background:rgba(16,50,36,.03);border:1px solid rgba(16,50,36,.08);border-radius:20px;padding:20px;display:flex;gap:12px}
+.ld-sidebar{width:180px;flex-shrink:0;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.55);border-radius:20px;padding:14px;min-height:340px;box-shadow:0 8px 24px -8px rgba(16,40,28,.15)}
+.ld-main{flex:1;display:flex;flex-direction:column;gap:10px}
+.ld-topbar{background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.55);border-radius:14px;height:50px;display:flex;align-items:center;padding:0 16px;font-size:.75rem;font-weight:700;color:#7a8d84;box-shadow:0 4px 12px -4px rgba(16,40,28,.1);margin:0}
+.ld-content{flex:1;background:rgba(16,50,36,.02);border-radius:14px;border:1px dashed rgba(16,50,36,.1);display:flex;align-items:center;justify-content:center;font-size:.78rem;color:#7a8d84;font-weight:600;min-height:260px}
+.ld-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ld-kpi{background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.55);border-radius:14px;height:80px;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#7a8d84;box-shadow:0 4px 12px -4px rgba(16,40,28,.1)}
+.ld-charts{display:grid;grid-template-columns:1.6fr 1fr;gap:8px}
+.ld-chart{background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.55);border-radius:14px;height:120px;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#7a8d84;box-shadow:0 4px 12px -4px rgba(16,40,28,.1)}
+
+/* Bar chart demo */
+.bc-demo{display:flex;align-items:flex-end;gap:10px;height:80px;padding:0 8px}
+.bc-bar-demo{flex:1;border-radius:6px 6px 0 0;min-width:18px;position:relative;display:flex;align-items:flex-end;justify-content:center}
+.bc-lbl-demo{font-size:.62rem;color:#7a8d84;font-weight:600;text-align:center;margin-top:4px}
+.bc-wrap-demo{display:flex;flex-direction:column;align-items:stretch;gap:0}
+
+/* Progress bar */
+.bar-demo{height:7px;border-radius:20px;background:rgba(16,50,36,.07);overflow:hidden;margin-top:6px}
+.bar-demo i{display:block;height:100%;border-radius:20px;background:linear-gradient(90deg,#15a05a,#11b5ae)}
+
+/* Notice */
+.notice-demo{display:flex;gap:12px;padding:14px;border-radius:16px;border:1px solid rgba(16,50,36,.08);background:rgba(255,255,255,.5);margin-bottom:10px}
+.n-ic{width:38px;height:38px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(21,160,90,.12);color:#15a05a}
+.n-ic svg{width:18px;height:18px}
+
+/* Chip */
+.chip-demo{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;font-weight:700;padding:4px 9px;border-radius:20px;background:rgba(16,50,36,.05);color:#41584d}
+
+/* Landing promo panel */
+.promo-demo{background:linear-gradient(150deg,#15a05a,#0c6f3d);border-radius:26px;padding:24px;position:relative;overflow:hidden;min-height:200px}
+.promo-demo::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 82% 14%,rgba(255,255,255,.28),transparent 42%);pointer-events:none}
+.promo-grid-pat{position:absolute;inset:0;opacity:.16;background-image:linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px);background-size:30px 30px}
+.promo-tag{display:inline-flex;align-items:center;gap:6px;font-size:.7rem;font-weight:700;color:#fff;background:rgba(0,0,0,.22);backdrop-filter:blur(6px);padding:5px 11px;border-radius:20px}
+.promo-h3{font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;letter-spacing:-.02em;line-height:1.08;margin:12px 0 8px;position:relative;z-index:1}
+.promo-p{font-size:.86rem;color:rgba(255,255,255,.9);line-height:1.5;position:relative;z-index:1}
+.promo-stats-demo{display:flex;gap:22px;margin-top:16px;position:relative;z-index:1}
+.promo-stats-demo .ps b{font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:#fff;display:block;line-height:1}
+.promo-stats-demo .ps span{font-size:.7rem;color:rgba(255,255,255,.8);font-weight:600}
+
+/* Callout */
+.callout-demo{padding:11px 14px;border-radius:14px;margin-top:12px;border:1px solid}
+.callout-warn{background:rgba(245,165,36,.1);border-color:rgba(245,165,36,.35)}
+.callout-ok{background:rgba(21,160,90,.1);border-color:rgba(21,160,90,.3)}
+.callout-danger{background:rgba(240,85,109,.1);border-color:rgba(240,85,109,.3)}
+.callout-demo .c-l{font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+.callout-demo .c-v{font-size:.84rem;line-height:1.4;color:#41584d}
+.callout-warn .c-l{color:#f5a524}
+.callout-ok .c-l{color:#15a05a}
+.callout-danger .c-l{color:#f0556d}
+
+/* Mesh bg demo */
+.mesh-demo{background:#eef3ef;border-radius:20px;height:140px;position:relative;overflow:hidden}
+.mesh-demo .m1{position:absolute;width:46%;height:100%;left:-8%;top:-20%;background:rgba(21,160,90,.16);border-radius:50%;filter:blur(40px)}
+.mesh-demo .m2{position:absolute;width:40%;height:100%;right:-6%;top:6%;background:rgba(17,181,174,.14);border-radius:50%;filter:blur(40px)}
+.mesh-demo .m3{position:absolute;width:38%;height:120%;left:24%;bottom:-30%;background:rgba(124,92,252,.1);border-radius:50%;filter:blur(40px)}
+.mesh-demo .m4{position:absolute;width:30%;height:80%;right:14%;bottom:-20%;background:rgba(46,155,255,.1);border-radius:50%;filter:blur(40px)}
+.mesh-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:#0e1d16;z-index:1;opacity:.5}
+
+/* Entrance animation note */
+.anim-note{background:rgba(21,160,90,.06);border:1px solid rgba(21,160,90,.2);border-radius:14px;padding:14px 18px;font-size:.84rem;color:#0c6f3d;margin-top:10px;line-height:1.6}
+
+/* Dark theme demo area */
+.dark-area{background:#06100b;border-radius:24px;padding:28px;margin-top:20px}
+.dark-glass{background:rgba(22,38,31,.58);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.07);border-radius:22px;padding:20px;box-shadow:0 22px 60px -22px rgba(0,0,0,.65)}
+.dark-text{color:#e9f1ec}
+.dark-text-2{color:#a3b6ad}
+.dark-text-3{color:#6d8278}
+
+/* Annotation label */
+.ann{display:inline-block;background:#0e1d16;color:#fff;font-size:.62rem;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase;vertical-align:middle;margin-left:8px}
+.ann-r{background:var(--accent)}
+.ann-b{background:#2e9bff}
+.ann-y{background:#f5a524;color:#0e1d16}
+
+/* Spacer */
+.spacer{height:1px;background:rgba(16,50,36,.07);margin:40px 0}
+
+/* Print indicator */
+.print-url{display:none}
+@media print{.print-url{display:block;font-size:.65rem;color:#7a8d84;margin-top:6px}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     COVER PAGE
+     ═══════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-logo">N</div>
+  <h1>
+    <span>NEST Service Portal</span>
+    Design Specification
+  </h1>
+  <p>Complete visual reference for implementing the glassmorphic redesign — layout, components, tokens, screens, and interaction patterns.</p>
+  <div class="cover-meta">
+    <div><b>3</b>Role Pages</div>
+    <div><b>30+</b>Screens</div>
+    <div><b>100+</b>Components</div>
+    <div><b>2</b>Themes</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     DOCUMENT BODY
+     ═══════════════════════════════════════════════════════ -->
+<div class="doc">
+
+<!-- ──────────────────────────────────────────────────────
+     1. DESIGN TOKENS
+     ────────────────────────────────────────────────────── -->
+<h2 class="section-title"><span class="num">1</span> Design Tokens</h2>
+
+<h3 class="sub-title">1.1 Color Palette</h3>
+<div class="spec-card">
+  <h4>Brand & Semantic Colors</h4>
+  <div class="palette">
+    <div class="pal-swatch"><div class="sw" style="background:#15a05a"></div><div class="sw-label">#15a05a<br/>--accent</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#0f8a4c"></div><div class="sw-label">#0f8a4c<br/>--accent-600</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#0c6f3d"></div><div class="sw-label">#0c6f3d<br/>--accent-700</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#11b5ae"></div><div class="sw-label">#11b5ae<br/>--teal</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#7c5cfc"></div><div class="sw-label">#7c5cfc<br/>--violet</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#f5a524"></div><div class="sw-label">#f5a524<br/>--amber</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#f0556d"></div><div class="sw-label">#f0556d<br/>--rose</div></div>
+    <div class="pal-swatch"><div class="sw" style="background:#2e9bff"></div><div class="sw-label">#2e9bff<br/>--sky</div></div>
+  </div>
+</div>
+
+<div class="two-col">
+<div class="spec-card">
+  <h4>Light Theme Surfaces</h4>
+  <table class="token-table">
+    <tr><th>Token</th><th>Value</th><th></th></tr>
+    <tr><td class="code">--bg-base</td><td>#eef3ef</td><td><span class="swatch" style="background:#eef3ef"></span></td></tr>
+    <tr><td class="code">--glass-bg</td><td>rgba(255,255,255, 0.62)</td><td><span class="swatch" style="background:rgba(255,255,255,.62)"></span></td></tr>
+    <tr><td class="code">--glass-bg-strong</td><td>rgba(255,255,255, 0.82)</td><td><span class="swatch" style="background:rgba(255,255,255,.82)"></span></td></tr>
+    <tr><td class="code">--glass-border</td><td>rgba(255,255,255, 0.55)</td><td><span class="swatch" style="background:rgba(255,255,255,.55);border:1px solid #ccc"></span></td></tr>
+    <tr><td class="code">--panel-2</td><td>rgba(255,255,255, 0.50)</td><td><span class="swatch" style="background:rgba(255,255,255,.5)"></span></td></tr>
+    <tr><td class="code">--panel-3</td><td>rgba(16,50,36, 0.04)</td><td><span class="swatch" style="background:rgba(16,50,36,.04)"></span></td></tr>
+    <tr><td class="code">--text</td><td>#0e1d16</td><td><span class="swatch" style="background:#0e1d16"></span></td></tr>
+    <tr><td class="code">--text-2</td><td>#41584d</td><td><span class="swatch" style="background:#41584d"></span></td></tr>
+    <tr><td class="code">--text-3</td><td>#7a8d84</td><td><span class="swatch" style="background:#7a8d84"></span></td></tr>
+    <tr><td class="code">--line</td><td>rgba(16,50,36, 0.10)</td><td><span class="swatch" style="background:rgba(16,50,36,.1)"></span></td></tr>
+  </table>
+</div>
+<div class="spec-card">
+  <h4>Dark Theme Surfaces</h4>
+  <table class="token-table">
+    <tr><th>Token</th><th>Value</th><th></th></tr>
+    <tr><td class="code">--bg-base</td><td>#06100b</td><td><span class="swatch" style="background:#06100b"></span></td></tr>
+    <tr><td class="code">--glass-bg</td><td>rgba(22,38,31, 0.52)</td><td><span class="swatch" style="background:rgba(22,38,31,.52)"></span></td></tr>
+    <tr><td class="code">--glass-border</td><td>rgba(255,255,255, 0.07)</td><td><span class="swatch" style="background:rgba(255,255,255,.07);border:1px solid #666"></span></td></tr>
+    <tr><td class="code">--panel-2</td><td>rgba(255,255,255, 0.04)</td><td><span class="swatch" style="background:rgba(255,255,255,.04);border:1px solid #444"></span></td></tr>
+    <tr><td class="code">--text</td><td>#e9f1ec</td><td><span class="swatch" style="background:#e9f1ec"></span></td></tr>
+    <tr><td class="code">--text-2</td><td>#a3b6ad</td><td><span class="swatch" style="background:#a3b6ad"></span></td></tr>
+    <tr><td class="code">--text-3</td><td>#6d8278</td><td><span class="swatch" style="background:#6d8278"></span></td></tr>
+    <tr><td class="code">--line</td><td>rgba(255,255,255, 0.09)</td><td><span class="swatch" style="background:rgba(255,255,255,.09);border:1px solid #444"></span></td></tr>
+    <tr><td class="code">--glass-shadow</td><td>0 22px 60px -22px rgba(0,0,0,.65)</td><td>—</td></tr>
+  </table>
+</div>
+</div>
+
+<h3 class="sub-title">1.2 Typography</h3>
+<div class="spec-card">
+  <h4>Font Stacks</h4>
+  <table class="token-table">
+    <tr><th>Token</th><th>Font</th><th>Usage</th><th>Preview</th></tr>
+    <tr><td class="code">--font-display</td><td>Space Grotesk</td><td>Headings, KPI values, card titles, logo</td><td style="font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700">Dashboard</td></tr>
+    <tr><td class="code">--font-body</td><td>Manrope</td><td>Body text, nav items, labels, paragraphs</td><td style="font-family:'Manrope',sans-serif">Service request submitted</td></tr>
+    <tr><td class="code">--font-mono</td><td>JetBrains Mono</td><td>Ticket IDs, OTP boxes, nav badges, code</td><td style="font-family:'JetBrains Mono',monospace;font-size:.85rem">NEST-260611-4823</td></tr>
+  </table>
+  <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:2rem;font-weight:700;letter-spacing:-.03em;color:#0e1d16">Dashboard <span style="color:#7a8d84;font-size:1rem;font-weight:500">700 / -0.03em — Page heading</span></div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:1.34rem;font-weight:700;letter-spacing:-.025em;color:#0e1d16">Topbar Title <span style="color:#7a8d84;font-size:.85rem;font-weight:500">700 / -0.025em</span></div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700;color:#0e1d16">Card Title <span style="color:#7a8d84;font-size:.85rem;font-weight:500">700 / -0.01em</span></div>
+    <div style="font-family:'Manrope',sans-serif;font-size:.9rem;font-weight:600;color:#41584d">Nav item / label text — 600 weight</div>
+    <div style="font-family:'Manrope',sans-serif;font-size:.82rem;color:#7a8d84">Subtitle / meta — text-3 color</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:#15a05a;font-weight:600">NEST-260611-4823 — ticket ID mono</div>
+  </div>
+</div>
+
+<h3 class="sub-title">1.3 Spacing, Radius & Shadow</h3>
+<div class="spec-card">
+  <h4>Border Radius Tokens</h4>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="text-align:center"><div style="width:60px;height:60px;background:rgba(21,160,90,.15);border:1px solid rgba(21,160,90,.3);border-radius:12px;margin-bottom:6px"></div><div style="font-size:.7rem;font-family:var(--font-mono);color:#41584d">--r-sm<br/>12px</div></div>
+    <div style="text-align:center"><div style="width:60px;height:60px;background:rgba(21,160,90,.15);border:1px solid rgba(21,160,90,.3);border-radius:18px;margin-bottom:6px"></div><div style="font-size:.7rem;font-family:var(--font-mono);color:#41584d">--r-md<br/>18px</div></div>
+    <div style="text-align:center"><div style="width:60px;height:60px;background:rgba(21,160,90,.15);border:1px solid rgba(21,160,90,.3);border-radius:26px;margin-bottom:6px"></div><div style="font-size:.7rem;font-family:var(--font-mono);color:#41584d">--r-lg<br/>26px</div></div>
+    <div style="text-align:center"><div style="width:60px;height:60px;background:rgba(21,160,90,.15);border:1px solid rgba(21,160,90,.3);border-radius:34px;margin-bottom:6px"></div><div style="font-size:.7rem;font-family:var(--font-mono);color:#41584d">--r-xl<br/>34px</div></div>
+  </div>
+  <table class="token-table">
+    <tr><th>Token</th><th>Value</th><th>Used on</th></tr>
+    <tr><td class="code">--sidebar-w</td><td>260px</td><td>Sidebar width</td></tr>
+    <tr><td class="code">--topbar-h</td><td>74px</td><td>Topbar height</td></tr>
+    <tr><td class="code">--glass-blur</td><td>20px</td><td>backdrop-filter blur on all glass surfaces</td></tr>
+    <tr><td class="code">--glass-alpha</td><td>0.62</td><td>Glass background opacity (Tweaks-adjustable)</td></tr>
+    <tr><td class="code">--glass-shadow (light)</td><td>0 18px 50px -18px rgba(16,40,28,.30), 0 2px 8px -4px rgba(16,40,28,.16)</td><td>All glass cards</td></tr>
+    <tr><td class="code">--ease</td><td>cubic-bezier(.22, 1, .36, 1)</td><td>All transitions</td></tr>
+  </table>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     2. ANIMATED BACKGROUND
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">2</span> Animated Mesh Background</h2>
+
+<div class="spec-card">
+  <h4>bg-mesh — 4 floating blobs, always behind everything</h4>
+  <div class="mesh-demo">
+    <div class="m1"></div><div class="m2"></div><div class="m3"></div><div class="m4"></div>
+    <div class="mesh-label">Animated background (position: fixed; inset: 0; z-index: 0)</div>
+  </div>
+  <div class="anim-note" style="margin-top:16px">
+    <strong>CSS:</strong> Each blob is a <code>&lt;span&gt;</code> inside <code>.bg-mesh</code> with <code>position:fixed; inset:0; z-index:0; overflow:hidden</code>.<br/>
+    Blobs animate via <code>@keyframes floaty { 0% { transform:translate(0,0) scale(1) } 100% { transform:translate(4vw,5vh) scale(1.15) } }</code> — <strong>22s alternate infinite</strong>.<br/>
+    Each blob has a different <code>animation-delay</code>: m1=0s, m2=-4s, m3=-9s, m4=-13s.<br/>
+    Sizes: m1=46vw, m2=40vw, m3=38vw, m4=30vw. Uses <code>filter:blur(60px)</code>. Reduced-motion: animation disabled.
+  </div>
+  <table class="token-table" style="margin-top:14px">
+    <tr><th>Blob</th><th>Color (light)</th><th>Color (dark)</th><th>Position</th></tr>
+    <tr><td>.m1</td><td>rgba(21,160,90, 0.16)</td><td>rgba(21,160,90, 0.28)</td><td>left:-8vw; top:-10vw</td></tr>
+    <tr><td>.m2</td><td>rgba(17,181,174, 0.14)</td><td>rgba(17,181,174, 0.20)</td><td>right:-6vw; top:6vh</td></tr>
+    <tr><td>.m3</td><td>rgba(124,92,252, 0.10)</td><td>rgba(124,92,252, 0.16)</td><td>left:24vw; bottom:-16vw</td></tr>
+    <tr><td>.m4</td><td>rgba(46,155,255, 0.10)</td><td>rgba(46,155,255, 0.14)</td><td>right:14vw; bottom:-10vw</td></tr>
+  </table>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     3. GLASS PRIMITIVE
+     ────────────────────────────────────────────────────── -->
+<h2 class="section-title"><span class="num">3</span> Glass Card Primitive</h2>
+
+<div class="two-col">
+<div class="spec-card">
+  <h4>Light theme glass card</h4>
+  <div style="background:#eef3ef;padding:20px;border-radius:16px">
+    <div class="demo-glass" style="padding:20px">
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700;color:#0e1d16;margin-bottom:6px">Glass Card</div>
+      <div style="font-size:.84rem;color:#41584d;line-height:1.5">Every card, sidebar, and topbar uses this primitive.</div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    <code>background: rgba(255,255,255,0.62);<br/>
+    backdrop-filter: blur(20px) saturate(160%);<br/>
+    border: 1px solid rgba(255,255,255,0.55);<br/>
+    border-radius: 26px;<br/>
+    box-shadow: 0 18px 50px -18px rgba(16,40,28,.30), 0 2px 8px -4px rgba(16,40,28,.16);</code><br/><br/>
+    <strong>::before inner highlight:</strong><br/>
+    <code>background: linear-gradient(160deg, rgba(255,255,255,0.55), transparent 42%);</code>
+  </div>
+</div>
+<div class="spec-card">
+  <h4>Dark theme glass card</h4>
+  <div style="background:#06100b;padding:20px;border-radius:16px">
+    <div class="demo-glass-dark" style="padding:20px">
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700;margin-bottom:6px">Glass Card Dark</div>
+      <div style="font-size:.84rem;color:#a3b6ad;line-height:1.5">Same structure, different token values.</div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    <code>background: rgba(22,38,31, 0.52);<br/>
+    backdrop-filter: blur(20px) saturate(160%);<br/>
+    border: 1px solid rgba(255,255,255,0.07);<br/>
+    border-radius: 26px;<br/>
+    box-shadow: 0 22px 60px -22px rgba(0,0,0,.65), 0 2px 10px -4px rgba(0,0,0,.5);</code><br/><br/>
+    <strong>::before inner highlight:</strong><br/>
+    <code>background: linear-gradient(160deg, rgba(255,255,255,0.04), transparent 42%);</code>
+  </div>
+</div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     4. LAYOUT SHELL
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">4</span> Layout Shell</h2>
+
+<div class="spec-card">
+  <h4>Overall page grid</h4>
+  <div class="layout-diagram">
+    <div class="ld-sidebar">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(16,50,36,.1)">
+        <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(140deg,#15a05a,#0c6f3d);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.6rem;font-weight:700;flex-shrink:0">N</div>
+        <div><div style="font-family:'Space Grotesk',sans-serif;font-size:.72rem;font-weight:700;color:#0e1d16">NEST Portal</div><div style="font-size:.55rem;color:#7a8d84;letter-spacing:.12em;text-transform:uppercase">Networking Experts</div></div>
+      </div>
+      <div style="font-size:.55rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7a8d84;padding:8px 6px 4px">Main</div>
+      <div style="display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:8px;background:rgba(21,160,90,.12);color:#15a05a;font-size:.72rem;font-weight:600;position:relative">
+        <span style="position:absolute;left:-8px;top:50%;transform:translateY(-50%);width:3px;height:14px;background:#15a05a;border-radius:0 3px 3px 0"></span>
+        ◼ Dashboard
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;padding:6px 8px;color:#41584d;font-size:.72rem;font-weight:600">◼ All Tickets</div>
+      <div style="font-size:.55rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7a8d84;padding:8px 6px 4px">Operations</div>
+      <div style="display:flex;align-items:center;gap:7px;padding:6px 8px;color:#41584d;font-size:.72rem;font-weight:600">◼ Attendance</div>
+      <div style="display:flex;align-items:center;gap:7px;padding:6px 8px;color:#41584d;font-size:.72rem;font-weight:600">◼ Service Requests</div>
+      <div style="font-size:.55rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7a8d84;padding:8px 6px 4px">Reports</div>
+      <div style="display:flex;align-items:center;gap:7px;padding:6px 8px;color:#41584d;font-size:.72rem;font-weight:600">◼ Finance</div>
+    </div>
+    <div class="ld-main">
+      <div class="ld-topbar">
+        <span style="font-family:'Space Grotesk',sans-serif;color:#0e1d16;font-weight:700;font-size:.8rem">Dashboard</span>
+        <span style="font-size:.62rem;color:#7a8d84;margin-left:8px">Live overview</span>
+        <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <span style="background:rgba(255,255,255,.5);border:1px solid rgba(16,50,36,.1);border-radius:10px;padding:4px 10px;font-size:.62rem;color:#7a8d84">🔍 Search…</span>
+          <span style="font-size:.8rem">🔔 🌙</span>
+        </span>
+      </div>
+      <div class="ld-kpi-row">
+        <div class="ld-kpi">KPI Ring 1</div>
+        <div class="ld-kpi">KPI Ring 2</div>
+        <div class="ld-kpi">KPI Ring 3</div>
+        <div class="ld-kpi">KPI Ring 4</div>
+      </div>
+      <div class="ld-charts">
+        <div class="ld-chart">Area Chart — Service Requests Trend</div>
+        <div class="ld-chart">Donut — By Category</div>
+      </div>
+      <div class="ld-charts">
+        <div class="ld-chart">Recent Service Requests (list rows)</div>
+        <div class="ld-chart">Top Technicians (leaderboard)</div>
+      </div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:14px">
+    <strong>Shell CSS:</strong> <code>display:grid; grid-template-columns: var(--sidebar-w) 1fr; height:100vh;</code><br/>
+    Sidebar: <code>margin:14px 0 14px 14px;</code> — floats with 14px gap from screen edges, glass card shape, rounded corners.<br/>
+    Topbar: <code>margin:14px 14px 0;</code> — also floats as a glass pill, NOT flush to top.<br/>
+    Page content: <code>padding:22px 26px 40px; overflow-y:auto;</code><br/>
+    Mobile (&lt;920px): sidebar hides off-screen, slides in on hamburger tap. Backdrop overlay shown.
+  </div>
+</div>
+
+<h3 class="sub-title">4.1 Sidebar Detail</h3>
+<div class="two-col">
+<div class="spec-card">
+  <h4>Sidebar structure</h4>
+  <div style="background:#eef3ef;padding:20px;border-radius:16px;display:flex;justify-content:center">
+    <div class="sidebar-demo">
+      <div class="sidebar-demo-logo">
+        <div class="logo-mark">N</div>
+        <div class="logo-word"><b>NEST Portal</b><small>Networking Experts</small></div>
+      </div>
+      <div class="nav-section-demo">Main</div>
+      <div class="nav-item-demo active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item-demo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+        All Tickets
+        <span style="margin-left:auto;font-size:.62rem;font-weight:700;font-family:'JetBrains Mono',monospace;background:#15a05a;color:#fff;border-radius:20px;padding:1px 7px">42</span>
+      </div>
+      <div class="nav-section-demo">Operations</div>
+      <div class="nav-item-demo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Attendance
+      </div>
+      <div class="nav-item-demo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Service Requests
+      </div>
+      <div class="sidebar-footer-demo">
+        <div class="user-card-demo">
+          <div class="avatar-demo">OB</div>
+          <div style="flex:1;min-width:0"><div style="font-size:.74rem;font-weight:700;color:#0e1d16;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Owais Bhat</div><div style="font-size:.64rem;color:#7a8d84;text-transform:capitalize">admin</div></div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#7a8d84" stroke-width="2" width="15" height="15"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="spec-card">
+  <h4>Sidebar specs</h4>
+  <table class="token-table">
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>Width</td><td>260px (var(--sidebar-w))</td></tr>
+    <tr><td>Margin</td><td>14px 0 14px 14px (floats, not flush)</td></tr>
+    <tr><td>Background</td><td>glass primitive (rgba(255,255,255,.62))</td></tr>
+    <tr><td>Border-radius</td><td>var(--r-lg) = 26px</td></tr>
+    <tr><td>Nav item padding</td><td>10px 14px</td></tr>
+    <tr><td>Nav item radius</td><td>var(--r-sm) = 12px</td></tr>
+    <tr><td>Active indicator</td><td>4px wide left bar, accent color, position:absolute left:-14px</td></tr>
+    <tr><td>Active bg</td><td>var(--accent-soft) = rgba(21,160,90,.12)</td></tr>
+    <tr><td>Nav badge font</td><td>JetBrains Mono, 0.7rem, bg = accent, color = #fff</td></tr>
+    <tr><td>Section label</td><td>0.64rem, 700, uppercase, letter-spacing:0.16em, color=text-3</td></tr>
+    <tr><td>Logo mark</td><td>40×40px, radius:12px, gradient accent→accent-700, glow shadow</td></tr>
+    <tr><td>Avatar</td><td>38×38px, radius:11px, gradient, initials from Space Grotesk 700</td></tr>
+  </table>
+</div>
+</div>
+
+<h3 class="sub-title">4.2 Topbar Detail</h3>
+<div class="spec-card">
+  <h4>Topbar — floats as glass pill with margin</h4>
+  <div style="background:#eef3ef;padding:16px;border-radius:16px">
+    <div class="topbar-demo">
+      <div class="topbar-title-demo"><h1>Dashboard</h1><p>Live overview of your operations</p></div>
+      <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
+        <div class="search-pill-demo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Search menu…
+        </div>
+        <div class="icon-btn-demo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="icon-btn-demo">🌙</div>
+      </div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    <strong>Key difference from old design:</strong> Topbar has <code>margin: 14px 14px 0</code> — it floats, not stuck to the top edge.<br/>
+    Height: 74px. Glass background + backdrop-filter. Search pill min-width: 220px. Title: Space Grotesk 700 1.34rem / -0.025em letterSpacing.
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     5. COMPONENTS
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">5</span> Components</h2>
+
+<h3 class="sub-title">5.1 KPI Gauge Card</h3>
+<div class="spec-card">
+  <h4>Gauge ring + value layout</h4>
+  <div style="background:#eef3ef;padding:20px;border-radius:16px;display:flex;gap:16px;flex-wrap:wrap">
+    <div class="demo-glass" style="padding:0;flex:1;min-width:200px">
+      <div class="kpi-demo">
+        <svg width="80" height="80" viewBox="0 0 92 92">
+          <path d="M 24.12 77.38 A 38 38 0 1 1 67.88 77.38" fill="none" stroke="rgba(16,50,36,.08)" stroke-width="9" stroke-linecap="round"/>
+          <path d="M 24.12 77.38 A 38 38 0 1 1 67.88 77.38" fill="none" stroke="#15a05a" stroke-width="9" stroke-linecap="round" stroke-dasharray="200 300" class="gauge-arc"/>
+          <text x="46" y="46" text-anchor="middle" dominant-baseline="central" font-family="'Space Grotesk',sans-serif" font-size="17" font-weight="700" fill="#0e1d16">84<tspan font-size="9" font-weight="600" fill="#7a8d84">%</tspan></text>
+        </svg>
+        <div class="kpi-info-demo">
+          <div class="kpi-label">Resolution Rate</div>
+          <div class="kpi-value">247 <small>resolved</small></div>
+          <div class="kpi-trend">▲ 12% vs last week</div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-glass" style="padding:0;flex:1;min-width:200px">
+      <div class="kpi-demo">
+        <svg width="80" height="80" viewBox="0 0 92 92">
+          <path d="M 24.12 77.38 A 38 38 0 1 1 67.88 77.38" fill="none" stroke="rgba(16,50,36,.08)" stroke-width="9" stroke-linecap="round"/>
+          <path d="M 24.12 77.38 A 38 38 0 0 1 86 46" fill="none" stroke="#2e9bff" stroke-width="9" stroke-linecap="round" class="gauge-arc"/>
+          <text x="46" y="46" text-anchor="middle" dominant-baseline="central" font-family="'Space Grotesk',sans-serif" font-size="17" font-weight="700" fill="#0e1d16">63<tspan font-size="9" font-weight="600" fill="#7a8d84">%</tspan></text>
+        </svg>
+        <div class="kpi-info-demo">
+          <div class="kpi-label">Assignment Rate</div>
+          <div class="kpi-value">184 <small>assigned</small></div>
+          <div class="kpi-trend" style="color:#2e9bff">▲ 5% vs last week</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Gauge is a 270° open SVG arc. Start angle: 135°. Sweep: 270°. Radius computed as <code>(size - stroke) / 2</code> where size=92, stroke=9.<br/>
+    Text centered at cx=46, cy=46. Value in Space Grotesk 700. Suffix (% or unit) in smaller tspan.<br/>
+    KPI card: <code>display:flex; align-items:center; gap:18px; padding:20px;</code>. Hover: <code>translateY(-3px)</code>.
+  </div>
+</div>
+
+<h3 class="sub-title">5.2 Buttons</h3>
+<div class="spec-card">
+  <h4>Button variants</h4>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="btn-demo btn-primary-demo">+ Register Request</button>
+    <button class="btn-demo btn-ghost-demo">↓ Export</button>
+    <button class="btn-demo btn-primary-demo btn-sm-demo">Manage</button>
+    <button class="btn-demo btn-ghost-demo btn-sm-demo">View all →</button>
+  </div>
+  <table class="token-table">
+    <tr><th>Class</th><th>Background</th><th>Radius</th><th>Padding</th><th>Font</th></tr>
+    <tr><td class="code">.btn-primary</td><td>linear-gradient(140deg, accent, accent-600)</td><td>13px</td><td>11px 18px</td><td>700, 0.88rem</td></tr>
+    <tr><td class="code">.btn-ghost</td><td>panel-2, border:line</td><td>13px</td><td>11px 18px</td><td>700, 0.88rem</td></tr>
+    <tr><td class="code">.btn-sm</td><td>—</td><td>11px</td><td>8px 13px</td><td>700, 0.80rem</td></tr>
+  </table>
+  <div class="anim-note" style="margin-top:10px">Hover on .btn-primary: <code>translateY(-1px)</code> + stronger glow shadow. Icon inside button: 17px (15px for sm).</div>
+</div>
+
+<h3 class="sub-title">5.3 Status Badges</h3>
+<div class="spec-card">
+  <h4>Status badge — dot prefix, rounded rect</h4>
+  <div class="badge-row">
+    <span class="badge open">Open</span>
+    <span class="badge assigned">Assigned</span>
+    <span class="badge progress">In Progress</span>
+    <span class="badge resolved">Resolved</span>
+    <span class="badge high">Urgent</span>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Each badge uses <code>::before { width:6px; height:6px; border-radius:50%; background:currentColor }</code> as the dot.<br/>
+    Padding: 4px 10px. Radius: 8px. Font: 0.7rem 700. Colors use <code>color-mix(in srgb, var(--sky) 14%, transparent)</code> for backgrounds.
+  </div>
+</div>
+
+<h3 class="sub-title">5.4 Filter Tabs</h3>
+<div class="spec-card">
+  <h4>ftab — filter tabs with count chip</h4>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <button class="ftab-demo on">All <span class="ftab-count-demo">47</span></button>
+    <button class="ftab-demo">Open <span class="ftab-count-demo">12</span></button>
+    <button class="ftab-demo">Assigned <span class="ftab-count-demo">8</span></button>
+    <button class="ftab-demo">In Progress <span class="ftab-count-demo">19</span></button>
+    <button class="ftab-demo">Resolved <span class="ftab-count-demo">8</span></button>
+  </div>
+  <div class="anim-note">Active tab: <code>background: accent-soft; color: accent; border-color: transparent</code>. Count chip: JetBrains Mono 0.72rem. Active count: accent bg, white text.</div>
+</div>
+
+<h3 class="sub-title">5.5 Data Table</h3>
+<div class="spec-card">
+  <h4>Standard table inside a glass card</h4>
+  <div style="overflow-x:auto">
+  <table class="tbl-demo">
+    <thead><tr>
+      <th>Ticket</th><th>Customer</th><th>Service</th><th>Assigned</th><th>Status</th><th>Payment</th><th style="text-align:right">Action</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><div class="cell-stack"><span class="tk">NEST-260611-4823</span><small>2 hrs ago</small></div></td>
+        <td><div class="cell-stack"><b>Ravi Kumar</b><small>TechCorp Ltd</small></div></td>
+        <td>CCTV Installation</td>
+        <td><b>Zeeshan</b></td>
+        <td><span class="badge progress">In Progress</span></td>
+        <td><span class="badge open">Unpaid</span></td>
+        <td style="text-align:right"><button class="btn-demo btn-primary-demo btn-sm-demo">Manage</button></td>
+      </tr>
+      <tr>
+        <td><div class="cell-stack"><span class="tk">NEST-260610-3341</span><small>Yesterday</small></div></td>
+        <td><div class="cell-stack"><b>Sunita Sharma</b><small>Retail Plus</small></div></td>
+        <td>Network Setup</td>
+        <td class="muted">Unassigned</td>
+        <td><span class="badge open">Open</span></td>
+        <td class="muted">—</td>
+        <td style="text-align:right"><button class="btn-demo btn-primary-demo btn-sm-demo">Manage</button></td>
+      </tr>
+      <tr>
+        <td><div class="cell-stack"><span class="tk">NEST-260608-7712</span><small>3 days ago</small></div></td>
+        <td><div class="cell-stack"><b>Mukhtar Ahmad</b><small>Kashmir Mart</small></div></td>
+        <td>Biometric Repair</td>
+        <td><b>Owais</b></td>
+        <td><span class="badge resolved">Resolved</span></td>
+        <td><span class="badge resolved">Paid</span></td>
+        <td style="text-align:right"><button class="btn-demo btn-ghost-demo btn-sm-demo">View PDF</button></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Table: <code>border-collapse:collapse; font-size:0.86rem</code>. TH: 0.70rem uppercase, letter-spacing:0.06em, color=text-3. Row hover: panel-3 bg. Last row: no border-bottom.
+  </div>
+</div>
+
+<h3 class="sub-title">5.6 Form Fields</h3>
+<div class="spec-card">
+  <h4>Field — label + input/select/textarea</h4>
+  <div class="two-col" style="background:#eef3ef;padding:20px;border-radius:14px">
+    <div>
+      <div class="field-demo"><label>Phone number</label><input type="text" value="+91 98765 43210"/></div>
+      <div class="field-demo"><label>Service type</label><select><option>CCTV Cameras</option><option>Networking</option></select></div>
+    </div>
+    <div>
+      <div class="field-demo"><label>Description</label><textarea rows="4" placeholder="Describe the issue…"></textarea></div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Input bg: panel-2. Border: 1px solid line. Radius: 13px. Padding: 12px 14px. Font: 0.9rem.<br/>
+    Focus: <code>border-color: accent; box-shadow: 0 0 0 4px accent-soft</code>.
+  </div>
+</div>
+
+<h3 class="sub-title">5.7 Modal</h3>
+<div class="spec-card">
+  <h4>Modal overlay + dialog</h4>
+  <div style="background:rgba(6,16,11,.3);border-radius:16px;padding:20px;backdrop-filter:blur(4px)">
+    <div class="modal-demo">
+      <div class="modal-head-demo">
+        <div style="width:38px;height:38px;border-radius:11px;background:rgba(21,160,90,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" fill="none" stroke="#15a05a" stroke-width="2" width="18" height="18"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
+        <h3>Manage Request — NEST-260611-4823</h3>
+        <button class="btn-demo btn-ghost-demo btn-sm-demo" style="margin-left:auto">✕</button>
+      </div>
+      <div class="modal-body-demo">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;font-size:.82rem">
+          <div>
+            <div style="font-size:.64rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7a8d84;margin-bottom:4px">Customer</div>
+            <div style="font-weight:600;color:#0e1d16">Ravi Kumar — TechCorp Ltd</div>
+            <div style="margin-top:12px;font-size:.64rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7a8d84;margin-bottom:4px">Service</div>
+            <div style="font-weight:600;color:#0e1d16">CCTV Camera Installation</div>
+          </div>
+          <div>
+            <div class="sla-box-demo"><span style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700">8h 20m left</span><span style="font-size:.72rem;color:#41584d;margin-left:8px">SLA deadline</span></div>
+            <div class="bill-demo" style="margin-top:12px">
+              <div class="bill-row item"><span>Labour</span><b>₹3,500</b></div>
+              <div class="bill-row item"><span>Parts</span><b>₹1,200</b></div>
+              <div class="bill-row" style="color:#15a05a"><span>Discount</span><b>-₹200</b></div>
+              <div class="bill-total-demo"><span>Total</span><b>₹4,500</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Overlay: <code>position:fixed; inset:0; background:rgba(6,16,11,.5); backdrop-filter:blur(8px);</code> animation: <code>@keyframes fade { from { opacity:0 }}</code><br/>
+    Modal: max-width:720px (wide:860px), max-height:90vh, border-radius:34px. Animation: <code>@keyframes pop { from { opacity:0; transform:translateY(16px) scale(0.97) }}</code>.<br/>
+    Modal head: sticky top:0, glass-bg-strong background, blur(30px).
+  </div>
+</div>
+
+<h3 class="sub-title">5.8 Timeline</h3>
+<div class="spec-card">
+  <h4>Activity timeline (inside modal)</h4>
+  <div style="background:#eef3ef;padding:20px;border-radius:14px">
+    <div class="timeline-demo">
+      <div class="tl-item"><b>Request created</b><span>Today, 10:23 AM — Customer submitted via portal</span></div>
+      <div class="tl-item"><b>Assigned to Zeeshan</b><span>Today, 10:45 AM — Auto-assigned by rules</span></div>
+      <div class="tl-item muted"><b>In Progress</b><span>Today, 11:30 AM — Technician clocked in at site</span></div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Container: <code>padding-left:26px; position:relative</code>. Vertical line: <code>::before</code> at left:8px, width:2px, bg:line.<br/>
+    Each dot: <code>position:absolute; left:-22px; width:12px; height:12px; border-radius:50%; bg:accent; box-shadow:0 0 0 4px accent-soft</code>. Muted dot uses text-3 color.
+  </div>
+</div>
+
+<h3 class="sub-title">5.9 Stat Mini Card</h3>
+<div class="spec-card">
+  <h4>Compact stat grid (used in Attendance, Finance, etc.)</h4>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;background:#eef3ef;padding:16px;border-radius:14px">
+    <div class="demo-glass" style="padding:18px 20px">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(46,155,255,.14);color:#2e9bff;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:1.1rem">🕐</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.02em;line-height:1;color:#2e9bff">18</div>
+      <div style="font-size:.74rem;color:#7a8d84;font-weight:600;margin-top:6px">Today's Attendance</div>
+    </div>
+    <div class="demo-glass" style="padding:18px 20px">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(21,160,90,.12);color:#15a05a;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:1.1rem">⚡</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.02em;line-height:1;color:#15a05a">12</div>
+      <div style="font-size:.74rem;color:#7a8d84;font-weight:600;margin-top:6px">Currently Active</div>
+    </div>
+    <div class="demo-glass" style="padding:18px 20px">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(240,85,109,.14);color:#f0556d;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:1.1rem">📋</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.02em;line-height:1;color:#f0556d">3</div>
+      <div style="font-size:.74rem;color:#7a8d84;font-weight:600;margin-top:6px">Forgot EOD</div>
+    </div>
+    <div class="demo-glass" style="padding:18px 20px">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(245,165,36,.16);color:#f5a524;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:1.1rem">⏳</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.02em;line-height:1;color:#f5a524">7h 20m</div>
+      <div style="font-size:.74rem;color:#7a8d84;font-weight:600;margin-top:6px">Avg Hours Today</div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:12px">
+    Grid: <code>grid-template-columns: repeat(4,1fr)</code> desktop, collapses to 2 at 1100px, 1 at 560px.<br/>
+    Icon container: 38×38px, radius:11px, colored bg using color-mix(). Value: Space Grotesk 1.7rem 700. Label: 0.78rem text-3.
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     6. ENTRANCE ANIMATIONS
+     ────────────────────────────────────────────────────── -->
+<h2 class="section-title"><span class="num">6</span> Entrance Animations</h2>
+<div class="spec-card">
+  <h4>Staggered rise animation on page load</h4>
+  <div class="anim-note">
+    Every element that should animate in gets class <code>.in</code> and an inline CSS variable <code>--d: 0.06s</code> (delay).<br/><br/>
+    <strong>CSS rule:</strong><br/>
+    <code>.anim-ready .in { animation: rise 0.55s var(--ease) both; animation-delay: var(--d, 0s); }</code><br/>
+    <code>@keyframes rise { from { transform: translateY(16px); } to { transform: none; } }</code><br/><br/>
+    <strong>Key rule:</strong> Animate TRANSFORM ONLY — never opacity — so content is always visible even if animation is frozen in a backgrounded tab.<br/><br/>
+    <strong>Stagger delays used:</strong> KPI cards 0, 0.06, 0.12, 0.18s. Charts 0.12, 0.16s. Lists 0.20, 0.24s.<br/><br/>
+    <strong>Trigger:</strong> <code>document.documentElement.classList.add('anim-ready')</code> is called inside a double <code>requestAnimationFrame</code> on page load so it only fires when the page is genuinely visible.<br/><br/>
+    <strong>Reduced motion:</strong> <code>@media (prefers-reduced-motion: reduce) { .anim-ready .in { animation: none; transform: none; } }</code>
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     7. LANDING PAGE
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">7</span> Public Landing Page</h2>
+
+<div class="spec-card">
+  <h4>Two-column hero grid</h4>
+  <div class="two-col" style="background:#eef3ef;padding:20px;border-radius:14px;align-items:start">
+    <div class="promo-demo">
+      <div class="promo-grid-pat"></div>
+      <div style="position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between">
+        <span class="promo-tag">NEST Smart Security</span>
+        <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;font-size:1.1rem">▶</div>
+      </div>
+      <div class="promo-h3">Professional CCTV &amp; Networking Solutions</div>
+      <div class="promo-p">Fast, reliable service with certified technicians across Jammu &amp; Kashmir.</div>
+      <div class="promo-stats-demo">
+        <div class="ps"><b>500+</b><span>Installations</span></div>
+        <div class="ps"><b>12h</b><span>SLA guarantee</span></div>
+        <div class="ps"><b>4.9★</b><span>Rating</span></div>
+      </div>
+    </div>
+    <div class="demo-glass" style="padding:0;overflow:hidden">
+      <div style="display:flex;padding:8px;gap:4px;border-bottom:1px solid rgba(16,50,36,.08)">
+        <button class="ftab-demo on" style="flex:1;justify-content:center">New Request</button>
+        <button class="ftab-demo" style="flex:1;justify-content:center">Track</button>
+        <button class="ftab-demo" style="flex:1;justify-content:center">Complaint</button>
+      </div>
+      <div style="padding:24px">
+        <div class="stepper-demo">
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">Verify</div></div>
+          <div class="step-line fill"></div>
+          <div class="step on"><div class="step-dot">2</div><div class="step-label">OTP</div></div>
+          <div class="step-line"></div>
+          <div class="step"><div class="step-dot">3</div><div class="step-label">Details</div></div>
+        </div>
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:6px;color:#0e1d16">Enter the code</div>
+        <div style="font-size:.84rem;color:#41584d;margin-bottom:16px">We sent a 6-digit code to <b style="color:#0e1d16">+91 98765 43210</b></div>
+        <div class="otp-row-demo">
+          <input class="otp-box filled" value="4" maxlength="1"/>
+          <input class="otp-box filled" value="8" maxlength="1"/>
+          <input class="otp-box filled" value="2" maxlength="1"/>
+          <input class="otp-box" value="" maxlength="1" placeholder="—"/>
+          <input class="otp-box" value="" maxlength="1" placeholder="—"/>
+          <input class="otp-box" value="" maxlength="1" placeholder="—"/>
+        </div>
+        <div style="font-size:.78rem;color:#7a8d84;text-align:center;margin-bottom:14px">Didn't get it? <span style="color:#15a05a;font-weight:700;cursor:pointer">Resend in 0:28</span></div>
+        <button class="btn-demo btn-primary-demo" style="width:100%;justify-content:center;padding:14px">Verify &amp; continue</button>
+      </div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:14px">
+    Landing grid: <code>display:grid; grid-template-columns:1fr 1.05fr; gap:26px; max-width:1240px; margin:40px auto 0; padding:0 26px</code>.<br/>
+    Collapses to 1 column at 940px (promo panel goes below, order:2).<br/>
+    Promo min-height: 560px. Request card tabs use same ftab system. Stepper lines animate with scaleX.<br/>
+    OTP boxes: 56px max-width, aspect-ratio:1, JetBrains Mono 1.4rem 700, radius:14px. Filled state gets accent border.
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     8. DARK THEME
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">8</span> Dark Theme</h2>
+
+<div class="dark-area">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="dark-glass">
+      <div class="dark-text" style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700;margin-bottom:6px">Glass Card Dark</div>
+      <div class="dark-text-2" style="font-size:.82rem">bg: rgba(22,38,31,.52), border: rgba(255,255,255,.07)</div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <span class="badge open">Open</span>
+        <span class="badge resolved">Resolved</span>
+        <span class="badge high">Urgent</span>
+      </div>
+      <div class="bar-demo" style="margin-top:10px"><i style="width:68%;background:linear-gradient(90deg,#2bbf73,#11b5ae)"></i></div>
+    </div>
+    <div class="dark-glass">
+      <div class="dark-text" style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.03em">₹2,84,500</div>
+      <div class="dark-text-3" style="font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-top:4px">Total Revenue</div>
+      <div style="margin-top:10px;height:6px;border-radius:20px;background:rgba(255,255,255,.07);overflow:hidden"><div style="width:72%;height:100%;background:linear-gradient(90deg,#2bbf73,#11b5ae);border-radius:20px"></div></div>
+      <div class="dark-text-2" style="font-size:.76rem;margin-top:6px">▲ 18% this month</div>
+    </div>
+  </div>
+  <div class="anim-note" style="margin-top:16px;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);color:#a3b6ad">
+    In dark mode accent becomes <code>#2bbf73</code> (brighter emerald for dark surfaces). Mesh blobs become more opaque (×1.75). All glass uses <code>rgba(22,38,31, calc(alpha × 0.9))</code>. Shadow depth increases. Scrollbar uses line-strong color.
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     9. SCREEN INVENTORY
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">9</span> Screen Inventory</h2>
+
+<h3 class="sub-title">9.1 Admin Screens (30)</h3>
+<div class="spec-card">
+  <table class="token-table">
+    <tr><th>Section</th><th>Screen</th><th>Key Components</th></tr>
+    <tr><td>Main</td><td>Dashboard</td><td>4× KPI gauge cards, area chart (trend), donut (by category), recent requests list, top technicians leaderboard</td></tr>
+    <tr><td>Main</td><td>All Tickets</td><td>Filter tabs, search toolbar, full data table, Manage modal</td></tr>
+    <tr><td>Main</td><td>Notifications</td><td>Notice feed items with icon, title, body, timestamp</td></tr>
+    <tr><td>Operations</td><td>Attendance</td><td>5× stat-mini cards, employee table with avatar + clock-in/out</td></tr>
+    <tr><td>Operations</td><td>Service Requests</td><td>Filter tabs, table, Manage modal with SLA ring + bill breakdown</td></tr>
+    <tr><td>Operations</td><td>Auto Assignment</td><td>Toggle switch, rules list, suggested-assignment queue</td></tr>
+    <tr><td>Operations</td><td>Device Follow-up</td><td>Device tracking table with status chips</td></tr>
+    <tr><td>Management</td><td>Contacts</td><td>Customer directory, call/WhatsApp/copy action buttons</td></tr>
+    <tr><td>Management</td><td>Users</td><td>User table with role badge, edit/delete actions</td></tr>
+    <tr><td>Management</td><td>Device Types</td><td>Two CRUD panels + reported devices table</td></tr>
+    <tr><td>Management</td><td>Employee Tutorials</td><td>Video card grid, upload form</td></tr>
+    <tr><td>Management</td><td>Training Courses</td><td>Course cards grid (banner gradient, progress ring)</td></tr>
+    <tr><td>Reports</td><td>Finance Report</td><td>Stat grid, revenue area chart, category donut, tech performance table</td></tr>
+    <tr><td>Reports</td><td>AI Report</td><td>AI-generated insights card</td></tr>
+    <tr><td>Reports</td><td>Payments</td><td>Filter tabs, payments table, payment status badge</td></tr>
+    <tr><td>Reports</td><td>Bills</td><td>Bills table, View PDF → premium invoice modal</td></tr>
+    <tr><td>Reports</td><td>Cash Collections</td><td>Per-employee cash cards, record submission form</td></tr>
+    <tr><td>Reports</td><td>Salary</td><td>Salary breakdown grid per employee</td></tr>
+    <tr><td>Reports</td><td>Leave Requests</td><td>Leave table with approve/reject actions</td></tr>
+    <tr><td>Reports</td><td>EOD Summaries</td><td>EOD report cards per employee per day</td></tr>
+    <tr><td>Reports</td><td>Leaderboard</td><td>Ranked list with star ratings and bar</td></tr>
+    <tr><td>Reports</td><td>Complaints</td><td>Complaints table with priority callout</td></tr>
+    <tr><td>Marketing</td><td>Landing Ads</td><td>Ad card grid with preview, status, duration</td></tr>
+    <tr><td>Marketing</td><td>Popup Ads</td><td>Popup overlay promo cards</td></tr>
+    <tr><td>Marketing</td><td>Notices</td><td>Notice board, editor form, priority (urgent/high)</td></tr>
+    <tr><td>Marketing</td><td>Discounts</td><td>Promo codes table with value, scope, usage</td></tr>
+    <tr><td>Marketing</td><td>Discount Details</td><td>Usage log per discount code</td></tr>
+    <tr><td>Marketing</td><td>Service Pricing</td><td>Pricing table, add/edit form</td></tr>
+    <tr><td>Config</td><td>Settings</td><td>2-col settings card grid with grouped toggle rows</td></tr>
+    <tr><td>Account</td><td>Profile</td><td>Avatar, name, email, password change</td></tr>
+  </table>
+</div>
+
+<h3 class="sub-title">9.2 Employee Screens (15)</h3>
+<div class="spec-card">
+  <table class="token-table">
+    <tr><th>Section</th><th>Screen</th><th>Key Components</th></tr>
+    <tr><td>Main</td><td>Dashboard</td><td>4× KPI gauges, clock-in card (live clock + button), today's route list, leaderboard, jobs/day bar chart</td></tr>
+    <tr><td>Main</td><td>My Tasks</td><td>Task list with filter tabs, SLA timer, map link</td></tr>
+    <tr><td>Main</td><td>Notifications</td><td>Same notice feed as admin</td></tr>
+    <tr><td>Work</td><td>Attendance Records</td><td>My clock-in history table</td></tr>
+    <tr><td>Work</td><td>Leave Requests</td><td>Submit leave form + my requests table</td></tr>
+    <tr><td>Work</td><td>EOD Reports</td><td>Submit EOD form + done state ring</td></tr>
+    <tr><td>Work</td><td>My Cash</td><td>Cash collected cards + submit form</td></tr>
+    <tr><td>Work</td><td>Collections</td><td>Collection reports table</td></tr>
+    <tr><td>Work</td><td>Salary</td><td>3-col salary breakdown grid</td></tr>
+    <tr><td>Work</td><td>Leaderboard</td><td>Ranked list, your position highlighted in accent-soft</td></tr>
+    <tr><td>Work</td><td>Device Follow-up</td><td>My assigned device tracking list</td></tr>
+    <tr><td>Services</td><td>Estimator</td><td>Live quote builder with line items, GST, total</td></tr>
+    <tr><td>Services</td><td>Service Pricing</td><td>Read-only pricing reference (if enabled)</td></tr>
+    <tr><td>Learn</td><td>Tutorials</td><td>Video player cards</td></tr>
+    <tr><td>Learn</td><td>Training Courses</td><td>Course cards + player modal with lessons + quiz</td></tr>
+  </table>
+</div>
+
+<h3 class="sub-title">9.3 Landing Page (Public)</h3>
+<div class="spec-card">
+  <table class="token-table">
+    <tr><th>Section</th><th>Components</th></tr>
+    <tr><td>Top nav</td><td>Logo mark + wordmark, Staff login button (glass), Technician link</td></tr>
+    <tr><td>Hero</td><td>Centered badge, large heading (Space Grotesk, clamp 2.6–4.6rem), subtitle</td></tr>
+    <tr><td>Two-col grid</td><td>Left: promo panel (gradient bg, grid pattern, play button, stats). Right: request card</td></tr>
+    <tr><td>Request card tabs</td><td>New Request / Track Request / Complaint — ftab style</td></tr>
+    <tr><td>New Request — Step 1</td><td>Phone input with +91 prefix, captcha box (mono font, accent bg), captcha text input</td></tr>
+    <tr><td>New Request — Step 2</td><td>6× OTP boxes (JetBrains Mono), resend timer, back + verify buttons</td></tr>
+    <tr><td>New Request — Step 3</td><td>Full service request form (name, address, service type, description, preferred time)</td></tr>
+    <tr><td>New Request — Step 4</td><td>Success ring animation, ticket number pill (dashed border, mono font), share button</td></tr>
+    <tr><td>Track Request</td><td>Phone + ticket ID lookup, results list with status badges</td></tr>
+    <tr><td>Complaint</td><td>Ticket + phone + issue textarea + submit</td></tr>
+    <tr><td>Urgent support bar</td><td>Glass card: phone number, Call button (accent gradient), WhatsApp button (green gradient)</td></tr>
+  </table>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     10. GAPS: WHAT IS MISSING IN YOUR ACTUAL APP
+     ────────────────────────────────────────────────────── -->
+<div class="page-break"></div>
+<h2 class="section-title"><span class="num">10</span> Gap Analysis — What Needs to Change</h2>
+
+<div class="spec-card">
+  <h4>CSS gaps (src/style.css)</h4>
+  <table class="token-table">
+    <tr><th>#</th><th>What is missing</th><th>Design spec value</th><th>Fix location</th></tr>
+    <tr><td>1</td><td>Sidebar has no margin — flush to screen edge</td><td><code>margin: 14px 0 14px 14px</code>, radius: 26px, overflow:hidden</td><td>.sidebar in style.css</td></tr>
+    <tr><td>2</td><td>Topbar is flush to top edge</td><td><code>margin: 14px 14px 0</code>, radius:18px, no border-bottom</td><td>.topbar in style.css</td></tr>
+    <tr><td>3</td><td>Shell is flex, not grid</td><td><code>display:grid; grid-template-columns: var(--sidebar-w) 1fr; height:100vh</code></td><td>.portal-layout in style.css</td></tr>
+    <tr><td>4</td><td>Glass ::before inner highlight missing on cards</td><td><code>.glass::before { background:linear-gradient(160deg, var(--glass-inner), transparent 42%) }</code></td><td>.card, .stat-card, .settings-card in style.css</td></tr>
+    <tr><td>5</td><td>Mesh blobs not animating</td><td><code>@keyframes floaty</code> with 22s alternate infinite, different delays per blob</td><td>style.css — add keyframes + animation to .bg-mesh span</td></tr>
+    <tr><td>6</td><td>bg-mesh not position:fixed covering full viewport</td><td><code>position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none</code></td><td>.bg-mesh in style.css</td></tr>
+    <tr><td>7</td><td>Staggered entrance animations missing</td><td>.in class + @keyframes rise + .anim-ready trigger</td><td>style.css + layout.js / page render fns</td></tr>
+    <tr><td>8</td><td>Badge dots missing (::before circle)</td><td><code>.badge::before { width:6px; height:6px; border-radius:50%; background:currentColor }</code></td><td>.badge in style.css</td></tr>
+    <tr><td>9</td><td>Badge bg uses plain colors, not color-mix()</td><td><code>color-mix(in srgb, var(--sky) 14%, transparent)</code> for each status color</td><td>.badge variants in style.css</td></tr>
+    <tr><td>10</td><td>Filter tabs use .sr-filter, not .ftab pattern</td><td>.ftab / .ftab.on / .ftab-count — same structure but correct class names</td><td>style.css + all page JS files</td></tr>
+    <tr><td>11</td><td>Main content has margin-left:260px</td><td>With grid shell: no margin-left needed; main col fills the 1fr column</td><td>.main-content in style.css</td></tr>
+    <tr><td>12</td><td>Page area not scrollable independently</td><td>.page { flex:1; overflow-y:auto; padding:22px 26px 40px }</td><td>.page-content in style.css</td></tr>
+    <tr><td>13</td><td>Modal missing @keyframes pop animation</td><td><code>@keyframes pop { from { opacity:0; transform:translateY(16px) scale(0.97) } }</code></td><td>style.css</td></tr>
+    <tr><td>14</td><td>Form focus ring uses only border-color</td><td><code>box-shadow: 0 0 0 4px var(--accent-soft)</code> on focus</td><td>input:focus in style.css</td></tr>
+    <tr><td>15</td><td>Scrollbar width is 5px with plain thumb</td><td>10px, thumb uses var(--line-strong), 2px transparent border, background-clip:padding-box</td><td>::-webkit-scrollbar in style.css</td></tr>
+  </table>
+</div>
+
+<div class="spec-card">
+  <h4>Layout / JS gaps (src/layout.js)</h4>
+  <table class="token-table">
+    <tr><th>#</th><th>What is missing</th><th>Required change</th></tr>
+    <tr><td>1</td><td>Shell wrapper uses .portal-layout with flex</td><td>Change to <code>&lt;div class="shell"&gt;</code> using <code>display:grid; grid-template-columns:var(--sidebar-w) 1fr; height:100vh</code></td></tr>
+    <tr><td>2</td><td>Sidebar has no .glass class</td><td>Add .glass class to &lt;aside class="sidebar"&gt; (or apply same CSS rules directly)</td></tr>
+    <tr><td>3</td><td>Topbar has no glass class + no margin</td><td>Add glass styles, margin, rounded corners to .topbar</td></tr>
+    <tr><td>4</td><td>No .anim-ready trigger on boot</td><td>Add double rAF in main.js: <code>requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('anim-ready')))</code></td></tr>
+    <tr><td>5</td><td>Page cards/elements missing .in class + --d delay</td><td>Add class="in" and style="--d:Xs" to KPI cards, chart cards, list cards in dashboard render fns</td></tr>
+  </table>
+</div>
+
+<div class="spec-card">
+  <h4>Component gaps in page JS files</h4>
+  <table class="token-table">
+    <tr><th>File</th><th>Gap</th><th>Fix</th></tr>
+    <tr><td>dashboard-widgets.js</td><td>renderDashboardHero renders into innerHTML — no .in classes or --d delays on cards</td><td>Add class="glass kpi kpi-card in" style="--d:Xs" to each KPI card and chart card HTML string</td></tr>
+    <tr><td>dashboard-widgets.js</td><td>.kpi-chart-card used but not a glass card</td><td>Replace with .glass .card pattern: background glass, backdrop-filter, border</td></tr>
+    <tr><td>admin.js / employee.js</td><td>Tables rendered without .tbl-wrap overflow wrapper</td><td>Wrap every table in <code>&lt;div class="tbl-wrap"&gt;</code></td></tr>
+    <tr><td>admin.js / employee.js</td><td>Page headers inconsistent — some pages missing sub-title and actions row</td><td>Use consistent PageHeader pattern: .page-h with title div + .ph-actions div</td></tr>
+    <tr><td>landing.js</td><td>Hero heading h1 missing display font size (clamp 2.6rem–4.6rem)</td><td>Apply .landing-hero h1 styles: Space Grotesk, clamp(2.6rem, 6vw, 4.6rem), letterSpacing:-.03em</td></tr>
+    <tr><td>landing.js</td><td>Promo panel missing grid pattern overlay and radial gradient</td><td>Add .grid-pat div inside promo + ::after radial gradients</td></tr>
+    <tr><td>style.css</td><td>Missing .landing, .landing-hero, .promo, .req-card, .stepper, .otp-box, .urgent-bar classes</td><td>Port all landing page CSS from design reference styles.css sections 488–655</td></tr>
+    <tr><td>style.css</td><td>Missing .tbl, .tbl-wrap, .ftab, .ftab-count, .page-h, .ph-actions, .stat-mini, .grid-stats</td><td>Port from design reference styles.css sections 656–710</td></tr>
+    <tr><td>style.css</td><td>Missing .notice, .n-ic, .n-body, .timeline, .tl-item, .sla-box, .callout, .bill, .bill-row, .bill-total, .assign-row</td><td>Port from design reference styles.css sections 714–797</td></tr>
+    <tr><td>style.css</td><td>Missing .bar (progress bar), .legend, .stars</td><td>Port from design reference styles.css lines 356–358, 711, 803–806</td></tr>
+  </table>
+</div>
+
+<!-- ──────────────────────────────────────────────────────
+     FOOTER
+     ────────────────────────────────────────────────────── -->
+<div class="spacer"></div>
+<div style="text-align:center;padding:40px 0;color:#7a8d84;font-size:.8rem">
+  <div style="font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700;color:#0e1d16;margin-bottom:8px">NEST Service Portal — Design Specification</div>
+  <div>To print as PDF: open in Chrome/Edge → File → Print → Save as PDF → Set paper to A4, margins to Minimum</div>
+  <div style="margin-top:6px">Design reference: <code style="font-family:'JetBrains Mono',monospace">design-reference/service/project/styles.css</code> + <code style="font-family:'JetBrains Mono',monospace">dashboard.jsx</code> + <code style="font-family:'JetBrains Mono',monospace">screens.jsx</code> + <code style="font-family:'JetBrains Mono',monospace">landing.jsx</code></div>
+</div>
+
+</div><!-- end .doc -->
+
+<div class="no-print" style="position:fixed;bottom:20px;right:20px;background:#15a05a;color:#fff;padding:12px 20px;border-radius:14px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.88rem;box-shadow:0 8px 24px -8px rgba(21,160,90,.5);cursor:pointer" onclick="window.print()">
+  Print / Save as PDF
+</div>
+
+</body>
+</html>

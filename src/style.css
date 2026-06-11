@@ -202,7 +202,7 @@ h1, h2, h3, h4, h5,
 
 body {
   font-family: 'Manrope', 'Inter', sans-serif;
-  background: var(--bg);
+  background: var(--bg-base, var(--bg));
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
@@ -5691,17 +5691,17 @@ input, select, textarea { max-width: 100%; }
   --portal-radius-sm: 12px;
   --portal-radius-md: 18px;
   --portal-radius-lg: 26px;
-  --portal-glass: rgba(255, 255, 255, 0.96);
-  --portal-glass-strong: rgba(255, 255, 255, 0.99);
-  --portal-glass-border: rgba(21, 160, 90, 0.13);
-  --portal-line: rgba(21, 160, 90, 0.10);
-  --portal-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --portal-glass: rgba(255, 255, 255, 0.62);
+  --portal-glass-strong: rgba(255, 255, 255, 0.82);
+  --portal-glass-border: rgba(255, 255, 255, 0.55);
+  --portal-line: rgba(16, 50, 36, 0.10);
+  --portal-shadow: 0 18px 50px -18px rgba(16, 40, 28, 0.30), 0 2px 8px -4px rgba(16,40,28,0.16);
 }
 
 [data-theme="dark"] {
-  --portal-glass: rgba(20, 36, 29, 0.76);
-  --portal-glass-strong: rgba(18, 32, 26, 0.9);
-  --portal-glass-border: rgba(255, 255, 255, 0.10);
+  --portal-glass: rgba(22, 38, 31, 0.56);
+  --portal-glass-strong: rgba(20, 34, 28, 0.86);
+  --portal-glass-border: rgba(255, 255, 255, 0.12);
   --portal-line: rgba(255, 255, 255, 0.09);
   --portal-shadow: 0 22px 60px -24px rgba(0, 0, 0, 0.7),
     0 2px 10px -4px rgba(0, 0, 0, 0.55);
@@ -5709,10 +5709,7 @@ input, select, textarea { max-width: 100%; }
 
 .portal-layout {
   font-family: var(--font-body);
-  background:
-    radial-gradient(circle at 12% 8%, rgba(16, 185, 129, 0.08), transparent 34%),
-    radial-gradient(circle at 88% 82%, rgba(14, 165, 165, 0.08), transparent 34%),
-    var(--bg);
+  background: var(--bg-base, var(--bg));
   min-height: 100vh;
 }
 
@@ -6940,3 +6937,210 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .srf-contact-action .srf-contact-icon svg { width: 19px; height: 19px; }
 .srf-contact-call { background: linear-gradient(140deg, var(--accent, #15a05a), var(--accent-700, #0c6f3d)); }
 .srf-contact-whatsapp { background: linear-gradient(140deg, #25d366, #128c4a); }
+/* ============================================================
+   DESIGN SPEC ALIGNMENT
+   Final authoritative geometry for the shared portal containers.
+   ============================================================ */
+.portal-layout {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.portal-layout .main-content {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.portal-layout > .sidebar {
+  width: var(--sidebar-w, 260px);
+  border-radius: var(--r-lg, 26px);
+}
+
+.portal-layout .sidebar-logo {
+  padding: 22px 22px 18px;
+}
+
+.portal-layout .sidebar-logo-mark {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+  border-radius: 12px;
+}
+
+.portal-layout .sidebar-logo-mark img {
+  width: 32px;
+  height: 32px;
+}
+
+.portal-layout .sidebar-logo .logo-text b {
+  font-size: 1.12rem;
+}
+
+.portal-layout .sidebar-logo .logo-text small {
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+}
+
+.portal-layout .sidebar-nav {
+  padding: 6px 14px 14px;
+}
+
+.portal-layout .nav-section {
+  padding: 16px 14px 8px;
+  font-size: 0.64rem;
+}
+
+.portal-layout .nav-item {
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.portal-layout .nav-item:hover {
+  color: var(--text);
+  background: var(--panel-3);
+  transform: none;
+}
+
+.portal-layout .topbar {
+  flex: 0 0 var(--topbar-h, 74px);
+  height: var(--topbar-h, 74px);
+  border-radius: var(--r-md, 18px);
+  padding: 0 26px;
+}
+
+.portal-layout .topbar-title h1 {
+  font-size: 1.34rem;
+}
+
+.portal-layout .topbar-title p {
+  margin-top: 2px;
+  font-size: 0.82rem;
+}
+
+.portal-layout .page-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 26px 40px;
+  scrollbar-gutter: stable;
+}
+
+.portal-layout .card,
+.portal-layout .stat-card,
+.portal-layout .notice-board,
+.portal-layout .employee-today-panel,
+.portal-layout .glass {
+  background:
+    linear-gradient(160deg, var(--glass-inner, rgba(255,255,255,0.22)), transparent 42%),
+    var(--glass-bg);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.portal-layout .card {
+  border-radius: var(--r-lg, 26px);
+}
+
+.portal-layout .card-header {
+  padding: 18px 22px;
+}
+
+.portal-layout .card-body {
+  padding: 22px;
+}
+
+.portal-layout .stat-card {
+  border-radius: var(--r-md, 18px);
+  padding: 18px 20px;
+}
+
+.portal-layout .grid,
+.portal-layout .stack,
+.portal-layout .dash-kpis,
+.portal-layout .dash-charts,
+.portal-layout .grid-stats {
+  gap: 18px;
+}
+
+.portal-layout .table-wrap,
+.portal-layout .tbl-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 0 0 var(--r-lg, 26px) var(--r-lg, 26px);
+}
+
+.portal-layout .btn {
+  min-height: 42px;
+  padding: 11px 18px;
+  border-radius: 13px;
+  font-size: 0.88rem;
+}
+
+.portal-layout .btn-sm {
+  min-height: 34px;
+  padding: 8px 13px !important;
+  border-radius: 11px !important;
+  font-size: 0.8rem !important;
+}
+
+.portal-layout .form-group input,
+.portal-layout .form-group select,
+.portal-layout .form-group textarea,
+.portal-layout input[type="text"],
+.portal-layout input[type="email"],
+.portal-layout input[type="password"],
+.portal-layout input[type="number"],
+.portal-layout input[type="tel"],
+.portal-layout input[type="date"],
+.portal-layout input[type="time"],
+.portal-layout input[type="search"],
+.portal-layout select,
+.portal-layout textarea {
+  min-height: 44px;
+  border-radius: 13px;
+}
+
+@media (max-width: 1024px) {
+  .portal-layout .main-content {
+    margin-left: 0;
+  }
+
+  .portal-layout > .sidebar {
+    width: min(var(--sidebar-w, 260px), calc(100vw - 20px));
+  }
+}
+
+@media (max-width: 720px) {
+  .portal-layout .topbar {
+    height: 62px;
+    flex-basis: 62px;
+    margin: 10px 10px 0;
+    padding: 0 12px;
+    border-radius: var(--r-md, 18px);
+  }
+
+  .portal-layout .page-content {
+    padding: 18px 14px 34px;
+    scrollbar-gutter: auto;
+  }
+
+  .portal-layout .card,
+  .portal-layout .table-wrap,
+  .portal-layout .tbl-wrap {
+    border-radius: 20px;
+  }
+
+  .portal-layout .card-header,
+  .portal-layout .card-body {
+    padding: 18px;
+  }
+
+  .portal-layout .grid,
+  .portal-layout .stack,
+  .portal-layout .dash-kpis,
+  .portal-layout .dash-charts,
+  .portal-layout .grid-stats {
+    gap: 14px;
+  }
+}

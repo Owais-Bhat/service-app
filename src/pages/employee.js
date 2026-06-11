@@ -1137,16 +1137,6 @@ export async function renderEmployeeDashboard(container) {
     </div>`).join('');
 
   container.innerHTML = `
-    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-      <div>
-        <h1 style="display:flex; align-items:center; gap:12px;">
-          <span style="width:32px; height:32px; display:flex; color:var(--primary);">${ICONS.staff}</span>
-          <span>Employee Portal</span>
-        </h1>
-        <p>Today is ${new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
-      </div>
-    </div>
-
     ${missedEods.length ? `
       <div class="card" style="margin-bottom:18px;border:1px solid ${strictEodBlock ? 'var(--danger)' : 'rgba(245,158,11,0.45)'};">
         <div class="card-body" style="display:flex;gap:14px;align-items:flex-start;">
