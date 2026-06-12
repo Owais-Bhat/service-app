@@ -1193,7 +1193,7 @@ export async function renderEmployeeDashboard(container) {
       </div>
     ` : ''}
 
-    <div class="grid grid-emp-2" style="margin-bottom:18px;align-items:start;">
+    <div class="grid grid-emp-2" style="margin-bottom:18px;">
       <!-- Clock card (DESIGN .clock-card) -->
       <div class="card clock-card emp-clock-card">
         <div class="chip" style="margin:0 auto 14px;width:fit-content;color:${isClockedIn && !isClockedOut ? 'var(--accent, var(--primary))' : 'var(--text-3, var(--text-dim))'};">

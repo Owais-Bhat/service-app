@@ -6704,7 +6704,12 @@ input, select, textarea { max-width: 100%; }
 .grid { display: grid; gap: 18px; }
 .grid-kpi { grid-template-columns: repeat(4,1fr); }
 .grid-emp { grid-template-columns: 1.1fr 1.7fr 1fr; }
-.grid-emp-2 { grid-template-columns: 1.1fr 1.9fr; }
+.grid-emp-2 { grid-template-columns: 1.1fr 1.9fr; align-items: stretch; }
+/* Equal-height row: both cards stretch; list area absorbs the slack */
+.grid-emp-2 > .card { display: flex; flex-direction: column; }
+.grid-emp-2 > .list-card .list { flex: 1; display: flex; flex-direction: column; }
+.grid-emp-2 > .list-card .list > div[style*="text-align:center"] { margin: auto 0; }
+.grid-emp-2 > .clock-card { justify-content: center; }
 .grid-client { grid-template-columns: 1.5fr 1fr; }
 .row { display: flex; gap: 18px; }
 .stack { display: flex; flex-direction: column; gap: 18px; }
