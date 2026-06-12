@@ -1600,6 +1600,9 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
         const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
         const feedbackToken = await createFeedbackToken(connection, inqRow.id);
         if (feedbackToken) {
+            // Full URL in the variable (matches the registered DLT sample).
+            // The link must contain ONLY alphanumerics + :// — DLT scrubbing
+            // strips ?, =, -, _ etc., which is why tokens were arriving blank.
             const feedbackLink = feedbackLinkFromToken(feedbackToken);
             smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
                 smsVar(inqRow.full_name, 'Customer', 60),
@@ -2556,10 +2559,10 @@ async function createFeedbackToken(connection, inquiryId) {
     const row = rows[0];
     if (!row || row.feedback_rating != null) return null;
 
-    // 24 random bytes → 32-char base64url token. MUST stay ≥ 20 chars:
-    // /api/feedback/resolve and /submit reject shorter tokens (the old
-    // 8-byte/11-char tokens failed that check, breaking every link).
-    const token = crypto.randomBytes(24).toString('base64url');
+    // 12 random bytes → 24-char hex token. Constraints:
+    // ≥ 20 chars (resolve/submit endpoints reject shorter tokens),
+    // ≤ 30 chars and pure alphanumeric (survives DLT SMS variable rules).
+    const token = crypto.randomBytes(12).toString('hex');
     const tokenHash = feedbackTokenHash(token);
     await connection.execute(
         `UPDATE inquiries
@@ -4641,6 +4644,9 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                 const feedbackToken = await createFeedbackToken(smsConn, row.id);
                 smsConn.release();
                 if (feedbackToken) {
+                    // Full URL in the variable (matches the registered DLT sample).
+                    // Link must be alphanumeric-only after the domain — DLT
+                    // scrubbing strips ?, =, -, _ (why tokens arrived blank).
                     const feedbackLink = feedbackLinkFromToken(feedbackToken, req);
                     smsNotify(row.phone, 'SMS_TID_PAYMENT', [
                         smsVar(row.full_name, 'Customer', 60),
@@ -5301,6 +5307,9 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                     const billTotal = inqRow.bill_total || inqRow.bill_amount || amount;
                     const feedbackToken = await createFeedbackToken(connection, inqRow.id);
                     if (feedbackToken) {
+                        // Full URL in the variable (matches the registered DLT
+                        // sample). Hex token keeps it alphanumeric-only — DLT
+                        // scrubbing strips ?, =, -, _ (why tokens arrived blank).
                         const feedbackLink = feedbackLinkFromToken(feedbackToken, req);
                         smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
                             smsVar(inqRow.full_name, 'Customer', 60),
