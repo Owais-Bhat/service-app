@@ -26,3 +26,6 @@ dist-ssr
 
 .vercel
 .env*.local
+
+# Video demo folder
+video-demo/

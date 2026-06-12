@@ -2541,7 +2541,10 @@ function feedbackTokenHash(token) {
 }
 
 function feedbackLinkFromToken(token, req = null) {
-    return `${publicBaseUrl(req)}/feedback?token=${encodeURIComponent(token)}`;
+    // Path-style short link (/f/<token>) instead of ?token= query string:
+    // SMS apps reliably hyperlink path-only URLs, while some cut the link at
+    // the '?' — which dropped customers on the landing page with no token.
+    return `${publicBaseUrl(req)}/f/${encodeURIComponent(token)}`;
 }
 
 async function createFeedbackToken(connection, inquiryId) {
@@ -2553,7 +2556,10 @@ async function createFeedbackToken(connection, inquiryId) {
     const row = rows[0];
     if (!row || row.feedback_rating != null) return null;
 
-    const token = crypto.randomBytes(8).toString('base64url');
+    // 24 random bytes → 32-char base64url token. MUST stay ≥ 20 chars:
+    // /api/feedback/resolve and /submit reject shorter tokens (the old
+    // 8-byte/11-char tokens failed that check, breaking every link).
+    const token = crypto.randomBytes(24).toString('base64url');
     const tokenHash = feedbackTokenHash(token);
     await connection.execute(
         `UPDATE inquiries

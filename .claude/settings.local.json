@@ -44,7 +44,27 @@
       "Bash(node --check server/index.cjs)",
       "Bash(awk -F: '$1 >= 3000')",
       "WebFetch(domain:api.anthropic.com)",
-      "Bash(tar -xf design.tar)"
+      "Bash(tar -xf design.tar)",
+      "Bash(npm install *)",
+      "Bash(npx remotion *)",
+      "Bash(node generate-voiceover.mjs)",
+      "PowerShell(Get-ChildItem \"E:\\\\service app\\\\video-demo\\\\out\" | Select-Object Name, @{N='Size';E={\"{0:N2} MB\" -f \\($_.Length/1MB\\)}})",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:remotion.dev)",
+      "WebFetch(domain:github.com)",
+      "Bash(npx playwright *)",
+      "Bash(node capture-screenshots.mjs)",
+      "Bash(node capture-screenshots.mjs --admin admin@networkingexperts.in Experts@112)",
+      "Bash(node capture-screenshots.mjs --employee zeeshan@networkingexperts.in Experts@112)",
+      "Bash(Remove-Item \"E:\\\\service app\\\\video-demo\\\\public\\\\screenshots\\\\*.png\" -Force)",
+      "Bash(Write-Host \"Cleared.\")",
+      "PowerShell(Get-Content *)",
+      "Bash(grep -E --line-buffered \"Rendered [0-9]{3,4}/10140|Encoded|✓|Done|Muxing|error|Error|failed|warning|WARN|Cannot|undefined\")",
+      "Bash(awk '/Rendered \\([0-9]+\\)\\\\/10140/{n=substr\\($2,1,index\\($2,\"/\"\\)-1\\); if\\(n%1000==0||n==10140\\) print; next} /Encoded|Muxing|Done|error|Error|failed|WARN|Cannot/{print}')",
+      "Bash(awk '/Rendered \\([0-9]+\\)\\\\/10140/{n=substr\\($2,1,index\\($2,\"/\"\\)-1\\)+0; if\\(n==2000||n==5000||n==8000||n==10140\\) print; next} /Encoded 10140|Muxing|Done|error|Error|failed|Cannot/{print}')",
+      "WebSearch",
+      "WebFetch(domain:mixkit.co)",
+      "Bash(awk '/Rendered \\([0-9]+\\)\\\\/10140/{n=substr\\($2,1,index\\($2,\"/\"\\)-1\\)+0; if\\(n==5000||n==10140\\) print; next} /Encoded 10140|website-demo-full|Done|error|Error|failed/{print}')"
     ]
   }
 }
