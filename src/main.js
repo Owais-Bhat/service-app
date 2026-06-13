@@ -15,6 +15,19 @@ import { registerSW } from 'virtual:pwa-register';
 // SMS links do not keep opening with an old cached landing-page script.
 const updateServiceWorker = registerSW({
   immediate: true,
+  // Already-installed apps may still be running an OLD service worker that
+  // intercepts public links (e.g. the SMS feedback link) and serves the cached
+  // app shell instead of the real page. Check for a fresh worker on launch,
+  // hourly, and whenever the app regains focus so devices adopt the corrected
+  // worker quickly rather than waiting for a full cold start.
+  onRegisteredSW(swUrl, registration) {
+    if (!registration) return;
+    const checkForUpdate = () => { registration.update().catch(() => {}); };
+    setInterval(checkForUpdate, 60 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    });
+  },
   onNeedRefresh() {
     updateServiceWorker(true);
   },

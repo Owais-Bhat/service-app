@@ -20,6 +20,11 @@ export default defineConfig({
       // SMS feedback link or a bill PDF get the cached app shell (landing page).
       workbox: {
         cleanupOutdatedCaches: true,
+        // Activate a freshly deployed worker immediately and take control of
+        // already-open pages, so installed apps stop using a stale worker that
+        // hijacks public links (e.g. the SMS feedback link) into the app shell.
+        clientsClaim: true,
+        skipWaiting: true,
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [
           /^\/f\//,          // feedback short link  /f/<token>
