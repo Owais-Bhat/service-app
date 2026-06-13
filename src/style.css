@@ -7046,31 +7046,25 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .bill-total span { font-weight: 700; }
 .bill-total b { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; color: var(--accent, var(--primary)); }
 .assign-row { display: flex; gap: 10px; margin-top: 6px; }
-.assign-row s
-/* Online Now indicator pulse (admin dashboard) */
-@keyframes onlinePulse {
-  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); }
-  70%  { box-shadow: 0 0 0 7px rgba(34, 197, 94, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-}
+.assign-row select { flex: 1; }
+.bill-tbl { width: 100%; border-collapse: collapse; margin: 6px 0 16px; }
+.bill-tbl th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3, var(--text-dim)); padding: 8px 10px; border-bottom: 1px solid var(--line, var(--border)); }
+.bill-tbl th.r, .bill-tbl td.r { text-align: right; }
+.bill-tbl td { padding: 10px; font-size: 0.88rem; border-bottom: 1px solid var(--line, var(--border)); }
 
-/* Quiz grading feedback — show which answers were wrong + the correct one */
-.qz-opt.correct { border-color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
-.qz-opt.correct .qz-letter { background: var(--success); color: #fff; }
-.qz-opt.wrong { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
-.qz-opt.wrong .qz-letter { background: var(--danger); color: #fff; }
-.qz-card.qz-wrong { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger) inset; }
-.qz-card.qz-correct { border-color: var(--success); }
-.qz-blank.qz-correct { border-style: solid; border-color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
-.qz-blank.qz-wrong { border-style: solid; border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
-.qz-feedback {
-  display: flex; align-items: center; gap: 6px; margin-top: 10px;
-  padding: 8px 12px; border-radius: 10px; font-size: 0.82rem; font-weight: 700;
-  color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent);
-}
-.qz-feedback svg { width: 15px; height: 15px; flex: none; }
-.qz-match-row .qz-feedback { display: inline-flex; margin-top: 0; margin-left: 8px; padding: 4px 10px; }
-0; }
+/* ── Timeline ── */
+.timeline { position: relative; padding-left: 26px; }
+.timeline::before { content: ""; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--line, var(--border)); }
+.tl-item { position: relative; padding-bottom: 16px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before { content: ""; position: absolute; left: -22px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent, var(--primary)); box-shadow: 0 0 0 4px var(--accent-soft); }
+.tl-item.muted::before { background: var(--text-3, var(--text-dim)); box-shadow: 0 0 0 4px var(--panel-3, var(--row-hover)); }
+.tl-item b { font-size: 0.86rem; }
+.tl-item span { display: block; font-size: 0.75rem; color: var(--text-3, var(--text-dim)); margin-top: 1px; }
+
+/* ── Chart legend ── */
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.legend span { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--text-2, var(--text-soft)); font-weight: 600; }
 .legend i { width: 10px; height: 10px; border-radius: 4px; }
 
 /* ============================================================
