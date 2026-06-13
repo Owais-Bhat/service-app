@@ -703,6 +703,17 @@ export async function renderAdminDashboard(container) {
     }
   }
 
+  // Layout: lift the "Needs Attention" + "Recent Service Requests" row up to sit
+  // right after the KPI gauges (above Online Now and the charts).
+  {
+    const _kpisRow = heroEl && heroEl.querySelector(".dash-kpis");
+    const _attnHead = [...container.querySelectorAll(".list-card h3")].find(
+      (h) => /Needs Attention/i.test(h.textContent || ""),
+    );
+    const _attnGrid = _attnHead && _attnHead.closest(".grid-2-1");
+    if (_kpisRow && _attnGrid) _kpisRow.insertAdjacentElement("afterend", _attnGrid);
+  }
+
   const bind = (sel, cb) => {
     const el = container.querySelector(sel);
     if (el) el.onclick = cb;
