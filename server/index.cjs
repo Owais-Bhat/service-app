@@ -1603,13 +1603,13 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
             // Full URL in the variable (matches the registered DLT sample).
             // The link must contain ONLY alphanumerics + :// — DLT scrubbing
             // strips ?, =, -, _ etc., which is why tokens were arriving blank.
-            const feedbackLink = feedbackLinkFromToken(feedbackToken);
+            // Send ONLY the token; the DLT template now holds the fixed .../f/ URL.
             smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
                 smsVar(inqRow.full_name, 'Customer', 60),
                 smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
                 smsVar(ticket_no, 'N/A', 20),
                 smsVar(inqRow.bill_no, 'N/A', 30),
-                smsVar(feedbackLink, 'Feedback unavailable', 140),
+                smsVar(feedbackToken, 'NA', 30),
             ]);
         } else {
             console.warn(`[feedback] Payment SMS skipped for ${ticket_no}: no feedback token was created`);
@@ -4652,13 +4652,13 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                     // Full URL in the variable (matches the registered DLT sample).
                     // Link must be alphanumeric-only after the domain — DLT
                     // scrubbing strips ?, =, -, _ (why tokens arrived blank).
-                    const feedbackLink = feedbackLinkFromToken(feedbackToken, req);
+                    // Send ONLY the token; the DLT template now holds the fixed .../f/ URL.
                     smsNotify(row.phone, 'SMS_TID_PAYMENT', [
                         smsVar(row.full_name, 'Customer', 60),
                         smsVar(`Rs.${Math.round(Number(amount) || 0)}`, 'Rs.0', 20),
                         smsVar(row.ticket_no, 'N/A', 20),
                         smsVar(row.bill_no, 'N/A', 30),
-                        smsVar(feedbackLink, 'Feedback unavailable', 140),
+                        smsVar(feedbackToken, 'NA', 30),
                     ]);
                 } else {
                     console.warn(`[feedback] Payment SMS skipped for ${row.ticket_no || row.id}: no feedback token was created`);
@@ -5315,13 +5315,13 @@ app.post('/api/webhook/razorpay', async (req, res) => {
                         // Full URL in the variable (matches the registered DLT
                         // sample). Hex token keeps it alphanumeric-only — DLT
                         // scrubbing strips ?, =, -, _ (why tokens arrived blank).
-                        const feedbackLink = feedbackLinkFromToken(feedbackToken, req);
+                        // Send ONLY the token; the DLT template now holds the fixed .../f/ URL.
                         smsNotify(inqRow.phone, 'SMS_TID_PAYMENT', [
                             smsVar(inqRow.full_name, 'Customer', 60),
                             smsVar(`Rs.${Math.round(billTotal)}`, 'Rs.0', 20),
                             smsVar(ticket_no, 'N/A', 20),
                             smsVar(inqRow.bill_no, 'N/A', 30),
-                            smsVar(feedbackLink, 'Feedback unavailable', 140),
+                            smsVar(feedbackToken, 'NA', 30),
                         ]);
                     } else {
                         console.warn(`[feedback] Payment SMS skipped for ${ticket_no}: no feedback token was created`);
