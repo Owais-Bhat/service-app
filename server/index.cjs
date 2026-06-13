@@ -3963,9 +3963,14 @@ app.post('/api/training/course/:id/quiz-submit', authenticateToken, async (req, 
     let c; try {
         c = await getConn();
         const [quiz] = await c.query('SELECT id, correct_index FROM training_quiz WHERE course_id = ?', [req.params.id]);
+        const results = quiz.map(q => {
+            const raw = answers[q.id];
+            const chosen = (raw === undefined || raw === null || raw === '') ? null : Number(raw);
+            return { id: q.id, correct_index: Number(q.correct_index), chosen, correct: chosen === Number(q.correct_index) };
+        });
         let score = 100, passed = 1;
         if (quiz.length) {
-            const correct = quiz.filter(q => Number(answers[q.id]) === Number(q.correct_index)).length;
+            const correct = results.filter(r => r.correct).length;
             score = Math.round((correct / quiz.length) * 100);
             passed = score >= 70 ? 1 : 0;
         }
@@ -3974,7 +3979,7 @@ app.post('/api/training/course/:id/quiz-submit', authenticateToken, async (req, 
             await c.query('INSERT INTO training_course_completions (id, course_id, employee_id, quiz_score, passed) VALUES (?,?,?,?,1)',
                 [uuidv4(), req.params.id, emp, score]);
         }
-        res.json({ score, passed: !!passed });
+        res.json({ score, passed: !!passed, results });
     } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
 });
 

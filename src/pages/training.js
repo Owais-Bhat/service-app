@@ -887,12 +887,65 @@ async function openCoursePlayer(courseId, onClose) {
     body.querySelectorAll('.qz-opt input').forEach(inp => inp.onchange = () => {
       const card = inp.closest('.qz-card');
       card.querySelectorAll('.qz-opt').forEach(o => o.classList.toggle('sel', o.contains(inp)));
+      clearResults();
       updateProgress();
     });
     body.querySelectorAll('.qz-blank').forEach(sel => sel.onchange = () => {
       sel.classList.toggle('filled', sel.value !== '');
+      clearResults();
       updateProgress();
     });
+
+    // Clear any previous correct/wrong highlights (used before a fresh grade or on retry).
+    const clearResults = () => {
+      body.querySelectorAll('.qz-opt').forEach(o => o.classList.remove('correct', 'wrong'));
+      body.querySelectorAll('.qz-opt input').forEach(i => { i.disabled = false; });
+      body.querySelectorAll('.qz-card').forEach(c => c.classList.remove('qz-correct', 'qz-wrong'));
+      body.querySelectorAll('.qz-blank').forEach(s => { s.classList.remove('qz-correct', 'qz-wrong'); s.disabled = false; });
+      body.querySelectorAll('.qz-feedback').forEach(el => el.remove());
+    };
+    // After grading, mark each question right/wrong and reveal the correct answer.
+    const renderResults = (results) => {
+      clearResults();
+      const byId = new Map(d.quiz.map(q => [String(q.id), q]));
+      (results || []).forEach(r => {
+        const q = byId.get(String(r.id));
+        if (!q) return;
+        const correctText = q.options[r.correct_index];
+        const card = body.querySelector(`.qz-card[data-q="${r.id}"]`);
+        if (card) {
+          card.classList.add(r.correct ? 'qz-correct' : 'qz-wrong');
+          card.querySelectorAll('.qz-opt').forEach(lab => {
+            const input = lab.querySelector('input');
+            if (!input) return;
+            const val = Number(input.value);
+            input.disabled = true;
+            if (val === r.correct_index) lab.classList.add('correct');
+            else if (val === r.chosen && !r.correct) lab.classList.add('wrong');
+          });
+          if (!r.correct) {
+            const fb = document.createElement('div');
+            fb.className = 'qz-feedback';
+            fb.innerHTML = `${miniIcon(ICONS.check)}<span>Correct answer: <b>${esc(correctText)}</b></span>`;
+            card.appendChild(fb);
+          }
+          return;
+        }
+        // fill-in-the-blank / match questions use a dropdown instead of a card
+        const sel = body.querySelector(`.qz-blank[data-q="${r.id}"]`);
+        if (sel) {
+          sel.classList.add(r.correct ? 'qz-correct' : 'qz-wrong');
+          sel.disabled = true;
+          if (!r.correct) {
+            const host = sel.closest('.qz-match-row') || sel.closest('.qz-card');
+            const fb = document.createElement('span');
+            fb.className = 'qz-feedback';
+            fb.innerHTML = `${miniIcon(ICONS.check)}<span>Correct: <b>${esc(correctText)}</b></span>`;
+            (host || sel.parentElement).appendChild(fb);
+          }
+        }
+      });
+    };
 
     const sub = body.querySelector('#cp-submit');
     if (sub) sub.onclick = async () => {
@@ -901,10 +954,21 @@ async function openCoursePlayer(courseId, onClose) {
       sub.disabled = true; sub.innerHTML = '<span>Submitting…</span>';
       try {
         const r = await api(`/training/course/${courseId}/quiz-submit`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ answers }) });
+        renderResults(r.results || []);
         const out = body.querySelector('#cp-result');
         out.className = 'tr-quiz-result ' + (r.passed ? 'pass' : 'fail');
-        out.textContent = r.passed ? `✓ Passed! Score ${r.score}%` : `Score ${r.score}% — need 70% to pass. Review and retry.`;
-        if (r.passed) { d.completion = { quiz_score: r.score, completed_at: new Date().toISOString() }; burstConfetti(ov.querySelector('.modal')); toast('Course completed!', 'success'); }
+        const wrong = (r.results || []).filter(x => x.correct === false).length;
+        out.textContent = r.passed
+          ? `✓ Passed! Score ${r.score}%`
+          : `Score ${r.score}% — need 70% to pass. ${wrong} answer${wrong === 1 ? '' : 's'} to fix — wrong ones are marked below with the correct answer. Fix them and submit again.`;
+        if (r.passed) {
+          d.completion = { quiz_score: r.score, completed_at: new Date().toISOString() };
+          burstConfetti(ov.querySelector('.modal'));
+          toast('Course completed!', 'success');
+        } else {
+          const firstWrong = body.querySelector('.qz-card.qz-wrong, .qz-blank.qz-wrong');
+          if (firstWrong) firstWrong.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       } catch (e) { toast(e.message, 'error'); }
       sub.disabled = false; sub.innerHTML = `${miniIcon(ICONS.check)}<span>Submit quiz</span>`;
     };
