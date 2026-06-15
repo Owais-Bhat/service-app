@@ -4336,8 +4336,10 @@ export async function renderSettingsTab(container) {
   let registrationKeys = { admin: "", employee: "" };
   let popupEnabled = true;
   let deviceTrackingEnabled = true;
+  let reopenLimit = 2;
+  let reopenButtonEnabled = true;
   try {
-    const [attendanceRes, keysRes, popupRes, deviceRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
@@ -4348,6 +4350,9 @@ export async function renderSettingsTab(container) {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/device-tracking`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/reopen`, {
         headers: authHeaders(),
       }),
     ]);
@@ -4365,6 +4370,11 @@ export async function renderSettingsTab(container) {
     if (deviceRes.ok) {
       const data = await deviceRes.json();
       deviceTrackingEnabled = data.enabled !== false;
+    }
+    if (reopenRes.ok) {
+      const data = await reopenRes.json();
+      if (typeof data.limit === "number") reopenLimit = data.limit;
+      reopenButtonEnabled = data.button_enabled !== false;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4517,6 +4527,36 @@ export async function renderSettingsTab(container) {
 
       <div class="settings-card">
         <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.refresh}</span>
+          <div>
+            <h3>Ticket Reopen Policy</h3>
+            <p>Control how many times a customer can reopen one ticket ("Issue not resolved"), and whether that button shows on the landing page.</p>
+          </div>
+        </div>
+
+        <div class="settings-alert settings-alert-info">
+          <span>${ICONS.alert}</span>
+          <small>Limiting reopens avoids unnecessary repeat visits. Set the limit to 0 for unlimited reopens.</small>
+        </div>
+
+        <div class="settings-form-row" style="align-items:center; gap:16px; flex-wrap:wrap;">
+          <label style="margin:0; display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="reopen-button-toggle" ${reopenButtonEnabled ? 'checked' : ''} style="width:20px; height:20px; cursor:pointer;">
+            <span>${reopenButtonEnabled ? 'Reopen button visible' : 'Reopen button hidden'}</span>
+          </label>
+          <label style="margin:0; display:flex; align-items:center; gap:8px;">
+            <span>Max reopens per ticket</span>
+            <input type="number" id="reopen-limit-input" min="0" max="99" value="${Number(reopenLimit)}" class="settings-time-input" style="width:90px;">
+          </label>
+          <button class="btn btn-primary settings-save-btn" id="save-reopen-policy">
+            ${ICONS.check}
+            <span>Save Setting</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
           <span class="settings-card-icon settings-card-icon-danger">${ICONS.block}</span>
           <div>
             <h3>Restrictions (${restrictedProfiles.length})</h3>
@@ -4655,6 +4695,36 @@ export async function renderSettingsTab(container) {
     } catch (err) {
       toast(err.message || "Could not save device tracking setting", "error");
       toggle.checked = deviceTrackingEnabled;
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#save-reopen-policy").onclick = async () => {
+    const toggle = container.querySelector("#reopen-button-toggle");
+    const limitInput = container.querySelector("#reopen-limit-input");
+    let limit = parseInt(limitInput.value, 10);
+    if (!Number.isFinite(limit) || limit < 0) limit = 0;
+    if (limit > 99) limit = 99;
+    const button_enabled = toggle.checked;
+    const btn = container.querySelector("#save-reopen-policy");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/reopen`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ limit, button_enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save reopen policy");
+      reopenLimit = data.limit;
+      reopenButtonEnabled = data.button_enabled !== false;
+      limitInput.value = reopenLimit;
+      const span = toggle.parentElement?.querySelector("span");
+      if (span) span.textContent = reopenButtonEnabled ? "Reopen button visible" : "Reopen button hidden";
+      toast("Reopen policy saved", "success");
+    } catch (err) {
+      toast(err.message || "Could not save reopen policy", "error");
     } finally {
       restore();
     }

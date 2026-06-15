@@ -268,6 +268,8 @@ export function renderLandingPage(container, onPortalClick) {
     reopenText: '',
     reopenLoading: false,
     reopenSubmitted: false,
+    reopenButtonEnabled: cachedBootstrap?.reopenButtonEnabled !== false,
+    reopenLimit: typeof cachedBootstrap?.reopenLimit === 'number' ? cachedBootstrap.reopenLimit : 2,
     // Ads carousel state
     ads: cachedBootstrap?.ads || cachedAds,
     adsLoading: false,
@@ -584,6 +586,8 @@ export function renderLandingPage(container, onPortalClick) {
       const ads = allAds.filter(a => (a.placement || 'landing') === 'landing');
       state.popupAds = allAds.filter(a => a.placement === 'popup_landing');
       state.popupEnabled = data.popupEnabled !== false;
+      state.reopenButtonEnabled = data.reopenButtonEnabled !== false;
+      state.reopenLimit = typeof data.reopenLimit === 'number' ? data.reopenLimit : 2;
       const seen = new Map();
       (data.categories || []).forEach(category => {
         const label = String(category || '').trim();
@@ -599,6 +603,8 @@ export function renderLandingPage(container, onPortalClick) {
         popupAds: state.popupAds,
         issueOptions: state.issueOptions,
         popupEnabled: state.popupEnabled,
+        reopenButtonEnabled: state.reopenButtonEnabled,
+        reopenLimit: state.reopenLimit,
       });
       render();
       preloadAds(ads).catch(() => {});
@@ -1001,7 +1007,7 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
       ` : ''}
 
-      ${resolved && paid ? `
+      ${resolved && paid && state.reopenButtonEnabled && (state.reopenLimit === 0 || (Number(r.reopen_count) || 0) < state.reopenLimit) ? `
         <div class="srf-feedback" style="margin-top:14px;">
           <h3 class="srf-fb-title">Issue not resolved?</h3>
           <p class="srf-fb-sub">If the problem is still there, let us know and we'll reopen your ticket and send a technician again — free of cost.</p>
@@ -1014,7 +1020,12 @@ export function renderLandingPage(container, onPortalClick) {
             </button>
           `}
         </div>
-      ` : ''}
+      ` : (resolved && paid && state.reopenButtonEnabled ? `
+        <div class="srf-feedback" style="margin-top:14px;">
+          <h3 class="srf-fb-title">Issue not resolved?</h3>
+          <p class="srf-fb-sub">This ticket has reached the maximum number of reopens. Please use the Complaint tab or call us for further help.</p>
+        </div>
+      ` : '')}
 
       ${canLeaveFeedback ? `
         <div class="srf-feedback">

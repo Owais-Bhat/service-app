@@ -514,6 +514,10 @@ const DEFAULT_AUTO_CLOCK_OUT_TIME = process.env.AUTO_CLOCK_OUT_TIME || '18:00';
 const appSettings = {
     autoClockOutTime: DEFAULT_AUTO_CLOCK_OUT_TIME,
     autoAssignmentEnabled: true,
+    // How many times a customer may reopen one ticket (0 = unlimited).
+    reopenLimit: 2,
+    // Whether the "Issue not resolved" reopen button shows on the landing page.
+    reopenButtonEnabled: true,
 };
 const REG_KEY_SETTINGS = {
     admin: 'admin_reg_key',
@@ -565,8 +569,8 @@ function isValidClockOutTime(value) {
 
 async function loadAppSettings(connection) {
     const [rows] = await connection.execute(
-        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?)',
-        ['auto_clock_out_time', 'auto_assignment_enabled']
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?)',
+        ['auto_clock_out_time', 'auto_assignment_enabled', 'reopen_limit', 'reopen_button_enabled']
     );
     const autoClockOut = rows.find(row => row.setting_key === 'auto_clock_out_time')?.setting_value;
     appSettings.autoClockOutTime = parseAutoClockOutTime(autoClockOut || DEFAULT_AUTO_CLOCK_OUT_TIME).label;
@@ -574,6 +578,17 @@ async function loadAppSettings(connection) {
     const autoAssign = rows.find(row => row.setting_key === 'auto_assignment_enabled')?.setting_value;
     if (autoAssign !== undefined) {
         appSettings.autoAssignmentEnabled = autoAssign === '1' || autoAssign === 'true';
+    }
+
+    const reopenLimit = rows.find(row => row.setting_key === 'reopen_limit')?.setting_value;
+    if (reopenLimit !== undefined && reopenLimit !== null && reopenLimit !== '') {
+        const n = parseInt(reopenLimit, 10);
+        if (Number.isFinite(n) && n >= 0) appSettings.reopenLimit = n;
+    }
+
+    const reopenBtn = rows.find(row => row.setting_key === 'reopen_button_enabled')?.setting_value;
+    if (reopenBtn !== undefined) {
+        appSettings.reopenButtonEnabled = reopenBtn === '1' || reopenBtn === 'true';
     }
 }
 
@@ -1015,6 +1030,7 @@ const requiredColumns = {
         { name: 'device_status', definition: "VARCHAR(50) DEFAULT 'pending'" },
         { name: 'follow_up_status', definition: "VARCHAR(50) DEFAULT 'none'" },
         { name: 'reopened', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Set to 1 when a paid ticket is reopened via complaint (free rework)'" },
+        { name: 'reopen_count', definition: 'INT DEFAULT 0' },
         { name: 'device_service_enabled', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'sla_breach_notified', definition: 'TINYINT(1) DEFAULT 0' },
     ],
@@ -3309,6 +3325,8 @@ app.get('/api/landing/bootstrap', async (_, res) => {
                 categories: categories.map(row => row.category).filter(Boolean),
                 popupEnabled: popupRows.length === 0
                     || (popupRows[0].setting_value !== '0' && popupRows[0].setting_value !== 'false'),
+                reopenButtonEnabled: appSettings.reopenButtonEnabled,
+                reopenLimit: appSettings.reopenLimit,
             };
             await cacheSet(LANDING_BOOTSTRAP_CACHE_KEY, payload, 300);
             res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
@@ -3376,6 +3394,34 @@ app.put('/api/settings/device-tracking', authenticateToken, async (req, res) => 
         res.json({ enabled });
     } catch (error) {
         console.error('Device tracking settings update error:', error);
+        res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+// Ticket reopen policy: how many times a customer may reopen one ticket, and
+// whether the "Issue not resolved" button is visible on the landing page.
+app.get('/api/settings/reopen', async (_, res) => {
+    res.json({ limit: appSettings.reopenLimit, button_enabled: appSettings.reopenButtonEnabled });
+});
+
+app.put('/api/settings/reopen', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    try {
+        if (req.body?.limit !== undefined) {
+            const n = parseInt(req.body.limit, 10);
+            if (!Number.isFinite(n) || n < 0 || n > 99) return res.status(400).json({ error: 'Limit must be between 0 and 99' });
+            await saveAppSetting('reopen_limit', String(n));
+            appSettings.reopenLimit = n;
+        }
+        if (req.body?.button_enabled !== undefined) {
+            const on = req.body.button_enabled !== false;
+            await saveAppSetting('reopen_button_enabled', on ? '1' : '0');
+            appSettings.reopenButtonEnabled = on;
+        }
+        invalidateLandingBootstrap();
+        res.json({ limit: appSettings.reopenLimit, button_enabled: appSettings.reopenButtonEnabled });
+    } catch (error) {
+        console.error('Reopen settings update error:', error);
         res.status(500).json({ error: error.message || 'Could not save setting' });
     }
 });
@@ -5247,7 +5293,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                     try {
                         c = await getConn();
                         const [rows] = await c.query(
-                            'SELECT status, payment_status, ticket_no, full_name FROM inquiries WHERE id = ? LIMIT 1',
+                            'SELECT status, payment_status, ticket_no, full_name, COALESCE(reopen_count,0) AS reopen_count FROM inquiries WHERE id = ? LIMIT 1',
                             [data.inquiry_id]
                         );
                         const inq = rows && rows[0];
@@ -5255,12 +5301,27 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                         const paidOrDone = String(inq.payment_status || '').toLowerCase() === 'paid'
                             || ['resolved', 'closed', 'case_closed', 'foc'].includes(String(inq.status || ''));
                         if (!paidOrDone) return;
+                        // Enforce the admin's reopen limit (0 = unlimited). When the
+                        // cap is hit, don't reopen — just flag it for the admin.
+                        const limit = Number(appSettings.reopenLimit) || 0;
+                        const used = Number(inq.reopen_count) || 0;
+                        if (limit > 0 && used >= limit) {
+                            recordNotification({
+                                subject: 'new_complaint',
+                                title: '⛔ Reopen Limit Reached',
+                                body: `${inq.full_name || 'Client'} tried to reopen ${inq.ticket_no || 'a ticket'} but the ${limit}-reopen limit is reached. Review manually.`,
+                                audience: { role: 'admin' },
+                                data: { inquiry_id: data.inquiry_id, ticket_no: inq.ticket_no, reopen_limit_reached: true },
+                            }).catch(() => {});
+                            return;
+                        }
                         await c.query(
                             `UPDATE inquiries
                                 SET status = 'in_progress',
                                     assignment_status = 'none',
                                     assigned_employee_id = NULL,
                                     reopened = 1,
+                                    reopen_count = COALESCE(reopen_count,0) + 1,
                                     sla_breach_notified = 0
                               WHERE id = ?`,
                             [data.inquiry_id]
