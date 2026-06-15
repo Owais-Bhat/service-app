@@ -852,6 +852,104 @@ function startFinanceSummaryJob() {
     setInterval(runMonthlyFinanceSummary, 60 * 60_000).unref();
 }
 
+// Once the month rolls over, congratulate the employee who collected the most
+// (received) in the month that just ended — "ranked #1 at month end". Deduped
+// via app_settings so the winner is only notified once.
+async function runMonthlyLeaderboard() {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+    const lastDay = new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate();
+    const from = `${prevKey}-01 00:00:00`, to = `${prevKey}-${String(lastDay).padStart(2, '0')} 23:59:59`;
+    let conn;
+    try {
+        conn = await getConn();
+        const [setRows] = await conn.query("SELECT setting_value FROM app_settings WHERE setting_key = 'last_leaderboard_month'");
+        if (setRows[0]?.setting_value === prevKey) { return; }
+        const [rows] = await conn.query(
+            `SELECT i.assigned_employee_id AS emp, p.full_name AS name,
+                    SUM(COALESCE(NULLIF(i.bill_total,0), i.bill_amount, 0)) AS total
+               FROM inquiries i
+               JOIN profiles p ON p.id = i.assigned_employee_id
+              WHERE i.payment_status = 'paid'
+                AND i.assigned_employee_id IS NOT NULL
+                AND COALESCE(i.payment_received_at, i.bill_generated_at, i.created_at) BETWEEN ? AND ?
+              GROUP BY i.assigned_employee_id, p.full_name
+              ORDER BY total DESC
+              LIMIT 1`,
+            [from, to]
+        );
+        const winner = rows && rows[0];
+        if (winner && winner.emp) {
+            const amt = Math.round(Number(winner.total) || 0);
+            await recordNotification({
+                subject: 'leaderboard_rank',
+                title: '🏆 You ranked #1 this month!',
+                body: `Congratulations ${winner.name || ''}! You topped the leaderboard for ${prevKey} with ₹${amt} collected.`,
+                audience: { userId: winner.emp },
+                data: { month: prevKey, amount: amt, voice: `Congratulations! You ranked first on the leaderboard this month.` },
+            });
+        }
+        await saveAppSetting('last_leaderboard_month', prevKey);
+        if (winner) console.log(`[leaderboard] month ${prevKey} winner notified: ${winner.name}`);
+    } catch (err) {
+        console.error('[leaderboard] monthly job failed:', err.message);
+    } finally {
+        if (conn) conn.release();
+    }
+}
+
+function startLeaderboardJob() {
+    console.log('[leaderboard] monthly winner job active');
+    runMonthlyLeaderboard();
+    setInterval(runMonthlyLeaderboard, 60 * 60_000).unref();
+}
+
+// EOD reminder: from 17:30 server time, nudge employees who are still clocked in
+// today but have not submitted an EOD report. One nudge per employee per day.
+let _lastEodReminderDate = null;
+async function runEodReminders() {
+    const now = new Date();
+    if (now.getHours() < 17 || (now.getHours() === 17 && now.getMinutes() < 30)) return;
+    const today = localDateKey(now);
+    if (_lastEodReminderDate === today) return;
+    let conn;
+    try {
+        conn = await getConn();
+        const [rows] = await conn.query(
+            `SELECT a.user_id AS emp
+               FROM attendance a
+              WHERE a.date = ? AND a.clock_in IS NOT NULL AND a.clock_out IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM eod_reports e
+                     WHERE e.employee_id = a.user_id AND DATE(e.date) = ?
+                )`,
+            [today, today]
+        );
+        _lastEodReminderDate = today;
+        for (const r of rows) {
+            recordNotification({
+                subject: 'eod_warning',
+                title: '📝 Submit your EOD report',
+                body: 'Please submit your end-of-day report before you clock out.',
+                audience: { userId: r.emp },
+                data: { voice: 'Reminder. Please submit your end of day report before clocking out.' },
+            }).catch(() => {});
+        }
+        if (rows.length) console.log(`[eod] reminded ${rows.length} employee(s)`);
+    } catch (err) {
+        // eod_reports table name may differ — fail quietly, don't crash the loop.
+        console.error('[eod] reminder failed:', err.message);
+    } finally {
+        if (conn) conn.release();
+    }
+}
+
+function startEodReminderJob() {
+    console.log('[eod] EOD reminder job active');
+    setInterval(runEodReminders, 60_000).unref();
+}
+
 const requiredColumns = {
     profiles: [
         { name: 'salary', definition: 'DECIMAL(10, 2) DEFAULT 0' },
@@ -861,6 +959,7 @@ const requiredColumns = {
         { name: 'can_add_service', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'can_update_profile', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'always_assign', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'allowed_tabs', definition: 'TEXT COMMENT \'JSON array of tab ids this employee may see; null = all\'' },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -1367,6 +1466,41 @@ async function recordNotification(payload) {
     sendWebPush(audience, payload).catch(() => {});
 }
 
+// Notify admin (and the assigned employee) when a device repair status changes.
+async function notifyDeviceStatus(inquiryId, status, headline) {
+    let conn;
+    try {
+        conn = await getConn();
+        const [rows] = await conn.query(
+            'SELECT ticket_no, full_name, service_item, assigned_employee_id FROM inquiries WHERE id = ? LIMIT 1',
+            [inquiryId]
+        );
+        const r = rows && rows[0];
+        if (!r) return;
+        const tail = `Ticket ${r.ticket_no || ''} (${r.full_name || 'client'} — ${r.service_item || 'device'})`;
+        recordNotification({
+            subject: 'device_status',
+            title: `🔧 ${headline}`,
+            body: tail,
+            audience: { role: 'admin' },
+            data: { inquiry_id: inquiryId, ticket_no: r.ticket_no, status, voice: `${headline}${r.ticket_no ? ` for ticket ${r.ticket_no}` : ''}.` },
+        }).catch(() => {});
+        if (r.assigned_employee_id) {
+            recordNotification({
+                subject: 'device_status',
+                title: `🔧 ${headline}`,
+                body: tail,
+                audience: { userId: r.assigned_employee_id },
+                data: { inquiry_id: inquiryId, ticket_no: r.ticket_no, status, voice: `${headline}.` },
+            }).catch(() => {});
+        }
+    } catch (e) {
+        console.error('[device] status notify failed:', e.message);
+    } finally {
+        if (conn) conn.release();
+    }
+}
+
 // Deliver a Web Push to every saved subscription matching the audience.
 async function sendWebPush(audience, payload) {
     if (!PUSH_ENABLED) return;
@@ -1380,7 +1514,7 @@ async function sendWebPush(audience, payload) {
         if (userId) [rows] = await conn.query('SELECT * FROM push_subscriptions WHERE user_id = ?', [userId]);
         else if (role) [rows] = await conn.query('SELECT * FROM push_subscriptions WHERE role = ?', [role]);
         else [rows] = await conn.query('SELECT * FROM push_subscriptions');
-        const body = JSON.stringify({ title: payload.title || 'Update', body: payload.body || '', data: payload.data || {} });
+        const body = JSON.stringify({ title: payload.title || 'Update', body: payload.body || '', subject: payload.subject || null, data: payload.data || {} });
         await Promise.all((rows || []).map(async (s) => {
             try {
                 await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body);
@@ -1820,7 +1954,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -2896,7 +3030,8 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         company,
         can_add_service,
         can_update_profile,
-        alwaysAssign
+        alwaysAssign,
+        allowed_tabs
     } = req.body;
 
     try {
@@ -2994,6 +3129,15 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (alwaysAssign !== undefined) {
                 profileUpdates.push('always_assign = ?');
                 profileParams.push(alwaysAssign ? 1 : 0);
+            }
+            if (allowed_tabs !== undefined) {
+                // null/empty array => full access (store NULL). Otherwise store a JSON array of tab ids.
+                profileUpdates.push('allowed_tabs = ?');
+                profileParams.push(
+                    (allowed_tabs === null || (Array.isArray(allowed_tabs) && allowed_tabs.length === 0))
+                        ? null
+                        : JSON.stringify(Array.isArray(allowed_tabs) ? allowed_tabs : [])
+                );
             }
 
             if (profileUpdates.length > 0) {
@@ -3741,6 +3885,14 @@ app.post('/api/training/courses', authenticateToken, async (req, res) => {
         const id = uuidv4();
         await c.query('INSERT INTO training_courses (id, title, description, category) VALUES (?,?,?,?)',
             [id, title, description || null, category || 'General']);
+        // Announce the new training program to all employees.
+        recordNotification({
+            subject: 'training_added',
+            title: '🎓 New Training Added',
+            body: `A new training program "${title}" is now available.`,
+            audience: { role: 'employee' },
+            data: { course_id: id, title, voice: `A new training program, ${title}, has been added.` },
+        }).catch(() => {});
         res.json({ id });
     } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
 });
@@ -4177,6 +4329,7 @@ app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
             'UPDATE inquiries SET device_status = ? WHERE id = ?',
             ['taken', inquiry_id]
         );
+        notifyDeviceStatus(inquiry_id, 'taken', 'Device taken into service');
 
         res.json({ id: logId, message: 'Device taken logged successfully' });
     } catch (error) {
@@ -4211,6 +4364,7 @@ app.post('/api/device-tracking/return', authenticateToken, async (req, res) => {
             'UPDATE inquiries SET device_status = ? WHERE id = ?',
             ['returned', inquiry_id]
         );
+        notifyDeviceStatus(inquiry_id, 'returned', 'Device returned to customer');
 
         res.json({ id: logId, message: 'Device return logged successfully' });
     } catch (error) {
@@ -4246,6 +4400,7 @@ app.post('/api/device-tracking/followup', authenticateToken, async (req, res) =>
             'UPDATE inquiries SET follow_up_status = ? WHERE id = ?',
             [status, inquiry_id]
         );
+        notifyDeviceStatus(inquiry_id, status, `Device repair status: ${status}`);
 
         res.json({ id: logId, message: 'Follow-up status updated successfully' });
     } catch (error) {
@@ -4639,6 +4794,52 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                     audience: { role: 'admin' },
                     data: { ticket_no: row.ticket_no, inquiry_id: row.id, amount: Math.round(Number(payAmount) || 0), method },
                 }).catch(() => {});
+                // Also tell the assigned employee their service got paid (with voice line).
+                if (row.assigned_employee_id) {
+                    const amt = Math.round(Number(payAmount) || 0);
+                    recordNotification({
+                        subject: 'payment_received',
+                        title: '💰 Payment Received',
+                        body: `Your ticket ${row.ticket_no || ''} was paid ₹${amt} via ${method}.`,
+                        audience: { userId: row.assigned_employee_id },
+                        data: { ticket_no: row.ticket_no, inquiry_id: row.id, amount: amt, method, customer: row.full_name, voice: `Rupees ${amt} has been received${row.ticket_no ? ` on ticket ${row.ticket_no}` : ''}.` },
+                    }).catch(() => {});
+                }
+            }
+
+            // Cash collected by admin → tell the employee whose cash it was.
+            const cashJustSubmitted = data.cash_submitted_at && !previousRow?.cash_submitted_at;
+            if (cashJustSubmitted && row.assigned_employee_id) {
+                const cashAmt = Math.round(Number(row.bill_total || row.bill_amount || 0));
+                recordNotification({
+                    subject: 'cash_collected',
+                    title: '🧾 Cash Collected',
+                    body: `₹${cashAmt} cash for ticket ${row.ticket_no || ''} has been collected by admin.`,
+                    audience: { userId: row.assigned_employee_id },
+                    data: { ticket_no: row.ticket_no, inquiry_id: row.id, amount: cashAmt, voice: `Rupees ${cashAmt} cash has been collected by admin.` },
+                }).catch(() => {});
+            }
+
+            // Job completed → notify admin + the assigned employee once.
+            const DONE = ['resolved', 'closed', 'case_closed'];
+            const becameDone = data.status && DONE.includes(String(data.status)) && !DONE.includes(String(previousRow?.status || ''));
+            if (becameDone) {
+                recordNotification({
+                    subject: 'job_completed',
+                    title: '✅ Job Completed',
+                    body: `Ticket ${row.ticket_no || ''} (${row.full_name || 'client'} — ${row.service_item || 'service'}) is completed.`,
+                    audience: { role: 'admin' },
+                    data: { ticket_no: row.ticket_no, inquiry_id: row.id, customer: row.full_name, voice: `A job has been completed${row.ticket_no ? ` on ticket ${row.ticket_no}` : ''}.` },
+                }).catch(() => {});
+                if (row.assigned_employee_id) {
+                    recordNotification({
+                        subject: 'job_completed',
+                        title: '✅ Job Completed',
+                        body: `Your ticket ${row.ticket_no || ''} is now marked completed.`,
+                        audience: { userId: row.assigned_employee_id },
+                        data: { ticket_no: row.ticket_no, inquiry_id: row.id, voice: 'Your job has been completed.' },
+                    }).catch(() => {});
+                }
             }
 
             // Any manual/admin/cash payment completion should also notify the client.
@@ -4754,6 +4955,42 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                     audience: { role: 'admin' },
                     data: { user_id: row.user_id, attendance_id: row.id || null },
                 });
+            });
+        }
+
+        // Notice toggled from hidden → active counts as publishing it.
+        if (table === 'notices' && updatedRows.length > 0) {
+            updatedRows.forEach(row => {
+                const prev = previousRows.find(p => p.id === row.id);
+                const becameActive = Number(row.active) === 1 && Number(prev?.active || 0) === 0;
+                if (!becameActive) return;
+                recordNotification({
+                    subject: 'notice_posted',
+                    title: `📢 ${row.title || 'New Notice'}`,
+                    body: String(row.body || '').slice(0, 240),
+                    audience: { role: 'employee' },
+                    data: { notice_id: row.id, priority: row.priority || 'normal', voice: `New notice. ${row.title || ''}.` },
+                }).catch(() => {});
+            });
+        }
+
+        // Leave approved / rejected → notify the employee who requested it.
+        if (table === 'leave_requests' && data.status && updatedRows.length > 0) {
+            updatedRows.forEach(row => {
+                const prev = previousRows.find(p => p.id === row.id);
+                if (prev && prev.status === row.status) return;       // no real change
+                const st = String(row.status).toLowerCase();
+                if (st !== 'approved' && st !== 'rejected' && st !== 'declined') return;
+                const approved = st === 'approved';
+                recordNotification({
+                    subject: approved ? 'leave_approved' : 'leave_rejected',
+                    title: approved ? '✅ Leave Approved' : '🚫 Leave Rejected',
+                    body: approved
+                        ? `Your leave (${row.start_date || ''}${row.end_date ? ' to ' + row.end_date : ''}) was approved.`
+                        : `Your leave request was ${st}.`,
+                    audience: { userId: row.employee_id },
+                    data: { leave_id: row.id, status: st, voice: approved ? 'Your leave request has been approved.' : 'Your leave request has been rejected.' },
+                }).catch(() => {});
             });
         }
 
@@ -4974,6 +5211,19 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 body: `Ticket ${data.ticket_no} — ${String(data.complaint_text || '').slice(0, 80)}`,
                 audience: { role: 'admin' },
                 data: { complaint_id: data.id, ticket_no: data.ticket_no, inquiry_id: data.inquiry_id || null },
+            });
+        }
+        // A new published notice → push it to every employee (bell + push + voice).
+        if (table === 'notices') {
+            rowsToInsert.forEach(notice => {
+                if (Number(notice.active) === 0) return;     // hidden notices stay silent
+                recordNotification({
+                    subject: 'notice_posted',
+                    title: `📢 ${notice.title || 'New Notice'}`,
+                    body: String(notice.body || '').slice(0, 240),
+                    audience: { role: 'employee' },
+                    data: { notice_id: notice.id, priority: notice.priority || 'normal', voice: `New notice. ${notice.title || ''}.` },
+                }).catch(() => {});
             });
         }
         if (table === 'attendance' && data.clock_in && !data.clock_out) {
@@ -5625,6 +5875,8 @@ async function startServer() {
         startDeviceReminderJob();
         startSlaJob();
         startFinanceSummaryJob();
+        startLeaderboardJob();
+        startEodReminderJob();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

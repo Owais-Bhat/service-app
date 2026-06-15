@@ -909,6 +909,16 @@ function isPastAutoClockOut(now = new Date()) {
   return now >= cutoff;
 }
 
+// The forced clock-in popup only appears from 8:30 AM onward (and until the
+// employee clocks out / the auto clock-out cutoff). Before 8:30 it stays hidden.
+const CLOCKIN_POPUP_START_HOUR = 8;
+const CLOCKIN_POPUP_START_MIN = 30;
+function isBeforeClockInWindow(now = new Date()) {
+  const start = new Date(now);
+  start.setHours(CLOCKIN_POPUP_START_HOUR, CLOCKIN_POPUP_START_MIN, 0, 0);
+  return now < start;
+}
+
 function isForgottenClockOut(row, today = new Date().toLocaleDateString('en-CA')) {
   if (!row?.clock_in || row?.clock_out) return false;
   return attendanceDateKey(row) !== today || isPastAutoClockOut();
@@ -1417,7 +1427,9 @@ export async function renderEmployeeDashboard(container) {
   // Shown right after login (dashboard is the landing page) until the
   // employee clocks in. No close button — clocking in is mandatory.
   document.querySelectorAll('.clockin-gate').forEach(el => el.remove());
-  if (!isClockedIn && !isClockedOut && !clockInClosed && !strictEodBlock) {
+  // Show only inside the 8:30 AM → clock-out window. Hidden before 8:30, after
+  // the employee clocks out, or once the auto clock-out cutoff passes.
+  if (!isClockedIn && !isClockedOut && !clockInClosed && !strictEodBlock && !isBeforeClockInWindow()) {
     const gate = document.createElement('div');
     gate.className = 'modal-overlay clockin-gate';
     gate.innerHTML = `

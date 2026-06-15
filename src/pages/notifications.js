@@ -1,6 +1,7 @@
 // Notifications page — full history with read/unread + filters.
 import { toast } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { openNotificationDetail } from '../notify-center.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api' : 'http://localhost:5000/api';
@@ -84,7 +85,9 @@ export async function renderNotificationsTab(container) {
     container.querySelectorAll('.sr-filter').forEach(b => b.onclick = () => { filter = b.dataset.f; draw(); });
     container.querySelectorAll('.ntf-row').forEach(row => row.onclick = async () => {
       const it = items.find(i => i.id === row.dataset.id);
-      if (it && !it.read_at) {
+      if (!it) return;
+      openNotificationDetail(it);               // full-screen detail with everything
+      if (!it.read_at) {
         try { await fetch(`${API}/notifications/${it.id}/read`, { method: 'POST', headers: authH() }); } catch {}
         it.read_at = new Date().toISOString();
         draw();

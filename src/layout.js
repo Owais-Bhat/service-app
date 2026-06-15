@@ -1,5 +1,6 @@
 import { signOut, onNotification } from './supabase.js';
 import { initials, toggleTheme } from './utils.js';
+import { openNotificationDetail } from './notify-center.js';
 import { ICONS } from './icons.js';
 import { mountAIAssistant } from './pages/ai-assistant.js';
 
@@ -215,6 +216,8 @@ function setupBell(onNav) {
     };
     dd.querySelector('#notif-viewall').onclick = (e) => { e.stopPropagation(); dd.style.display = 'none'; onNav('notifications'); };
     dd.querySelectorAll('.notif-item').forEach(el => el.onclick = async () => {
+      const it = items.find(i => String(i.id) === String(el.dataset.id));
+      if (it) { dd.style.display = 'none'; openNotificationDetail(it); }
       if (el.classList.contains('unread')) {
         try { await fetch(`${NOTIF_API}/notifications/${el.dataset.id}/read`, { method: 'POST', headers: authH() }); } catch {}
         el.classList.remove('unread'); loadCount();

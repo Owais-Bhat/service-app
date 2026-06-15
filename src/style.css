@@ -7447,3 +7447,22 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 }
 .qz-feedback svg { width: 15px; height: 15px; flex: none; }
 .qz-match-row .qz-feedback { display: inline-flex; margin-top: 0; margin-left: 8px; padding: 4px 10px; }
+
+/* ── Full-screen notification detail (notify-center.js) ────────────── */
+.ntf-fullscreen{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,12,20,.62);backdrop-filter:blur(6px);animation:ntfFade .18s ease;}
+@keyframes ntfFade{from{opacity:0}to{opacity:1}}
+.ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:ntfPop .22s cubic-bezier(.2,.9,.3,1.2);}
+@keyframes ntfPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+.ntf-fullscreen-close{position:absolute;top:12px;right:14px;border:none;background:transparent;font-size:1.7rem;line-height:1;color:var(--text-dim);cursor:pointer;}
+.ntf-fullscreen-icon{font-size:3rem;line-height:1;margin-bottom:8px;}
+.ntf-fullscreen-kicker{text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;color:var(--primary);margin-bottom:6px;}
+.ntf-fullscreen-title{margin:0 0 8px;font-size:1.35rem;font-family:var(--font-display,inherit);}
+.ntf-fullscreen-body{margin:0 0 16px;color:var(--text-soft);font-size:.96rem;line-height:1.5;}
+.ntf-detail-list{text-align:left;border:1px solid var(--border);border-radius:14px;overflow:hidden;margin:6px 0 16px;}
+.ntf-detail-row{display:flex;justify-content:space-between;gap:14px;padding:11px 14px;border-bottom:1px solid var(--border);font-size:.9rem;}
+.ntf-detail-row:last-child{border-bottom:none;}
+.ntf-detail-k{color:var(--text-dim);font-weight:600;}
+.ntf-detail-v{font-weight:700;text-align:right;}
+.ntf-fullscreen-time{font-size:.78rem;color:var(--text-dim);margin-bottom:18px;}
+.ntf-fullscreen-actions{display:flex;gap:10px;justify-content:center;}
+.ntf-fullscreen-actions .btn{min-width:120px;text-decoration:none;}

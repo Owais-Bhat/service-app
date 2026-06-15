@@ -2205,6 +2205,30 @@ export async function renderUsers(container) {
 
   function openUserModal(user, onDone) {
     const isEdit = !!user;
+    // Employee tab ids must match getNavItems('employee') in main.js. Always-on
+    // tabs (dashboard/notifications/profile) are intentionally excluded.
+    const EMP_TABS = [
+      { id: "all-tickets", label: "My Tasks" },
+      { id: "my-attendance", label: "Attendance Records" },
+      { id: "my-leaves", label: "Leave Requests" },
+      { id: "my-eod", label: "EOD Reports" },
+      { id: "my-cash", label: "My Cash" },
+      { id: "my-collections", label: "Collections" },
+      { id: "my-salary", label: "Salary" },
+      { id: "leaderboard", label: "Leaderboard" },
+      { id: "employee-training", label: "Tutorials" },
+      { id: "my-training-courses", label: "Training" },
+      { id: "device-followup", label: "Device Follow-up" },
+      { id: "estimator", label: "Estimator" },
+      { id: "service-pricing", label: "Service Pricing" },
+    ];
+    let allowedSet = null;
+    try {
+      if (user && user.allowed_tabs) {
+        const a = typeof user.allowed_tabs === "string" ? JSON.parse(user.allowed_tabs) : user.allowed_tabs;
+        if (Array.isArray(a)) allowedSet = new Set(a.map(String));
+      }
+    } catch { /* treat unparseable as full access */ }
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.innerHTML = `
@@ -2272,6 +2296,21 @@ export async function renderUsers(container) {
                 Always Auto-Assign Service (Staff only)
               </label>
             </div>
+
+            <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+              <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;">
+                <input type="checkbox" id="usr-limit-tabs" ${isEdit && allowedSet ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
+                Limit which tabs this staff can see
+              </label>
+              <p style="font-size:.78rem;color:var(--text-dim);margin:6px 0 0;">Leave unchecked for full access. Dashboard, Notifications and Profile are always visible.</p>
+              <div id="usr-tabs-list" style="display:${isEdit && allowedSet ? "grid" : "none"};grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+                ${EMP_TABS.map(t => `
+                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:.86rem;cursor:pointer;">
+                    <input type="checkbox" class="usr-tab-chk" value="${t.id}" ${(allowedSet ? allowedSet.has(t.id) : true) ? "checked" : ""} style="cursor:pointer;width:15px;height:15px;margin:0;"/>
+                    ${escapeHtml(t.label)}
+                  </label>`).join("")}
+              </div>
+            </div>
           </form>
         </div>
         <div class="modal-footer">
@@ -2289,6 +2328,13 @@ export async function renderUsers(container) {
     overlay.onclick = (e) => {
       if (e.target === overlay) close();
     };
+
+    // Show/hide the tab checklist with the "Limit tabs" switch.
+    const limitChk = overlay.querySelector("#usr-limit-tabs");
+    const tabsList = overlay.querySelector("#usr-tabs-list");
+    if (limitChk && tabsList) {
+      limitChk.onchange = () => { tabsList.style.display = limitChk.checked ? "grid" : "none"; };
+    }
 
     const phoneInput = overlay.querySelector("#usr-phone");
     phoneInput.oninput = () => {
@@ -2336,6 +2382,13 @@ export async function renderUsers(container) {
         can_update_profile: can_update_profile ? 1 : 0,
         alwaysAssign: alwaysAssign ? 1 : 0,
       };
+
+      // Tab access: unchecked "limit" = full access (null). Otherwise the
+      // explicit list of tab ids this staff member may see.
+      const limitTabs = overlay.querySelector("#usr-limit-tabs")?.checked;
+      payload.allowed_tabs = limitTabs
+        ? [...overlay.querySelectorAll(".usr-tab-chk:checked")].map((c) => c.value)
+        : null;
 
       if (password) payload.password = password;
 

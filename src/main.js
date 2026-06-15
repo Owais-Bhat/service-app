@@ -8,6 +8,7 @@ import { renderLayout } from './layout.js';
 import { renderLandingPage } from './pages/landing.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
 import { initPush } from './push.js';
+import { speak as speakNotification, openNotificationDetail, primeVoice } from './notify-center.js';
 import { ICONS } from './icons.js';
 import { registerSW } from 'virtual:pwa-register';
 
@@ -72,6 +73,20 @@ let canAddService = false;
 let activePage = 'dashboard';
 
 // ── NAV CONFIGS PER ROLE ──────────────────────────────
+// Keep only tabs the admin granted this employee. Always-on tabs can never be
+// hidden, and section headers with no visible items beneath them are dropped.
+const ALWAYS_ON_TABS = new Set(['dashboard', 'notifications', 'profile']);
+function filterTabs(items) {
+  if (!allowedTabs) return items;
+  const kept = items.filter(it => it.type === 'section' || ALWAYS_ON_TABS.has(it.id) || allowedTabs.has(String(it.id)));
+  // Remove section headers that ended up with no items after them.
+  return kept.filter((it, i) => {
+    if (it.type !== 'section') return true;
+    const next = kept[i + 1];
+    return next && next.type !== 'section';
+  });
+}
+
 function getNavItems(role) {
   const common = [
     { type: 'section', label: 'Main' },
@@ -102,7 +117,7 @@ function getNavItems(role) {
       { type: 'section', label: 'Account' },
       { id: 'profile', icon: ICONS.user, label: 'Profile' }
     );
-    return items;
+    return filterTabs(items);
   }
   return [...common,
     { id: 'all-tickets', icon: ICONS.ticket, label: 'All Tickets' },
@@ -227,17 +242,36 @@ function getPageRenderer(role, page) {
   };
 }
 
+// When a push notification is tapped (app in background or freshly opened),
+// the push service worker postMessages the payload here so we can show the
+// full-screen detail card.
+let _swMsgBound = false;
+function bindServiceWorkerMessages() {
+  if (_swMsgBound || !('serviceWorker' in navigator)) return;
+  _swMsgBound = true;
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.type === 'notification-click') openNotificationDetail(d);
+  });
+}
+
 let _notifyUnsub = null;
 function startGlobalNotifications() {
+  bindServiceWorkerMessages();
   if (_notifyUnsub) return;
   ensureNotifyPermission();
   initPush();
+  primeVoice();
   _notifyUnsub = onNotification(null, (msg) => {
+    // Human-voice announcement for every live notification.
+    speakNotification(msg);
     // Don't double-toast if the active page already handles its own UI feedback.
     showNotification({
       title: msg.title || 'Update',
       body: msg.body || '',
       tag: msg.subject || 'app-notify',
+      // Tapping the OS/in-app notification opens the full-screen detail card.
+      onclick: () => openNotificationDetail(msg),
       type: msg.subject === 'payment_received' ? 'payment'
           : msg.subject === 'new_assignment' ? 'alert'
           : msg.subject === 'new_service_request' ? 'alert'
@@ -312,6 +346,17 @@ function isFeedbackRoute() {
 // needed on the login / boot critical path.
 const readCanAddService = (u) => (u?.can_add_service === 1 || u?.can_add_service === true);
 
+// Per-user tab access. null = all tabs allowed; otherwise a Set of permitted
+// tab ids (admin-controlled in the Users screen). Tabs that must never be
+// locked out (dashboard/notifications/profile) are always kept in getNavItems.
+let allowedTabs = null;
+const readAllowedTabs = (u) => {
+  let v = u?.allowed_tabs;
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return null; } }
+  return (Array.isArray(v) && v.length) ? new Set(v.map(String)) : null;
+};
+
 function showAuth() {
   renderAuth(
     async (user, role) => {
@@ -325,7 +370,7 @@ function showAuth() {
       currentUser = user;
       currentRole = role;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
-      if (role === 'employee') canAddService = readCanAddService(user);
+      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); }
       navigate('dashboard');
     },
     () => goToLanding()
@@ -401,7 +446,7 @@ async function boot() {
       }
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
-      if (currentRole === 'employee') canAddService = readCanAddService(currentUser);
+      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); }
       navigate('dashboard');
     } catch (err) {
       console.warn('[boot] dashboard load failed', err);
