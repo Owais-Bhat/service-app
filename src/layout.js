@@ -1,4 +1,4 @@
-import { signOut, onNotification } from './supabase.js';
+import { signOut, onNotification, supabase } from './supabase.js';
 import { initials, toggleTheme } from './utils.js';
 import { openNotificationDetail } from './notify-center.js';
 import { ICONS } from './icons.js';
@@ -74,10 +74,14 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
           <button class="menu-toggle icon-btn" id="menu-toggle" aria-label="Toggle navigation">${ICONS.menu}</button>
           <div class="topbar-title" id="topbar-title"></div>
           <div id="topbar-actions" class="topbar-actions">
-            <label class="topbar-search" for="portal-nav-search">
-              ${ICONS.search}
-              <input id="portal-nav-search" type="search" placeholder="Search menu..." autocomplete="off" />
-            </label>
+            <div class="global-search-wrap">
+              <label class="topbar-search" for="portal-nav-search">
+                ${ICONS.search}
+                <input id="portal-nav-search" type="search" placeholder="Search tickets, customers, pages…" autocomplete="off" />
+                <kbd class="search-kbd">/</kbd>
+              </label>
+              <div class="global-search-results" id="global-search-results" style="display:none;"></div>
+            </div>
             <div class="notif-bell-wrap">
               <button class="icon-btn" id="notif-bell" title="Notifications">
                 ${ICONS.bell}
@@ -93,7 +97,7 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
     </div>`;
 
   buildNav(navItems, activePage, onNav);
-  setupNavSearch();
+  setupGlobalSearch(onNav, role);
   setupBell(onNav);
   mountAIAssistant(); // floating AI assistant — appears once across all portal pages
 
@@ -152,24 +156,103 @@ function renderPage(pageContent, navItems, activePage) {
   else container.innerHTML = pageContent || '';
 }
 
-function setupNavSearch() {
+// Global search: searches portal pages (sidebar items) + live service requests
+// (by ticket no, customer name or phone) and shows a premium results dropdown.
+function setupGlobalSearch(onNav, role) {
   const input = document.getElementById('portal-nav-search');
-  const nav = document.getElementById('sidebar-nav');
-  if (!input || !nav) return;
-  input.addEventListener('input', () => {
-    const query = input.value.trim().toLowerCase();
-    nav.querySelectorAll('.nav-item').forEach(item => {
-      item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
-    });
-    nav.querySelectorAll('.nav-section').forEach(section => {
-      let next = section.nextElementSibling;
-      let hasVisibleItem = false;
-      while (next && !next.classList.contains('nav-section')) {
-        if (next.classList.contains('nav-item') && !next.hidden) hasVisibleItem = true;
-        next = next.nextElementSibling;
+  const results = document.getElementById('global-search-results');
+  if (!input || !results) return;
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const ticketsPage = 'all-tickets';
+
+  // Pages come straight from the rendered sidebar (respects per-user tab access).
+  const pageItems = () => [...document.querySelectorAll('#sidebar-nav .nav-item[data-nav]')].map(el => ({
+    id: el.dataset.nav,
+    label: (el.querySelector('span:nth-child(2)')?.textContent || el.textContent || '').trim(),
+    icon: el.querySelector('.nav-icon')?.innerHTML || '',
+  }));
+
+  // Service requests are loaded once, then filtered client-side as you type.
+  let inquiriesCache = null;
+  let loadingInquiries = false;
+  const loadInquiries = async () => {
+    if (inquiriesCache || loadingInquiries) return;
+    loadingInquiries = true;
+    try {
+      const { data } = await supabase.from('inquiries')
+        .select('id,ticket_no,full_name,phone,service_item,status')
+        .order('created_at', { ascending: false });
+      inquiriesCache = Array.isArray(data) ? data : [];
+    } catch { inquiriesCache = []; }
+    loadingInquiries = false;
+  };
+
+  const open = () => { results.style.display = 'block'; };
+  const close = () => { results.style.display = 'none'; };
+
+  const draw = (q) => {
+    const query = q.toLowerCase();
+    const pages = pageItems().filter(p => p.label.toLowerCase().includes(query)).slice(0, 6);
+    const reqs = (inquiriesCache || []).filter(r =>
+      (r.ticket_no || '').toLowerCase().includes(query) ||
+      (r.full_name || '').toLowerCase().includes(query) ||
+      (r.phone || '').toLowerCase().includes(query) ||
+      (r.service_item || '').toLowerCase().includes(query)
+    ).slice(0, 6);
+
+    if (!query) { close(); return; }
+    if (!pages.length && !reqs.length) {
+      results.innerHTML = `<div class="gs-empty">No results for "${esc(q)}"${inquiriesCache ? '' : ' — still loading…'}</div>`;
+      open();
+      return;
+    }
+
+    results.innerHTML = `
+      ${pages.length ? `<div class="gs-group"><div class="gs-group-label">Pages</div>${pages.map(p => `
+        <button class="gs-item" data-type="page" data-id="${esc(p.id)}">
+          <span class="gs-ico">${p.icon}</span><span class="gs-text">${esc(p.label)}</span>
+        </button>`).join('')}</div>` : ''}
+      ${reqs.length ? `<div class="gs-group"><div class="gs-group-label">Service Requests</div>${reqs.map(r => `
+        <button class="gs-item" data-type="req" data-id="${esc(r.id)}">
+          <span class="gs-ico">${ICONS.ticket}</span>
+          <span class="gs-text"><b>${esc(r.full_name || 'Client')}</b><small>${esc(r.ticket_no || '')}${r.service_item ? ' · ' + esc(r.service_item) : ''}</small></span>
+          <span class="gs-badge">${esc(r.status || '')}</span>
+        </button>`).join('')}</div>` : ''}
+    `;
+    open();
+
+    results.querySelectorAll('.gs-item').forEach(btn => btn.onclick = () => {
+      const type = btn.dataset.type;
+      input.value = '';
+      close();
+      if (type === 'page') onNav(btn.dataset.id);
+      else {
+        // Hand the chosen ticket to the tickets page so it can focus it.
+        try { localStorage.setItem('search_focus_ticket', btn.dataset.id); } catch {}
+        onNav(ticketsPage);
       }
-      section.hidden = Boolean(query) && !hasVisibleItem;
     });
+  };
+
+  let t = null;
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    loadInquiries().then(() => { if (input.value.trim() === q) draw(q); });
+    clearTimeout(t);
+    t = setTimeout(() => draw(q), 120);
+  });
+  input.addEventListener('focus', () => { loadInquiries(); if (input.value.trim()) draw(input.value.trim()); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.value = ''; close(); input.blur(); } });
+
+  // Close when clicking outside; "/" anywhere focuses the search.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.global-search-wrap')) close();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement !== input && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) {
+      e.preventDefault(); input.focus();
+    }
   });
 }
 
