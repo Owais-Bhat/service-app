@@ -44,19 +44,30 @@ function filterRows(rows, filters) {
   });
 }
 
-// Money model per ticket.
-//  net      = bill_total            → the amount actually collected from the client
-//  discount = discount_amount       → the discount the employee gave (company's profit cut, "mine")
-//  gross    = net + discount        → service price BEFORE any discount
-//  travel   = transport_fee
-//  service  = gross − travel        → service + any additions (the part the employee sees)
+// Money model per ticket. Bill total already includes platform fee + GST, so we
+// back each component out of the stored figures (always reconciles to net):
+//   net             = bill_total          → total collected from the client (incl. GST + platform)
+//   gst             = gst_amount          → tax portion
+//   platform        = platform_fee        → platform/convenience fee
+//   travel          = transport_fee
+//   discount        = discount_amount     → discount the employee gave (company's profit cut)
+//   extra           = extra_cost          → additional charges
+//   taxable         = net − gst           → pre-tax amount
+//   servicesSubtotal= taxable − extra − platform − travel + discount
+//   service         = servicesSubtotal + extra   → service + additions (the part the employee sees)
 function amounts(row) {
   const net = num(row.bill_total);
-  const discount = num(row.discount_amount);
+  const gst = num(row.gst_amount);
+  const platform = num(row.platform_fee);
   const travel = num(row.transport_fee);
-  const gross = net + discount;
-  const service = Math.max(0, gross - travel);
-  return { net, discount, travel, gross, service };
+  const discount = num(row.discount_amount);
+  const extra = num(row.extra_cost);
+  const taxable = Math.max(0, net - gst);
+  const servicesSubtotal = Math.max(0, taxable - extra - platform - travel + discount);
+  const service = servicesSubtotal + extra;
+  const gross = service + travel;
+  const gstRate = taxable > 0 ? Math.round((gst / taxable) * 100) : 0;
+  return { net, gst, gstRate, platform, travel, discount, extra, taxable, servicesSubtotal, service, gross };
 }
 
 // ── BILL DETAIL (per-ticket breakdown) ───────────────────────────
@@ -112,9 +123,12 @@ async function openBillDetail(row, { admin }) {
     <div style="text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;font-weight:700;color:var(--text-dim);margin-bottom:4px;">Services</div>
     ${lineRows}
     ${extra > 0 ? bdRow(`Additional charges${row.extra_cost_reason ? ` (${escapeHtml(row.extra_cost_reason)})` : ''}`, inr(extra)) : ''}
+    ${admin && m.platform > 0 ? bdRow('Platform fee', inr(m.platform)) : ''}
     ${bdRow('Travel', inr(m.travel))}
     ${admin
-      ? bdRow('Discount given (your profit cut)', `-${inr(m.discount)}`, { color: 'var(--danger)' })
+      ? (m.discount > 0 ? bdRow('Discount given (your profit cut)', `-${inr(m.discount)}`, { color: 'var(--danger)' }) : '')
+        + bdRow('Taxable', inr(m.taxable))
+        + (m.gst > 0 ? bdRow(`GST${m.gstRate ? ` (${m.gstRate}%)` : ''}`, inr(m.gst)) : '')
         + bdRow('Net collected', inr(m.net), { total: true })
         + bdRow('<span style="color:var(--text-dim)">Payment mode</span>', row.payment_method === 'cash' ? 'Cash' : 'Online')
       : bdRow('Total', inr(m.service + m.travel), { total: true })}
@@ -130,14 +144,14 @@ function summarizeEmployee(rows) {
   }, { service: 0, travel: 0, total: 0, count: 0 });
 }
 
-// What the ADMIN sees: gross, discount given (profit cut) and net collected.
+// What the ADMIN sees: service, travel, platform fee, GST, discount and net.
 function summarizeAdmin(rows) {
   return rows.reduce((a, r) => {
     const m = amounts(r);
-    a.service += m.service; a.travel += m.travel; a.gross += m.gross;
-    a.discount += m.discount; a.net += m.net; a.count += 1;
+    a.service += m.service; a.travel += m.travel; a.platform += m.platform;
+    a.gst += m.gst; a.discount += m.discount; a.net += m.net; a.count += 1;
     return a;
-  }, { service: 0, travel: 0, gross: 0, discount: 0, net: 0, count: 0 });
+  }, { service: 0, travel: 0, platform: 0, gst: 0, discount: 0, net: 0, count: 0 });
 }
 
 // ── EMPLOYEE COLLECTIONS ─────────────────────────────────────────
@@ -231,9 +245,9 @@ function adminTable(rows, profileById) {
   return `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Date</th><th>Ticket</th><th>Customer</th><th>Employee</th><th>Service</th><th>Travel</th><th>Discount</th><th>Net</th></tr></thead>
+        <thead><tr><th>Date</th><th>Ticket</th><th>Customer</th><th>Employee</th><th>Service</th><th>Travel</th><th>Platform</th><th>GST</th><th>Discount</th><th>Net</th></tr></thead>
         <tbody>
-          ${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No collections found</td></tr>' : rows.map(r => {
+          ${rows.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No collections found</td></tr>' : rows.map(r => {
             const m = amounts(r);
             return `
             <tr class="coll-row" data-id="${escapeHtml(r.id)}" style="cursor:pointer;">
@@ -243,6 +257,8 @@ function adminTable(rows, profileById) {
               <td>${escapeHtml(profileById.get(r.assigned_employee_id)?.full_name || 'Employee')}</td>
               <td>${inr(m.service)}</td>
               <td>${inr(m.travel)}</td>
+              <td>${m.platform > 0 ? inr(m.platform) : '<small style="color:var(--text-dim)">—</small>'}</td>
+              <td>${m.gst > 0 ? `${inr(m.gst)}${m.gstRate ? `<br/><small style="color:var(--text-dim)">${m.gstRate}%</small>` : ''}` : '<small style="color:var(--text-dim)">—</small>'}</td>
               <td>${m.discount > 0 ? `<span style="color:var(--danger)">-${inr(m.discount)}</span>` : '<small style="color:var(--text-dim)">—</small>'}</td>
               <td><b>${inr(m.net)}</b><br/><small style="color:var(--text-dim)">${r.payment_method === 'cash' ? 'Cash' : 'Online'}</small></td>
             </tr>`;
@@ -303,6 +319,8 @@ export async function renderAdminCollections(container) {
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${inr(totals.service)}</div><div class="stat-label">Service (${totals.count})</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${inr(totals.travel)}</div><div class="stat-label">Travel</div></div>
+      <div class="stat-card"><div class="stat-value">${inr(totals.platform)}</div><div class="stat-label">Platform Fee</div></div>
+      <div class="stat-card"><div class="stat-value">${inr(totals.gst)}</div><div class="stat-label">GST (18%)</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${inr(totals.discount)}</div><div class="stat-label">Discount Given (profit cut)</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--success)">${inr(totals.net)}</div><div class="stat-label">Net Collected</div></div>
     </div>
@@ -310,9 +328,9 @@ export async function renderAdminCollections(container) {
       <div class="card-header"><span class="card-title">By Employee</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Employee</th><th>Service</th><th>Travel</th><th>Discount</th><th>Net</th></tr></thead>
-          <tbody>${empRows.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">No collections found</td></tr>' : empRows.map(e => `
-            <tr><td><b>${escapeHtml(e.name)}</b></td><td>${inr(e.service)}</td><td>${inr(e.travel)}</td><td style="color:var(--danger)">${e.discount > 0 ? '-' + inr(e.discount) : '—'}</td><td><b>${inr(e.net)}</b></td></tr>
+          <thead><tr><th>Employee</th><th>Service</th><th>Travel</th><th>Platform</th><th>GST</th><th>Discount</th><th>Net</th></tr></thead>
+          <tbody>${empRows.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-dim)">No collections found</td></tr>' : empRows.map(e => `
+            <tr><td><b>${escapeHtml(e.name)}</b></td><td>${inr(e.service)}</td><td>${inr(e.travel)}</td><td>${inr(e.platform)}</td><td>${inr(e.gst)}</td><td style="color:var(--danger)">${e.discount > 0 ? '-' + inr(e.discount) : '—'}</td><td><b>${inr(e.net)}</b></td></tr>
           `).join('')}</tbody>
         </table>
       </div>
@@ -348,6 +366,8 @@ export async function renderAdminCollections(container) {
       employee: profileById.get(r.assigned_employee_id)?.full_name || '',
       service: m.service,
       travel: m.travel,
+      platform_fee: m.platform,
+      gst: m.gst,
       discount: m.discount,
       net: m.net,
       payment_method: r.payment_method === 'cash' ? 'cash' : 'online',

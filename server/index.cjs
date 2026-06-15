@@ -749,7 +749,7 @@ async function runSlaChecks() {
             `SELECT id, ticket_no, full_name, service_item, created_at, assigned_employee_id
                FROM inquiries
               WHERE COALESCE(sla_breach_notified,0) = 0
-                AND status NOT IN ('resolved','closed','case_closed','issue_not_resolved')
+                AND status NOT IN ('resolved','closed','case_closed','issue_not_resolved','foc')
                 AND created_at IS NOT NULL`
         );
         const now = Date.now();
@@ -1014,6 +1014,7 @@ const requiredColumns = {
         { name: 'employee_update_at', definition: 'TIMESTAMP NULL' },
         { name: 'device_status', definition: "VARCHAR(50) DEFAULT 'pending'" },
         { name: 'follow_up_status', definition: "VARCHAR(50) DEFAULT 'none'" },
+        { name: 'reopened', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Set to 1 when a paid ticket is reopened via complaint (free rework)'" },
         { name: 'device_service_enabled', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'sla_breach_notified', definition: 'TINYINT(1) DEFAULT 0' },
     ],
@@ -1999,7 +2000,7 @@ const EMPLOYEE_WRITE_FIELDS = {
         'cash_collected_at', 'bill_amount', 'extra_cost', 'extra_cost_reason', 'transport_km',
         'transport_fee', 'platform_fee', 'discount_amount', 'gst_amount', 'bill_total',
         'discount_reason', 'discount_label', 'discount_preset_id',
-        'bill_generated_at', 'bill_pdf_url',
+        'bill_generated_at', 'bill_pdf_url', 'bill_no',
         'employee_bill_lat', 'employee_bill_lng',
         'employee_update_detail', 'employee_update_status', 'employee_update_at',
     ]),
@@ -4178,6 +4179,12 @@ app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (r
                 i.full_name,
                 i.phone,
                 i.service_item,
+                i.address,
+                i.company_name,
+                i.device_type,
+                i.device_serial_no,
+                i.preferred_time,
+                i.bill_no,
                 i.device_status,
                 i.follow_up_status,
                 i.device_service_enabled,
@@ -4846,7 +4853,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             }
 
             // Job completed → notify admin + the assigned employee once.
-            const DONE = ['resolved', 'closed', 'case_closed'];
+            const DONE = ['resolved', 'closed', 'case_closed', 'foc'];
             const becameDone = data.status && DONE.includes(String(data.status)) && !DONE.includes(String(previousRow?.status || ''));
             if (becameDone) {
                 recordNotification({
@@ -5231,6 +5238,49 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 audience: { role: 'admin' },
                 data: { complaint_id: data.id, ticket_no: data.ticket_no, inquiry_id: data.inquiry_id || null },
             });
+            // "Issue not resolved" on a paid/completed ticket → reopen it, unassign
+            // the original employee, and route it to admin so they can reassign it
+            // to a DIFFERENT employee. The rework is free (employee marks it FOC).
+            if (data.inquiry_id) {
+                (async () => {
+                    let c;
+                    try {
+                        c = await getConn();
+                        const [rows] = await c.query(
+                            'SELECT status, payment_status, ticket_no, full_name FROM inquiries WHERE id = ? LIMIT 1',
+                            [data.inquiry_id]
+                        );
+                        const inq = rows && rows[0];
+                        if (!inq) return;
+                        const paidOrDone = String(inq.payment_status || '').toLowerCase() === 'paid'
+                            || ['resolved', 'closed', 'case_closed', 'foc'].includes(String(inq.status || ''));
+                        if (!paidOrDone) return;
+                        await c.query(
+                            `UPDATE inquiries
+                                SET status = 'in_progress',
+                                    assignment_status = 'none',
+                                    assigned_employee_id = NULL,
+                                    reopened = 1,
+                                    sla_breach_notified = 0
+                              WHERE id = ?`,
+                            [data.inquiry_id]
+                        );
+                        const [fresh] = await c.query('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [data.inquiry_id]);
+                        if (fresh && fresh[0]) broadcastChange('UPDATE', 'inquiries', fresh[0]);
+                        recordNotification({
+                            subject: 'new_service_request',
+                            title: '🔁 Ticket Reopened — Issue Not Resolved',
+                            body: `${inq.full_name || 'Client'} says ${inq.ticket_no || 'the ticket'} isn't resolved. Reassign to an employee — free rework (FOC).`,
+                            audience: { role: 'admin' },
+                            data: { inquiry_id: data.inquiry_id, ticket_no: inq.ticket_no, reopened: true, voice: 'A paid ticket has been reopened. Please reassign it.' },
+                        }).catch(() => {});
+                    } catch (e) {
+                        console.error('[reopen] failed:', e.message);
+                    } finally {
+                        if (c) c.release();
+                    }
+                })();
+            }
         }
         // A new published notice → push it to every employee (bell + push + voice).
         if (table === 'notices') {

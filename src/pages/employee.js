@@ -20,7 +20,7 @@ async function loadDeviceTrackingEnabled() {
 // A ticket is locked (read-only) once it reaches a terminal state.
 // 'resolved' and 'case_closed' lock the modal; 'issue_not_resolved' stays editable.
 function isLocked(status) {
-  return ['resolved', 'case_closed'].includes(displayStatus(status));
+  return ['resolved', 'case_closed', 'foc'].includes(displayStatus(status));
 }
 
 async function setTicketDeviceFlag(inquiryId, enabled) {
@@ -226,6 +226,20 @@ export async function renderEmployeeFollowUp(container) {
         <div class="card-header"><span class="card-title">${escapeHtml(d.ticket_no || '—')} · ${escapeHtml(d.full_name || 'Client')}</span></div>
         <div class="card-body">
           <div style="font-size:0.85rem;color:var(--text-soft);margin-bottom:12px;">${escapeHtml(d.service_item || 'Service')}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px 18px;background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.84rem;">
+            ${[
+              ['Customer', d.full_name],
+              ['Phone', d.phone],
+              ['Company', d.company_name],
+              ['Address', d.address],
+              ['Device', d.device_type],
+              ['Serial No', d.device_serial_no],
+              ['Preferred Time', d.preferred_time],
+              ['Bill No', d.bill_no],
+            ].filter(([, v]) => v).map(([k, v]) => `
+              <div><div style="color:var(--text-dim);font-weight:600;font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">${k}</div><div>${escapeHtml(v)}</div></div>
+            `).join('')}
+          </div>
           <div class="form-group">
             <label>Update follow-up status</label>
             <select class="fu-status">
@@ -239,7 +253,10 @@ export async function renderEmployeeFollowUp(container) {
             <label>Notes</label>
             <textarea class="fu-notes" rows="2" placeholder="Latest update on this device..."></textarea>
           </div>
-          <button class="btn btn-primary btn-sm fu-save" data-inq="${escapeAttr(d.id)}">Add update</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm fu-save" data-inq="${escapeAttr(d.id)}">Add update</button>
+            <button class="btn btn-secondary btn-sm fu-open" data-inq="${escapeAttr(d.id)}" data-status="${escapeAttr(d.status || 'in_progress')}">Open ticket to complete service</button>
+          </div>
           <div class="fu-history" style="margin-top:14px;">${renderFollowUpTab(followups)}</div>
         </div>
       </div>`;
@@ -261,6 +278,11 @@ export async function renderEmployeeFollowUp(container) {
       if (hist) hist.innerHTML = renderFollowUpTab(st?.device_follow_up_logs || []);
       const notesEl = card.querySelector('.fu-notes'); if (notesEl) notesEl.value = '';
     };
+  });
+
+  // Open the full Manage Service ticket so the employee can finish/resolve it.
+  listEl.querySelectorAll('.fu-open').forEach(btn => {
+    btn.onclick = () => openTaskModalWithLoader(btn, null, btn.dataset.inq, btn.dataset.status, () => renderEmployeeFollowUp(container));
   });
 }
 
@@ -288,6 +310,7 @@ function statusText(status) {
     resolved: 'resolved',
     issue_not_resolved: 'issue not resolved',
     case_closed: 'case closed',
+    foc: 'FOC (free)',
   };
   return labels[shown] || shown.replace('_', ' ');
 }
@@ -2328,7 +2351,7 @@ export async function renderEmployeeTasks(container) {
 
   const activeTasks = tasks.filter(x => {
     const status = displayStatus(x.status);
-    if (status === 'resolved' || status === 'issue_not_resolved') return false;
+    if (status === 'resolved' || status === 'issue_not_resolved' || status === 'foc') return false;
     const inq = x.inquiries?.[0];
     if (!inq) return status === 'assigned' || status === 'in_progress' || status === 'open';
     return inq.assignment_status === 'accepted' && !['resolved', 'issue_not_resolved'].includes(displayStatus(inq.status));
@@ -2343,7 +2366,7 @@ export async function renderEmployeeTasks(container) {
   // output, so 'closed' already maps to 'resolved'.
   const groupOf = (s) => {
     if (s === 'in_progress') return 'in_progress';
-    if (s === 'resolved') return 'resolved';
+    if (s === 'resolved' || s === 'foc') return 'resolved'; // FOC counts as a completed service
     if (s === 'issue_not_resolved') return 'issue_not_resolved';
     if (s === 'case_closed') return 'case_closed';
     return 'active'; // open / assigned / pending
@@ -2355,7 +2378,7 @@ export async function renderEmployeeTasks(container) {
   const jobCard = (inq) => {
     const shownStatus = displayStatus(inq.status);
     const serviceDeadline = inq.created_at ? calculateSLA(inq.created_at) : null;
-    const terminalStatus = ['resolved', 'closed', 'issue_not_resolved'].includes(shownStatus);
+    const terminalStatus = ['resolved', 'closed', 'issue_not_resolved', 'foc'].includes(shownStatus);
     const slaTimerText = terminalStatus ? 'Service Completed' : (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-');
     return `
     <div class="emp-job-card" data-status="${shownStatus}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
@@ -2875,6 +2898,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     await loadDeviceTrackingEnabled();
     const deviceFeatureOn = deviceTrackingEnabled;
     let deviceTicketOn = Number(inquiryRow?.device_service_enabled) === 1;
+    // Whether the device taken for service has been returned to the client. Used
+    // to block completing the service while a device is still at the service center.
+    let deviceReturned = !(Number(inquiryRow?.device_service_enabled) === 1)
+      || inquiryRow?.follow_up_status === 'returned'
+      || inquiryRow?.device_status === 'returned';
     const serviceDeadline = inquiryRow?.created_at ? calculateSLA(inquiryRow.created_at) : null;
     const serviceElapsed = elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || new Date());
     const serviceResolvedTime = ['resolved', 'closed', 'issue_not_resolved'].includes(displayStatus(inquiryRow?.status))
@@ -3030,16 +3058,27 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           <!-- TAB 1: STATUS -->
           <div class="mst-pane active" data-pane="status">
+            ${Number(inquiryRow?.reopened) === 1 ? `
+              <div style="padding:12px 14px;border-radius:12px;background:rgba(245,158,11,0.12);border:1px solid var(--warning);margin-bottom:14px;font-size:0.85rem;line-height:1.5;">
+                🔁 <b>Reopened ticket — issue not resolved.</b> The customer already paid for this service, so complete the rework as <b>FOC (Free of Cost)</b> — no new bill will be generated.
+              </div>` : ''}
             <div class="form-group">
               <label>New Status</label>
               <select id="new-status" ${isResolvedReadOnly ? 'disabled' : ''}>
                 <option value="open" ${normalizedCurrentStatus==='open'?'selected':''}>Received</option>
                 <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                 <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                <option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>
                 <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
                 <option value="case_closed" ${normalizedCurrentStatus==='case_closed'?'selected':''}>Case Closed — customer didn't cooperate / no fee</option>
               </select>
               <small id="case-closed-hint" style="display:${normalizedCurrentStatus==='case_closed'?'block':'none'}; margin-top:6px; color:var(--danger); font-size:0.75rem;">⚠️ Case Closed is final — the ticket will be locked and cannot be reopened.</small>
+            </div>
+
+            <div class="form-group" id="foc-billno-group" style="display:${normalizedCurrentStatus==='foc'?'block':'none'};">
+              <label>Client Bill Number <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="foc-bill-no" value="${escapeHtml(inquiryRow?.bill_no || '')}" placeholder="Enter the customer's existing bill number" />
+              <small style="color:var(--text-dim);font-size:0.75rem;">FOC service: no new bill is generated, but the client's bill number is required for the record.</small>
             </div>
 
             <div class="form-group">
@@ -3135,6 +3174,29 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 </div>
               </div>
               <button type="button" class="btn btn-primary btn-sm" id="save-device-return">Mark returned / sent back to client</button>
+
+              <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+
+              <!-- Follow-up status updates (awaiting parts / in repair / ready to return) -->
+              <div id="followup-body">
+                <div style="font-weight:700;font-size:0.88rem;margin-bottom:8px;">Repair / follow-up progress</div>
+                <div class="form-group">
+                  <label>Update status</label>
+                  <select id="device-followup-status">
+                    <option value="awaiting_parts">⏳ Awaiting Parts</option>
+                    <option value="repair_progress">🔧 Repair in Progress</option>
+                    <option value="ready_return">📦 Ready to Return</option>
+                    <option value="returned">✅ Returned to Client</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Progress note</label>
+                  <textarea id="device-followup-notes" rows="2" placeholder="Latest update on this device..."></textarea>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="save-device-followup">Add follow-up update</button>
+                <div id="followup-history" style="margin-top:14px;"></div>
+              </div>
+              <small id="followup-disabled-hint" style="display:none;color:var(--text-dim);">Turn on device service above to log follow-up updates.</small>
 
               <div id="device-history" style="margin-top:18px;"><div style="text-align:center;color:var(--text-dim);font-size:0.82rem;padding:10px;">Loading device history…</div></div>
             </div>
@@ -3754,6 +3816,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         saveBtn.style.cursor = 'not-allowed';
         saveBtn.title = 'Resolved tasks are read-only.';
       } else if (!resolving) {
+        const foc = statusSel.value === 'foc';
+        const focBillNo = overlay.querySelector('#foc-bill-no')?.value.trim() || '';
         // If the task is not resolved, the employee can save immediately on the first tab
         if (!isStatusTabValid) {
           saveBtn.disabled = true;
@@ -3761,9 +3825,21 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           saveBtn.style.opacity = '0.6';
           saveBtn.style.cursor = 'not-allowed';
           saveBtn.title = 'Please fill out the Work Details / Progress Update first.';
+        } else if (foc && !focBillNo) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Enter client bill number';
+          saveBtn.style.opacity = '0.6';
+          saveBtn.style.cursor = 'not-allowed';
+          saveBtn.title = 'FOC requires the client\'s bill number before you can complete the service.';
+        } else if (foc && deviceTicketOn && !deviceReturned) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Return device first';
+          saveBtn.style.opacity = '0.6';
+          saveBtn.style.cursor = 'not-allowed';
+          saveBtn.title = 'This ticket has a device in service. Mark the device as returned before closing the service.';
         } else {
           saveBtn.disabled = false;
-          saveBtn.textContent = 'Save Changes';
+          saveBtn.textContent = foc ? 'Complete (FOC)' : 'Save Changes';
           saveBtn.style.opacity = '1';
           saveBtn.style.cursor = 'pointer';
           saveBtn.title = '';
@@ -3799,6 +3875,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
         saveBtn.title = 'Please fill out all mandatory fields in previous tabs (Status and Device Info).';
+      } else if (deviceTicketOn && !deviceReturned) {
+        // Can't complete the service while the customer's device is still at the
+        // service center. The employee must mark it returned first.
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Return device first';
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.title = 'This ticket has a device in service. Mark the device as returned (Device Service tab) before completing the service.';
       } else if (requiresPayment && !paid) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Awaiting Payment...';
@@ -3819,6 +3903,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       pricingSec.style.display = resolving ? 'block' : 'none';
       const lockHint = overlay.querySelector('#bill-locked-hint');
       if (lockHint) lockHint.style.display = resolving ? 'none' : 'block';
+      // FOC: no bill generated, but the client's bill number is mandatory.
+      const focGroup = overlay.querySelector('#foc-billno-group');
+      if (focGroup) focGroup.style.display = statusSel.value === 'foc' ? 'block' : 'none';
       // Case Closed UX: warn it's final and relabel the mandatory note as a reason.
       const closing = statusSel.value === 'case_closed';
       const ccHint = overlay.querySelector('#case-closed-hint');
@@ -3829,6 +3916,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         : 'Work Details / Progress Update <span style="color:var(--danger)">*</span>';
       renderPayStatus();
     };
+    // Re-evaluate the save gate as the FOC bill number is typed.
+    overlay.querySelector('#foc-bill-no')?.addEventListener('input', () => renderPayStatus());
 
     // ---- Device Service tab wiring ----
     if (deviceFeatureOn && inqId) {
@@ -3847,6 +3936,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         const followups = data?.device_follow_up_logs || [];
         if (dHistory) dHistory.innerHTML = renderDeviceTrackingTab(inqId, taken, returned, followups);
         if (fHistory) fHistory.innerHTML = renderFollowUpTab(followups);
+        // A device counts as returned once a return log exists or the latest
+        // follow-up / device status is "returned". Re-evaluate the save gate.
+        deviceReturned = !deviceTicketOn || !!returned
+          || data?.inquiry?.follow_up_status === 'returned'
+          || data?.inquiry?.device_status === 'returned'
+          || (followups[0]?.status === 'returned');
+        renderPayStatus();
       };
 
       if (dToggle) {
@@ -3859,7 +3955,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             if (fBody) fBody.style.display = on ? 'block' : 'none';
             if (fHint) fHint.style.display = on ? 'none' : 'block';
             toast(on ? 'Device marked for service center' : 'Device service turned off', 'success');
-            if (on) refreshDeviceHistory();
+            if (on) { refreshDeviceHistory(); }
+            else { deviceReturned = true; renderPayStatus(); }
           } catch (e) {
             dToggle.checked = !on;
             toast(e.message || 'Could not update', 'error');
@@ -4280,8 +4377,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
       const detail = overlay.querySelector('#progress-detail').value.trim();
       const companyName = getSelectedCompany();
-      
+      const foc = newStatus === 'foc';
+      const focBillNo = overlay.querySelector('#foc-bill-no')?.value.trim() || '';
+
       if (!detail) { toast('Please provide details of your work', 'warning'); return; }
+      if (foc) {
+        if (!focBillNo) { toast('Enter the client\'s bill number for this FOC service', 'warning'); return; }
+        if (deviceTicketOn && !deviceReturned) { toast('Mark the device as returned before closing this service', 'warning'); return; }
+      }
       if (resolving) {
         if (!companyName) { toast('Please provide the company name', 'warning'); return; }
         if (!validateDiscount()) return;
@@ -4318,6 +4421,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (companyName) inqUpdates.company_name = companyName;
       if (deviceType) inqUpdates.device_type = deviceType;
       if (deviceSerial) inqUpdates.device_serial_no = deviceSerial;
+      // FOC: free service — no bill is generated, but record the client's bill number.
+      if (foc) {
+        inqUpdates.bill_no = focBillNo;
+        inqUpdates.bill_total = 0;
+        inqUpdates.bill_amount = 0;
+        inqUpdates.payment_status = 'foc';
+      }
       if (resolving && bill.total > 0) {
         inqUpdates.bill_amount = bill.servicesSubtotal + bill.extra;
         inqUpdates.extra_cost = bill.extra;
