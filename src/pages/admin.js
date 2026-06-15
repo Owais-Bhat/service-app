@@ -2053,6 +2053,33 @@ export async function renderUsers(container) {
   `
       : '<span style="color:var(--text-dim)">-</span>';
 
+  // Per-employee tab ids (must match getNavItems('employee') in main.js).
+  const EMPLOYEE_TAB_IDS = ["all-tickets","my-attendance","my-leaves","my-eod","my-cash","my-collections","my-salary","leaderboard","employee-training","my-training-courses","device-followup","estimator","service-pricing"];
+  const parseAllowedTabs = (u) => {
+    try {
+      if (u.allowed_tabs) {
+        const a = typeof u.allowed_tabs === "string" ? JSON.parse(u.allowed_tabs) : u.allowed_tabs;
+        if (Array.isArray(a)) return a.map(String);
+      }
+    } catch { /* unparseable = full access */ }
+    return null; // null = all tabs visible
+  };
+  const canSeeCollections = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-collections"); };
+
+  // Inline "Collections" tab access toggle in the Users table.
+  const collectionsCell = (u) =>
+    u.role === "employee"
+      ? `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="switch-outer coll-switch-outer" data-uid="${u.id}" style="position:relative;width:38px;height:20px;background:${canSeeCollections(u) ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
+        <div class="switch-inner" style="position:absolute;top:2px;left:${canSeeCollections(u) ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+      </div>
+      <span class="coll-status-text" style="font-size:0.8rem;font-weight:700;color:${canSeeCollections(u) ? "var(--primary)" : "var(--text-dim)"};">${canSeeCollections(u) ? "ON" : "OFF"}</span>
+      <input type="checkbox" class="coll-access-chk" data-uid="${u.id}" ${canSeeCollections(u) ? "checked" : ""} style="display:none;" />
+    </div>
+  `
+      : '<span style="color:var(--text-dim)">-</span>';
+
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div>
@@ -2072,6 +2099,7 @@ export async function renderUsers(container) {
               <th>Service Access</th>
               <th>Profile Access</th>
               <th>Always Assign</th>
+              <th>Collections Tab</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -2093,6 +2121,7 @@ export async function renderUsers(container) {
                 <td>${accessCell(u)}</td>
                 <td>${profileCell(u)}</td>
                 <td>${alwaysAssignCell(u)}</td>
+                <td>${collectionsCell(u)}</td>
                 <td>
                   <div style="display:flex;gap:8px;">
                     <button class="btn btn-secondary btn-sm edit-user-btn" data-uid="${u.id}">${ICONS.edit || "📝"}<span>Edit</span></button>
@@ -2103,7 +2132,7 @@ export async function renderUsers(container) {
             `,
                     )
                     .join("")
-                : '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
+                : '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
             }
           </tbody>
         </table>
@@ -2157,6 +2186,52 @@ export async function renderUsers(container) {
         chk.checked = !chk.checked;
         chk.dispatchEvent(new Event("change"));
       }
+    };
+  });
+
+  // Collections tab access toggle — flips 'my-collections' in the user's
+  // allowed_tabs (the same per-user tab system used in the edit dialog).
+  container.querySelectorAll(".coll-access-chk").forEach((chk) => {
+    chk.addEventListener("change", async () => {
+      const uid = chk.dataset.uid;
+      const user = rows.find((u) => u.id === uid);
+      if (!user) return;
+      let a = parseAllowedTabs(user); // null (all) or array
+      let newVal;
+      if (chk.checked) {
+        // Make Collections visible.
+        if (a === null) newVal = null;
+        else { if (!a.includes("my-collections")) a.push("my-collections"); newVal = a; }
+      } else {
+        // Hide Collections only — keep every other tab visible.
+        if (a === null) newVal = EMPLOYEE_TAB_IDS.filter((id) => id !== "my-collections");
+        else newVal = a.filter((id) => id !== "my-collections");
+      }
+      const stored = newVal === null ? null : JSON.stringify(newVal);
+      const { error } = await supabase.from("profiles").update({ allowed_tabs: stored }).eq("id", uid);
+      if (error) {
+        toast("Failed to update Collections access: " + (error.message || ""), "error");
+        chk.checked = !chk.checked;
+        return;
+      }
+      user.allowed_tabs = stored; // keep local cache in sync
+      const wrap = chk.parentElement;
+      const outer = wrap.querySelector(".coll-switch-outer");
+      const inner = wrap.querySelector(".switch-inner");
+      const text = wrap.querySelector(".coll-status-text");
+      if (outer && inner && text) {
+        outer.style.background = chk.checked ? "var(--primary)" : "var(--border)";
+        inner.style.left = chk.checked ? "20px" : "2px";
+        text.style.color = chk.checked ? "var(--primary)" : "var(--text-dim)";
+        text.textContent = chk.checked ? "ON" : "OFF";
+      }
+      toast(`Collections tab ${chk.checked ? "enabled" : "hidden"} for ${user.full_name || "staff"}`, "success");
+    });
+  });
+  container.querySelectorAll(".coll-switch-outer").forEach((div) => {
+    div.onclick = () => {
+      const chk = div.parentElement.querySelector(".coll-access-chk");
+      if (chk) { chk.checked = !chk.checked; chk.dispatchEvent(new Event("change")); }
     };
   });
 
