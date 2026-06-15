@@ -264,6 +264,10 @@ export function renderLandingPage(container, onPortalClick) {
     complaintText: '',
     complaintLoading: false,
     complaintSubmitted: false,
+    // "Issue not resolved" reopen state (track view)
+    reopenText: '',
+    reopenLoading: false,
+    reopenSubmitted: false,
     // Ads carousel state
     ads: cachedBootstrap?.ads || cachedAds,
     adsLoading: false,
@@ -997,6 +1001,21 @@ export function renderLandingPage(container, onPortalClick) {
         </div>
       ` : ''}
 
+      ${resolved && paid ? `
+        <div class="srf-feedback" style="margin-top:14px;">
+          <h3 class="srf-fb-title">Issue not resolved?</h3>
+          <p class="srf-fb-sub">If the problem is still there, let us know and we'll reopen your ticket and send a technician again — free of cost.</p>
+          ${state.reopenSubmitted ? `
+            <div style="padding:12px 14px;border-radius:12px;background:rgba(16,185,129,0.08);border:1px solid var(--primary);font-size:0.88rem;">✅ Your ticket has been reopened. Our team will reassign a technician shortly — no extra charge.</div>
+          ` : `
+            <textarea id="srf-reopen-text" class="srf-input" rows="3" maxlength="2000" placeholder="Tell us what's still wrong..." style="margin-bottom:10px;resize:vertical;min-height:84px;">${escapeHTML(state.reopenText || '')}</textarea>
+            <button class="srf-btn srf-btn-primary" id="srf-reopen-btn" ${state.reopenLoading ? 'disabled' : ''}>
+              ${state.reopenLoading ? '<span class="srf-spin"></span>' : ''}<span>Issue not resolved — reopen ticket</span>
+            </button>
+          `}
+        </div>
+      ` : ''}
+
       ${canLeaveFeedback ? `
         <div class="srf-feedback">
           <h3 class="srf-fb-title">How did we do?</h3>
@@ -1379,6 +1398,40 @@ export function renderLandingPage(container, onPortalClick) {
         // Clearing trackResult naturally falls back to the list (if we came from
         // one) or the search form (if we arrived via ticket_no + phone direct).
         state.trackResult = null;
+        state.reopenSubmitted = false;
+        state.reopenText = '';
+        render();
+      };
+
+      // "Issue not resolved" → reopen the (paid) ticket. Routes to admin for
+      // reassignment to a different technician (free rework) on the server.
+      const reopenTextEl = container.querySelector('#srf-reopen-text');
+      if (reopenTextEl) reopenTextEl.addEventListener('input', e => { state.reopenText = e.target.value; });
+      const reopenBtn = container.querySelector('#srf-reopen-btn');
+      if (reopenBtn) reopenBtn.onclick = async () => {
+        const r = state.trackResult || {};
+        const txt = (state.reopenText || '').trim();
+        if (txt.length < 10) return toast('Please describe what is still wrong (at least 10 characters)', 'error');
+        const phone = r.phone || ('+91' + (state.trackPhone || ''));
+        if (!r.ticket_no || !phone) return toast('Could not identify this ticket', 'error');
+        state.reopenLoading = true; render();
+        const { error } = await supabase.from('complaints').insert({
+          ticket_no: r.ticket_no,
+          phone,
+          complaint_text: 'ISSUE NOT RESOLVED: ' + txt,
+        });
+        state.reopenLoading = false;
+        if (error) {
+          const msg = /No ticket found/i.test(error.message || '')
+            ? 'We could not match this ticket. Please use the Complaint tab.'
+            : (error.message || 'Could not reopen the ticket');
+          toast(msg, 'error');
+          render();
+          return;
+        }
+        state.reopenSubmitted = true;
+        state.reopenText = '';
+        toast('Ticket reopened — our team will reassign a technician', 'success');
         render();
       };
 
