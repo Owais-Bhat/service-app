@@ -1501,6 +1501,31 @@ async function notifyDeviceStatus(inquiryId, status, headline) {
     }
 }
 
+// Announce a clock-in / clock-out to admins using the employee's real name so
+// the voice alert says e.g. "Zeshaan clocked in" instead of "Unknown".
+async function notifyClock(userId, kind, location, attendanceId) {
+    let name = 'An employee';
+    let conn;
+    try {
+        conn = await getConn();
+        const [rows] = await conn.query('SELECT full_name FROM profiles WHERE id = ? LIMIT 1', [userId]);
+        if (rows && rows[0] && rows[0].full_name) name = rows[0].full_name;
+    } catch (e) {
+        // fall back to the generic name
+    } finally {
+        if (conn) conn.release();
+    }
+    const phrase = kind === 'in' ? 'clocked in' : 'clocked out';
+    const loc = location ? ` — ${String(location).slice(0, 80)}` : '';
+    broadcastNotify({
+        subject: kind === 'in' ? 'employee_clock_in' : 'employee_clock_out',
+        title: kind === 'in' ? '🟢 Employee Clocked In' : '🔴 Employee Clocked Out',
+        body: `${name} ${phrase}${loc}`,
+        audience: { role: 'admin' },
+        data: { user_id: userId, attendance_id: attendanceId || null, employee: name, voice: `${name} ${phrase}.` },
+    });
+}
+
 // Deliver a Web Push to every saved subscription matching the audience.
 async function sendWebPush(audience, payload) {
     if (!PUSH_ENABLED) return;
@@ -4948,13 +4973,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
         if (table === 'attendance' && data.clock_out && updatedRows.length > 0) {
             updatedRows.forEach(row => {
-                broadcastNotify({
-                    subject: 'employee_clock_out',
-                    title: 'Employee Clocked Out',
-                    body: row.location ? `Last location: ${String(row.location).slice(0, 90)}` : 'Employee is offline',
-                    audience: { role: 'admin' },
-                    data: { user_id: row.user_id, attendance_id: row.id || null },
-                });
+                notifyClock(row.user_id, 'out', row.location, row.id).catch(() => {});
             });
         }
 
@@ -5227,13 +5246,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
             });
         }
         if (table === 'attendance' && data.clock_in && !data.clock_out) {
-            broadcastNotify({
-                subject: 'employee_clock_in',
-                title: 'Employee Clocked In',
-                body: data.location ? `Clock-in location: ${String(data.location).slice(0, 90)}` : 'Employee is online',
-                audience: { role: 'admin' },
-                data: { user_id: data.user_id, attendance_id: data.id || null },
-            });
+            notifyClock(data.user_id, 'in', data.location, data.id).catch(() => {});
         }
         res.status(201).json(Array.isArray(input) ? rowsToInsert : data);
     } catch (error) {

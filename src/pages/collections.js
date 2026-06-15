@@ -59,6 +59,68 @@ function amounts(row) {
   return { net, discount, travel, gross, service };
 }
 
+// ── BILL DETAIL (per-ticket breakdown) ───────────────────────────
+let _pricingCache = null;
+async function loadPricingMap() {
+  if (_pricingCache) return _pricingCache;
+  const { data } = await supabase.from('service_pricing').select('id,name,cost');
+  const map = new Map();
+  (data || []).forEach(s => map.set(String(s.id), { name: s.name, cost: Number(s.cost) || 0 }));
+  _pricingCache = map;
+  return map;
+}
+
+const bdRow = (label, value, opts = {}) =>
+  `<div style="display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--border);font-size:.92rem;${opts.total ? 'font-weight:800;border-bottom:none;border-top:2px solid var(--border);margin-top:4px;padding-top:12px;' : ''}${opts.color ? `color:${opts.color};` : ''}"><span>${label}</span><span>${value}</span></div>`;
+
+// Opens the full bill breakdown for one ticket. admin=true shows discount
+// (your profit cut) + net collected; employees see service + additions + travel only.
+async function openBillDetail(row, { admin }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <span class="modal-title">Bill Detail — ${escapeHtml(row.ticket_no || '')}</span>
+        <button class="modal-close">×</button>
+      </div>
+      <div class="modal-body" id="bill-detail-body"><div style="text-align:center;padding:34px;color:var(--text-dim)">Loading…</div></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.modal-close').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  const [{ data: links }, pricing] = await Promise.all([
+    supabase.from('inquiry_services').select('*').eq('inquiry_id', row.id),
+    loadPricingMap(),
+  ]);
+  const items = (links || []).map(l => pricing.get(String(l.service_id))).filter(Boolean);
+  const m = amounts(row);
+  const extra = num(row.extra_cost);
+
+  const lineRows = items.length
+    ? items.map(it => bdRow(escapeHtml(it.name || 'Service'), inr(it.cost))).join('')
+    : bdRow('<span style="color:var(--text-dim)">Service charge</span>', inr(Math.max(0, m.service - extra)));
+
+  const body = overlay.querySelector('#bill-detail-body');
+  body.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <b>${escapeHtml(row.full_name || 'Client')}</b><br>
+      <small style="color:var(--text-dim)">${escapeHtml(row.service_item || '')}${paymentDate(row) ? ' · ' + formatDate(paymentDate(row)) : ''}</small>
+    </div>
+    <div style="text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;font-weight:700;color:var(--text-dim);margin-bottom:4px;">Services</div>
+    ${lineRows}
+    ${extra > 0 ? bdRow(`Additional charges${row.extra_cost_reason ? ` (${escapeHtml(row.extra_cost_reason)})` : ''}`, inr(extra)) : ''}
+    ${bdRow('Travel', inr(m.travel))}
+    ${admin
+      ? bdRow('Discount given (your profit cut)', `-${inr(m.discount)}`, { color: 'var(--danger)' })
+        + bdRow('Net collected', inr(m.net), { total: true })
+        + bdRow('<span style="color:var(--text-dim)">Payment mode</span>', row.payment_method === 'cash' ? 'Cash' : 'Online')
+      : bdRow('Total', inr(m.service + m.travel), { total: true })}
+  `;
+}
+
 // What the EMPLOYEE is allowed to see: service + travel only (no discount/profit).
 function summarizeEmployee(rows) {
   return rows.reduce((a, r) => {
@@ -88,7 +150,7 @@ function employeeTable(rows) {
           ${rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No collections found</td></tr>' : rows.map(r => {
             const m = amounts(r);
             return `
-            <tr>
+            <tr class="coll-row" data-id="${escapeHtml(r.id)}" style="cursor:pointer;">
               <td><small style="color:var(--text-dim)">${paymentDate(r) ? formatDate(paymentDate(r)) : '-'}</small></td>
               <td><code style="font-size:0.75rem;color:var(--primary)">${escapeHtml(r.ticket_no || '-')}</code></td>
               <td><b>${escapeHtml(r.full_name || 'Client')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(r.service_item || '')}</small></td>
@@ -144,6 +206,10 @@ export async function renderEmployeeCollections(container) {
   `;
 
   container.querySelector('#collections-refresh').onclick = () => renderEmployeeCollections(container);
+  container.querySelectorAll('.coll-row').forEach(tr => tr.onclick = () => {
+    const r = visible.find(x => String(x.id) === tr.dataset.id);
+    if (r) openBillDetail(r, { admin: false });
+  });
   container.querySelectorAll('.collection-filters .sr-filter').forEach(btn => {
     btn.onclick = () => {
       container.dataset.period = btn.dataset.period;
@@ -170,7 +236,7 @@ function adminTable(rows, profileById) {
           ${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No collections found</td></tr>' : rows.map(r => {
             const m = amounts(r);
             return `
-            <tr>
+            <tr class="coll-row" data-id="${escapeHtml(r.id)}" style="cursor:pointer;">
               <td><small style="color:var(--text-dim)">${paymentDate(r) ? formatDate(paymentDate(r)) : '-'}</small></td>
               <td><code style="font-size:0.75rem;color:var(--primary)">${escapeHtml(r.ticket_no || '-')}</code></td>
               <td><b>${escapeHtml(r.full_name || 'Client')}</b><br/><small style="color:var(--text-dim)">${escapeHtml(r.service_item || '')}</small></td>
@@ -254,6 +320,10 @@ export async function renderAdminCollections(container) {
     <div class="card">${adminTable(visible, profileById)}</div>
   `;
 
+  container.querySelectorAll('.coll-row').forEach(tr => tr.onclick = () => {
+    const r = visible.find(x => String(x.id) === tr.dataset.id);
+    if (r) openBillDetail(r, { admin: true });
+  });
   container.querySelectorAll('.collection-filters .sr-filter').forEach(btn => {
     btn.onclick = () => {
       container.dataset.period = btn.dataset.period;
