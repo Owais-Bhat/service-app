@@ -2338,6 +2338,14 @@ export async function renderEmployeeTasks(container) {
     ]);
     tasks = ticketsRes.data || [];
     const allInquiries = inquiriesRes.data || [];
+    // The API shim doesn't resolve the nested inquiries(*) relation, so link each
+    // ticket to its inquiry (inquiry.ticket_id === ticket.id) manually — this is
+    // what powers the customer details, call/WhatsApp and map buttons on the card.
+    tasks = tasks.map(t => {
+      if (t.inquiries && t.inquiries.length) return t;
+      const linked = allInquiries.find(i => String(i.ticket_id) === String(t.id));
+      return linked ? { ...t, inquiries: [linked] } : t;
+    });
     const taskInquiryIds = new Set(tasks.map(task => task.inquiries?.[0]?.id).filter(Boolean));
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
@@ -2426,11 +2434,19 @@ export async function renderEmployeeTasks(container) {
          </div>
        </div>
 
-       <div style="margin-top:20px; display:flex; gap:10px;">
-         <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+       <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+         <button class="btn btn-secondary btn-sm task-btn" data-id="${inq.ticket_id}" data-inq-id="${inq.id}" data-status="${inq.status}" style="flex:1; min-width:120px; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
            <span style="width:16px;height:16px;display:flex;">${ICONS.edit}</span> Update Status
          </button>
-         <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')" style="flex:1; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+         ${inq.phone ? `
+           <a href="tel:${escapeAttr(inq.phone)}" class="btn btn-secondary btn-sm" style="flex:1; min-width:100px; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none;">
+             <span style="width:16px;height:16px;display:flex;">${ICONS.phone}</span> Call
+           </a>
+           <a href="https://wa.me/${(inq.phone || '').replace(/\D/g, '')}" target="_blank" rel="noopener" class="btn btn-sm" style="flex:1; min-width:100px; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; background:#25D366; color:#fff;">
+             <span style="width:16px;height:16px;display:flex;">${ICONS.whatsapp}</span> WhatsApp
+           </a>
+         ` : ''}
+         <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')" style="flex:1; min-width:120px; height:40px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
            <span style="width:16px;height:16px;display:flex;">${ICONS.pin}</span> Open Maps
          </button>
        </div>
@@ -2500,6 +2516,14 @@ export async function renderEmployeeTasks(container) {
           <button class="btn btn-secondary btn-sm task-btn" data-id="${task.id}" data-inq-id="${inq ? inq.id : ''}" data-status="${task.status}" style="flex:1; min-width:120px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
             <span style="width:16px;height:16px;display:flex;">${ICONS.edit}</span> Update Status
           </button>
+          ${inq && inq.phone ? `
+            <a href="tel:${escapeAttr(inq.phone)}" class="btn btn-secondary btn-sm" style="flex:1; min-width:100px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; text-decoration:none;">
+              <span style="width:16px;height:16px;display:flex;">${ICONS.phone}</span> Call
+            </a>
+            <a href="https://wa.me/${(inq.phone || '').replace(/\D/g, '')}" target="_blank" rel="noopener" class="btn btn-sm" style="flex:1; min-width:100px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; text-decoration:none; background:#25D366; color:#fff;">
+              <span style="width:16px;height:16px;display:flex;">${ICONS.whatsapp}</span> WhatsApp
+            </a>
+          ` : ''}
           ${inq ? `
             <button class="btn btn-primary btn-sm" onclick="window.open('${escapeAttr(inquiryMapLink(inq))}')" style="flex:1; min-width:120px; height:42px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
               <span style="width:16px;height:16px;display:flex;">${ICONS.pin}</span> Open Maps
@@ -3030,6 +3054,29 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                   <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Deadline</div>
                   <div style="font-size:0.88rem;font-weight:600;">${['resolved', 'closed', 'issue_not_resolved'].includes(inquiryRow?.status) ? 'Service Completed' : (serviceDeadline ? formatSLADeadline(serviceDeadline) : '-')}</div>
                 </div>
+              </div>
+            </div>
+          ` : ''}
+
+          ${inquiryRow ? `
+            <div style="background:var(--bg-soft);border:1px solid var(--border);border-radius:14px;padding:14px;margin:0 0 12px;">
+              <div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Customer Details</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 16px;font-size:0.85rem;margin-bottom:12px;">
+                ${[
+                  ['Name', inquiryRow.full_name],
+                  ['Phone', inquiryRow.phone],
+                  ['Ticket', inquiryRow.ticket_no],
+                  ['Service', inquiryRow.service_item],
+                  ['Company', inquiryRow.company_name],
+                  ['Address', inquiryRow.address || inquiryRow.location],
+                ].filter(([, v]) => v).map(([k, v]) => `<div><div style="color:var(--text-dim);font-size:0.7rem;font-weight:700;text-transform:uppercase;">${k}</div><div style="font-weight:600;">${escapeHtml(v)}</div></div>`).join('')}
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                ${inquiryRow.phone ? `
+                  <a href="tel:${escapeAttr(inquiryRow.phone)}" class="btn btn-secondary btn-sm" style="flex:1;min-width:90px;height:38px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;font-weight:700;"><span style="width:15px;height:15px;display:flex;">${ICONS.phone}</span>Call</a>
+                  <a href="https://wa.me/${(inquiryRow.phone || '').replace(/\D/g, '')}" target="_blank" rel="noopener" class="btn btn-sm" style="flex:1;min-width:90px;height:38px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;font-weight:700;background:#25D366;color:#fff;"><span style="width:15px;height:15px;display:flex;">${ICONS.whatsapp}</span>WhatsApp</a>
+                ` : ''}
+                <a href="${escapeAttr(inquiryMapLink(inquiryRow))}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="flex:1;min-width:90px;height:38px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;font-weight:700;"><span style="width:15px;height:15px;display:flex;">${ICONS.pin}</span>Open Map</a>
               </div>
             </div>
           ` : ''}
