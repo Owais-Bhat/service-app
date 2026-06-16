@@ -2677,8 +2677,7 @@ export async function renderEmployeeTasks(container) {
 
     <div class="filter-bar" style="margin-bottom:16px;">
       <div class="sr-filter-bar" id="task-filter-tabs">
-        <button class="sr-filter active" data-filter="active"><span>Active</span><span class="sr-filter-count">${statusCounts.active}</span></button>
-        <button class="sr-filter" data-filter="in_progress"><span>In Progress</span><span class="sr-filter-count">${statusCounts.in_progress}</span></button>
+        <button class="sr-filter active" data-filter="in_progress"><span>In Progress</span><span class="sr-filter-count">${statusCounts.in_progress + statusCounts.active}</span></button>
         <button class="sr-filter" data-filter="resolved"><span>Resolved</span><span class="sr-filter-count">${statusCounts.resolved}</span></button>
         <button class="sr-filter" data-filter="issue_not_resolved"><span>Issue Not Resolved</span><span class="sr-filter-count">${statusCounts.issue_not_resolved}</span></button>
         <button class="sr-filter" data-filter="device_followup"><span>Device Follow Up</span></button>
@@ -2764,13 +2763,13 @@ export async function renderEmployeeTasks(container) {
 
   // Status filters — each tab shows only its own services.
   const FILTER_TITLES = {
-    active: 'Active Services',
+    active: 'In Progress Services',
     in_progress: 'In Progress Services',
     resolved: 'Resolved Services',
     issue_not_resolved: 'Issue Not Resolved Services',
     case_closed: 'Case Closed Services',
   };
-  let activeFilter = 'active';
+  let activeFilter = 'in_progress';
   let searchQuery = '';
 
   const applyFilters = () => {
@@ -2797,7 +2796,13 @@ export async function renderEmployeeTasks(container) {
 
     let shown = 0;
     container.querySelectorAll('#services-list .emp-task-card, #services-list .emp-job-card').forEach(card => {
-      const ok = groupOf(card.dataset.status) === activeFilter
+      const grp = groupOf(card.dataset.status);
+      // "In Progress" also absorbs any not-yet-progressed accepted work, so an
+      // accepted task is never hidden just because its status lagged behind.
+      const matchesFilter = activeFilter === 'in_progress'
+        ? (grp === 'in_progress' || grp === 'active')
+        : grp === activeFilter;
+      const ok = matchesFilter
         && (!q || card.textContent.toLowerCase().includes(q));
       card.style.display = ok ? '' : 'none';
       if (ok) shown++;
