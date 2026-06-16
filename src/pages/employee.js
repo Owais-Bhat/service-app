@@ -3196,7 +3196,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
             <div id="device-service-body" style="display:${deviceTicketOn ? 'block' : 'none'};">
               <div class="form-group">
-                <label>Device Photo (when taken)</label>
+                <label>Device Photo (when taken) <span style="color:var(--danger)">*</span></label>
                 <input type="file" id="device-taken-image" accept="image/*">
               </div>
               <div class="form-group">
@@ -3208,7 +3208,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
 
               <div class="form-group">
-                <label>Return photo (when handing back to client)</label>
+                <label>Return photo (when handing back to client) <span style="color:var(--danger)">*</span></label>
                 <input type="file" id="device-return-image" accept="image/*">
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -4052,7 +4052,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (takenBtn) takenBtn.onclick = async () => {
         const file = overlay.querySelector('#device-taken-image')?.files?.[0] || null;
         const desc = overlay.querySelector('#device-taken-desc')?.value.trim() || '';
-        if (!file && !desc) return toast('Add a photo or description first', 'info');
+        if (!file) return toast('Please add a photo of the device first', 'warning');
         takenBtn.disabled = true; takenBtn.textContent = 'Saving…';
         const { error } = await saveDeviceTaken(inqId, empId, file, desc);
         takenBtn.disabled = false; takenBtn.textContent = 'Save device taken';
@@ -4079,6 +4079,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         const file = overlay.querySelector('#device-return-image')?.files?.[0] || null;
         const condition = overlay.querySelector('#device-return-condition')?.value || 'good';
         const notes = overlay.querySelector('#device-return-notes')?.value.trim() || '';
+        if (!file) return toast('Please add a photo of the returned device first', 'warning');
         returnBtn.disabled = true; returnBtn.textContent = 'Saving…';
         const { error } = await saveDeviceReturn(inqId, file, condition, notes);
         returnBtn.disabled = false; returnBtn.textContent = 'Mark returned / sent back to client';
