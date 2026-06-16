@@ -2994,8 +2994,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         <div class="modal-body" style="padding-top:14px;">
           <div class="mst-tabs" role="tablist">
             <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
-            <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device Info</span></button>
-            ${deviceFeatureOn ? `<button type="button" class="mst-tab" data-tab="service">${ICONS.wrench}<span>Device Service</span></button>` : ''}
+            <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device</span></button>
             <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
@@ -3407,6 +3406,21 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     overlay.querySelectorAll('.mst-tab').forEach(tabBtn => {
       tabBtn.onclick = () => goToTab(tabBtn.dataset.tab);
     });
+
+    // Device Service is no longer its own tab — fold its content (toggle +
+    // taken/return/follow-up) into the Device tab so it's controlled by the toggle.
+    (() => {
+      const servicePane = overlay.querySelector('[data-pane="service"]');
+      const devicePane = overlay.querySelector('[data-pane="device"]');
+      if (!servicePane || !devicePane) return;
+      servicePane.classList.remove('mst-pane');
+      servicePane.removeAttribute('data-pane');
+      servicePane.style.display = 'block';
+      const hr = document.createElement('hr');
+      hr.style.cssText = 'border:none;border-top:1px solid var(--border);margin:18px 0 14px;';
+      devicePane.appendChild(hr);
+      devicePane.appendChild(servicePane);
+    })();
 
     const statusSel = overlay.querySelector('#new-status');
     const pricingSec = overlay.querySelector('#pricing-section');
