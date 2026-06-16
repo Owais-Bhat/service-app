@@ -997,6 +997,10 @@ export function renderLandingPage(container, onPortalClick) {
             : `<span class="srf-bill-pending">${ICONS.hourglass}<span>Link pending</span></span>`)
         }
           </div>
+          ${paid && r.bill_pdf_url ? `
+            <a class="srf-btn srf-btn-primary" href="${escapeAttr(r.bill_pdf_url)}" target="_blank" rel="noopener" style="margin-top:14px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;">
+              ${ICONS.download}<span>Download Bill (PDF)</span>
+            </a>` : ''}
         </div>
       ` : ''}
 
