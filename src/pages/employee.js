@@ -3407,19 +3407,24 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       tabBtn.onclick = () => goToTab(tabBtn.dataset.tab);
     });
 
-    // Device Service is no longer its own tab — fold its content (toggle +
-    // taken/return/follow-up) into the Device tab so it's controlled by the toggle.
+    // Device Service is no longer its own tab — its toggle lives in the STATUS
+    // tab and, when turned on, expands to show the device serial + taken/return
+    // photos + follow-up updates.
     (() => {
       const servicePane = overlay.querySelector('[data-pane="service"]');
-      const devicePane = overlay.querySelector('[data-pane="device"]');
-      if (!servicePane || !devicePane) return;
+      const statusPane = overlay.querySelector('[data-pane="status"]');
+      if (!servicePane || !statusPane) return;
       servicePane.classList.remove('mst-pane');
       servicePane.removeAttribute('data-pane');
       servicePane.style.display = 'block';
+      // Pull the serial number into the expanded device section (with the photos).
+      const serialGroup = overlay.querySelector('#device-serial')?.closest('.form-group');
+      const body = servicePane.querySelector('#device-service-body');
+      if (serialGroup && body) body.insertBefore(serialGroup, body.firstChild);
       const hr = document.createElement('hr');
       hr.style.cssText = 'border:none;border-top:1px solid var(--border);margin:18px 0 14px;';
-      devicePane.appendChild(hr);
-      devicePane.appendChild(servicePane);
+      statusPane.appendChild(hr);
+      statusPane.appendChild(servicePane);
     })();
 
     const statusSel = overlay.querySelector('#new-status');
