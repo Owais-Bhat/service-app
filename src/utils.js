@@ -202,6 +202,24 @@ export function calculateSLA(createdAt, slaHours = 12) {
   return date;
 }
 
+// Effective SLA deadline for a ticket:
+//  • a rescheduled visit time (scheduled_at) overrides the computed SLA, and
+//  • any time the device spent in the service centre (paused) pushes it out.
+export function effectiveSLADeadline(inq) {
+  if (!inq) return null;
+  const base = inq.scheduled_at ? new Date(inq.scheduled_at) : calculateSLA(inq.created_at);
+  let ms = base.getTime();
+  ms += Number(inq.sla_pause_ms) || 0;            // already-accumulated pause
+  if (inq.sla_paused_at) {                          // currently paused (device out)
+    const pausedAt = new Date(inq.sla_paused_at).getTime();
+    if (!Number.isNaN(pausedAt)) ms += Math.max(0, Date.now() - pausedAt);
+  }
+  return new Date(ms);
+}
+
+// True while the SLA clock is paused because the device is at the service centre.
+export function isSlaPaused(inq) { return !!(inq && inq.sla_paused_at); }
+
 // --- NOTIFICATIONS: sound + browser push ---
 let _audioCtx = null;
 function getAudioCtx() {

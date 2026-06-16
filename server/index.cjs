@@ -761,15 +761,19 @@ async function runSlaChecks() {
     try {
         connection = await getConn();
         const [rows] = await connection.query(
-            `SELECT id, ticket_no, full_name, service_item, created_at, assigned_employee_id
+            `SELECT id, ticket_no, full_name, service_item, created_at, assigned_employee_id,
+                    scheduled_at, sla_paused_at, sla_pause_ms
                FROM inquiries
               WHERE COALESCE(sla_breach_notified,0) = 0
                 AND status NOT IN ('resolved','closed','case_closed','issue_not_resolved','foc')
-                AND created_at IS NOT NULL`
+                AND created_at IS NOT NULL
+                AND sla_paused_at IS NULL`
         );
         const now = Date.now();
         for (const r of rows) {
-            const deadline = slaDeadline(r.created_at).getTime();
+            // Reschedule overrides the deadline; paused device time pushes it out.
+            const base = r.scheduled_at ? new Date(r.scheduled_at) : slaDeadline(r.created_at);
+            const deadline = base.getTime() + (Number(r.sla_pause_ms) || 0);
             if (now < deadline - 2 * 3600000) continue; // not within the 2h warning window yet
             const overdue = now >= deadline;
             await connection.query('UPDATE inquiries SET sla_breach_notified = 1 WHERE id = ?', [r.id]);
@@ -1031,6 +1035,9 @@ const requiredColumns = {
         { name: 'follow_up_status', definition: "VARCHAR(50) DEFAULT 'none'" },
         { name: 'reopened', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Set to 1 when a paid ticket is reopened via complaint (free rework)'" },
         { name: 'reopen_count', definition: 'INT DEFAULT 0' },
+        { name: 'scheduled_at', definition: "TIMESTAMP NULL COMMENT 'Rescheduled visit time — overrides the computed SLA deadline'" },
+        { name: 'sla_paused_at', definition: 'TIMESTAMP NULL COMMENT \'When the SLA clock was paused (device taken to service center)\'' },
+        { name: 'sla_pause_ms', definition: 'BIGINT DEFAULT 0 COMMENT \'Total time (ms) the SLA was paused while the device was in service\'' },
         { name: 'device_service_enabled', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'sla_breach_notified', definition: 'TINYINT(1) DEFAULT 0' },
     ],
@@ -2019,6 +2026,7 @@ const EMPLOYEE_WRITE_FIELDS = {
         'bill_generated_at', 'bill_pdf_url', 'bill_no',
         'employee_bill_lat', 'employee_bill_lng',
         'employee_update_detail', 'employee_update_status', 'employee_update_at',
+        'scheduled_at',
     ]),
     tickets: new Set(['status']),
     ticket_comments: new Set(['id', 'ticket_id', 'user_id', 'content']),
@@ -4402,9 +4410,9 @@ app.post('/api/device-tracking/taken', authenticateToken, async (req, res) => {
             [logId, inquiry_id, employee_id, description || null, device_image_url || null]
         );
 
-        // Update inquiry device_status
+        // Update inquiry device_status + PAUSE the SLA clock (device is off-site).
         await connection.execute(
-            'UPDATE inquiries SET device_status = ? WHERE id = ?',
+            'UPDATE inquiries SET device_status = ?, sla_paused_at = COALESCE(sla_paused_at, NOW()) WHERE id = ?',
             ['taken', inquiry_id]
         );
         notifyDeviceStatus(inquiry_id, 'taken', 'Device taken into service');
@@ -4437,10 +4445,15 @@ app.post('/api/device-tracking/return', authenticateToken, async (req, res) => {
             [logId, inquiry_id, device_condition || 'good', return_notes || null, return_image_url || null]
         );
 
-        // Update inquiry device_status
+        // Update inquiry device_status + RESUME the SLA clock: add the paused
+        // duration to sla_pause_ms so the deadline shifts by exactly that time.
         await connection.execute(
-            'UPDATE inquiries SET device_status = ? WHERE id = ?',
-            ['returned', inquiry_id]
+            `UPDATE inquiries
+                SET device_status = 'returned',
+                    sla_pause_ms = COALESCE(sla_pause_ms, 0) + CASE WHEN sla_paused_at IS NOT NULL THEN TIMESTAMPDIFF(MICROSECOND, sla_paused_at, NOW()) / 1000 ELSE 0 END,
+                    sla_paused_at = NULL
+              WHERE id = ?`,
+            [inquiry_id]
         );
         notifyDeviceStatus(inquiry_id, 'returned', 'Device returned to customer');
 
@@ -4918,6 +4931,28 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                         data: { ticket_no: row.ticket_no, inquiry_id: row.id, voice: 'Your job has been completed.' },
                     }).catch(() => {});
                 }
+            }
+
+            // Rescheduled visit → re-send the ticket SMS with the NEW time so the
+            // customer knows the updated SLA / arrival window.
+            const rescheduled = data.scheduled_at && String(data.scheduled_at) !== String(previousRow?.scheduled_at || '');
+            if (rescheduled) {
+                const whenText = formatSlaDeadlineForSms(new Date(row.scheduled_at));
+                if (row.phone) {
+                    smsNotify(row.phone, 'SMS_TID_TICKET', [
+                        smsVar(row.full_name, 'Customer', 60),
+                        smsVar(row.ticket_no, 'N/A', 20),
+                        smsVar(row.service_item, 'General Service', 80),
+                        smsVar(whenText, 'soon', 40),
+                    ]);
+                }
+                recordNotification({
+                    subject: 'new_assignment',
+                    title: '📅 Service Rescheduled',
+                    body: `${row.full_name || 'Client'} — ${row.ticket_no || ''} rescheduled to ${whenText}`,
+                    audience: { role: 'admin' },
+                    data: { inquiry_id: row.id, ticket_no: row.ticket_no, scheduled_at: row.scheduled_at },
+                }).catch(() => {});
             }
 
             // Any manual/admin/cash payment completion should also notify the client.

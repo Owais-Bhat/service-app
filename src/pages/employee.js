@@ -1,5 +1,5 @@
 import { supabase } from '../supabase.js';
-import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, formatTimeRemaining, formatSLADeadline, exportToCSV, showLoader } from '../utils.js';
+import { toast, formatDate, formatDateTime, formatTime, showNotification, calculateSLA, effectiveSLADeadline, isSlaPaused, formatTimeRemaining, formatSLADeadline, exportToCSV, showLoader } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { saveDeviceTaken, saveDeviceReturn, saveFollowUpStatus, loadDeviceTakenLog, loadDeviceReturnLog, loadDeviceFollowUpLogs } from './device-tracking.js';
 import { getEmployeeDevices, getDeviceStatus, renderDeviceTrackingTab, renderFollowUpTab } from './device-tracking-employee.js';
@@ -2416,9 +2416,11 @@ export async function renderEmployeeTasks(container) {
 
   const jobCard = (inq) => {
     const shownStatus = displayStatus(inq.status);
-    const serviceDeadline = inq.created_at ? calculateSLA(inq.created_at) : null;
+    const serviceDeadline = inq.created_at ? effectiveSLADeadline(inq) : null;
     const terminalStatus = ['resolved', 'closed', 'issue_not_resolved', 'foc'].includes(shownStatus);
-    const slaTimerText = terminalStatus ? 'Service Completed' : (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-');
+    const slaTimerText = terminalStatus ? 'Service Completed'
+      : isSlaPaused(inq) ? '<span style="color:var(--warning)">⏸ Paused (device in service)</span>'
+      : (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-');
     return `
     <div class="emp-job-card" data-status="${shownStatus}" data-reopened="${Number(inq.reopened) === 1 ? '1' : '0'}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);${Number(inq.reopened) === 1 ? 'border-left:4px solid var(--warning);' : ''}">
        ${Number(inq.reopened) === 1 ? `<div style="display:inline-flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:800;color:var(--warning);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">🔁 Reopened — free rework</div>` : ''}
@@ -2969,7 +2971,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     let deviceReturned = !(Number(inquiryRow?.device_service_enabled) === 1)
       || inquiryRow?.follow_up_status === 'returned'
       || inquiryRow?.device_status === 'returned';
-    const serviceDeadline = inquiryRow?.created_at ? calculateSLA(inquiryRow.created_at) : null;
+    // Effective SLA = rescheduled time (if any) + paused device time.
+    const serviceDeadline = inquiryRow ? effectiveSLADeadline(inquiryRow) : null;
+    const slaPaused = isSlaPaused(inquiryRow);
+    const scheduledLocal = (() => {
+      if (!inquiryRow?.scheduled_at) return '';
+      const d = new Date(inquiryRow.scheduled_at);
+      if (Number.isNaN(d.getTime())) return '';
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    })();
     const serviceElapsed = elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || new Date());
     const serviceResolvedTime = ['resolved', 'closed', 'issue_not_resolved'].includes(displayStatus(inquiryRow?.status))
       ? elapsedTime(inquiryRow?.created_at, inquiryRow?.updated_at || inquiryRow?.bill_generated_at || new Date())
@@ -3092,8 +3102,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                   <div style="font-size:0.88rem;font-weight:600;color:var(--primary);">${escapeHtml(inquiryRow.preferred_time || 'Flexible')}</div>
                 </div>
                 <div>
-                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Deadline</div>
-                  <div style="font-size:0.88rem;font-weight:600;">${['resolved', 'closed', 'issue_not_resolved'].includes(inquiryRow?.status) ? 'Service Completed' : (serviceDeadline ? formatSLADeadline(serviceDeadline) : '-')}</div>
+                  <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">SLA Deadline${inquiryRow?.scheduled_at ? ' (rescheduled)' : ''}</div>
+                  <div style="font-size:0.88rem;font-weight:600;">${['resolved', 'closed', 'issue_not_resolved', 'foc'].includes(inquiryRow?.status) ? 'Service Completed' : slaPaused ? '<span style="color:var(--warning)">⏸ Paused — device in service</span>' : (serviceDeadline ? formatSLADeadline(serviceDeadline) : '-')}</div>
                 </div>
               </div>
             </div>
@@ -3159,6 +3169,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 ` : `
                   <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                  <option value="reschedule">📅 Reschedule (set new visit time)</option>
                   <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
                   <option value="case_closed" ${normalizedCurrentStatus==='case_closed'?'selected':''}>Case Closed — customer didn't cooperate / no fee</option>
                 `}
@@ -3170,6 +3181,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <label>Client Bill Number <span style="color:var(--danger)">*</span></label>
               <input type="text" id="foc-bill-no" value="${escapeHtml(inquiryRow?.bill_no || '')}" placeholder="Enter the customer's existing bill number" />
               <small style="color:var(--text-dim);font-size:0.75rem;">FOC service: no new bill is generated, but the client's bill number is required for the record.</small>
+            </div>
+
+            <div class="form-group" id="reschedule-group" style="display:none;">
+              <label>New visit date &amp; time <span style="color:var(--danger)">*</span></label>
+              <input type="datetime-local" id="reschedule-at" value="${scheduledLocal}" />
+              <small style="color:var(--text-dim);font-size:0.75rem;">Saving sends the customer an SMS with this new time, and the SLA timer resets to it.</small>
             </div>
 
             <div class="form-group">
@@ -3939,9 +3956,22 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         saveBtn.title = 'Resolved tasks are read-only.';
       } else if (!resolving) {
         const foc = statusSel.value === 'foc';
+        const resched = statusSel.value === 'reschedule';
         const focBillNo = overlay.querySelector('#foc-bill-no')?.value.trim() || '';
+        const reschedAt = overlay.querySelector('#reschedule-at')?.value || '';
+        // Reschedule only needs a date/time — no work details required.
+        if (resched) {
+          if (!reschedAt) {
+            saveBtn.disabled = true; saveBtn.textContent = 'Pick a date & time';
+            saveBtn.style.opacity = '0.6'; saveBtn.style.cursor = 'not-allowed';
+            saveBtn.title = 'Choose the new visit date & time first.';
+          } else {
+            saveBtn.disabled = false; saveBtn.textContent = '📅 Save Schedule';
+            saveBtn.style.opacity = '1'; saveBtn.style.cursor = 'pointer'; saveBtn.title = '';
+          }
+        }
         // If the task is not resolved, the employee can save immediately on the first tab
-        if (!isStatusTabValid) {
+        else if (!isStatusTabValid) {
           saveBtn.disabled = true;
           saveBtn.textContent = 'Save Changes';
           saveBtn.style.opacity = '0.6';
@@ -4028,6 +4058,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       // FOC: no bill generated, but the client's bill number is mandatory.
       const focGroup = overlay.querySelector('#foc-billno-group');
       if (focGroup) focGroup.style.display = statusSel.value === 'foc' ? 'block' : 'none';
+      // Reschedule: show the date/time picker.
+      const reschedGroup = overlay.querySelector('#reschedule-group');
+      if (reschedGroup) reschedGroup.style.display = statusSel.value === 'reschedule' ? 'block' : 'none';
       // Case Closed UX: warn it's final and relabel the mandatory note as a reason.
       const closing = statusSel.value === 'case_closed';
       const ccHint = overlay.querySelector('#case-closed-hint');
@@ -4040,6 +4073,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
     // Re-evaluate the save gate as the FOC bill number is typed.
     overlay.querySelector('#foc-bill-no')?.addEventListener('input', () => renderPayStatus());
+    // Re-evaluate the save gate as the reschedule date/time is picked.
+    overlay.querySelector('#reschedule-at')?.addEventListener('input', () => renderPayStatus());
     // Reopened tickets only offer Resolved/FOC and default to Resolved — sync the
     // pricing/FOC sections to match that default on open.
     if (Number(inquiryRow?.reopened) === 1) statusSel.onchange();
@@ -4527,8 +4562,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const companyName = getSelectedCompany();
       const foc = newStatus === 'foc';
       const focBillNo = overlay.querySelector('#foc-bill-no')?.value.trim() || '';
+      const resched = newStatus === 'reschedule';
+      const reschedAt = overlay.querySelector('#reschedule-at')?.value || '';
+      // Reschedule keeps the ticket active (In Progress) with a new visit time.
+      const savedStatus = resched ? 'in_progress' : newStatus;
 
-      if (!detail) { toast('Please provide details of your work', 'warning'); return; }
+      if (resched && !reschedAt) { toast('Pick the new visit date & time', 'warning'); return; }
+      if (!resched && !detail) { toast('Please provide details of your work', 'warning'); return; }
       if (foc) {
         if (!focBillNo) { toast('Enter the client\'s bill number for this FOC service', 'warning'); return; }
         if (deviceTicketOn && !deviceReturned) { toast('Mark the device as returned before closing this service', 'warning'); return; }
@@ -4556,10 +4596,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
       const { data: { user } } = await supabase.auth.getUser();
       const ops = [];
-      if (taskId) ops.push(supabase.from('tickets').update({ status: newStatus }).eq('id', taskId));
+      if (taskId) ops.push(supabase.from('tickets').update({ status: savedStatus }).eq('id', taskId));
 
       const inqUpdates = {
-        status: newStatus,
+        status: savedStatus,
         employee_update_detail: detail,
         employee_update_status: newStatus,
         employee_update_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -4569,6 +4609,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (companyName) inqUpdates.company_name = companyName;
       if (deviceType) inqUpdates.device_type = deviceType;
       if (deviceSerial) inqUpdates.device_serial_no = deviceSerial;
+      // Reschedule: store the new visit time — server re-sends the SLA SMS.
+      if (resched) inqUpdates.scheduled_at = reschedAt ? new Date(reschedAt).toISOString().slice(0, 19).replace('T', ' ') : null;
       // FOC: free service — no bill is generated, but record the client's bill number.
       if (foc) {
         inqUpdates.bill_no = focBillNo;
