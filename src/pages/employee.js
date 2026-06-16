@@ -1130,10 +1130,12 @@ export async function renderEmployeeDashboard(container) {
   const canClockOut = isClockedIn && !isClockedOut;
   const missedEods = getMissedEodRows(attendanceHistory, eodHistory, today);
   const strictEodBlock = missedEods.length >= STRICT_EOD_LIMIT;
+  // Today's Route shows ALL in-progress / on-plate tasks (not just today's new
+  // ones) so the employee always sees everything still to be done.
   const todayTasks = [
-    ...activeTasks.filter(task => dateKey(task.inquiries?.[0]?.created_at || task.created_at) === today),
-    ...acceptedInquiries.filter(inq => dateKey(inq.created_at) === today),
-  ].sort(byNewestCreated).slice(0, 5);
+    ...activeTasks,
+    ...acceptedInquiries,
+  ].sort(byNewestCreated);
 
   // ── Leaderboard (DESIGN third column) — monthly feedback ratings ──
   const _empMap = new Map((allProfiles || []).filter(p => p.role === 'employee').map(p => [p.id, p]));
@@ -1256,7 +1258,7 @@ export async function renderEmployeeDashboard(container) {
           <span class="chip">${todayTasks.length} stop${todayTasks.length === 1 ? '' : 's'}</span>
         </div>
         <div class="list">
-          ${todayTasks.length === 0 ? `<div style="text-align:center;padding:28px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No new task assigned today.</div>` : todayTasks.map(item => {
+          ${todayTasks.length === 0 ? `<div style="text-align:center;padding:28px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No in-progress tasks right now.</div>` : todayTasks.map(item => {
             const inq = item.inquiries?.[0] || item;
             const id = item.inquiries ? item.id : (inq.ticket_id || '');
             const st = displayStatus(inq.status || item.status || 'assigned');
