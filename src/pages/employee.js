@@ -3421,6 +3421,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     // Bill constants
     const TRANSPORT_PER_KM = 5;
+    // Roads aren't straight lines — multiply the straight-line (haversine) distance
+    // by this factor to approximate real driving distance for the transport fee.
+    const ROAD_FACTOR = 1.3;
     const DISCOUNT_THRESHOLD = 250;
     const DISCOUNT_AMOUNT = 30;
     const GST_RATE = 0.18;
@@ -3615,8 +3618,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
       autoKmBtn.disabled = false; autoKmBtn.style.opacity = '1';
       kmHint.textContent = hasBill
-        ? '₹5 per km  ?  🧮 Auto km uses clock-in GPS → your captured precise location.'
-        : '₹5 per km  ?  🧮 Auto km uses clock-in GPS → customer GPS (capture precise location for higher accuracy).';
+        ? 'Start point: your clock-in location (fixed for today) → on-site capture. ₹5/km, auto-filled.'
+        : 'Start point: your clock-in location (fixed for today) → customer GPS. ₹5/km, auto-filled. Capture on-site for best accuracy.';
     };
     refreshAutoKmHint();
 
@@ -3643,23 +3646,31 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
     };
 
-    autoKmBtn.onclick = () => {
+    // Distance for the transport fee always starts from the employee's CLOCK-IN
+    // location (fixed for the whole day) → the customer's location. Road factor
+    // approximates real driving distance.
+    const applyAutoKm = ({ silent } = {}) => {
       const eLat = employeeCoords.lat, eLng = employeeCoords.lng;
-      if (eLat == null || eLng == null) return;
+      if (eLat == null || eLng == null) return false;
       // Prefer captured bill-time precise location; fall back to customer's submitted coords.
       let dLat, dLng, source;
       if (billLoc.lat != null && billLoc.lng != null) {
-        dLat = billLoc.lat; dLng = billLoc.lng; source = 'precise capture';
+        dLat = billLoc.lat; dLng = billLoc.lng; source = 'on-site capture';
       } else if (inquiryRow?.customer_lat != null && inquiryRow?.customer_lng != null) {
         dLat = inquiryRow.customer_lat; dLng = inquiryRow.customer_lng; source = 'customer GPS';
       } else {
-        return;
+        return false;
       }
-      const km = haversineKm(Number(eLat), Number(eLng), Number(dLat), Number(dLng));
+      const km = haversineKm(Number(eLat), Number(eLng), Number(dLat), Number(dLng)) * ROAD_FACTOR;
       kmInput.value = km.toFixed(1);
       calcTotal(); renderPayStatus();
-      toast(`Distance: ${km.toFixed(1)} km (from ${source})`, 'success');
+      if (!silent) toast(`Distance: ${km.toFixed(1)} km (clock-in location → ${source})`, 'success');
+      return true;
     };
+    autoKmBtn.onclick = () => applyAutoKm({ silent: false });
+    // Auto-fill the distance when the bill opens, using the locked clock-in origin
+    // → the customer's location, so it's never forgotten or mis-measured.
+    if (!kmInput.value || Number(kmInput.value) === 0) applyAutoKm({ silent: true });
 
     kmInput.oninput = () => { calcTotal(); renderPayStatus(); };
     const progressDetailInput = overlay.querySelector('#progress-detail');
