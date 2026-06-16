@@ -413,7 +413,7 @@ export async function renderTrainingAdminTab(container) {
                 <td><b style="color:var(--primary)">${done.length}</b> / ${employeeList.length}</td>
                 <td style="max-width:320px;white-space:normal;">${pending ? escapeHtml(pending) : '<span class="badge badge-resolved">All complete</span>'}</td>
                 <td>${done[0] ? `${escapeHtml(done[0].profiles?.full_name || 'Employee')}<br/><small>${formatDateTime(done[0].completed_at)}</small>` : '-'}</td>
-                <td><button class="btn btn-secondary btn-sm training-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button></td>
+                <td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm training-edit" data-id="${escapeAttr(item.id)}">Edit</button> <button class="btn btn-secondary btn-sm training-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button> <button class="btn btn-secondary btn-sm training-delete" data-id="${escapeAttr(item.id)}" style="color:var(--danger)">Delete</button></td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -455,6 +455,89 @@ export async function renderTrainingAdminTab(container) {
       else renderTrainingAdminTab(container);
     };
   });
+  container.querySelectorAll('.training-edit').forEach(btn => {
+    btn.onclick = () => {
+      const item = itemList.find(i => String(i.id) === btn.dataset.id);
+      if (item) openTutorialEditor(item, () => renderTrainingAdminTab(container));
+    };
+  });
+  container.querySelectorAll('.training-delete').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Delete this tutorial? Completion records for it will also be removed. This cannot be undone.')) return;
+      const id = btn.dataset.id;
+      const { error: delCompErr } = await supabase.from('training_completions').delete().eq('item_id', id);
+      if (delCompErr) return toast('Could not remove completions: ' + delCompErr.message, 'error');
+      const { error: delErr } = await supabase.from('training_items').delete().eq('id', id);
+      if (delErr) return toast('Could not delete: ' + delErr.message, 'error');
+      toast('Tutorial deleted', 'success');
+      renderTrainingAdminTab(container);
+    };
+  });
+}
+
+function openTutorialEditor(item, onChange) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <span class="modal-title">Edit tutorial</span>
+        <button class="modal-close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>Title</label><input id="te-title" value="${escapeHtml(item.title || '')}" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/></div>
+        <div class="form-group"><label>Description</label><textarea id="te-desc" rows="3" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;">${escapeHtml(item.description || '')}</textarea></div>
+        <div class="form-group"><label>Position</label><input id="te-position" type="number" value="${Number(item.position) || 0}" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/></div>
+        <div class="form-group">
+          <label>Replace media (optional)</label>
+          <input id="te-file" type="file" accept="image/*,video/*" style="width:100%;padding:8px;border-radius:10px;border:1px dashed var(--border);background:var(--bg);font-size:0.9rem;"/>
+          ${item.url ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;overflow:hidden;text-overflow:ellipsis;">Current: <a href="${escapeHtml(item.url)}" target="_blank" style="color:var(--primary)">${escapeHtml(item.url)}</a></div>` : ''}
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.9rem;">
+          <input id="te-active" type="checkbox" ${Number(item.active) === 1 ? 'checked' : ''}/> Active (visible to employees)
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="te-cancel">Cancel</button>
+        <button class="btn btn-primary" id="te-save">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.modal-close').onclick = close;
+  overlay.querySelector('#te-cancel').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#te-save').onclick = async () => {
+    const title = overlay.querySelector('#te-title').value.trim();
+    if (!title) return toast('Title is required', 'warning');
+    const payload = {
+      title,
+      description: overlay.querySelector('#te-desc').value.trim(),
+      position: Number(overlay.querySelector('#te-position').value) || 0,
+      active: overlay.querySelector('#te-active').checked ? 1 : 0,
+    };
+    const file = overlay.querySelector('#te-file').files[0];
+    const btn = overlay.querySelector('#te-save');
+    btn.disabled = true;
+    btn.textContent = file ? 'Uploading...' : 'Saving...';
+    try {
+      if (file) {
+        payload.url = await uploadMediaFile(file);
+        payload.kind = fileKind(file);
+      }
+      const { error } = await supabase.from('training_items').update(payload).eq('id', item.id);
+      if (error) throw new Error(error.message);
+      toast('Tutorial updated', 'success');
+      close();
+      if (onChange) onChange();
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Save';
+    }
+  };
 }
 
 export async function renderEmployeeTrainingTab(container) {
