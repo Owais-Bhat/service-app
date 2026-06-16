@@ -25,7 +25,37 @@ export function toast(message, type = 'info', duration = 3500) {
   msgSpan.textContent = message == null ? '' : String(message);
   el.append(iconSpan, msgSpan);
   container.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; el.style.transition = '0.3s'; setTimeout(() => el.remove(), 300); }, duration);
+
+  // Dismissable: auto-hide after `duration`, tap to close, or swipe away (mobile).
+  let removed = false;
+  const dismiss = () => {
+    if (removed) return; removed = true;
+    el.style.transition = '0.25s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(120%)';
+    setTimeout(() => el.remove(), 260);
+  };
+  let startX = 0, startY = 0, dx = 0, dy = 0, swiping = false;
+  el.addEventListener('touchstart', (e) => {
+    const t = e.touches[0]; startX = t.clientX; startY = t.clientY; swiping = true; el.style.transition = 'none';
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (!swiping) return;
+    const t = e.touches[0]; dx = t.clientX - startX; dy = t.clientY - startY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      el.style.transform = `translateX(${dx}px)`;
+      el.style.opacity = String(Math.max(0, 1 - Math.abs(dx) / 180));
+    }
+  }, { passive: true });
+  el.addEventListener('touchend', () => {
+    swiping = false;
+    if (Math.abs(dx) > 90 || dy < -60) dismiss();
+    else { el.style.transition = '0.2s'; el.style.transform = ''; el.style.opacity = ''; }
+    dx = 0; dy = 0;
+  });
+  el.addEventListener('click', dismiss);
+  el.style.cursor = 'pointer';
+  setTimeout(dismiss, duration);
 }
 
 function parseAppDate(value) {

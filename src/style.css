@@ -7534,3 +7534,10 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .gs-badge { font-size: .68rem; font-weight: 700; color: var(--text-dim); background: var(--bg-soft, rgba(0,0,0,.05)); border-radius: 999px; padding: 2px 9px; text-transform: capitalize; flex: 0 0 auto; }
 .gs-empty { padding: 22px 14px; text-align: center; color: var(--text-dim); font-size: .88rem; }
 @media (max-width: 640px) { .global-search-wrap .topbar-search { width: 46px; padding: 0 12px; } .global-search-wrap .topbar-search input, .search-kbd { display: none; } .global-search-wrap .topbar-search:focus-within { width: min(280px, 70vw); } .global-search-wrap .topbar-search:focus-within input { display: block; } }
+
+/* ── Toast: top corner + swipe-to-dismiss on mobile ──────────────── */
+.toast { touch-action: pan-y; user-select: none; }
+@media (max-width: 640px) {
+  .toast-container { top: 10px; right: 10px; left: auto; max-width: 88vw; align-items: flex-end; }
+  .toast { min-width: 0; max-width: 88vw; padding: 12px 16px; font-size: 0.86rem; }
+}

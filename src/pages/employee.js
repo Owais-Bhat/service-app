@@ -1137,6 +1137,9 @@ export async function renderEmployeeDashboard(container) {
     ...acceptedInquiries,
   ].sort(byNewestCreated);
 
+  // Reopened tickets (customer clicked "issue not resolved") — shown separately.
+  const reopenedItems = todayTasks.filter(item => Number((item.inquiries?.[0] || item)?.reopened) === 1);
+
   // ── Leaderboard (DESIGN third column) — monthly feedback ratings ──
   const _empMap = new Map((allProfiles || []).filter(p => p.role === 'employee').map(p => [p.id, p]));
   const _monthKey = getMonthKey();
@@ -1279,6 +1282,30 @@ export async function renderEmployeeDashboard(container) {
       </div>
 
     </div>
+
+    ${reopenedItems.length ? `
+      <div class="card list-card" style="margin-bottom:18px;border:1px solid var(--warning);">
+        <div class="card-head">
+          <h3>🔁 Reopened Tickets</h3>
+          <span class="chip" style="background:var(--warning);color:#fff;">${reopenedItems.length}</span>
+        </div>
+        <div class="list">
+          ${reopenedItems.map(item => {
+            const inq = item.inquiries?.[0] || item;
+            const id = item.inquiries ? item.id : (inq.ticket_id || '');
+            return `
+            <div class="lrow">
+              <div class="lrow-ico" style="color:var(--warning);">${ICONS.refresh}</div>
+              <div class="lrow-main">
+                <b>${escapeHtml(inq.full_name || item.title || 'Client')}</b>
+                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || 'Service')} · free rework</span>
+              </div>
+              <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'in_progress')}">${ICONS.edit}<span>Open</span></button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     ${acceptedInquiries.length ? `
       <div class="card list-card" style="margin-bottom:18px;">
@@ -2384,6 +2411,8 @@ export async function renderEmployeeTasks(container) {
   const allServiceItems = [...acceptedInquiries, ...tasks].sort(byNewestCreated);
   const statusCounts = { active: 0, in_progress: 0, resolved: 0, issue_not_resolved: 0, case_closed: 0 };
   allServiceItems.forEach(item => { statusCounts[groupOf(displayStatus(item.status))]++; });
+  const isReopened = (item) => Number((item.inquiries?.[0] || item)?.reopened) === 1;
+  const reopenedCount = allServiceItems.filter(isReopened).length;
 
   const jobCard = (inq) => {
     const shownStatus = displayStatus(inq.status);
@@ -2391,7 +2420,8 @@ export async function renderEmployeeTasks(container) {
     const terminalStatus = ['resolved', 'closed', 'issue_not_resolved', 'foc'].includes(shownStatus);
     const slaTimerText = terminalStatus ? 'Service Completed' : (serviceDeadline ? formatTimeRemaining(serviceDeadline) : '-');
     return `
-    <div class="emp-job-card" data-status="${shownStatus}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
+    <div class="emp-job-card" data-status="${shownStatus}" data-reopened="${Number(inq.reopened) === 1 ? '1' : '0'}" data-company="${inq._company || ''}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);${Number(inq.reopened) === 1 ? 'border-left:4px solid var(--warning);' : ''}">
+       ${Number(inq.reopened) === 1 ? `<div style="display:inline-flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:800;color:var(--warning);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">🔁 Reopened — free rework</div>` : ''}
        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
          <div>
            <div style="font-weight:800; font-size:1.15rem; color:var(--primary)">${inq.full_name}</div>
@@ -2460,7 +2490,8 @@ export async function renderEmployeeTasks(container) {
     const inq = task.inquiries?.[0];
     const shownStatus = displayStatus(task.status);
     return `
-      <div class="emp-task-card" data-status="${shownStatus}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
+      <div class="emp-task-card" data-status="${shownStatus}" data-reopened="${Number(inq?.reopened) === 1 ? '1' : '0'}" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);${Number(inq?.reopened) === 1 ? 'border-left:4px solid var(--warning);' : ''}">
+        ${Number(inq?.reopened) === 1 ? `<div style="display:inline-flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:800;color:var(--warning);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">🔁 Reopened — free rework</div>` : ''}
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="flex:1">
             <div style="font-weight:800; font-size:1.1rem; color:var(--text)">${task.title}</div>
@@ -2680,6 +2711,7 @@ export async function renderEmployeeTasks(container) {
     <div class="filter-bar" style="margin-bottom:16px;">
       <div class="sr-filter-bar" id="task-filter-tabs">
         <button class="sr-filter active" data-filter="in_progress"><span>In Progress</span><span class="sr-filter-count">${statusCounts.in_progress + statusCounts.active}</span></button>
+        ${reopenedCount ? `<button class="sr-filter" data-filter="reopened"><span>🔁 Reopened</span><span class="sr-filter-count">${reopenedCount}</span></button>` : ''}
         <button class="sr-filter" data-filter="resolved"><span>Resolved</span><span class="sr-filter-count">${statusCounts.resolved}</span></button>
         <button class="sr-filter" data-filter="issue_not_resolved"><span>Issue Not Resolved</span><span class="sr-filter-count">${statusCounts.issue_not_resolved}</span></button>
         <button class="sr-filter" data-filter="device_followup"><span>Device Follow Up</span></button>
@@ -2767,6 +2799,7 @@ export async function renderEmployeeTasks(container) {
   const FILTER_TITLES = {
     active: 'In Progress Services',
     in_progress: 'In Progress Services',
+    reopened: '🔁 Reopened Tickets (free rework)',
     resolved: 'Resolved Services',
     issue_not_resolved: 'Issue Not Resolved Services',
     case_closed: 'Case Closed Services',
@@ -2801,9 +2834,11 @@ export async function renderEmployeeTasks(container) {
       const grp = groupOf(card.dataset.status);
       // "In Progress" also absorbs any not-yet-progressed accepted work, so an
       // accepted task is never hidden just because its status lagged behind.
-      const matchesFilter = activeFilter === 'in_progress'
-        ? (grp === 'in_progress' || grp === 'active')
-        : grp === activeFilter;
+      const matchesFilter = activeFilter === 'reopened'
+        ? card.dataset.reopened === '1'
+        : activeFilter === 'in_progress'
+          ? (grp === 'in_progress' || grp === 'active')
+          : grp === activeFilter;
       const ok = matchesFilter
         && (!q || card.textContent.toLowerCase().includes(q));
       card.style.display = ok ? '' : 'none';
@@ -3118,12 +3153,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <div class="form-group">
               <label>New Status</label>
               <select id="new-status" ${isResolvedReadOnly ? 'disabled' : ''}>
-                <option value="open" ${normalizedCurrentStatus==='open'?'selected':''}>Received</option>
-                <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
-                <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
-                <option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>
-                <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
-                <option value="case_closed" ${normalizedCurrentStatus==='case_closed'?'selected':''}>Case Closed — customer didn't cooperate / no fee</option>
+                ${Number(inquiryRow?.reopened) === 1 ? `
+                  <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                  <option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>
+                ` : `
+                  <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
+                  <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                  <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
+                  <option value="case_closed" ${normalizedCurrentStatus==='case_closed'?'selected':''}>Case Closed — customer didn't cooperate / no fee</option>
+                `}
               </select>
               <small id="case-closed-hint" style="display:${normalizedCurrentStatus==='case_closed'?'block':'none'}; margin-top:6px; color:var(--danger); font-size:0.75rem;">⚠️ Case Closed is final — the ticket will be locked and cannot be reopened.</small>
             </div>
@@ -4002,6 +4040,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
     // Re-evaluate the save gate as the FOC bill number is typed.
     overlay.querySelector('#foc-bill-no')?.addEventListener('input', () => renderPayStatus());
+    // Reopened tickets only offer Resolved/FOC and default to Resolved — sync the
+    // pricing/FOC sections to match that default on open.
+    if (Number(inquiryRow?.reopened) === 1) statusSel.onchange();
 
     // ---- Device Service tab wiring ----
     if (deviceFeatureOn && inqId) {
@@ -4098,6 +4139,21 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     // Active auto-poller: asks the backend to verify Razorpay directly, then falls
     // back to the saved DB state if the gateway cannot be reached.
+    // When payment lands (online or cash), auto-submit a completed RESOLVED bill
+    // so the ticket closes itself and never stays open. No-op if the form isn't
+    // valid yet (save button disabled) or the status isn't Resolved.
+    let _autoSaving = false;
+    const autoSaveOnPaid = () => {
+      if (_autoSaving) return;
+      if (statusSel.value !== 'resolved') return;
+      goToTab('bill');
+      renderPayStatus();
+      setTimeout(() => {
+        const btn = overlay.querySelector('#save-update');
+        if (btn && !btn.disabled) { _autoSaving = true; btn.click(); }
+      }, 300);
+    };
+
     const refreshPaymentFromDb = async (showToastOnChange) => {
       if (!inqId) return;
       let data = null;
@@ -4119,7 +4175,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       paymentState = { status: data.payment_status || 'unpaid', received_at: data.payment_received_at || null };
       if (!wasPaid && paymentState.status === 'paid') {
         _paymentJustReceived = true;
-        showNotification({ title: '💰 Payment Received', body: 'You can now submit the resolution.', type: 'payment', tag: `pay-${inqId}` });
+        showNotification({ title: '💰 Payment Received', body: 'Saving the resolution…', type: 'payment', tag: `pay-${inqId}` });
+        renderPayStatus();
+        autoSaveOnPaid();
+        return;
       } else if (showToastOnChange) {
         toast(paymentState.status === 'paid' ? 'Payment confirmed' : 'Still waiting for client to pay...', paymentState.status === 'paid' ? 'success' : 'info');
       }
@@ -4157,10 +4216,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           _paymentJustReceived = true;
           showNotification({
             title: '💰 Payment Received!',
-            body: 'Client just paid. You can submit the resolution now.',
+            body: 'Client just paid — saving the resolution…',
             type: 'payment',
             tag: `pay-${inqId}`,
           });
+          renderPayStatus();
+          autoSaveOnPaid();
+          return;
         }
         renderPayStatus();
       })
@@ -4435,7 +4497,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           _paymentJustReceived = true;
           renderPayStatus();
           renderPayMethod();
-          toast('✓ Cash recorded - visible in My Cash as pending submission', 'success');
+          toast('✓ Cash recorded — finalising the ticket…', 'success');
+          autoSaveOnPaid();
         } catch (err) {
           toast(err.message || 'Could not mark cash', 'error');
           markCashBtn.disabled = false;
