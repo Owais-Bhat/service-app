@@ -1127,8 +1127,13 @@ async function openInquiryDetail(id, onDone) {
     updateBox.innerHTML = `<div class="sr-meta-label">Employee submitted detail</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(i.employee_update_detail)}</div><small style="color:var(--text-dim)">Status: ${updateStatus}${i.employee_update_at ? ` - ${formatDateTime(i.employee_update_at)}` : ""}</small>`;
     overlay.querySelector(".sr-meta")?.appendChild(updateBox);
   }
-  overlay.querySelector("#ci").onclick = overlay.querySelector("#ci2").onclick =
-    () => overlay.remove();
+  const ciBtn = overlay.querySelector("#ci");
+  if (ciBtn) ciBtn.onclick = () => overlay.remove();
+  const ci2Btn = overlay.querySelector("#ci2");
+  if (ci2Btn) ci2Btn.onclick = () => overlay.remove();
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
   if (hasBill) {
     overlay.querySelector("#view-bill-btn").onclick = () => {
       const servicesSubtotal = Math.max(

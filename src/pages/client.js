@@ -327,7 +327,13 @@ async function openTicketDetail(ticketId, onClose) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('#cd').onclick = overlay.querySelector('#cd2').onclick = () => { overlay.remove(); onClose && onClose(); };
+  const cdBtn = overlay.querySelector('#cd');
+  if (cdBtn) cdBtn.onclick = () => { overlay.remove(); onClose && onClose(); };
+  const cd2Btn = overlay.querySelector('#cd2');
+  if (cd2Btn) cd2Btn.onclick = () => { overlay.remove(); onClose && onClose(); };
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { overlay.remove(); onClose && onClose(); }
+  });
 
   overlay.querySelector('#add-c').onclick = async () => {
     const { data: { user } } = await supabase.auth.getUser();

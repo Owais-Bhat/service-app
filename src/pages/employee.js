@@ -4543,7 +4543,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     }
 
     const closeOverlay = () => { stopPolling(); try { supabase.removeChannel(channel); } catch {} overlay.remove(); };
-    overlay.querySelector('#cm').onclick = overlay.querySelector('#cm2').onclick = closeOverlay;
+    const cmBtn = overlay.querySelector('#cm');
+    if (cmBtn) cmBtn.onclick = closeOverlay;
+    const cm2Btn = overlay.querySelector('#cm2');
+    if (cm2Btn) cm2Btn.onclick = closeOverlay;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeOverlay();
+    });
     overlay.querySelector('#save-update').onclick = async () => {
       const newStatus = statusSel.value;
       const resolving = newStatus === 'resolved';
