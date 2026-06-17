@@ -1100,6 +1100,23 @@ export async function renderEmployeeDashboard(container) {
       .slice(0, 4);
     eodHistory = res[6].data || [];
     const allInquiries = res[3].data || [];
+    // Link each ticket to its inquiry (shim doesn't resolve nested joins; fall
+    // back to a direct ticket_id fetch for any state) so route/accepted cards
+    // show full customer details + contact buttons.
+    const byTicket = new Map();
+    allInquiries.forEach(i => { if (i.ticket_id) byTicket.set(String(i.ticket_id), i); });
+    const missingIds = (tasks || [])
+      .filter(t => !(t.inquiries && t.inquiries.length) && !byTicket.has(String(t.id)))
+      .map(t => t.id).filter(Boolean);
+    if (missingIds.length) {
+      const { data: extra } = await supabase.from('inquiries').select('*').in('ticket_id', missingIds);
+      (extra || []).forEach(i => { if (i.ticket_id) byTicket.set(String(i.ticket_id), i); });
+    }
+    tasks = (tasks || []).map(t => {
+      if (t.inquiries && t.inquiries.length) return t;
+      const linked = byTicket.get(String(t.id));
+      return linked ? { ...t, inquiries: [linked] } : t;
+    });
     const taskInquiryIds = new Set((tasks || []).map(task => task.inquiries?.[0]?.id).filter(Boolean));
 
     // Build phone → company map for labelling service jobs
@@ -2370,9 +2387,21 @@ export async function renderEmployeeTasks(container) {
     // The API shim doesn't resolve the nested inquiries(*) relation, so link each
     // ticket to its inquiry (inquiry.ticket_id === ticket.id) manually — this is
     // what powers the customer details, call/WhatsApp and map buttons on the card.
+    const byTicket = new Map();
+    allInquiries.forEach(i => { if (i.ticket_id) byTicket.set(String(i.ticket_id), i); });
+    // Second pass: any ticket still unlinked (its inquiry isn't pending/accepted,
+    // e.g. an in-progress one) — fetch its inquiry directly by ticket_id.
+    const missingIds = tasks
+      .filter(t => !(t.inquiries && t.inquiries.length) && !byTicket.has(String(t.id)))
+      .map(t => t.id)
+      .filter(Boolean);
+    if (missingIds.length) {
+      const { data: extra } = await supabase.from('inquiries').select('*').in('ticket_id', missingIds);
+      (extra || []).forEach(i => { if (i.ticket_id) byTicket.set(String(i.ticket_id), i); });
+    }
     tasks = tasks.map(t => {
       if (t.inquiries && t.inquiries.length) return t;
-      const linked = allInquiries.find(i => String(i.ticket_id) === String(t.id));
+      const linked = byTicket.get(String(t.id));
       return linked ? { ...t, inquiries: [linked] } : t;
     });
     const taskInquiryIds = new Set(tasks.map(task => task.inquiries?.[0]?.id).filter(Boolean));
