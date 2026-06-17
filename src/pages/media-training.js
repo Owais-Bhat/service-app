@@ -380,45 +380,79 @@ export async function renderTrainingAdminTab(container) {
     if (!byItem.has(row.item_id)) byItem.set(row.item_id, []);
     byItem.get(row.item_id).push(row);
   });
+  const empCount = employeeList.length || 1;
+  const completionPctOf = (item) => Math.round(((byItem.get(item.id) || []).length / empCount) * 100);
+  const avgCompletion = itemList.length ? Math.round(itemList.reduce((s, i) => s + completionPctOf(i), 0) / itemList.length) : 0;
+  const fullyDone = itemList.filter(i => (byItem.get(i.id) || []).length >= empCount && empCount > 0).length;
+
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div><h1>Employee Tutorials</h1><p>Upload training media and monitor completion live</p></div>
       <button class="btn btn-secondary" id="training-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
-    <div class="card" style="margin-bottom:22px;">
-      <div class="card-header"><span class="card-title">${ICONS.upload}<span style="margin-left:8px">Upload Tutorial</span></span></div>
+
+    <div class="stats-grid" style="margin-bottom:22px;">
+      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${itemList.length}</div><div class="stat-label">Tutorials</div></div>
+      <div class="stat-card"><div class="stat-value">${employeeList.length}</div><div class="stat-label">Employees</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${avgCompletion}%</div><div class="stat-label">Avg Completion</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${fullyDone}</div><div class="stat-label">Fully Completed</div></div>
+    </div>
+
+    <div class="card tut-upload" style="margin-bottom:22px;">
+      <div class="card-header"><span class="card-title">${ICONS.upload}<span style="margin-left:8px">Upload New Tutorial</span></span></div>
       <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
-          <div class="form-group"><label>Title</label><input id="training-title" placeholder="Training title"/></div>
-          <div class="form-group"><label>Position</label><input id="training-position" type="number" value="0"/></div>
-          <div class="form-group"><label>File</label><input id="training-file" type="file" accept="image/*,video/*"/></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;">
+          <div class="form-group"><label>Title</label><input id="training-title" placeholder="e.g. How to bill a service"/></div>
+          <div class="form-group"><label>Category</label><input id="training-category" placeholder="e.g. Billing, Safety" value="General"/></div>
+          <div class="form-group"><label>Position (order)</label><input id="training-position" type="number" value="0"/></div>
+          <div class="form-group"><label>Image / Video file</label><input id="training-file" type="file" accept="image/*,video/*"/></div>
         </div>
-        <div class="form-group"><label>Description</label><textarea id="training-desc" rows="3" placeholder="What employee must learn from this tutorial"></textarea></div>
-        <button class="btn btn-primary" id="training-save">${ICONS.upload}<span>Upload Tutorial</span></button>
+        <div class="form-group"><label>Description</label><textarea id="training-desc" rows="2" placeholder="What should the employee learn from this?"></textarea></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;"><input id="training-required" type="checkbox" checked style="width:18px;height:18px;"/> Required for all employees</label>
+          <button class="btn btn-primary" id="training-save">${ICONS.upload}<span>Upload Tutorial</span></button>
+        </div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">Training Completion Report</span></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Tutorial</th><th>Media</th><th>Completed</th><th>Pending Employees</th><th>Latest Completion</th><th></th></tr></thead>
-          <tbody>
-            ${itemList.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-dim)">No tutorials uploaded yet</td></tr>' : itemList.map(item => {
-              const done = byItem.get(item.id) || [];
-              const doneIds = new Set(done.map(x => x.employee_id));
-              const pending = employeeList.filter(e => !doneIds.has(e.id)).map(e => e.full_name).join(', ');
-              return `<tr>
-                <td><b>${escapeHtml(item.title)}</b><br/><small style="color:var(--text-dim)">${escapeHtml(item.description || '')}</small></td>
-                <td style="width:180px">${mediaPreview(item)}</td>
-                <td><b style="color:var(--primary)">${done.length}</b> / ${employeeList.length}</td>
-                <td style="max-width:320px;white-space:normal;">${pending ? escapeHtml(pending) : '<span class="badge badge-resolved">All complete</span>'}</td>
-                <td>${done[0] ? `${escapeHtml(done[0].profiles?.full_name || 'Employee')}<br/><small>${formatDateTime(done[0].completed_at)}</small>` : '-'}</td>
-                <td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm training-edit" data-id="${escapeAttr(item.id)}">Edit</button> <button class="btn btn-secondary btn-sm training-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button> <button class="btn btn-secondary btn-sm training-delete" data-id="${escapeAttr(item.id)}" style="color:var(--danger)">Delete</button></td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
+
+    <div class="tut-admin-grid">
+      ${itemList.length === 0 ? '<div class="card"><div class="card-body" style="text-align:center;padding:36px;color:var(--text-dim)">No tutorials uploaded yet — add your first above.</div></div>' : itemList.map(item => {
+        const done = byItem.get(item.id) || [];
+        const doneIds = new Set(done.map(x => x.employee_id));
+        const pendingNames = employeeList.filter(e => !doneIds.has(e.id)).map(e => e.full_name);
+        const pctv = completionPctOf(item);
+        const req = Number(item.required) !== 0;
+        return `
+          <div class="card tut-admin-card ${Number(item.active) === 1 ? '' : 'is-hidden'}">
+            <div class="tut-admin-thumb">
+              ${item.kind === 'video' ? `<video src="${escapeAttr(item.url)}#t=0.1" muted preload="metadata"></video><span class="tut-play">${ICONS.play}</span>` : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.title)}"/>`}
+              <div class="tut-badges">
+                <span class="tut-type">${item.kind === 'video' ? '📹 Video' : '🖼️ Image'}</span>
+                ${req ? '<span class="tut-req">Required</span>' : '<span class="tut-opt">Optional</span>'}
+                ${Number(item.active) === 1 ? '' : '<span class="tut-hidden-tag">Hidden</span>'}
+              </div>
+            </div>
+            <div class="tut-admin-body">
+              <div class="tut-admin-head">
+                <div class="tut-title">${escapeHtml(item.title)}</div>
+                <span class="badge badge-open">${escapeHtml(item.category || 'General')}</span>
+              </div>
+              <p class="tut-desc">${escapeHtml(item.description || '')}</p>
+              <div class="tut-admin-progress">
+                <div class="tut-admin-progress-top"><span>${done.length} / ${employeeList.length} completed</span><b>${pctv}%</b></div>
+                <div class="tut-bar"><span style="width:${pctv}%"></span></div>
+              </div>
+              ${pendingNames.length
+                ? `<details class="tut-pending"><summary>${pendingNames.length} pending</summary><div class="tut-pending-list">${pendingNames.map(n => escapeHtml(n)).join(', ')}</div></details>`
+                : '<span class="badge badge-resolved" style="margin-top:8px;display:inline-block;">✓ All employees complete</span>'}
+              <div class="tut-admin-actions">
+                <button class="btn btn-secondary btn-sm training-edit" data-id="${escapeAttr(item.id)}">${ICONS.edit}<span>Edit</span></button>
+                <button class="btn btn-secondary btn-sm training-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button>
+                <button class="btn btn-secondary btn-sm training-delete" data-id="${escapeAttr(item.id)}" style="color:var(--danger)">${ICONS.close}<span>Delete</span></button>
+              </div>
+            </div>
+          </div>`;
+      }).join('')}
     </div>
   `;
   container.querySelector('#training-refresh').onclick = () => renderTrainingAdminTab(container);
@@ -434,6 +468,8 @@ export async function renderTrainingAdminTab(container) {
       const { error } = await supabase.from('training_items').insert({
         title,
         description: container.querySelector('#training-desc').value.trim(),
+        category: container.querySelector('#training-category').value.trim() || 'General',
+        required: container.querySelector('#training-required').checked ? 1 : 0,
         kind: fileKind(file),
         url,
         position: Number(container.querySelector('#training-position').value) || 0,
@@ -487,7 +523,13 @@ function openTutorialEditor(item, onChange) {
       <div class="modal-body">
         <div class="form-group"><label>Title</label><input id="te-title" value="${escapeHtml(item.title || '')}" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/></div>
         <div class="form-group"><label>Description</label><textarea id="te-desc" rows="3" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;">${escapeHtml(item.description || '')}</textarea></div>
-        <div class="form-group"><label>Position</label><input id="te-position" type="number" value="${Number(item.position) || 0}" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group"><label>Category</label><input id="te-category" value="${escapeAttr(item.category || 'General')}" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/></div>
+          <div class="form-group"><label>Position</label><input id="te-position" type="number" value="${Number(item.position) || 0}" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-family:inherit;font-size:0.9rem;"/></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.9rem;margin-bottom:12px;">
+          <input id="te-required" type="checkbox" ${Number(item.required) !== 0 ? 'checked' : ''}/> Required for all employees
+        </label>
         <div class="form-group">
           <label>Replace media (optional)</label>
           <input id="te-file" type="file" accept="image/*,video/*" style="width:100%;padding:8px;border-radius:10px;border:1px dashed var(--border);background:var(--bg);font-size:0.9rem;"/>
@@ -515,6 +557,8 @@ function openTutorialEditor(item, onChange) {
     const payload = {
       title,
       description: overlay.querySelector('#te-desc').value.trim(),
+      category: overlay.querySelector('#te-category').value.trim() || 'General',
+      required: overlay.querySelector('#te-required').checked ? 1 : 0,
       position: Number(overlay.querySelector('#te-position').value) || 0,
       active: overlay.querySelector('#te-active').checked ? 1 : 0,
     };
@@ -540,6 +584,30 @@ function openTutorialEditor(item, onChange) {
   };
 }
 
+// Full-screen viewer for a tutorial (image lightbox / video player).
+function openTutorialViewer(item) {
+  const overlay = document.createElement('div');
+  overlay.className = 'tut-viewer';
+  overlay.innerHTML = `
+    <div class="tut-viewer-card">
+      <button class="tut-viewer-close" aria-label="Close">×</button>
+      <div class="tut-viewer-media">
+        ${item.kind === 'video'
+          ? `<video src="${escapeAttr(item.url)}" controls autoplay playsinline></video>`
+          : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.title)}"/>`}
+      </div>
+      <div class="tut-viewer-info">
+        <div class="tut-viewer-title">${escapeHtml(item.title)}</div>
+        ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.tut-viewer-close').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } });
+}
+
 export async function renderEmployeeTrainingTab(container) {
   showLoader(container);
   const { data: { user } } = await supabase.auth.getUser();
@@ -549,41 +617,114 @@ export async function renderEmployeeTrainingTab(container) {
   ]);
   const done = new Set((completions || []).map(x => x.item_id));
   const itemList = items || [];
-  container.innerHTML = `
-    <div class="page-header"><h1>Employee Tutorials</h1><p>Complete required image and video training</p></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;">
-      ${itemList.length === 0 ? '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-dim);padding:36px;">No tutorials assigned</div></div>' : itemList.map(item => `
-        <div class="card">
-          <div class="card-body">
-            ${mediaPreview(item)}
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:12px;">
-              <div>
-                <div style="font-weight:800;color:var(--text);">${escapeHtml(item.title)}</div>
-                <p style="margin:6px 0 0;color:var(--text-soft);font-size:0.9rem;">${escapeHtml(item.description || '')}</p>
-              </div>
-              ${done.has(item.id) ? '<span class="badge badge-resolved">Completed</span>' : '<span class="badge badge-medium">Pending</span>'}
-            </div>
-            <button class="btn ${done.has(item.id) ? 'btn-secondary' : 'btn-primary'} btn-wide mark-training" data-id="${escapeAttr(item.id)}" ${done.has(item.id) ? 'disabled' : ''} style="margin-top:14px;">${ICONS.check}<span>${done.has(item.id) ? 'Completed' : 'Mark Complete'}</span></button>
+  const total = itemList.length;
+  const completedCount = itemList.filter(i => done.has(i.id)).length;
+  const requiredItems = itemList.filter(i => Number(i.required) !== 0);
+  const requiredPending = requiredItems.filter(i => !done.has(i.id)).length;
+  const pct = total ? Math.round((completedCount / total) * 100) : 0;
+  const categories = [...new Set(itemList.map(i => i.category || 'General'))];
+
+  const card = (item) => {
+    const isDone = done.has(item.id);
+    const req = Number(item.required) !== 0;
+    return `
+      <div class="tut-card ${isDone ? 'is-done' : ''}" data-cat="${escapeAttr(item.category || 'General')}" data-done="${isDone ? '1' : '0'}" data-req="${req ? '1' : '0'}" data-search="${escapeAttr((item.title + ' ' + (item.description || '')).toLowerCase())}">
+        <div class="tut-thumb tut-watch" data-id="${escapeAttr(item.id)}">
+          ${item.kind === 'video'
+            ? `<video src="${escapeAttr(item.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="tut-play">${ICONS.play}</span>`
+            : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.title)}"/>`}
+          ${isDone ? '<span class="tut-done-tick">✓</span>' : ''}
+          <div class="tut-badges">
+            <span class="tut-type">${item.kind === 'video' ? '📹 Video' : '🖼️ Image'}</span>
+            ${req ? '<span class="tut-req">Required</span>' : '<span class="tut-opt">Optional</span>'}
           </div>
         </div>
-      `).join('')}
-    </div>
+        <div class="tut-body">
+          <div class="tut-title">${escapeHtml(item.title)}</div>
+          <p class="tut-desc">${escapeHtml(item.description || '')}</p>
+          <div class="tut-actions">
+            <button class="btn btn-secondary btn-sm tut-watch" data-id="${escapeAttr(item.id)}">${ICONS.play}<span>Watch</span></button>
+            <button class="btn ${isDone ? 'btn-secondary' : 'btn-primary'} btn-sm mark-training" data-id="${escapeAttr(item.id)}" ${isDone ? 'disabled' : ''}>${ICONS.check}<span>${isDone ? 'Completed' : 'Mark Complete'}</span></button>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  container.innerHTML = `
+    <div class="page-header"><h1>Employee Tutorials</h1><p>Complete your image &amp; video training</p></div>
+    ${total === 0 ? `
+      <div class="card"><div class="card-body" style="text-align:center;color:var(--text-dim);padding:48px;">
+        <div style="font-size:2.4rem;margin-bottom:10px;">🎓</div>
+        <p style="font-weight:700;color:var(--text);">No tutorials assigned yet</p>
+        <p style="font-size:0.86rem;">Your trainer hasn't added any tutorials. Check back soon.</p>
+      </div></div>
+    ` : `
+      <div class="card tut-progress">
+        <div class="tut-ring" style="background:conic-gradient(var(--primary) ${pct * 3.6}deg, var(--border) 0deg);"><div class="tut-ring-inner">${pct}<small>%</small></div></div>
+        <div class="tut-progress-meta">
+          <div class="tut-progress-title">Your training progress</div>
+          <div class="tut-progress-sub">${completedCount} of ${total} completed${requiredPending ? ` · <b style="color:var(--warning)">${requiredPending} required pending</b>` : ' · <b style="color:var(--success)">all required done 🎉</b>'}</div>
+          <div class="tut-bar"><span style="width:${pct}%"></span></div>
+        </div>
+      </div>
+
+      <div class="tut-toolbar">
+        <div class="sr-filter-bar" id="tut-filters">
+          <button class="sr-filter active" data-f="all">All <span class="sr-filter-count">${total}</span></button>
+          <button class="sr-filter" data-f="required">Required <span class="sr-filter-count">${requiredItems.length}</span></button>
+          <button class="sr-filter" data-f="pending">Pending <span class="sr-filter-count">${total - completedCount}</span></button>
+          <button class="sr-filter" data-f="completed">Completed <span class="sr-filter-count">${completedCount}</span></button>
+          ${categories.length > 1 ? categories.map(c => `<button class="sr-filter" data-f="cat:${escapeAttr(c)}">${escapeHtml(c)}</button>`).join('') : ''}
+        </div>
+        <label class="tut-search"><span>${ICONS.search}</span><input id="tut-search" type="search" placeholder="Search tutorials..." autocomplete="off"/></label>
+      </div>
+
+      <div class="tut-grid" id="tut-grid">${itemList.map(card).join('')}</div>
+      <div id="tut-empty" style="display:none;text-align:center;padding:30px;color:var(--text-dim);">No tutorials match this filter.</div>
+    `}
   `;
+
+  if (total === 0) return;
+
+  let filter = 'all', query = '';
+  const applyFilters = () => {
+    let shown = 0;
+    container.querySelectorAll('#tut-grid .tut-card').forEach(c => {
+      let ok = true;
+      if (filter === 'required') ok = c.dataset.req === '1';
+      else if (filter === 'pending') ok = c.dataset.done === '0';
+      else if (filter === 'completed') ok = c.dataset.done === '1';
+      else if (filter.startsWith('cat:')) ok = c.dataset.cat === filter.slice(4);
+      if (ok && query) ok = c.dataset.search.includes(query);
+      c.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    });
+    const empty = container.querySelector('#tut-empty');
+    if (empty) empty.style.display = shown ? 'none' : 'block';
+  };
+  container.querySelectorAll('#tut-filters .sr-filter').forEach(b => b.onclick = () => {
+    container.querySelectorAll('#tut-filters .sr-filter').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); filter = b.dataset.f; applyFilters();
+  });
+  const searchEl = container.querySelector('#tut-search');
+  if (searchEl) searchEl.oninput = (e) => { query = e.target.value.trim().toLowerCase(); applyFilters(); };
+
+  container.querySelectorAll('.tut-watch').forEach(el => el.onclick = () => {
+    const item = itemList.find(i => String(i.id) === el.dataset.id);
+    if (item) openTutorialViewer(item);
+  });
+
   container.querySelectorAll('.mark-training').forEach(btn => {
-    btn.onclick = async () => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
       btn.disabled = true;
       const { error } = await supabase.from('training_completions').insert({
         item_id: btn.dataset.id,
         employee_id: user.id,
         completed_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
       });
-      if (error) {
-        toast(error.message, 'error');
-        btn.disabled = false;
-      } else {
-        toast('Training marked complete', 'success');
-        renderEmployeeTrainingTab(container);
-      }
+      if (error) { toast(error.message, 'error'); btn.disabled = false; }
+      else { toast('🎉 Training marked complete', 'success'); renderEmployeeTrainingTab(container); }
     };
   });
 }

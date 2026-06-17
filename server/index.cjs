@@ -970,6 +970,11 @@ function startEodReminderJob() {
 }
 
 const requiredColumns = {
+    training_items: [
+        { name: 'category', definition: "VARCHAR(80) DEFAULT 'General'" },
+        { name: 'required', definition: 'TINYINT(1) DEFAULT 1' },
+        { name: 'caption', definition: 'VARCHAR(200)' },
+    ],
     profiles: [
         { name: 'salary', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'address', definition: 'TEXT' },
