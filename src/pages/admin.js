@@ -1117,6 +1117,34 @@ async function openInquiryDetail(id, onDone) {
               })
               .join("")}          </select>          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentLocked ? "Already assigned. Save is disabled to prevent duplicate assignment." : "Only currently clocked-in employees with no strict EOD restriction can receive new assignments."}</small>        </div>      </div>      <div class="modal-footer">        <button class="btn btn-secondary" id="ci2">Close</button>        <button class="btn btn-primary" id="save-sr" ${assignmentLocked ? "disabled" : ""}>${ICONS.check}<span>${assignmentLocked ? "Already assigned" : "Save assignment"}</span></button>      </div>    </div>`;
   document.body.appendChild(overlay);
+
+  // Device Service photos (taken / returned) the technician uploaded — admins
+  // couldn't see these before. Fetched on open and appended to the modal body.
+  (async () => {
+    try {
+      const dRes = await fetch(`${API_BASE}/device-tracking/status/${encodeURIComponent(id)}`, { headers: authHeaders() });
+      if (!dRes.ok) return;
+      const d = await dRes.json();
+      const taken = d.device_taken_logs;
+      const returned = d.device_return_logs;
+      const followups = d.device_follow_up_logs || [];
+      if (!taken && !returned && !followups.length) return;
+      const photo = (url, alt) => url
+        ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(url)}" alt="${alt}" style="width:100%;max-height:260px;object-fit:cover;border-radius:8px;margin-top:8px;display:block;"/></a>`
+        : '<div style="color:var(--text-dim);font-size:0.82rem;margin-top:4px;">No photo uploaded</div>';
+      const box = document.createElement("div");
+      box.style.cssText = "margin-top:14px;border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--bg-soft);";
+      box.innerHTML = `
+        <div class="sr-meta-label" style="margin-bottom:10px;">🔧 Device Service — uploaded by technician</div>
+        ${taken ? `<div style="margin-bottom:14px;"><b style="font-size:0.86rem;">📸 Device Taken</b> · <small style="color:var(--text-dim)">${escapeHtml(taken.profiles?.full_name || '')}${taken.taken_at ? ' · ' + formatDateTime(taken.taken_at) : ''}</small>${photo(taken.device_image_url, 'Device taken')}${taken.device_description ? `<div style="font-size:0.82rem;margin-top:6px;">${escapeHtml(taken.device_description)}</div>` : ''}</div>` : ''}
+        ${returned ? `<div style="margin-bottom:6px;"><b style="font-size:0.86rem;">✅ Device Returned</b> · <small style="color:var(--text-dim)">${escapeHtml((returned.device_condition || 'good').toUpperCase())}${returned.returned_at ? ' · ' + formatDateTime(returned.returned_at) : ''}</small>${photo(returned.return_image_url, 'Device returned')}${returned.return_notes ? `<div style="font-size:0.82rem;margin-top:6px;">${escapeHtml(returned.return_notes)}</div>` : ''}</div>` : ''}
+        ${followups.length ? `<div style="margin-top:8px;"><div class="sr-meta-label">Follow-up updates</div>${followups.map(f => `<div style="font-size:0.82rem;margin-top:5px;"><b style="color:var(--primary)">${escapeHtml(String(f.status || '').replace(/_/g, ' '))}</b>${f.notes ? ' — ' + escapeHtml(f.notes) : ''} <small style="color:var(--text-dim)">${f.created_at ? formatDateTime(f.created_at) : ''}</small></div>`).join('')}</div>` : ''}
+      `;
+      const body = overlay.querySelector(".modal-body");
+      if (body) body.appendChild(box);
+    } catch { /* device tracking optional */ }
+  })();
+
   if (i.employee_update_detail) {
     const updateBox = document.createElement("div");
     updateBox.style.cssText =
