@@ -1672,6 +1672,12 @@ export async function renderInquiries(container) {
       // inquiry_services has no cascade FK — remove its rows first; feedback &
       // payments are removed automatically by ON DELETE CASCADE.
       await supabase.from("inquiry_services").delete().eq("inquiry_id", id);
+      // Also remove the linked employee ticket (+ its comments) so the request
+      // disappears from the employee's portal too — not just the admin list.
+      if (row?.ticket_id) {
+        await supabase.from("ticket_comments").delete().eq("ticket_id", row.ticket_id);
+        await supabase.from("tickets").delete().eq("id", row.ticket_id);
+      }
       const { error } = await supabase
         .from("inquiries")
         .delete()
