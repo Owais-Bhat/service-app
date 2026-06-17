@@ -3449,6 +3449,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    // Wire close/cancel + backdrop EARLY so they always work even if a later
+    // part of setup throws. (The full handler below adds polling/channel cleanup.)
+    const _earlyClose = () => overlay.remove();
+    overlay.querySelector('#cm')?.addEventListener('click', _earlyClose);
+    overlay.querySelector('#cm2')?.addEventListener('click', _earlyClose);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) _earlyClose(); });
     if (inquiryRow?.employee_update_detail) {
       const updateBox = document.createElement('div');
       updateBox.style.cssText = 'padding:12px;border-radius:12px;background:var(--bg-soft);border:1px solid var(--border);margin:12px 0;';
@@ -3744,7 +3750,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
       const km = haversineKm(Number(eLat), Number(eLng), Number(dLat), Number(dLng)) * ROAD_FACTOR;
       kmInput.value = km.toFixed(1);
-      calcTotal(); renderPayStatus();
+      // `renderPayStatus` is defined later in setup — skip it on the silent
+      // auto-fill (the initial paint calls it) to avoid a temporal-dead-zone throw.
+      calcTotal();
+      if (!silent) renderPayStatus();
       if (!silent) toast(`Distance: ${km.toFixed(1)} km (clock-in location → ${source})`, 'success');
       return true;
     };
