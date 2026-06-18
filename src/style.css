@@ -5809,6 +5809,21 @@ input, select, textarea { max-width: 100%; }
 .ai-fab-icon svg { width: 22px; height: 22px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); animation: ai-spark 2.6s ease-in-out infinite; }
 @keyframes ai-spark { 0%,100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.15) rotate(8deg); } }
 
+/* Refresh FAB — floats above the AI assistant button */
+.global-refresh-fab {
+  position: fixed; right: 22px; bottom: 90px; z-index: 1199;
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--bg-soft); border: 1px solid var(--border);
+  color: var(--text-soft); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  transition: transform .2s ease, box-shadow .2s ease, color .15s;
+}
+.global-refresh-fab svg { width: 18px; height: 18px; }
+.global-refresh-fab:hover { transform: translateY(-2px) rotate(30deg); box-shadow: 0 8px 20px rgba(0,0,0,.2); color: var(--primary); }
+.global-refresh-fab:active { transform: rotate(180deg); }
+@media (max-width: 560px) { .global-refresh-fab { right: 16px; bottom: 80px; } }
+
 .ai-panel {
   position: fixed; right: 22px; bottom: 24px; z-index: 1201;
   width: 392px; max-width: calc(100vw - 28px);

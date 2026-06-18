@@ -101,6 +101,18 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
   setupBell(onNav);
   mountAIAssistant(); // floating AI assistant — appears once across all portal pages
 
+  // Refresh FAB — sits above the AI assistant button
+  if (!document.getElementById('global-refresh-fab')) {
+    const rfab = document.createElement('button');
+    rfab.id = 'global-refresh-fab';
+    rfab.className = 'global-refresh-fab';
+    rfab.title = 'Refresh page';
+    rfab.setAttribute('aria-label', 'Refresh page');
+    rfab.innerHTML = ICONS.refresh;
+    document.body.appendChild(rfab);
+    rfab.addEventListener('click', () => location.reload());
+  }
+
   app.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);
 
   document.getElementById('logout-btn').addEventListener('click', async () => {

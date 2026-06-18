@@ -573,8 +573,69 @@ export async function renderEmployeeStats(container) {
   }).length;
   const onTimeRate = completedToday > 0 ? Math.round((onTimeToday / completedToday) * 100) : 0;
 
-  const acceptedInq  = allInquiries.filter(x => x.assignment_status === 'accepted').length;
+  const acceptedInqAll = allInquiries.filter(x => x.assignment_status === 'accepted');
+  const acceptedInq  = acceptedInqAll.length;
   const pendingInq   = allInquiries.filter(x => x.assignment_status === 'pending').length;
+
+  // Jobs summary (for stat cards + donut — mirrors My Tasks)
+  const _DONE_ST = new Set(['resolved', 'closed', 'case_closed', 'paid', 'foc']);
+  const _ISSUE_ST = 'issue_not_resolved';
+  const jobsIssueTasksCount = tasks.filter(x => {
+    const st = (Array.isArray(x.inquiries) ? x.inquiries[0]?.status : null) || x.status || '';
+    return st === _ISSUE_ST;
+  }).length;
+  const jobsActiveInqCount    = acceptedInqAll.filter(x => !_DONE_ST.has(x.status) && x.status !== _ISSUE_ST).length;
+  const jobsResolvedInqCount  = acceptedInqAll.filter(x => _DONE_ST.has(x.status)).length;
+  const jobsIssueInqCount     = acceptedInqAll.filter(x => x.status === _ISSUE_ST).length;
+  const jobsTotal      = tasks.length + acceptedInq;
+  const jobsActive     = activeTasks.length + jobsActiveInqCount;
+  const jobsCompleted  = completedAll.length + jobsResolvedInqCount;
+  const jobsIssues     = jobsIssueTasksCount + jobsIssueInqCount;
+  const _donutSegs = [
+    { label: 'Active',    value: jobsActive,    color: 'var(--warning)' },
+    { label: 'Completed', value: jobsCompleted, color: 'var(--success)' },
+    { label: 'Issues',    value: jobsIssues,    color: 'var(--danger)'  },
+  ];
+  const _donutTotal = _donutSegs.reduce((s, x) => s + x.value, 0);
+  const _DONUT_C = 2 * Math.PI * 44;
+  let _donutAcc = 0;
+  const _donutArcs = _donutSegs.filter(s => s.value > 0).map(s => {
+    const dash = (s.value / _donutTotal) * _DONUT_C;
+    const arc = `<circle cx="60" cy="60" r="44" fill="none" stroke="${s.color}" stroke-width="14"
+      stroke-dasharray="${dash.toFixed(2)} ${(_DONUT_C - dash).toFixed(2)}" stroke-dashoffset="${(-_donutAcc).toFixed(2)}"/>`;
+    _donutAcc += dash;
+    return arc;
+  }).join('');
+  const jobsDonutHtml = `
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Jobs Overview</span></div>
+      <div class="card-body" style="padding-top:0;">
+        <div class="stats-grid" style="margin-bottom:20px;">
+          <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${jobsTotal}</div><div class="stat-label">Total Jobs</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${jobsActive}</div><div class="stat-label">Active</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--success)">${jobsCompleted}</div><div class="stat-label">Completed</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${jobsIssues}</div><div class="stat-label">Issues</div></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:28px;flex-wrap:wrap;">
+          <svg width="150" height="150" viewBox="0 0 120 120" role="img" aria-label="Job status distribution">
+            <g transform="rotate(-90 60 60)">
+              <circle cx="60" cy="60" r="44" fill="none" stroke="var(--border)" stroke-width="14"/>
+              ${_donutArcs}
+            </g>
+            <text x="60" y="58" text-anchor="middle" font-size="24" font-weight="800" fill="var(--text)" font-family="var(--font-display)">${_donutTotal}</text>
+            <text x="60" y="74" text-anchor="middle" font-size="8" font-weight="700" letter-spacing="1" fill="var(--text-dim)">TOTAL JOBS</text>
+          </svg>
+          <div style="display:flex;flex-direction:column;gap:10px;min-width:160px;">
+            ${_donutSegs.map(s => `
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
+                <span style="flex:1;font-size:0.85rem;font-weight:600;color:var(--text-soft);">${s.label}</span>
+                <span style="font-size:0.9rem;font-weight:800;">${s.value}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
 
   // Missed EODs (attendance rows without matching EOD)
   const eodDatesSet  = new Set(eodHistory.map(x => x.date));
@@ -648,6 +709,7 @@ export async function renderEmployeeStats(container) {
       <button class="btn btn-secondary" id="stats-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
     ${_statsKpis}
+    ${jobsDonutHtml}
     <div class="card" style="margin-bottom:24px">
       <div class="card-header">
         <span class="card-title">Live Stats</span>

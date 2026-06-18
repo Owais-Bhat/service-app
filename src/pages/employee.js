@@ -1166,22 +1166,6 @@ export async function renderEmployeeDashboard(container) {
   if (myLb && !lbTop.some(e => e.you)) lbTop.push(myLb);
   const lbInitials = (name) => String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
-  // ── Jobs/day (DESIGN third column) — tasks per day, last 7 days ──
-  const jobsDays = Array.from({ length: 7 }, (_, k) => {
-    const d = new Date(); d.setDate(d.getDate() - (6 - k));
-    return d;
-  });
-  const jobsData = jobsDays.map(d => {
-    const key = d.toLocaleDateString('en-CA');
-    return t.filter(x => dateKey(x.inquiries?.[0]?.created_at || x.created_at) === key).length;
-  });
-  const jobsMax = Math.max(1, ...jobsData);
-  const jobsBars = jobsDays.map((d, i) => `
-    <div class="bc-col">
-      <div class="bc-bar" style="height:${Math.round(jobsData[i] / jobsMax * 100)}%;background:${i === 6 ? 'linear-gradient(180deg, var(--accent, var(--primary)), var(--accent-700, #0c6f3d))' : 'var(--accent-soft)'};${i === 6 ? '' : 'border:1px solid var(--line, var(--border));'}border-radius:8px 8px 4px 4px;"><span>${jobsData[i] || ''}</span></div>
-      <div class="bc-lbl">${'SMTWTFS'[d.getDay()]}</div>
-    </div>`).join('');
-
   container.innerHTML = `
     <!-- ── Horizontal clock row ── -->
     <div class="card emp-clock-row" style="margin-bottom:18px;">
@@ -2679,46 +2663,6 @@ export async function renderEmployeeTasks(container) {
     ...issueTasks,
   ].sort(byNewestCreated);
 
-  // ── Donut chart of job status distribution ──
-  const donutSegs = [
-    { label: 'Active', value: activeTasks.length + activeAcceptedInquiries.length, color: 'var(--warning)' },
-    { label: 'Completed', value: completedTasks.length + resolvedAcceptedInquiries.length, color: 'var(--success)' },
-    { label: 'Issues', value: issueTasks.length + issueAcceptedInquiries.length, color: 'var(--danger)' },
-  ];
-  const donutTotal = donutSegs.reduce((s, x) => s + x.value, 0);
-  const DONUT_C = 2 * Math.PI * 44;
-  let donutAcc = 0;
-  const donutArcs = donutSegs.filter(s => s.value > 0).map(s => {
-    const dash = (s.value / donutTotal) * DONUT_C;
-    const arc = `<circle cx="60" cy="60" r="44" fill="none" stroke="${s.color}" stroke-width="14"
-      stroke-dasharray="${dash.toFixed(2)} ${(DONUT_C - dash).toFixed(2)}" stroke-dashoffset="${(-donutAcc).toFixed(2)}"/>`;
-    donutAcc += dash;
-    return arc;
-  }).join('');
-  const donutHtml = `
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Jobs Overview</span></div>
-      <div class="card-body" style="display:flex; align-items:center; justify-content:center; gap:28px; flex-wrap:wrap;">
-        <svg width="150" height="150" viewBox="0 0 120 120" role="img" aria-label="Job status distribution">
-          <g transform="rotate(-90 60 60)">
-            <circle cx="60" cy="60" r="44" fill="none" stroke="var(--border)" stroke-width="14"/>
-            ${donutArcs}
-          </g>
-          <text x="60" y="58" text-anchor="middle" font-size="24" font-weight="800" fill="var(--text)" font-family="var(--font-display)">${donutTotal}</text>
-          <text x="60" y="74" text-anchor="middle" font-size="8" font-weight="700" letter-spacing="1" fill="var(--text-dim)">TOTAL JOBS</text>
-        </svg>
-        <div style="display:flex; flex-direction:column; gap:10px; min-width:160px;">
-          ${donutSegs.map(s => `
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="width:10px; height:10px; border-radius:50%; background:${s.color}; flex-shrink:0;"></span>
-              <span style="flex:1; font-size:0.85rem; font-weight:600; color:var(--text-soft);">${s.label}</span>
-              <span style="font-size:0.9rem; font-weight:800;">${s.value}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-  `;
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -2733,27 +2677,6 @@ export async function renderEmployeeTasks(container) {
         <button class="btn btn-secondary" id="tasks-refresh">${ICONS.refresh}<span>Refresh</span></button>
       </div>
     </div>
-
-    <div class="stats-grid" style="margin-bottom:24px;">
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--primary)">${tasks.length + acceptedInquiries.length}</div>
-        <div class="stat-label">Total Jobs</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--warning)">${activeTasks.length + activeAcceptedInquiries.length}</div>
-        <div class="stat-label">Active</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--success)">${completedTasks.length + resolvedAcceptedInquiries.length}</div>
-        <div class="stat-label">Completed</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--danger)">${issueTasks.length + issueAcceptedInquiries.length}</div>
-        <div class="stat-label">Issues</div>
-      </div>
-    </div>
-
-    ${donutHtml}
 
     ${pendingInquiries.length > 0 ? `
       <div style="margin-bottom:24px;">
