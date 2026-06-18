@@ -3361,23 +3361,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             </div>
             <div id="pricing-section" style="display:${isResolving ? 'block' : 'none'};">
               <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
-              ${mainOptions.length === 0 ? `
+              ${(pricing || []).length === 0 ? `
                 <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services defined by Admin.</p>
               ` : `
-                <div class="svc-picker-wrap">
-                  <select id="svc-main" class="svc-picker">
-                    <option value="">Select Main Category...</option>
-                    ${mainOptions.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('')}
-                  </select>
-                  <select id="svc-sub" class="svc-picker" disabled>
-                    <option value="">Select Sub Category...</option>
-                  </select>
-                  <select id="svc-sub-sub" class="svc-picker" disabled>
-                    <option value="">Select Specific Issue...</option>
-                  </select>
-                  <div class="svc-picker-actions">
-                    <div class="svc-preview-text" id="svc-preview">Pick an issue to see the price.</div>
-                    <button type="button" class="btn btn-primary btn-sm" id="svc-add" disabled style="white-space:nowrap;">+ Add</button>
+                <div class="svc-search-row">
+                  <div class="svc-search-input-wrap">
+                    <span class="svc-search-icon">${ICONS.search}</span>
+                    <input type="search" id="svc-search" class="svc-search-input" placeholder="Search services (e.g. CCTV, network, door, camera…)" autocomplete="off"/>
+                    <div id="svc-results" class="svc-results"></div>
                   </div>
                 </div>
                 <div id="svc-selected" style="display:none; margin-bottom:12px;"></div>
@@ -3844,14 +3835,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       companyCustom.oninput = () => { calcTotal(); renderPayStatus(); };
     }
 
-    // ── Cascading picker wiring ───────────────────────────────────────────
-    const mainSel = overlay.querySelector('#svc-main');
-    const subSel = overlay.querySelector('#svc-sub');
-    const subSubSel = overlay.querySelector('#svc-sub-sub');
-    const svcPreview = overlay.querySelector('#svc-preview');
-    const svcAddBtn = overlay.querySelector('#svc-add');
+    // ── Keyword search picker ────────────────────────────────────────────
     const svcSelectedBox = overlay.querySelector('#svc-selected');
-
     const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
     const renderSelectedList = () => {
@@ -3878,76 +3863,50 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       });
     };
 
-    const fillSubs = () => {
-      if (!subSel) return;
-      const main = mainSel.value;
-      subSel.innerHTML = '<option value="">Select Sub Category...</option>';
-      subSubSel.innerHTML = '<option value="">Select Specific Issue...</option>';
-      subSubSel.disabled = true;
-      svcPreview.textContent = 'Pick an issue to see the price.';
-      svcAddBtn.disabled = true;
-      if (!main || !tree[main]) { subSel.disabled = true; return; }
-      const subs = Object.keys(tree[main]).sort();
-      subs.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s;
-        opt.textContent = s || '- (no sub-group)';
-        subSel.appendChild(opt);
-      });
-      subSel.disabled = false;
-      // If only one sub group, auto-select it.
-      if (subs.length === 1) { subSel.value = subs[0]; fillSubSubs(); }
+    // Build flat search index from pricing rows
+    const flatPricing = (pricing || []).map(p => ({
+      id: p.id,
+      main: p.category || 'Uncategorized',
+      sub: (p.sub_category || '').trim(),
+      leaf: p.sub_sub_category || p.name || '',
+      cost: Number(p.cost) || 0,
+      _s: [p.category, p.sub_category, p.sub_sub_category, p.name].filter(Boolean).join(' ').toLowerCase()
+    })).filter(p => p.leaf);
+
+    const svcSearchInput = overlay.querySelector('#svc-search');
+    const svcResultsBox = overlay.querySelector('#svc-results');
+
+    const closeSvcResults = () => { if (svcResultsBox) { svcResultsBox.innerHTML = ''; svcResultsBox.style.display = 'none'; } };
+    const addSvcItem = (p) => {
+      if (selectedServices.some(s => s.id === p.id)) { toast('Already added', 'warning'); return; }
+      selectedServices.push({ id: p.id, main: p.main, sub: p.sub, leaf: p.leaf, cost: p.cost });
+      renderSelectedList(); calcTotal(); renderPayStatus();
+      if (svcSearchInput) svcSearchInput.value = '';
+      closeSvcResults();
     };
 
-    const fillSubSubs = () => {
-      if (!subSubSel) return;
-      const main = mainSel.value;
-      const sub = subSel.value;
-      subSubSel.innerHTML = '<option value="">Select Specific Issue...</option>';
-      svcPreview.textContent = 'Pick an issue to see the price.';
-      svcAddBtn.disabled = true;
-      if (!main || !tree[main] || tree[main][sub] === undefined) { subSubSel.disabled = true; return; }
-      tree[main][sub].forEach((leaf, i) => {
-        const opt = document.createElement('option');
-        opt.value = String(i);
-        opt.textContent = `${leaf.leaf} (₹${leaf.cost.toLocaleString('en-IN')})`;
-        opt.dataset.id = leaf.id;
-        opt.dataset.cost = leaf.cost;
-        subSubSel.appendChild(opt);
-      });
-      subSubSel.disabled = false;
-    };
-
-    const onLeafChange = () => {
-      const main = mainSel.value;
-      const sub = subSel.value;
-      const idx = subSubSel.value;
-      if (idx === '' || !tree[main]?.[sub]?.[Number(idx)]) {
-        svcPreview.textContent = 'Pick an issue to see the price.';
-        svcAddBtn.disabled = true; return;
-      }
-      const leaf = tree[main][sub][Number(idx)];
-      svcPreview.innerHTML = `Price: <b style="color:var(--primary)">₹${leaf.cost.toLocaleString('en-IN')}</b>`;
-      svcAddBtn.disabled = false;
-    };
-
-    if (mainSel) {
-      mainSel.onchange = fillSubs;
-      subSel.onchange = fillSubSubs;
-      subSubSel.onchange = onLeafChange;
-      svcAddBtn.onclick = () => {
-        const main = mainSel.value, sub = subSel.value, idx = subSubSel.value;
-        const leaf = tree[main]?.[sub]?.[Number(idx)];
-        if (!leaf) return;
-        if (selectedServices.some(s => s.id === leaf.id)) {
-          toast('Already added', 'warning');
-          return;
+    if (svcSearchInput) {
+      svcSearchInput.addEventListener('input', () => {
+        const q = svcSearchInput.value.trim().toLowerCase();
+        if (!q) { closeSvcResults(); return; }
+        const words = q.split(/\s+/);
+        const matches = flatPricing.filter(p => words.every(w => p._s.includes(w))).slice(0, 10);
+        if (matches.length === 0) {
+          svcResultsBox.innerHTML = `<div class="svc-result-empty">No services match "<b>${escHtml(q)}</b>"</div>`;
+          svcResultsBox.style.display = 'block'; return;
         }
-        selectedServices.push({ id: leaf.id, main, sub, leaf: leaf.leaf, cost: leaf.cost });
-        renderSelectedList(); calcTotal(); renderPayStatus();
-        // Reset leaf so the employee can add another quickly.
-        subSubSel.value = ''; svcPreview.textContent = 'Pick an issue to see the price.'; svcAddBtn.disabled = true;
-      };
+        svcResultsBox.innerHTML = matches.map((p, i) => `
+          <div class="svc-result-item" data-idx="${i}">
+            <div class="svc-result-name">${escHtml(p.main)}${p.sub ? ` <span class="svc-result-sep">›</span> ${escHtml(p.sub)}` : ''} <span class="svc-result-sep">›</span> <b>${escHtml(p.leaf)}</b></div>
+            <span class="svc-result-price">₹${p.cost.toLocaleString('en-IN')}</span>
+          </div>`).join('');
+        svcResultsBox.style.display = 'block';
+        svcResultsBox.querySelectorAll('.svc-result-item').forEach((el, i) => {
+          el.addEventListener('mousedown', (e) => { e.preventDefault(); addSvcItem(matches[i]); });
+        });
+      });
+      svcSearchInput.addEventListener('blur', () => setTimeout(closeSvcResults, 180));
+      svcSearchInput.addEventListener('focus', () => { if (svcSearchInput.value.trim()) svcSearchInput.dispatchEvent(new Event('input')); });
     }
 
     // --- Live payment status panel + Save-button gating ---
