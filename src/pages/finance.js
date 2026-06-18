@@ -347,7 +347,6 @@ export async function renderFinanceReportTab(container) {
           </select>
           <button class="btn btn-secondary" id="fin-pdf">${ICONS.receipt || ''}<span>PDF</span></button>
           <button class="btn btn-secondary" id="fin-csv">${ICONS.download || ''}<span>CSV</span></button>
-          <button class="btn btn-secondary" id="fin-refresh">${ICONS.refresh}<span>Refresh</span></button>
         </div>
       </div>
 
@@ -418,7 +417,6 @@ export async function renderFinanceReportTab(container) {
     animateBars(container); animateRings(container); animateLines(container);
 
     container.querySelector('#fin-range').onchange = (e) => { preset = e.target.value; load(); };
-    container.querySelector('#fin-refresh').onclick = () => load();
 
     const aiOut = container.querySelector('#fin-ai-out');
     const runAI = async (btn, question) => {

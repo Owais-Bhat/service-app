@@ -704,7 +704,6 @@ export async function renderEmployeeStats(container) {
         <h1 style="display:inline-flex;align-items:center;gap:10px">${ICONS.dashboard}<span>My Stats</span></h1>
         <p style="color:var(--text-soft);margin:4px 0 0">Your personal metrics — live data + custom cards</p>
       </div>
-      <button class="btn btn-secondary" id="stats-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
     ${_statsKpis}
     ${jobsDonutHtml}
@@ -733,7 +732,6 @@ export async function renderEmployeeStats(container) {
       </div>
     </div>`;
 
-  container.querySelector('#stats-refresh')?.addEventListener('click', () => renderEmployeeStats(container));
   bindCustomActions(container, storageKey, customCards);
 
   container.querySelector('#emp-daily-target')?.addEventListener('change', e => {

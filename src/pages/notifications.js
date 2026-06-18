@@ -50,7 +50,6 @@ export async function renderNotificationsTab(container) {
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-secondary" id="ntf-readall">Mark all read</button>
-          <button class="btn btn-secondary" id="ntf-refresh">${ICONS.refresh}<span>Refresh</span></button>
         </div>
       </div>
 

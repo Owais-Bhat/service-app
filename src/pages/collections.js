@@ -203,7 +203,6 @@ export async function renderEmployeeCollections(container) {
         <h1>My Collections</h1>
         <p>Service charges and travel you have collected</p>
       </div>
-      <button class="btn btn-secondary" id="collections-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
     <div class="collection-filters">
       ${['daily','weekly','monthly','yearly','all'].map(p => `<button class="sr-filter ${p === (container.dataset.period || 'monthly') ? 'active' : ''}" data-period="${p}">${p}</button>`).join('')}
@@ -219,7 +218,6 @@ export async function renderEmployeeCollections(container) {
     <div class="card">${employeeTable(visible)}</div>
   `;
 
-  container.querySelector('#collections-refresh').onclick = () => renderEmployeeCollections(container);
   container.querySelectorAll('.coll-row').forEach(tr => tr.onclick = () => {
     const r = visible.find(x => String(x.id) === tr.dataset.id);
     if (r) openBillDetail(r, { admin: false });
