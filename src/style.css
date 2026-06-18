@@ -127,6 +127,12 @@
   --line-strong: rgba(16, 50, 36, 0.16);
 
   --chip-bg: rgba(16, 50, 36, 0.05);
+
+  /* Neumorphic popup shadows — light theme */
+  --neu-shadow:
+    6px 6px 20px rgba(163, 188, 173, 0.55),
+    -4px -4px 14px rgba(255, 255, 255, 0.90),
+    0 2px 0 rgba(255, 255, 255, 0.80) inset;
 }
 
 [data-theme="dark"] {
@@ -183,6 +189,12 @@
   --line-strong: rgba(255, 255, 255, 0.16);
 
   --chip-bg: rgba(255, 255, 255, 0.06);
+
+  /* Neumorphic popup shadows — dark theme */
+  --neu-shadow:
+    8px 8px 24px rgba(0, 0, 0, 0.55),
+    -4px -4px 12px rgba(255, 255, 255, 0.04),
+    0 2px 0 rgba(255, 255, 255, 0.05) inset;
 }
 
 html {
@@ -2033,12 +2045,10 @@ tr:hover td {
 }
 
 .modal {
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(30px) saturate(160%);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
-  border: 1px solid var(--glass-border);
+  background: var(--bg, #ffffff);
+  border: 1px solid var(--border);
   border-radius: 30px;
-  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--neu-shadow);
   width: 100%;
   max-width: 580px;
   max-height: 90vh;
@@ -2055,9 +2065,7 @@ tr:hover td {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
+  background: var(--bg, #ffffff);
   border-radius: 30px 30px 0 0;
 }
 
@@ -2103,12 +2111,10 @@ tr:hover td {
 }
 
 .modal-card {
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(30px) saturate(160%);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
-  border: 1px solid var(--glass-border);
+  background: var(--bg, #ffffff);
+  border: 1px solid var(--border);
   border-radius: 24px;
-  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--neu-shadow);
   width: 100%;
   max-width: 580px;
   max-height: calc(100vh - 40px);
@@ -7498,7 +7504,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 /* ── Full-screen notification detail (notify-center.js) ────────────── */
 .ntf-fullscreen{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,12,20,.62);backdrop-filter:blur(6px);animation:ntfFade .18s ease;}
 @keyframes ntfFade{from{opacity:0}to{opacity:1}}
-.ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:ntfPop .22s cubic-bezier(.2,.9,.3,1.2);}
+.ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--bg,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:var(--neu-shadow);animation:ntfPop .22s cubic-bezier(.2,.9,.3,1.2);}
 @keyframes ntfPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
 .ntf-fullscreen-close{position:absolute;top:12px;right:14px;border:none;background:transparent;font-size:1.7rem;line-height:1;color:var(--text-dim);cursor:pointer;}
 .ntf-fullscreen-icon{font-size:3rem;line-height:1;margin-bottom:8px;}
@@ -7960,7 +7966,8 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .lb-podium-slot-0 .lb-podium-avatar { border-color: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,.3); }
 .lb-podium-slot-1 .lb-podium-avatar { border-color: #9ca3af; box-shadow: 0 0 0 3px rgba(156,163,175,.25); }
 .lb-podium-slot-2 .lb-podium-avatar { border-color: #b45309; box-shadow: 0 0 0 3px rgba(180,83,9,.25); }
-.lb-podium-you   { outline: 3px solid var(--accent, var(--primary)); outline-offset: 3px; }
+.lb-podium-you       { outline: 3px solid var(--accent, var(--primary)); outline-offset: 3px; }
+.lb-podium-empty-av  { background: var(--border) !important; color: var(--text-dim) !important; border-color: var(--border) !important; box-shadow: none !important; }
 .lb-podium-name {
   font-weight: 700; font-size: 0.82rem; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

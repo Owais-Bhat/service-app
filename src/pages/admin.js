@@ -3869,19 +3869,19 @@ export async function renderFeedbackTab(container) {
   const initials = (name) => String(name).trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
   const PODIUM_ORDER = [1, 0, 2];
   const PODIUM_H = ["96px", "120px", "80px"];
-  const podiumSlots = PODIUM_ORDER.map((i) => monthRows[i] || null);
+  // Always show all 3 podium slots — pad with placeholder if fewer than 3 employees.
+  const podiumSlots = PODIUM_ORDER.map((i) => monthRows[i] || { id: null, name: "—", count: 0, avg: 0, fiveStars: 0, _empty: true });
 
   const podiumHtml = `<div class="lb-podium">
     ${podiumSlots.map((e, slot) => {
       const rank = PODIUM_ORDER[slot];
-      if (!e) return `<div class="lb-podium-slot lb-podium-slot-${rank}"></div>`;
       return `<div class="lb-podium-slot lb-podium-slot-${rank}">
         <div class="lb-podium-medal">${MEDAL[rank]}</div>
-        <div class="lb-podium-avatar">${initials(e.name)}</div>
-        <div class="lb-podium-name">${escapeHtml(e.name)}</div>
-        <div class="lb-podium-reviews"><b>${e.count}</b> review${e.count !== 1 ? "s" : ""}</div>
-        <div class="lb-podium-stars">${e.count > 0 ? `${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span>` : '<span style="color:var(--text-dim);font-size:0.75rem">No reviews yet</span>'}</div>
-        <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};"></div>
+        <div class="lb-podium-avatar ${e._empty ? 'lb-podium-empty-av' : ''}">${e._empty ? "?" : initials(e.name)}</div>
+        <div class="lb-podium-name">${e._empty ? '<span style="color:var(--text-dim)">Available</span>' : escapeHtml(e.name)}</div>
+        <div class="lb-podium-reviews">${e._empty ? '<span style="color:var(--text-dim);font-size:0.75rem">No one yet</span>' : `<b>${e.count}</b> review${e.count !== 1 ? "s" : ""}`}</div>
+        <div class="lb-podium-stars">${e._empty || e.count === 0 ? '<span style="color:var(--text-dim);font-size:0.75rem">No reviews yet</span>' : `${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span>`}</div>
+        <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};${e._empty ? "opacity:0.3;" : ""}"></div>
       </div>`;
     }).join("")}
   </div>`;

@@ -2007,26 +2007,28 @@ export async function renderEmployeeLeaderboard(container) {
   const PODIUM_H = ['96px', '120px', '80px']; // bar heights for 1st/2nd/3rd
   const PODIUM_ORDER = [1, 0, 2];             // display order: 2nd, 1st, 3rd
   const initials = (name) => String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
-  const podiumSlots = PODIUM_ORDER.map(i => monthly[i] || null);
 
-  const podiumHtml = monthly.length === 0
-    ? `<div style="text-align:center;padding:48px;color:var(--text-dim)">No reviews this month yet</div>`
-    : `<div class="lb-podium">
-        ${podiumSlots.map((e, slot) => {
-          const rank = PODIUM_ORDER[slot]; // 0-based index in monthly array
-          if (!e) return `<div class="lb-podium-slot lb-podium-slot-${rank}"></div>`;
-          const isYou = e.id === user.id;
-          return `
-            <div class="lb-podium-slot lb-podium-slot-${rank}">
-              <div class="lb-podium-medal">${MEDAL[rank]}</div>
-              <div class="lb-podium-avatar ${isYou ? 'lb-podium-you' : ''}">${initials(e.name)}</div>
-              <div class="lb-podium-name">${escapeHtml(e.name)}${isYou ? ' <span class="lb-you-tag">You</span>' : ''}</div>
-              <div class="lb-podium-reviews"><b>${e.count}</b> review${e.count !== 1 ? 's' : ''}</div>
-              <div class="lb-podium-stars">${e.count > 0 ? `${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span>` : '<span style="color:var(--text-dim);font-size:0.75rem;">No reviews yet</span>'}</div>
-              <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};"></div>
-            </div>`;
-        }).join('')}
+  // Always show 3 slots — pad with placeholder if fewer than 3 employees exist.
+  const podiumSlots = PODIUM_ORDER.map(i => monthly[i] || { id: null, name: '—', count: 0, avg: 0, fiveStars: 0, _empty: true });
+
+  const renderPodiumSlot = (e, rank) => {
+    const isYou = e.id === user.id;
+    return `
+      <div class="lb-podium-slot lb-podium-slot-${rank}">
+        <div class="lb-podium-medal">${MEDAL[rank]}</div>
+        <div class="lb-podium-avatar ${e._empty ? 'lb-podium-empty-av' : ''} ${isYou ? 'lb-podium-you' : ''}">
+          ${e._empty ? '?' : initials(e.name)}
+        </div>
+        <div class="lb-podium-name">${e._empty ? '<span style="color:var(--text-dim)">Available</span>' : escapeHtml(e.name) + (isYou ? ' <span class="lb-you-tag">You</span>' : '')}</div>
+        <div class="lb-podium-reviews">${e._empty ? '<span style="color:var(--text-dim);font-size:0.75rem;">No one yet</span>' : `<b>${e.count}</b> review${e.count !== 1 ? 's' : ''}`}</div>
+        <div class="lb-podium-stars">${e._empty || e.count === 0 ? '<span style="color:var(--text-dim);font-size:0.75rem;">No reviews yet</span>' : `${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span>`}</div>
+        <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};${e._empty ? 'opacity:0.3;' : ''}"></div>
       </div>`;
+  };
+
+  const podiumHtml = `<div class="lb-podium">
+    ${podiumSlots.map((e, slot) => renderPodiumSlot(e, PODIUM_ORDER[slot])).join('')}
+  </div>`;
 
   container.innerHTML = `
     <div class="page-header">
