@@ -197,6 +197,7 @@ export async function renderEmployeeCollections(container) {
   const visible = filterRows(rows, filters);
   const totals = summarizeEmployee(visible);
 
+  const activePeriod = container.dataset.period || 'monthly';
   container.innerHTML = `
     <div class="page-header collection-header">
       <div>
@@ -204,17 +205,52 @@ export async function renderEmployeeCollections(container) {
         <p>Service charges and travel you have collected</p>
       </div>
     </div>
-    <div class="collection-filters">
-      ${['daily','weekly','monthly','yearly','all'].map(p => `<button class="sr-filter ${p === (container.dataset.period || 'monthly') ? 'active' : ''}" data-period="${p}">${p}</button>`).join('')}
-      <input type="date" id="coll-from" value="${filters.from}">
-      <input type="date" id="coll-to" value="${filters.to}">
-      <button class="btn btn-secondary btn-sm" id="coll-apply">Apply</button>
+
+    <div class="coll-filter-bar">
+      <div class="coll-filter-group">
+        <label class="coll-filter-label">Period</label>
+        <select id="coll-period" class="coll-select">
+          <option value="daily"   ${activePeriod === 'daily'   ? 'selected' : ''}>Today</option>
+          <option value="weekly"  ${activePeriod === 'weekly'  ? 'selected' : ''}>This Week</option>
+          <option value="monthly" ${activePeriod === 'monthly' ? 'selected' : ''}>This Month</option>
+          <option value="yearly"  ${activePeriod === 'yearly'  ? 'selected' : ''}>This Year</option>
+          <option value="custom"  ${activePeriod === 'custom'  ? 'selected' : ''}>Custom Range</option>
+          <option value="all"     ${activePeriod === 'all'     ? 'selected' : ''}>All Time</option>
+        </select>
+      </div>
+      <div class="coll-filter-group coll-date-wrap" id="coll-custom-dates" style="${activePeriod === 'custom' ? '' : 'display:none'}">
+        <label class="coll-filter-label">From</label>
+        <input type="date" id="coll-from" class="coll-date-input" value="${filters.from}">
+        <label class="coll-filter-label" style="margin-left:8px;">To</label>
+        <input type="date" id="coll-to" class="coll-date-input" value="${filters.to}">
+        <button class="btn btn-primary btn-sm" id="coll-apply">Apply</button>
+      </div>
     </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${inr(totals.service)}</div><div class="stat-label">Service (${totals.count})</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${inr(totals.travel)}</div><div class="stat-label">Travel</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${inr(totals.total)}</div><div class="stat-label">Total Collection</div></div>
+
+    <div class="coll-stats-row">
+      <div class="coll-stat-card coll-stat-service">
+        <div class="coll-stat-icon">🔧</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.service)}</div>
+          <div class="coll-stat-lbl">Service · ${totals.count} ticket${totals.count !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-travel">
+        <div class="coll-stat-icon">🚗</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.travel)}</div>
+          <div class="coll-stat-lbl">Travel</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-total">
+        <div class="coll-stat-icon">💰</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.total)}</div>
+          <div class="coll-stat-lbl">Total Collected</div>
+        </div>
+      </div>
     </div>
+
     <div class="card">${employeeTable(visible)}</div>
   `;
 
@@ -222,15 +258,21 @@ export async function renderEmployeeCollections(container) {
     const r = visible.find(x => String(x.id) === tr.dataset.id);
     if (r) openBillDetail(r, { admin: false });
   });
-  container.querySelectorAll('.collection-filters .sr-filter').forEach(btn => {
-    btn.onclick = () => {
-      container.dataset.period = btn.dataset.period;
+  container.querySelector('#coll-period').onchange = function () {
+    const p = this.value;
+    const customDates = container.querySelector('#coll-custom-dates');
+    if (p === 'custom') {
+      customDates.style.display = '';
+    } else {
+      customDates.style.display = 'none';
+      container.dataset.period = p;
       container.dataset.from = '';
       container.dataset.to = '';
       renderEmployeeCollections(container);
-    };
-  });
-  container.querySelector('#coll-apply').onclick = () => {
+    }
+  };
+  const applyBtn = container.querySelector('#coll-apply');
+  if (applyBtn) applyBtn.onclick = () => {
     container.dataset.period = 'custom';
     container.dataset.from = container.querySelector('#coll-from').value;
     container.dataset.to = container.querySelector('#coll-to').value;
@@ -296,31 +338,87 @@ export async function renderAdminCollections(container) {
     return { id, name: profileById.get(id)?.full_name || 'Unassigned', ...s };
   }).sort((a, b) => b.net - a.net);
 
+  const activePeriod = container.dataset.period || 'monthly';
   container.innerHTML = `
     <div class="page-header collection-header">
       <div>
         <h1>Collection Reports</h1>
-        <p>Detailed service collections, discounts (your profit cut) and net by employee</p>
+        <p>Detailed service collections, discounts and net by employee</p>
       </div>
       <button class="btn btn-primary" id="coll-export">${ICONS.download}<span>Export</span></button>
     </div>
-    <div class="collection-filters">
-      ${['daily','weekly','monthly','yearly','all'].map(p => `<button class="sr-filter ${p === (container.dataset.period || 'monthly') ? 'active' : ''}" data-period="${p}">${p}</button>`).join('')}
-      <select id="coll-employee">
-        <option value="all">All employees</option>
-        ${employees.map(e => `<option value="${e.id}" ${filters.employee === e.id ? 'selected' : ''}>${escapeHtml(e.full_name || e.phone || e.id)}</option>`).join('')}
-      </select>
-      <input type="date" id="coll-from" value="${filters.from}">
-      <input type="date" id="coll-to" value="${filters.to}">
-      <button class="btn btn-secondary btn-sm" id="coll-apply">Apply</button>
+
+    <div class="coll-filter-bar">
+      <div class="coll-filter-group">
+        <label class="coll-filter-label">Period</label>
+        <select id="coll-period" class="coll-select">
+          <option value="daily"   ${activePeriod === 'daily'   ? 'selected' : ''}>Today</option>
+          <option value="weekly"  ${activePeriod === 'weekly'  ? 'selected' : ''}>This Week</option>
+          <option value="monthly" ${activePeriod === 'monthly' ? 'selected' : ''}>This Month</option>
+          <option value="yearly"  ${activePeriod === 'yearly'  ? 'selected' : ''}>This Year</option>
+          <option value="custom"  ${activePeriod === 'custom'  ? 'selected' : ''}>Custom Range</option>
+          <option value="all"     ${activePeriod === 'all'     ? 'selected' : ''}>All Time</option>
+        </select>
+      </div>
+      <div class="coll-filter-group">
+        <label class="coll-filter-label">Employee</label>
+        <select id="coll-employee" class="coll-select">
+          <option value="all">All Employees</option>
+          ${employees.map(e => `<option value="${e.id}" ${filters.employee === e.id ? 'selected' : ''}>${escapeHtml(e.full_name || e.phone || e.id)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="coll-filter-group coll-date-wrap" id="coll-custom-dates" style="${activePeriod === 'custom' ? '' : 'display:none'}">
+        <label class="coll-filter-label">From</label>
+        <input type="date" id="coll-from" class="coll-date-input" value="${filters.from}">
+        <label class="coll-filter-label" style="margin-left:8px;">To</label>
+        <input type="date" id="coll-to" class="coll-date-input" value="${filters.to}">
+        <button class="btn btn-primary btn-sm" id="coll-apply">Apply</button>
+      </div>
     </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${inr(totals.service)}</div><div class="stat-label">Service (${totals.count})</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${inr(totals.travel)}</div><div class="stat-label">Travel</div></div>
-      <div class="stat-card"><div class="stat-value">${inr(totals.platform)}</div><div class="stat-label">Platform Fee</div></div>
-      <div class="stat-card"><div class="stat-value">${inr(totals.gst)}</div><div class="stat-label">GST (18%)</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${inr(totals.discount)}</div><div class="stat-label">Discount Given (profit cut)</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${inr(totals.net)}</div><div class="stat-label">Net Collected</div></div>
+
+    <div class="coll-stats-row">
+      <div class="coll-stat-card coll-stat-service">
+        <div class="coll-stat-icon">🔧</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.service)}</div>
+          <div class="coll-stat-lbl">Service · ${totals.count} ticket${totals.count !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-travel">
+        <div class="coll-stat-icon">🚗</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.travel)}</div>
+          <div class="coll-stat-lbl">Travel</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-platform">
+        <div class="coll-stat-icon">🏷️</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.platform)}</div>
+          <div class="coll-stat-lbl">Platform Fee</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-gst">
+        <div class="coll-stat-icon">🧾</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.gst)}</div>
+          <div class="coll-stat-lbl">GST (18%)</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-discount">
+        <div class="coll-stat-icon">🎁</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.discount)}</div>
+          <div class="coll-stat-lbl">Discount Given</div>
+        </div>
+      </div>
+      <div class="coll-stat-card coll-stat-total">
+        <div class="coll-stat-icon">💰</div>
+        <div class="coll-stat-body">
+          <div class="coll-stat-val">${inr(totals.net)}</div>
+          <div class="coll-stat-lbl">Net Collected</div>
+        </div>
+      </div>
     </div>
     <div class="card" style="margin-bottom:20px;">
       <div class="card-header"><span class="card-title">By Employee</span></div>
@@ -340,15 +438,26 @@ export async function renderAdminCollections(container) {
     const r = visible.find(x => String(x.id) === tr.dataset.id);
     if (r) openBillDetail(r, { admin: true });
   });
-  container.querySelectorAll('.collection-filters .sr-filter').forEach(btn => {
-    btn.onclick = () => {
-      container.dataset.period = btn.dataset.period;
+  container.querySelector('#coll-period').onchange = function () {
+    const p = this.value;
+    const customDates = container.querySelector('#coll-custom-dates');
+    if (p === 'custom') {
+      customDates.style.display = '';
+    } else {
+      customDates.style.display = 'none';
+      container.dataset.period = p;
+      container.dataset.employee = container.querySelector('#coll-employee').value;
       container.dataset.from = '';
       container.dataset.to = '';
       renderAdminCollections(container);
-    };
-  });
-  container.querySelector('#coll-apply').onclick = () => {
+    }
+  };
+  container.querySelector('#coll-employee').onchange = function () {
+    container.dataset.employee = this.value;
+    renderAdminCollections(container);
+  };
+  const applyBtn = container.querySelector('#coll-apply');
+  if (applyBtn) applyBtn.onclick = () => {
     container.dataset.period = 'custom';
     container.dataset.employee = container.querySelector('#coll-employee').value;
     container.dataset.from = container.querySelector('#coll-from').value;

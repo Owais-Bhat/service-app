@@ -7779,6 +7779,99 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .route-sub { font-size:0.77rem; color:var(--text-dim); margin-top:3px; line-height:1.4; }
 .route-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
 
+/* ── Collections: Filter Bar ───────────────────────────────────── */
+.coll-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-soft, var(--panel-2, #f8fafc));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
+.coll-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.coll-filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.coll-select {
+  padding: 8px 32px 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color .2s;
+}
+.coll-select:focus { outline: none; border-color: var(--primary); }
+.coll-date-wrap { flex-direction: row; align-items: flex-end; gap: 8px; }
+.coll-date-input {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+  transition: border-color .2s;
+}
+.coll-date-input:focus { outline: none; border-color: var(--primary); }
+
+/* Collections: Stat Cards Row */
+.coll-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.coll-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  transition: transform .15s, box-shadow .15s;
+}
+.coll-stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.1); }
+.coll-stat-icon { font-size: 1.6rem; line-height: 1; flex-shrink: 0; }
+.coll-stat-body { min-width: 0; }
+.coll-stat-val  { font-weight: 800; font-size: 1.1rem; white-space: nowrap; }
+.coll-stat-lbl  { font-size: 0.74rem; color: var(--text-dim); margin-top: 2px; }
+
+.coll-stat-service  .coll-stat-val { color: var(--primary); }
+.coll-stat-travel   .coll-stat-val { color: var(--warning, #f59e0b); }
+.coll-stat-total    .coll-stat-val { color: var(--success, #22c55e); }
+.coll-stat-platform .coll-stat-val { color: var(--text); }
+.coll-stat-gst      .coll-stat-val { color: var(--text); }
+.coll-stat-discount .coll-stat-val { color: var(--danger, #ef4444); }
+
+.coll-stat-service  { border-top: 3px solid var(--primary); }
+.coll-stat-travel   { border-top: 3px solid var(--warning, #f59e0b); }
+.coll-stat-total    { border-top: 3px solid var(--success, #22c55e); }
+.coll-stat-discount { border-top: 3px solid var(--danger, #ef4444); }
+
+@media (max-width: 560px) {
+  .coll-stats-row { grid-template-columns: 1fr 1fr; }
+  .coll-filter-bar { padding: 12px 14px; gap: 10px; }
+}
+
 /* ── Leaderboard — Your Rank Card ──────────────────────────────── */
 .lb-my-rank-card {
   display: flex;
