@@ -1892,14 +1892,16 @@ export async function renderEmployeeCash(container) {
   const cashOutside = (e) => {
     if (!cashBtn.closest('.df-wrap').contains(e.target)) {
       cashPanel.style.display = 'none';
+      cashBtn.classList.remove('df-open');
       document.removeEventListener('click', cashOutside);
     }
   };
-  const cashClose = () => { cashPanel.style.display = 'none'; document.removeEventListener('click', cashOutside); };
+  const cashClose = () => { cashPanel.style.display = 'none'; cashBtn.classList.remove('df-open'); document.removeEventListener('click', cashOutside); };
   cashBtn.onclick = (e) => {
     e.stopPropagation();
     if (cashPanel.style.display === 'none') {
       cashPanel.style.display = '';
+      cashBtn.classList.add('df-open');
       setTimeout(() => document.addEventListener('click', cashOutside), 0);
     } else { cashClose(); }
   };
@@ -2875,6 +2877,7 @@ export async function renderEmployeeTasks(container) {
   const taskOutside = (e) => {
     if (!taskBtn.closest('.df-wrap').contains(e.target)) {
       taskPanel.style.display = 'none';
+      taskBtn.classList.remove('df-open');
       document.removeEventListener('click', taskOutside);
     }
   };
@@ -2882,14 +2885,16 @@ export async function renderEmployeeTasks(container) {
     e.stopPropagation();
     if (taskPanel.style.display === 'none') {
       taskPanel.style.display = '';
+      taskBtn.classList.add('df-open');
       setTimeout(() => document.addEventListener('click', taskOutside), 0);
     } else {
       taskPanel.style.display = 'none';
+      taskBtn.classList.remove('df-open');
       document.removeEventListener('click', taskOutside);
     }
   };
   const searchInput = container.querySelector('#task-search');
-  const taskClose = () => { taskPanel.style.display = 'none'; document.removeEventListener('click', taskOutside); };
+  const taskClose = () => { taskPanel.style.display = 'none'; taskBtn.classList.remove('df-open'); document.removeEventListener('click', taskOutside); };
   container.querySelector('#task-ok').onclick = () => {
     activeFilter = container.querySelector('#task-status-sel').value;
     searchQuery = searchInput ? searchInput.value : '';

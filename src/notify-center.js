@@ -7,6 +7,34 @@ import { ICONS } from './icons.js';
 const VOICE_KEY = 'voice_alerts';            // '0' to mute voice
 const inr = (v) => Math.round(Number(v) || 0).toLocaleString('en-IN');
 
+// Subject → page navigation (role-aware) — mirrors notifications.js NAV_MAP.
+const NAV_MAP = {
+  new_service_request:      { admin: 'inquiries',          employee: 'all-tickets' },
+  new_assignment:           { admin: 'inquiries',          employee: 'all-tickets' },
+  job_completed:            { admin: 'inquiries',          employee: 'all-tickets' },
+  sla_breach:               { admin: 'inquiries',          employee: 'all-tickets' },
+  payment_received:         { admin: 'payments',           employee: 'all-tickets' },
+  cash_collected:           { admin: 'cash',               employee: 'my-cash'     },
+  new_complaint:            { admin: 'complaints' },
+  device_status:            { admin: 'device-tracking',   employee: 'dashboard'   },
+  device_followup_reminder: { admin: 'device-tracking',   employee: 'dashboard'   },
+  notice_posted:            { employee: 'dashboard' },
+  training_added:           { admin: 'training-courses',   employee: 'my-training-courses' },
+  leave_approved:           { employee: 'my-leaves' },
+  leave_rejected:           { employee: 'my-leaves' },
+  leave_request:            { admin: 'leaves' },
+  eod_warning:              { employee: 'my-eod' },
+  leaderboard_rank:         { employee: 'leaderboard' },
+  finance_summary:          { admin: 'finance' },
+};
+
+function navTarget(subject) {
+  const role = window.__appRole || 'employee';
+  const map = NAV_MAP[subject];
+  if (!map) return null;
+  return map[role] || map.admin || map.employee || null;
+}
+
 // Per-subject display + spoken-line config. {voice} receives the notification
 // payload (subject, title, body, data) and returns the sentence to speak.
 const SUBJECTS = {
@@ -141,6 +169,7 @@ export function openNotificationDetail(item) {
       <div class="ntf-fullscreen-time">${fmt(item.created_at || Date.now())}</div>
       <div class="ntf-fullscreen-actions">
         ${data.url ? `<a class="btn btn-primary" href="${esc(data.url)}">Open</a>` : ''}
+        ${navTarget(item.subject) ? `<button class="btn btn-primary ntf-goto-btn">Go to page →</button>` : ''}
         <button class="btn btn-secondary ntf-fullscreen-dismiss">Dismiss</button>
       </div>
     </div>`;
@@ -152,4 +181,11 @@ export function openNotificationDetail(item) {
   document.addEventListener('keydown', function onKey(e) {
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
   });
+  const gotoBtn = overlay.querySelector('.ntf-goto-btn');
+  if (gotoBtn) {
+    gotoBtn.onclick = () => {
+      const target = navTarget(item.subject);
+      if (target && window.__appNav) { close(); window.__appNav(target); }
+    };
+  }
 }

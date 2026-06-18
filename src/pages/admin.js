@@ -1192,12 +1192,13 @@ export async function renderAttendance(container) {
       rowHtml(filtered);
     updateAttBadge();
   };
-  const attClose = () => { attPanel.style.display = "none"; document.removeEventListener("click", attOutside); };
+  const attClose = () => { attPanel.style.display = "none"; attBtn.classList.remove('df-open'); document.removeEventListener("click", attOutside); };
   const attOutside = (e) => { if (!attBtn.closest(".df-wrap").contains(e.target)) attClose(); };
   attBtn.onclick = (e) => {
     e.stopPropagation();
     if (attPanel.style.display === "none") {
       attPanel.style.display = "";
+      attBtn.classList.add('df-open');
       setTimeout(() => document.addEventListener("click", attOutside), 0);
     } else { attClose(); }
   };
@@ -1492,6 +1493,7 @@ export async function renderInquiries(container) {
     if (srBtn && !srBtn.closest(".df-wrap").contains(e.target)) {
       srPanel.style.display = "none";
       container.dataset.srDfOpen = "";
+      srBtn.classList.remove('df-open');
       document.removeEventListener("click", srOutside);
     }
   };
@@ -1500,17 +1502,19 @@ export async function renderInquiries(container) {
     if (srPanel.style.display === "none") {
       srPanel.style.display = "";
       container.dataset.srDfOpen = "1";
+      srBtn.classList.add('df-open');
       setTimeout(() => document.addEventListener("click", srOutside), 0);
     } else {
       srPanel.style.display = "none";
       container.dataset.srDfOpen = "";
+      srBtn.classList.remove('df-open');
       document.removeEventListener("click", srOutside);
     }
   };
   if (container.dataset.srDfOpen === "1") {
     setTimeout(() => document.addEventListener("click", srOutside), 0);
   }
-  const srClose = () => { srPanel.style.display = "none"; container.dataset.srDfOpen = ""; document.removeEventListener("click", srOutside); };
+  const srClose = () => { srPanel.style.display = "none"; container.dataset.srDfOpen = ""; srBtn.classList.remove('df-open'); document.removeEventListener("click", srOutside); };
   container.querySelector("#sr-ok").onclick = () => {
     container.dataset.srFilter = container.querySelector("#sr-status-sel").value;
     container.dataset.srCompany = (container.querySelector("#sr-company-filter").value || "").trim();
@@ -1637,12 +1641,13 @@ export async function renderEODReports(container) {
       renderItems(filtered);
       updateEodBadge();
     };
-    const eodClose = () => { eodPanel.style.display = "none"; document.removeEventListener("click", eodOutside); };
+    const eodClose = () => { eodPanel.style.display = "none"; eodBtn.classList.remove('df-open'); document.removeEventListener("click", eodOutside); };
     const eodOutside = (e) => { if (!eodBtn.closest(".df-wrap").contains(e.target)) eodClose(); };
     eodBtn.onclick = (e) => {
       e.stopPropagation();
       if (eodPanel.style.display === "none") {
         eodPanel.style.display = "";
+        eodBtn.classList.add('df-open');
         setTimeout(() => document.addEventListener("click", eodOutside), 0);
       } else { eodClose(); }
     };

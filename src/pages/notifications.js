@@ -19,26 +19,72 @@ const SUBJECT_ICON = {
   finance_summary: '📊',
 };
 
+// Subject → page navigation (role-aware).
+const NAV_MAP = {
+  new_service_request:     { admin: 'inquiries',         employee: 'all-tickets' },
+  new_assignment:          { admin: 'inquiries',         employee: 'all-tickets' },
+  job_completed:           { admin: 'inquiries',         employee: 'all-tickets' },
+  sla_breach:              { admin: 'inquiries',         employee: 'all-tickets' },
+  payment_received:        { admin: 'payments',          employee: 'all-tickets' },
+  cash_collected:          { admin: 'cash',              employee: 'my-cash'     },
+  new_complaint:           { admin: 'complaints' },
+  device_status:           { admin: 'device-tracking',  employee: 'dashboard'   },
+  device_followup_reminder:{ admin: 'device-tracking',  employee: 'dashboard'   },
+  notice_posted:           { employee: 'dashboard' },
+  training_added:          { admin: 'training-courses',  employee: 'my-training-courses' },
+  leave_approved:          { employee: 'my-leaves' },
+  leave_rejected:          { employee: 'my-leaves' },
+  leave_request:           { admin: 'leaves' },
+  eod_warning:             { employee: 'my-eod' },
+  leaderboard_rank:        { employee: 'leaderboard' },
+  finance_summary:         { admin: 'finance' },
+};
+
+function navTarget(subject) {
+  const role = window.__appRole || 'employee';
+  const map = NAV_MAP[subject];
+  if (!map) return null;
+  return map[role] || map.admin || map.employee || null;
+}
+
+// Subjects that are device-tracking-only — filtered when feature is off.
+const DEVICE_SUBJECTS = new Set(['device_status', 'device_followup_reminder']);
+
 export async function renderNotificationsTab(container) {
   let items = [];
   let filter = 'all'; // all | unread | payment_received
+  let deviceTrackingEnabled = true; // default to showing; overridden by fetch
 
   const fetchAll = async () => {
-    const r = await fetch(`${API}/notifications`, { headers: authH() });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Could not load notifications');
+    const [notifRes, dtRes] = await Promise.all([
+      fetch(`${API}/notifications`, { headers: authH() }),
+      fetch(`${API}/settings/device-tracking`, { headers: authH() }).catch(() => null),
+    ]);
+    const d = await notifRes.json();
+    if (!notifRes.ok) throw new Error(d.error || 'Could not load notifications');
     items = d.items || [];
+
+    if (dtRes && dtRes.ok) {
+      const dtData = await dtRes.json();
+      deviceTrackingEnabled = dtData?.enabled !== false;
+    }
   };
 
-  const visible = () => items.filter(it => {
-    if (filter === 'unread') return !it.read_at;
-    if (filter === 'payment_received') return it.subject === 'payment_received';
-    return true;
-  });
+  const visibleItems = () => {
+    return items.filter(it => {
+      // Hide device notifications when device tracking is disabled.
+      if (!deviceTrackingEnabled && DEVICE_SUBJECTS.has(it.subject)) return false;
+      if (filter === 'unread') return !it.read_at;
+      if (filter === 'payment_received') return it.subject === 'payment_received';
+      return true;
+    });
+  };
 
   const draw = () => {
-    const list = visible();
-    const unread = items.filter(i => !i.read_at).length;
+    const list = visibleItems();
+    // Count unread and payment from all items (respecting device filter).
+    const allVisible = items.filter(it => deviceTrackingEnabled || !DEVICE_SUBJECTS.has(it.subject));
+    const unread = allVisible.filter(i => !i.read_at).length;
     container.innerHTML = `
       <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <div>
@@ -54,9 +100,9 @@ export async function renderNotificationsTab(container) {
       </div>
 
       <div class="sr-filter-bar" style="margin-bottom:16px;">
-        <button class="sr-filter ${filter === 'all' ? 'active' : ''}" data-f="all">All <span class="sr-filter-count">${items.length}</span></button>
+        <button class="sr-filter ${filter === 'all' ? 'active' : ''}" data-f="all">All <span class="sr-filter-count">${allVisible.length}</span></button>
         <button class="sr-filter ${filter === 'unread' ? 'active' : ''}" data-f="unread">Unread <span class="sr-filter-count">${unread}</span></button>
-        <button class="sr-filter ${filter === 'payment_received' ? 'active' : ''}" data-f="payment_received">Payments <span class="sr-filter-count">${items.filter(i => i.subject === 'payment_received').length}</span></button>
+        <button class="sr-filter ${filter === 'payment_received' ? 'active' : ''}" data-f="payment_received">Payments <span class="sr-filter-count">${allVisible.filter(i => i.subject === 'payment_received').length}</span></button>
       </div>
 
       <div class="card"><div class="card-body" style="padding:0;">
@@ -70,7 +116,10 @@ export async function renderNotificationsTab(container) {
                 <div style="font-size:0.86rem;color:var(--text-soft);margin-top:2px;">${esc(it.body || '')}</div>
                 <div style="font-size:0.74rem;color:var(--text-dim);margin-top:6px;">${fmt(it.created_at)}</div>
               </div>
-              ${it.read_at ? '' : '<span style="width:9px;height:9px;border-radius:50%;background:var(--primary);flex-shrink:0;margin-top:6px;"></span>'}
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+                ${it.read_at ? '' : '<span style="width:9px;height:9px;border-radius:50%;background:var(--primary);margin-top:6px;"></span>'}
+                ${navTarget(it.subject) ? '<span style="font-size:0.72rem;color:var(--primary);white-space:nowrap;">Go to →</span>' : ''}
+              </div>
             </div>`).join('')}
       </div></div>`;
 
@@ -84,11 +133,21 @@ export async function renderNotificationsTab(container) {
     container.querySelectorAll('.ntf-row').forEach(row => row.onclick = async () => {
       const it = items.find(i => i.id === row.dataset.id);
       if (!it) return;
-      openNotificationDetail(it);               // full-screen detail with everything
+
+      // Mark as read first.
       if (!it.read_at) {
         try { await fetch(`${API}/notifications/${it.id}/read`, { method: 'POST', headers: authH() }); } catch {}
         it.read_at = new Date().toISOString();
         draw();
+      }
+
+      // Navigate to the relevant page if we know where to go.
+      const target = navTarget(it.subject);
+      if (target && window.__appNav) {
+        window.__appNav(target);
+      } else {
+        // Fallback: show full detail modal for subjects with no page target.
+        openNotificationDetail(it);
       }
     });
   };

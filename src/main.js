@@ -307,8 +307,10 @@ function navigate(page, opts = {}) {
   if (currentRole === 'employee') {
     import('./pages/media-training.js').then(m => m.mountEmployeePopupAds()).catch(() => {});
   }
-  // Expose for the global refresh FAB in layout.js
+  // Expose for the global refresh FAB and notification navigation
   window.__softRefresh = () => navigate(activePage, { push: false });
+  window.__appNav  = (page) => navigate(page);
+  window.__appRole = currentRole;
 }
 
 // Phone/browser back button: close an open popup first, otherwise go to the
