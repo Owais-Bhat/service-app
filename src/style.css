@@ -7819,7 +7819,12 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   transition: border-color .2s;
 }
 .coll-select:focus { outline: none; border-color: var(--primary); }
-.coll-date-wrap { flex-direction: row; align-items: flex-end; gap: 8px; }
+.coll-date-wrap {
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .coll-date-input {
   padding: 8px 12px;
   border-radius: 10px;
@@ -7828,6 +7833,9 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   color: var(--text);
   font-size: 0.875rem;
   transition: border-color .2s;
+  min-width: 0;
+  max-width: 160px;
+  width: 100%;
 }
 .coll-date-input:focus { outline: none; border-color: var(--primary); }
 
@@ -7869,7 +7877,13 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 
 @media (max-width: 560px) {
   .coll-stats-row { grid-template-columns: 1fr 1fr; }
-  .coll-filter-bar { padding: 12px 14px; gap: 10px; }
+  .coll-filter-bar { padding: 12px 14px; gap: 10px; flex-direction: column; align-items: stretch; }
+  .coll-filter-group { width: 100%; }
+  .coll-select { width: 100%; }
+  .coll-date-wrap { flex-direction: column; align-items: stretch; }
+  .coll-date-input { max-width: 100%; width: 100%; }
+  .coll-date-wrap .coll-filter-label { margin-left: 0 !important; }
+  .coll-date-wrap .btn { width: 100%; margin-top: 4px; }
 }
 
 /* ── Leaderboard — Your Rank Card ──────────────────────────────── */

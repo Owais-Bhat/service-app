@@ -3821,92 +3821,161 @@ function generateEmployeeTicketNo() {
 
 export async function renderFeedbackTab(container) {
   const [{ data: rows }, { data: profiles }] = await Promise.all([
-    supabase
-      .from("inquiries")
-      .select("*")
-      .order("feedback_at", { ascending: false }),
+    supabase.from("inquiries").select("*").order("feedback_at", { ascending: false }),
     supabase.from("profiles").select("id,full_name,role"),
   ]);
   const all = (rows || []).filter((r) => r.feedback_rating != null);
   const profileById = new Map((profiles || []).map((p) => [p.id, p]));
+  const allEmployees = (profiles || []).filter((p) => p.role === "employee");
   const monthKey = new Date().toLocaleDateString("en-CA").slice(0, 7);
   const monthFeedback = all.filter((r) =>
     String(r.feedback_at || r.updated_at || "").startsWith(monthKey),
   );
-  const empAgg = new Map();
-  all.forEach((r) => {
-    const empId = r.feedback_employee_id || r.assigned_employee_id;
-    if (!empId) return;
-    const score = r.employee_rating || r.feedback_rating;
-    if (!score) return;
-    if (!empAgg.has(empId))
-      empAgg.set(empId, { total: 0, count: 0, fiveStars: 0 });
-    const a = empAgg.get(empId);
-    a.total += Number(score);
-    a.count += 1;
-    if (score >= 5) a.fiveStars += 1;
-  });
-  const empRows = [...empAgg.entries()]
-    .map(([id, a]) => ({
-      id,
-      name: profileById.get(id)?.full_name || "—",
-      avg: a.total / a.count,
-      count: a.count,
-      fiveStars: a.fiveStars,
-    }))
-    .sort((a, b) => b.avg - a.avg || b.count - a.count);
-  const monthAgg = new Map();
-  monthFeedback.forEach((r) => {
-    const empId = r.feedback_employee_id || r.assigned_employee_id;
-    if (!empId) return;
-    const score = r.employee_rating || r.feedback_rating;
-    if (!score) return;
-    if (!monthAgg.has(empId))
-      monthAgg.set(empId, { total: 0, count: 0, fiveStars: 0 });
-    const a = monthAgg.get(empId);
-    a.total += Number(score);
-    a.count += 1;
-    if (score >= 5) a.fiveStars += 1;
-  });
-  const monthEmpRows = [...monthAgg.entries()]
-    .map(([id, a]) => ({
-      id,
-      name: profileById.get(id)?.full_name || "Employee",
-      avg: a.total / a.count,
-      count: a.count,
-      fiveStars: a.fiveStars,
-    }))
-    .sort(
-      (a, b) => b.avg - a.avg || b.count - a.count || b.fiveStars - a.fiveStars,
-    );
-  const employeeOfMonth = monthEmpRows[0] || null;
-  const overallAvg = all.length
-    ? all.reduce((s, r) => s + Number(r.feedback_rating || 0), 0) / all.length
-    : 0;
+
+  const buildLb = (sourceRows) => {
+    const agg = new Map(allEmployees.map((e) => [e.id, { total: 0, count: 0, fiveStars: 0 }]));
+    sourceRows.forEach((r) => {
+      const empId = r.feedback_employee_id || r.assigned_employee_id;
+      if (!empId || !agg.has(empId)) return;
+      const score = Number(r.employee_rating || r.feedback_rating || 0);
+      if (!score) return;
+      const a = agg.get(empId);
+      a.total += score; a.count += 1;
+      if (score >= 5) a.fiveStars += 1;
+    });
+    return [...agg.entries()]
+      .map(([id, a]) => ({
+        id, name: profileById.get(id)?.full_name || "—",
+        avg: a.count > 0 ? a.total / a.count : 0,
+        count: a.count, fiveStars: a.fiveStars,
+      }))
+      .sort((a, b) => b.count - a.count || b.avg - a.avg || b.fiveStars - a.fiveStars);
+  };
+
+  const monthRows = buildLb(monthFeedback);
+  const allTimeRows = buildLb(all);
+  const employeeOfMonth = monthRows.find((e) => e.count > 0) || null;
+  const overallAvg = all.length ? all.reduce((s, r) => s + Number(r.feedback_rating || 0), 0) / all.length : 0;
   const fiveCount = all.filter((r) => r.feedback_rating >= 5).length;
+
   const starsHtml = (n) => {
     const v = Math.round(Number(n) || 0);
-    return Array.from(
-      { length: 5 },
-      (_, i) =>
-        `<span style="color:${i < v ? "var(--warning)" : "var(--border)"};display:inline-flex;width:14px;height:14px">${i < v ? ICONS.star : ICONS.starOutline}</span>`,
+    return Array.from({ length: 5 }, (_, i) =>
+      `<span style="color:${i < v ? "var(--warning)" : "var(--border)"};display:inline-flex;width:14px;height:14px">${i < v ? ICONS.star : ICONS.starOutline}</span>`,
     ).join("");
   };
-  container.innerHTML = `    <div class="page-header">      <h1>Client Feedback</h1>      <p>Ratings & comments submitted by clients after service completion</p>    </div>    <div class="stats-grid">      <div class="stat-card"><div class="stat-value">${all.length}</div><div class="stat-label">Total Reviews</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${overallAvg.toFixed(2)} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Overall Average</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${fiveCount}</div><div class="stat-label">5-Star Reviews</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${empRows.length}</div><div class="stat-label">Employees Rated</div></div>      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.55rem">${employeeOfMonth ? escapeHtml(employeeOfMonth.name) : "-"}</div><div class="stat-label">Employee of Month</div></div>    </div>    <div class="card">      <div class="card-header"><span class="card-title">Employee Leaderboard</span></div>      <div class="table-wrap">        <table>          <thead><tr><th>Employee</th><th>Average</th><th>Reviews</th><th>5?</th></tr></thead>          <tbody>            ${empRows.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-dim)">No employee-specific ratings yet</td></tr>' : empRows.map((e) => `<tr>                <td><b>${e.name}</b></td>                <td>${starsHtml(e.avg)} <span style="margin-left:6px;font-weight:700">${e.avg.toFixed(2)}</span></td>                <td>${e.count}</td>                <td><span class="badge badge-resolved">${e.fiveStars}</span></td>              </tr>`).join("")}          </tbody>        </table>      </div>    </div>    <div class="card" style="margin-top:24px">      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">        <span class="card-title">All Reviews</span>        <div class="search-input-wrap" style="min-width:200px;max-width:320px;">          <span>${ICONS.search}</span>          <input class="search-input" id="fb-search" placeholder="Filter by name or ticket…" style="padding:6px 10px;font-size:0.85rem;"/>        </div>      </div>      <div class="table-wrap">        <table id="fb-table">          <thead><tr><th>Date</th><th>Ticket</th><th>Client</th><th>Employee</th><th>Overall</th><th>Employee</th><th>Comment</th></tr></thead>          <tbody>            ${
-    all.length === 0
-      ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No feedback received yet</td></tr>'
-      : all
-          .map((r) => {
-            const empName =
-              profileById.get(r.feedback_employee_id || r.assigned_employee_id)
-                ?.full_name || "—";
-            const empStars = r.employee_rating
-              ? `${starsHtml(r.employee_rating)} <b style="margin-left:4px">${r.employee_rating}</b>`
-              : '<span style="color:var(--text-dim)">—</span>';
-            return `<tr data-search="${(r.full_name + " " + (r.ticket_no || "") + " " + empName).toLowerCase()}">                  <td><small>${r.feedback_at ? formatDate(r.feedback_at) : "—"}</small></td>                  <td><code style="font-size:0.75rem;color:var(--primary)">${r.ticket_no || "—"}</code></td>                  <td><b>${r.full_name}</b></td>                  <td>${empName}</td>                  <td>${starsHtml(r.feedback_rating)} <b style="margin-left:4px">${r.feedback_rating}</b></td>                  <td>${empStars}</td>                  <td style="max-width:340px;white-space:normal;font-size:.85rem;line-height:1.45;color:var(--text-soft)">${r.feedback_comment || '<span style="color:var(--text-dim)">—</span>'}</td>                </tr>`;
-          })
-          .join("")
-  }          </tbody>        </table>      </div>    </div>  `;
+
+  const MEDAL = ["🥇", "🥈", "🥉"];
+  const initials = (name) => String(name).trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
+  const PODIUM_ORDER = [1, 0, 2];
+  const PODIUM_H = ["96px", "120px", "80px"];
+  const podiumSlots = PODIUM_ORDER.map((i) => monthRows[i] || null);
+
+  const podiumHtml = `<div class="lb-podium">
+    ${podiumSlots.map((e, slot) => {
+      const rank = PODIUM_ORDER[slot];
+      if (!e) return `<div class="lb-podium-slot lb-podium-slot-${rank}"></div>`;
+      return `<div class="lb-podium-slot lb-podium-slot-${rank}">
+        <div class="lb-podium-medal">${MEDAL[rank]}</div>
+        <div class="lb-podium-avatar">${initials(e.name)}</div>
+        <div class="lb-podium-name">${escapeHtml(e.name)}</div>
+        <div class="lb-podium-reviews"><b>${e.count}</b> review${e.count !== 1 ? "s" : ""}</div>
+        <div class="lb-podium-stars">${e.count > 0 ? `${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span>` : '<span style="color:var(--text-dim);font-size:0.75rem">No reviews yet</span>'}</div>
+        <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};"></div>
+      </div>`;
+    }).join("")}
+  </div>`;
+
+  const lbTableRows = (list) => list.length === 0
+    ? `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-dim)">No data</td></tr>`
+    : list.map((e, idx) => {
+        const medal = idx < 3 ? `${MEDAL[idx]} ` : "";
+        const bg = idx === 0 ? "background:rgba(255,200,0,0.07);" : idx === 1 ? "background:rgba(180,180,190,0.07);" : idx === 2 ? "background:rgba(180,110,50,0.07);" : "";
+        return `<tr style="${bg}">
+          <td><b>${medal}#${idx + 1}</b></td>
+          <td><b>${escapeHtml(e.name)}</b></td>
+          <td><b style="color:var(--primary)">${e.count}</b></td>
+          <td>${e.count > 0 ? `${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
+          <td>${e.count > 0 ? `<span class="badge badge-resolved">${e.fiveStars}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
+        </tr>`;
+      }).join("");
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Client Feedback</h1>
+      <p>Ratings & comments submitted by clients after service completion</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${all.length}</div><div class="stat-label">Total Reviews</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${overallAvg.toFixed(2)} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Overall Average</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${fiveCount}</div><div class="stat-label">5-Star Reviews</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${allEmployees.length}</div><div class="stat-label">Total Employees</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.45rem">${employeeOfMonth ? escapeHtml(employeeOfMonth.name) : "—"}</div><div class="stat-label">Most Reviews This Month</div></div>
+    </div>
+
+    <!-- Podium -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">🏆 Top 3 This Month — Most Reviews</span></div>
+      <div style="padding:24px 16px 8px;">${podiumHtml}</div>
+    </div>
+
+    <!-- Monthly Leaderboard -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">This Month — Full Rankings</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th><th>5★</th></tr></thead>
+          <tbody>${lbTableRows(monthRows)}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- All-Time Leaderboard -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">All-Time Rankings</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th><th>5★</th></tr></thead>
+          <tbody>${lbTableRows(allTimeRows)}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- All Reviews -->
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span class="card-title">All Reviews</span>
+        <div class="search-input-wrap" style="min-width:200px;max-width:320px;">
+          <span>${ICONS.search}</span>
+          <input class="search-input" id="fb-search" placeholder="Filter by name or ticket…" style="padding:6px 10px;font-size:0.85rem;"/>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="fb-table">
+          <thead><tr><th>Date</th><th>Ticket</th><th>Client</th><th>Employee</th><th>Overall</th><th>Employee</th><th>Comment</th></tr></thead>
+          <tbody>
+            ${all.length === 0
+              ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No feedback received yet</td></tr>'
+              : all.map((r) => {
+                  const empName = profileById.get(r.feedback_employee_id || r.assigned_employee_id)?.full_name || "—";
+                  const empStars = r.employee_rating
+                    ? `${starsHtml(r.employee_rating)} <b style="margin-left:4px">${r.employee_rating}</b>`
+                    : '<span style="color:var(--text-dim)">—</span>';
+                  return `<tr data-search="${(r.full_name + " " + (r.ticket_no || "") + " " + empName).toLowerCase()}">
+                    <td><small>${r.feedback_at ? formatDate(r.feedback_at) : "—"}</small></td>
+                    <td><code style="font-size:0.75rem;color:var(--primary)">${r.ticket_no || "—"}</code></td>
+                    <td><b>${escapeHtml(r.full_name || "—")}</b></td>
+                    <td>${escapeHtml(empName)}</td>
+                    <td>${starsHtml(r.feedback_rating)} <b style="margin-left:4px">${r.feedback_rating}</b></td>
+                    <td>${empStars}</td>
+                    <td style="max-width:340px;white-space:normal;font-size:.85rem;line-height:1.45;color:var(--text-soft)">${r.feedback_comment || '<span style="color:var(--text-dim)">—</span>'}</td>
+                  </tr>`;
+                }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
   const search = container.querySelector("#fb-search");
   if (search) {
     search.oninput = () => {
