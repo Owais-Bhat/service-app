@@ -1983,6 +1983,7 @@ export async function renderUsers(container) {
   };
   const canSeeCollections = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-collections"); };
   const canSeeAttendance  = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-attendance"); };
+  const canSeeLeaves      = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-leaves"); };
 
   const makeTabSwitch = (u, tabId, cssPrefix, canSee) =>
     u.role === "employee"
@@ -1996,8 +1997,9 @@ export async function renderUsers(container) {
       : '<span style="color:var(--text-dim)">-</span>';
 
   // Inline "Collections" tab access toggle in the Users table.
-  const collectionsCell = (u) => makeTabSwitch(u, "my-collections", "coll", canSeeCollections(u));
-  const attendanceCell  = (u) => makeTabSwitch(u, "my-attendance",  "att",  canSeeAttendance(u));
+  const collectionsCell = (u) => makeTabSwitch(u, "my-collections", "coll",   canSeeCollections(u));
+  const attendanceCell  = (u) => makeTabSwitch(u, "my-attendance",  "att",    canSeeAttendance(u));
+  const leavesCell      = (u) => makeTabSwitch(u, "my-leaves",      "leaves", canSeeLeaves(u));
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -2019,6 +2021,7 @@ export async function renderUsers(container) {
               <th>Profile Access</th>
               <th>Always Assign</th>
               <th>Attendance Tab</th>
+              <th>Leave Tab</th>
               <th>Collections Tab</th>
               <th>Actions</th>
             </tr>
@@ -2042,6 +2045,7 @@ export async function renderUsers(container) {
                 <td>${profileCell(u)}</td>
                 <td>${alwaysAssignCell(u)}</td>
                 <td>${attendanceCell(u)}</td>
+                <td>${leavesCell(u)}</td>
                 <td>${collectionsCell(u)}</td>
                 <td>
                   <div style="display:flex;gap:8px;">
@@ -2053,7 +2057,7 @@ export async function renderUsers(container) {
             `,
                     )
                     .join("")
-                : '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
+                : '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
             }
           </tbody>
         </table>
@@ -2151,8 +2155,9 @@ export async function renderUsers(container) {
       };
     });
   };
-  bindTabSwitch(".att-access-chk",  ".att-switch-outer",  ".att-status-text",  "Attendance tab");
-  bindTabSwitch(".coll-access-chk", ".coll-switch-outer", ".coll-status-text", "Collections tab");
+  bindTabSwitch(".att-access-chk",    ".att-switch-outer",    ".att-status-text",    "Attendance tab");
+  bindTabSwitch(".leaves-access-chk", ".leaves-switch-outer", ".leaves-status-text", "Leave tab");
+  bindTabSwitch(".coll-access-chk",   ".coll-switch-outer",   ".coll-status-text",   "Collections tab");
 
   container.querySelectorAll(".delete-user-btn").forEach((btn) => {
     btn.onclick = async () => {
