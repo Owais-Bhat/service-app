@@ -3,9 +3,9 @@
 // Custom cards are persisted in localStorage per role.
 
 import { supabase } from '../supabase.js';
-import { showLoader, toast, calculateSLA } from '../utils.js';
+import { showLoader, toast, calculateSLA, formatTime } from '../utils.js';
 import { ICONS } from '../icons.js';
-import { renderDashboardHero } from './dashboard-widgets.js';
+import { renderDashboardHero, kpiCard } from './dashboard-widgets.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dateKey = (d) => (d ? new Date(d).toLocaleDateString('en-CA') : '');
@@ -626,6 +626,19 @@ export async function renderEmployeeStats(container) {
   let customCards = [];
   try { customCards = JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { customCards = []; }
 
+  const _statsCompletedCount = completedAll.length;
+  const _statsWorkTotal = activeTasks.length + acceptedInq + _statsCompletedCount;
+  const _statsShare = (n) => _statsWorkTotal ? (n / _statsWorkTotal) * 100 : 0;
+  const _statsKpis = `<div class="dash-kpis" style="margin-bottom:24px;">
+    ${kpiCard(isClockedIn ? 100 : 0, 'Clock Status',
+      isClockedIn ? 'Since ' + formatTime(attendance?.clock_in) : isClockedOut ? 'Clocked out today' : 'Not clocked in',
+      isClockedIn ? 'var(--success)' : 'var(--text-dim)',
+      isClockedIn ? 'IN' : 'OUT')}
+    ${kpiCard(_statsShare(activeTasks.length), 'Active Tasks', `of ${_statsWorkTotal} total jobs`, 'var(--warning)', `${activeTasks.length}`)}
+    ${kpiCard(_statsShare(acceptedInq), 'Accepted Requests', 'awaiting completion', 'var(--info)', `${acceptedInq}`)}
+    ${kpiCard(_statsShare(_statsCompletedCount), 'Completed', `${_statsCompletedCount} of ${_statsWorkTotal} resolved`, 'var(--success)', `${_statsCompletedCount}`)}
+  </div>`;
+
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px">
       <div>
@@ -634,6 +647,7 @@ export async function renderEmployeeStats(container) {
       </div>
       <button class="btn btn-secondary" id="stats-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
+    ${_statsKpis}
     <div class="card" style="margin-bottom:24px">
       <div class="card-header">
         <span class="card-title">Live Stats</span>

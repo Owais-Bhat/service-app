@@ -1180,34 +1180,61 @@ export async function renderEmployeeDashboard(container) {
     </div>`).join('');
 
   container.innerHTML = `
-    ${missedEods.length ? `
-      <div class="card" style="margin-bottom:18px;border:1px solid ${strictEodBlock ? 'var(--danger)' : 'rgba(245,158,11,0.45)'};">
-        <div class="card-body" style="display:flex;gap:14px;align-items:flex-start;">
-          <span style="width:24px;height:24px;color:${strictEodBlock ? 'var(--danger)' : 'var(--warning)'};display:flex;">${ICONS.alert}</span>
-          <div>
-            <div style="font-weight:800;color:${strictEodBlock ? 'var(--danger)' : 'var(--warning)'};">${strictEodBlock ? 'Clock-in restricted' : 'EOD warning'}</div>
-            <div style="color:var(--text-soft);font-size:0.88rem;line-height:1.45;margin-top:4px;">
-              You have ${missedEods.length} missed EOD report${missedEods.length === 1 ? '' : 's'}. ${strictEodBlock ? 'Please contact admin before starting a new shift.' : 'Please submit your EOD before the day closes.'}
+    <!-- ── Horizontal clock row ── -->
+    <div class="card emp-clock-row" style="margin-bottom:18px;">
+      <div class="emp-clock-left">
+        <div id="live-clock" class="clock-time">--:--:--</div>
+        <div class="clock-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div class="chip" style="margin-top:8px;width:fit-content;color:${isClockedIn && !isClockedOut ? 'var(--accent,var(--primary))' : 'var(--text-3,var(--text-dim))'};">
+          <i style="width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;"></i>
+          ${isClockedOut ? 'Clocked out' : isClockedIn ? 'Clocked in' : 'Not started'}
+        </div>
+        ${isClockedIn ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;">Since ${formatTime(attendance.clock_in)}</div>` : ''}
+        ${isClockedOut ? `<div class="chip" style="margin-top:8px;width:fit-content;color:var(--accent,var(--primary));">${ICONS.check}<span>${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span></div>` : ''}
+        ${attendance?.location ? `<p class="attendance-location" style="margin-top:8px;justify-content:flex-start;">${ICONS.pin}<span>${escapeHtml(attendance.location)}</span></p>` : ''}
+      </div>
+      <div class="emp-clock-right">
+        <button class="btn ${canClockOut ? 'btn-danger' : 'btn-primary'} emp-clock-toggle" id="btn-clock-toggle" ${isClockedOut || (!canClockOut && (strictEodBlock || clockInClosed)) ? 'disabled' : ''}>
+          ${canClockOut ? ICONS.pause : ICONS.play}
+          <span>${isClockedOut ? 'Session Done' : canClockOut ? 'Clock Out' : 'Clock In'}</span>
+        </button>
+        ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-top:6px;">${ICONS.clipboard}<span>EOD required to clock out</span></p>` : ''}
+        ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-top:6px;">${ICONS.clock}<span>Closed after ${clockOutSetting.label}</span></p>` : ''}
+        ${strictEodBlock && !canClockOut ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-top:6px;color:var(--danger);">${ICONS.alert}<span>Restricted — contact admin</span></p>` : ''}
+      </div>
+    </div>
+
+    <!-- ── Carousel: EOD Status + Notice Board ── -->
+    <div class="card emp-carousel" style="margin-bottom:18px;">
+      <div class="emp-carousel-inner">
+        <div class="emp-car-track" id="emp-car-track">
+          <div class="emp-car-slide">
+            <div class="emp-slide-head">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;color:${missedEods.length ? (strictEodBlock ? 'var(--danger)' : 'var(--warning)') : 'var(--success)'};">
+                ${missedEods.length ? ICONS.alert : ICONS.check}
+                ${missedEods.length ? (strictEodBlock ? 'Clock-in Restricted' : 'EOD Warning') : 'EOD Up to Date'}
+              </span>
             </div>
+            <p style="margin:8px 0 0;font-size:0.87rem;color:var(--text-soft);line-height:1.5;">${missedEods.length ? `You have ${missedEods.length} missed EOD report${missedEods.length === 1 ? '' : 's'}. ${strictEodBlock ? 'Please contact admin before starting a new shift.' : 'Submit your EOD report before the day closes.'}` : 'All past EOD reports are submitted. Great work!'}</p>
+          </div>
+          <div class="emp-car-slide">
+            <div class="emp-slide-head">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;">${ICONS.bell} Notice Board</span>
+              ${notices.length ? `<span class="df-badge" style="background:var(--primary);margin-left:4px;">${notices.length}</span>` : ''}
+            </div>
+            ${notices.length === 0 ? `<p style="margin:10px 0 0;font-size:0.87rem;color:var(--text-dim);">No active notices right now.</p>` : `<div class="emp-notices-list">${notices.map((n, i) => `<div class="emp-notice-item" data-notice-idx="${i}" role="button" tabindex="0"><div class="emp-notice-ico">${ICONS.bell}</div><div style="flex:1;min-width:0;"><div class="emp-notice-title">${escapeHtml(n.title || 'Notice')}</div><div class="emp-notice-date">${formatDate(n.created_at)}</div></div><span style="color:var(--text-dim);flex-shrink:0;">${ICONS.arrowRight}</span></div>`).join('')}</div>`}
           </div>
         </div>
       </div>
-    ` : ''}
-
-    ${(() => {
-      const completedCount = t.filter(x => displayStatus(x.status) === 'resolved').length;
-      const workTotal = activeTasks.length + acceptedInquiries.length + completedCount;
-      const share = (n) => workTotal ? (n / workTotal) * 100 : 0;
-      return `<div class="dash-kpis">
-        ${kpiCard(isClockedIn ? 100 : 0, 'Clock Status',
-          isClockedIn ? 'Since ' + formatTime(attendance.clock_in) : clockInClosed ? `Closed after ${clockOutSetting.label}` : 'Tap Clock In to start',
-          isClockedIn ? 'var(--success)' : 'var(--text-dim)',
-          isClockedIn ? 'IN' : 'OUT')}
-        ${kpiCard(share(activeTasks.length), 'Active Tasks', `of ${workTotal} total jobs`, 'var(--warning)', `${activeTasks.length}`)}
-        ${kpiCard(share(acceptedInquiries.length), 'Accepted Requests', 'awaiting completion', 'var(--info)', `${acceptedInquiries.length}`)}
-        ${kpiCard(share(completedCount), 'Completed', `${completedCount} of ${workTotal} resolved`, 'var(--success)', `${completedCount}`)}
-      </div>`;
-    })()}
+      <div class="emp-carousel-nav">
+        <button class="emp-car-arrow" id="emp-car-prev">&#8249;</button>
+        <div class="emp-car-dots">
+          <span class="emp-dot active" data-idx="0"></span>
+          <span class="emp-dot" data-idx="1"></span>
+        </div>
+        <button class="emp-car-arrow" id="emp-car-next">&#8250;</button>
+      </div>
+    </div>
 
     ${pendingInquiries.length ? `
       <div class="card list-card" style="margin-bottom:18px;border-color:rgba(245,165,36,0.4);">
@@ -1231,56 +1258,31 @@ export async function renderEmployeeDashboard(container) {
       </div>
     ` : ''}
 
-    <div class="grid grid-emp-2" style="margin-bottom:18px;">
-      <!-- Clock card (DESIGN .clock-card) -->
-      <div class="card clock-card emp-clock-card">
-        <div class="chip" style="margin:0 auto 14px;width:fit-content;color:${isClockedIn && !isClockedOut ? 'var(--accent, var(--primary))' : 'var(--text-3, var(--text-dim))'};">
-          <i style="width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;"></i>
-          ${isClockedOut ? 'Clocked out' : isClockedIn ? 'Clocked in' : 'Not started'}
-        </div>
-        <div id="live-clock" class="clock-time">--:--:--</div>
-        <div class="clock-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <button class="btn btn-primary" id="btn-clock-in" style="width:100%;" ${isClockedIn || strictEodBlock || clockInClosed ? 'disabled' : ''}>
-            ${ICONS.play}<span>Clock In</span>
-          </button>
-          <button class="btn btn-ghost" id="btn-clock-out" style="width:100%;" ${canClockOut ? '' : 'disabled'}>
-            ${ICONS.pause}<span>Clock Out</span>
-          </button>
-        </div>
-        ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note">${ICONS.clipboard}<span>Clock Out will ask for your EOD report first.</span></p>` : ''}
-        ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note">${ICONS.clock}<span>Clock-in is closed after ${clockOutSetting.label}. Please contact admin.</span></p>` : ''}
-        ${attendance?.location ? `<p class="attendance-location">${ICONS.pin}<span>${attendance.location}</span></p>` : ''}
-        ${isClockedOut ? `<div class="chip" style="margin:14px auto 0;width:fit-content;color:var(--accent, var(--primary));">${ICONS.check}<span>Session: ${formatTime(attendance.clock_in)} → ${formatTime(attendance.clock_out)}</span></div>` : ''}
+    <!-- Today's Route (full-width) -->
+    <div class="card list-card" style="margin-bottom:18px;">
+      <div class="card-head">
+        <h3>${ICONS.wrench} Today's Route</h3>
+        <span class="chip">${todayTasks.length} stop${todayTasks.length === 1 ? '' : 's'}</span>
       </div>
-
-      <!-- Today's Route (DESIGN list card) -->
-      <div class="card list-card">
-        <div class="card-head">
-          <h3>${ICONS.wrench} Today's Route</h3>
-          <span class="chip">${todayTasks.length} stop${todayTasks.length === 1 ? '' : 's'}</span>
-        </div>
-        <div class="list">
-          ${todayTasks.length === 0 ? `<div style="text-align:center;padding:28px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No in-progress tasks right now.</div>` : todayTasks.map(item => {
-            const inq = item.inquiries?.[0] || item;
-            const id = item.inquiries ? item.id : (inq.ticket_id || '');
-            const st = displayStatus(inq.status || item.status || 'assigned');
-            const badgeCls = st === 'in_progress' ? 'progress' : st === 'resolved' ? 'resolved' : st === 'assigned' ? 'assigned' : 'open';
-            return `
-              <div class="lrow">
-                <div class="lrow-ico">${ICONS.wrench}</div>
-                <div class="lrow-main">
-                  <b>${escapeHtml(inq.full_name || item.title || 'Service task')}</b>
-                  <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || item.description || 'Service request')} · ${formatDateTime(inq.created_at || item.created_at)}</span>
-                </div>
-                <span class="badge ${badgeCls} hide-sm">${statusText(inq.status || item.status || 'assigned')}</span>
-                <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
+      <div class="list">
+        ${todayTasks.length === 0 ? `<div style="text-align:center;padding:28px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No in-progress tasks right now.</div>` : todayTasks.map(item => {
+          const inq = item.inquiries?.[0] || item;
+          const id = item.inquiries ? item.id : (inq.ticket_id || '');
+          const st = displayStatus(inq.status || item.status || 'assigned');
+          const badgeCls = st === 'in_progress' ? 'progress' : st === 'resolved' ? 'resolved' : st === 'assigned' ? 'assigned' : 'open';
+          return `
+            <div class="lrow">
+              <div class="lrow-ico">${ICONS.wrench}</div>
+              <div class="lrow-main">
+                <b>${escapeHtml(inq.full_name || item.title || 'Service task')}</b>
+                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || item.description || 'Service request')} · ${formatDateTime(inq.created_at || item.created_at)}</span>
               </div>
-            `;
-          }).join('')}
-        </div>
+              <span class="badge ${badgeCls} hide-sm">${statusText(inq.status || item.status || 'assigned')}</span>
+              <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
+            </div>
+          `;
+        }).join('')}
       </div>
-
     </div>
 
     ${reopenedItems.length ? `
@@ -1381,8 +1383,13 @@ export async function renderEmployeeDashboard(container) {
     if (el) el.onclick = cb;
   };
 
-  // Clock In
-  bind('#btn-clock-in', async () => {
+  // Single Clock In / Clock Out toggle
+  bind('#btn-clock-toggle', async () => {
+    if (canClockOut) {
+      if (!eodReport) { openEodClockOutModal(); return; }
+      await doClockOut();
+      return;
+    }
     if (strictEodBlock) {
       toast('Clock-in is restricted because you have 4 or more missed EOD reports. Contact admin.', 'error');
       return;
@@ -1391,8 +1398,8 @@ export async function renderEmployeeDashboard(container) {
       toast(`Clock-in is closed after ${parseClockOutTime().label}. Please contact admin.`, 'error');
       return;
     }
-    const btn = container.querySelector('#btn-clock-in');
-    btn.disabled = true; btn.textContent = 'Getting location...';
+    const btn = container.querySelector('#btn-clock-toggle');
+    btn.disabled = true; btn.innerHTML = `${ICONS.crosshair}<span>Getting location…</span>`;
     let locationStr = 'Unknown';
     let coords = { lat: null, lng: null, accuracy: null };
     try {
@@ -1405,7 +1412,6 @@ export async function renderEmployeeDashboard(container) {
         locationStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       }
     } catch (_) {}
-
     const { error } = await supabase.from('attendance').insert({
       user_id: user.id, clock_in: new Date().toISOString(), date: today, location: locationStr,
       latitude: coords.lat, longitude: coords.lng, status: 'present'
@@ -1456,9 +1462,42 @@ export async function renderEmployeeDashboard(container) {
       await doClockOut();
     };
   };
-  bind('#btn-clock-out', async () => {
-    if (!eodReport) { openEodClockOutModal(); return; }
-    await doClockOut();
+  // Carousel
+  let _carIdx = 0;
+  const _carTrack = container.querySelector('#emp-car-track');
+  const _carDots = container.querySelectorAll('.emp-dot');
+  const _slideTo = (idx) => {
+    _carIdx = Math.max(0, Math.min(1, idx));
+    if (_carTrack) _carTrack.style.transform = `translateX(-${_carIdx * 100}%)`;
+    _carDots.forEach((d, i) => d.classList.toggle('active', i === _carIdx));
+  };
+  container.querySelector('#emp-car-prev')?.addEventListener('click', () => _slideTo(_carIdx - 1));
+  container.querySelector('#emp-car-next')?.addEventListener('click', () => _slideTo(_carIdx + 1));
+  _carDots.forEach((d, i) => d.addEventListener('click', () => _slideTo(i)));
+
+  // Notice modal
+  container.querySelectorAll('.emp-notice-item').forEach(el => {
+    el.onclick = () => {
+      const idx = parseInt(el.dataset.noticeIdx, 10);
+      const n = notices[idx];
+      if (!n) return;
+      const ov = document.createElement('div');
+      ov.className = 'modal-overlay';
+      ov.innerHTML = `
+        <div class="modal" style="max-width:600px;">
+          <div class="modal-header">
+            <span class="modal-title">${ICONS.bell}<span>${escapeHtml(n.title || 'Notice')}</span></span>
+            <button class="modal-close" id="notice-close-btn">✕</button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size:0.85rem;color:var(--text-dim);margin:0 0 16px">${formatDateTime(n.created_at)}</p>
+            <div style="line-height:1.7;white-space:pre-wrap;font-size:0.95rem;">${escapeHtml(n.body || n.message || n.content || '(No details available.)')}</div>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#notice-close-btn').onclick = () => ov.remove();
+      ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+    };
   });
 
   // EOD
