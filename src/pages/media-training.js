@@ -273,7 +273,6 @@ export async function renderPopupAdsTab(container) {
         <h1>Popup Ads</h1>
         <p>Upload full-screen popup images or videos for the landing page and employee portal</p>
       </div>
-      <button class="btn btn-secondary" id="media-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
     <div class="card" style="margin-bottom:22px;">
       <div class="card-header"><span class="card-title">${ICONS.upload}<span style="margin-left:8px">Upload Media</span></span></div>

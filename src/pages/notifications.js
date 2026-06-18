@@ -74,7 +74,6 @@ export async function renderNotificationsTab(container) {
             </div>`).join('')}
       </div></div>`;
 
-    container.querySelector('#ntf-refresh').onclick = () => load();
     container.querySelector('#ntf-readall').onclick = async () => {
       try { await fetch(`${API}/notifications/read-all`, { method: 'POST', headers: authH() }); } catch {}
       items = items.map(i => ({ ...i, read_at: i.read_at || new Date().toISOString() }));
