@@ -495,8 +495,12 @@ const dbConfig = {
 const pool = mysql.createPool({
     ...dbConfig,
     waitForConnections: true,
-    connectionLimit: Number(process.env.DB_POOL_SIZE) || 10,
-    queueLimit: 0,
+    connectionLimit: Number(process.env.DB_POOL_SIZE) || 25,
+    queueLimit: 100,          // reject with ECONNREFUSED after 100 queued; prevents unbounded memory
+    connectTimeout: 10000,    // 10 s to establish a new TCP connection
+    acquireTimeout: 15000,    // 15 s max wait to get a connection from the pool
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 30000,
 });
 async function getConn() { return pool.getConnection(); }
 
@@ -3466,39 +3470,57 @@ app.post('/api/device-tracking/toggle', authenticateToken, async (req, res) => {
 // ── FINANCE REPORT ──────────────────────────────────────────────
 // Aggregated business finance summary for the admin dashboard. Pure SQL/JS —
 // no AI — so the numbers are always trustworthy. Optional ?from=&to=YYYY-MM-DD.
-async function computeFinanceSummary(connection, from, to) {
+async function computeFinanceSummary(from, to) {
         const where = ['(i.bill_total > 0 OR i.bill_amount > 0)'];
         const params = [];
         if (from) { where.push('COALESCE(i.bill_generated_at, i.created_at) >= ?'); params.push(`${from} 00:00:00`); }
         if (to) { where.push('COALESCE(i.bill_generated_at, i.created_at) <= ?'); params.push(`${to} 23:59:59`); }
         const whereSql = 'WHERE ' + where.join(' AND ');
 
-        const [rows] = await connection.query(
-            `SELECT i.id, i.company_name, i.bill_total, i.bill_amount, i.gst_amount,
-                    i.discount_amount, i.platform_fee, i.transport_fee, i.payment_status,
-                    i.payment_method, i.bill_generated_at, i.created_at,
-                    i.cash_collected_at, i.cash_submitted_at,
-                    p.full_name AS technician
-               FROM inquiries i
-               LEFT JOIN profiles p ON p.id = i.assigned_employee_id
-               ${whereSql}`,
-            params
-        );
-        const [catRows] = await connection.query(
-            `SELECT COALESCE(sp.category, 'Uncategorized') AS category,
-                    SUM(COALESCE(sp.cost, 0)) AS revenue, COUNT(*) AS items
-               FROM inquiry_services isv
-               JOIN service_pricing sp ON sp.id = isv.service_id
-               JOIN inquiries i ON i.id = isv.inquiry_id
-               ${whereSql}
-              GROUP BY COALESCE(sp.category, 'Uncategorized')
-              ORDER BY revenue DESC`,
-            params
-        );
+        const now = new Date();
+        const fmtDate = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        const trendStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+        // Run the three independent queries in parallel — each borrows its own pool connection.
+        const [[rows], [catRows], [trendRows]] = await Promise.all([
+            pool.query(
+                `SELECT i.id, i.company_name, i.bill_total, i.bill_amount, i.gst_amount,
+                        i.discount_amount, i.platform_fee, i.transport_fee, i.payment_status,
+                        i.payment_method, i.bill_generated_at, i.created_at,
+                        i.cash_collected_at, i.cash_submitted_at,
+                        p.full_name AS technician
+                   FROM inquiries i
+                   LEFT JOIN profiles p ON p.id = i.assigned_employee_id
+                   ${whereSql}`,
+                params
+            ),
+            pool.query(
+                `SELECT COALESCE(sp.category, 'Uncategorized') AS category,
+                        SUM(COALESCE(sp.cost, 0)) AS revenue, COUNT(*) AS items
+                   FROM inquiry_services isv
+                   JOIN service_pricing sp ON sp.id = isv.service_id
+                   JOIN inquiries i ON i.id = isv.inquiry_id
+                   ${whereSql}
+                  GROUP BY COALESCE(sp.category, 'Uncategorized')
+                  ORDER BY revenue DESC`,
+                params
+            ),
+            pool.query(
+                `SELECT DATE_FORMAT(COALESCE(i.bill_generated_at, i.created_at), '%Y-%m') AS month,
+                        SUM(COALESCE(NULLIF(i.bill_total,0), i.bill_amount, 0)) AS billed,
+                        SUM(CASE WHEN i.payment_status='paid' THEN COALESCE(NULLIF(i.bill_total,0), i.bill_amount,0) ELSE 0 END) AS received,
+                        COUNT(*) AS bills
+                   FROM inquiries i
+                  WHERE (i.bill_total > 0 OR i.bill_amount > 0)
+                    AND COALESCE(i.bill_generated_at, i.created_at) >= ?
+                  GROUP BY month ORDER BY month`,
+                [`${fmtDate(trendStart)} 00:00:00`]
+            ),
+        ]);
+        const trend = trendRows.map(r => ({ month: r.month, billed: Number(r.billed) || 0, received: Number(r.received) || 0, bills: Number(r.bills) || 0 }));
 
         const amt = (r) => Number(r.bill_total) || Number(r.bill_amount) || 0;
         const isPaid = (r) => r.payment_status === 'paid';
-        const now = new Date();
 
         let billed = 0, received = 0, pending = 0, gst = 0, discounts = 0, platform = 0, transport = 0, paidCount = 0, cashInHand = 0;
         const byTech = new Map(), byCompany = new Map(), byMonth = new Map();
@@ -3539,22 +3561,6 @@ async function computeFinanceSummary(connection, from, to) {
             mo.billed += a; if (isPaid(r)) mo.received += a; byMonth.set(key, mo);
         });
 
-        // 12-month trend (independent of the selected range) — powers the trend chart.
-        const fmtDate = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-        const trendStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-        const [trendRows] = await connection.query(
-            `SELECT DATE_FORMAT(COALESCE(i.bill_generated_at, i.created_at), '%Y-%m') AS month,
-                    SUM(COALESCE(NULLIF(i.bill_total,0), i.bill_amount, 0)) AS billed,
-                    SUM(CASE WHEN i.payment_status='paid' THEN COALESCE(NULLIF(i.bill_total,0), i.bill_amount,0) ELSE 0 END) AS received,
-                    COUNT(*) AS bills
-               FROM inquiries i
-              WHERE (i.bill_total > 0 OR i.bill_amount > 0)
-                AND COALESCE(i.bill_generated_at, i.created_at) >= ?
-              GROUP BY month ORDER BY month`,
-            [`${fmtDate(trendStart)} 00:00:00`]
-        );
-        const trend = trendRows.map(r => ({ month: r.month, billed: Number(r.billed) || 0, received: Number(r.received) || 0, bills: Number(r.bills) || 0 }));
-
         // Previous equal-length period (for growth deltas) — only when range is bounded.
         let previous = null;
         if (from && to) {
@@ -3563,7 +3569,7 @@ async function computeFinanceSummary(connection, from, to) {
             const days = Math.max(1, Math.round((tt - f) / dayMs) + 1);
             const prevTo = new Date(f.getTime() - dayMs);
             const prevFrom = new Date(prevTo.getTime() - (days - 1) * dayMs);
-            const [[pr]] = await connection.query(
+            const [[pr]] = await pool.query(
                 `SELECT SUM(COALESCE(NULLIF(i.bill_total,0), i.bill_amount, 0)) AS billed,
                         SUM(CASE WHEN i.payment_status='paid' THEN COALESCE(NULLIF(i.bill_total,0), i.bill_amount,0) ELSE 0 END) AS received,
                         COUNT(*) AS billsCount,
@@ -3598,15 +3604,11 @@ async function computeFinanceSummary(connection, from, to) {
 
 app.get('/api/finance/summary', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    let connection;
     try {
-        connection = await getConn();
-        res.json(await computeFinanceSummary(connection, req.query.from, req.query.to));
+        res.json(await computeFinanceSummary(req.query.from, req.query.to));
     } catch (err) {
         console.error('[finance] summary error:', err);
         res.status(500).json({ error: err.message || 'Could not build finance summary' });
-    } finally {
-        if (connection) connection.release();
     }
 });
 

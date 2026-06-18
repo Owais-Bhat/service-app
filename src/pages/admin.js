@@ -430,6 +430,16 @@ export async function renderAdminDashboard(container) {
       ["resolved", "closed"].includes(x.status) &&
       dateKey(x.updated_at || x.bill_generated_at || x.created_at) === today,
   ).length;
+  // On-time = resolved today AND completed before their SLA deadline
+  const onTimeToday = allRows.filter((x) => {
+    if (!["resolved", "closed"].includes(x.status)) return false;
+    if (dateKey(x.updated_at || x.bill_generated_at || x.created_at) !== today) return false;
+    const deadline = calculateSLA(x.created_at);
+    const resolvedAt = new Date(x.updated_at || x.bill_generated_at || x.created_at);
+    return resolvedAt <= deadline;
+  }).length;
+  const onTimeRate = resolvedToday > 0 ? Math.round((onTimeToday / resolvedToday) * 100) : 0;
+  const todayTarget = Math.max(1, parseInt(localStorage.getItem("nest-daily-target") || "8", 10));
   const unpaidBills = allRows.filter(
     (x) => x.bill_amount && x.payment_status !== "paid",
   ).length;
@@ -650,6 +660,76 @@ export async function renderAdminDashboard(container) {
     const _kpisEl = heroEl.querySelector(".dash-kpis");
     if (_kpisEl) _kpisEl.insertAdjacentHTML("afterend", onlineCardHtml);
     else heroEl.insertAdjacentHTML("afterbegin", onlineCardHtml);
+  }
+
+  // ── Today's Scorecard — daily target + on-time rate ──────────────
+  {
+    const targetPct = Math.min(100, Math.round((resolvedToday / todayTarget) * 100));
+    const scorecardHtml = `
+<div class="card" id="today-scorecard" style="margin-bottom:20px">
+  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:${resolvedToday >= todayTarget ? "var(--success)" : "var(--primary)"};display:inline-block"></span>
+      Today's Scorecard
+    </span>
+    <div style="display:inline-flex;align-items:center;gap:8px;font-size:0.82rem;">
+      <span style="color:var(--text-dim);font-weight:600;">Daily Target:</span>
+      <input type="number" id="daily-target-input" min="1" max="999" value="${todayTarget}"
+             style="width:64px;padding:4px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-weight:700;font-size:0.9rem;text-align:center;">
+    </div>
+  </div>
+  <div class="card-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:0;">
+    <div style="padding:20px 24px;text-align:center;border-right:1px solid var(--border);">
+      <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Resolved Today</div>
+      <div style="font-size:2.8rem;font-weight:800;line-height:1;color:${resolvedToday >= todayTarget ? "var(--success)" : "var(--text)"}">
+        ${resolvedToday}<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim)"> / ${todayTarget}</span>
+      </div>
+      <div style="margin-top:14px;height:8px;background:var(--border);border-radius:6px;overflow:hidden">
+        <div id="target-progress-bar" style="height:100%;width:${targetPct}%;background:${resolvedToday >= todayTarget ? "var(--success)" : "var(--primary)"};border-radius:6px;transition:width 0.5s ease;min-width:${resolvedToday > 0 ? 4 : 0}px"></div>
+      </div>
+      <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:${resolvedToday >= todayTarget ? "var(--success)" : "var(--text-dim)"}">
+        ${resolvedToday >= todayTarget ? "🎯 Goal reached!" : `${todayTarget - resolvedToday} more to reach goal`}
+      </div>
+    </div>
+    <div style="padding:20px 24px;text-align:center;border-right:1px solid var(--border);">
+      <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">On-Time Rate Today</div>
+      <div style="font-size:2.8rem;font-weight:800;line-height:1;color:${onTimeRate >= 80 ? "var(--success)" : onTimeRate >= 60 ? "var(--warning)" : resolvedToday === 0 ? "var(--text-dim)" : "var(--danger)"}">
+        ${onTimeRate}<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim)">%</span>
+      </div>
+      <div style="margin-top:14px;height:8px;background:var(--border);border-radius:6px;overflow:hidden">
+        <div style="height:100%;width:${onTimeRate}%;background:${onTimeRate >= 80 ? "var(--success)" : onTimeRate >= 60 ? "var(--warning)" : "var(--danger)"};border-radius:6px;min-width:${onTimeToday > 0 ? 4 : 0}px"></div>
+      </div>
+      <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:var(--text-dim)">
+        ${resolvedToday === 0 ? "No tickets resolved yet today" : `${onTimeToday} of ${resolvedToday} within SLA (12 hrs)`}
+      </div>
+    </div>
+    <div style="padding:20px 24px;text-align:center;">
+      <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">New Today</div>
+      <div style="font-size:2.8rem;font-weight:800;line-height:1;color:var(--primary)">${newToday}</div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <span style="padding:3px 10px;border-radius:20px;background:rgba(124,92,252,0.12);color:var(--violet,#7c5cfc);font-size:0.75rem;font-weight:700">${inProgress} in progress</span>
+        <span style="padding:3px 10px;border-radius:20px;background:rgba(245,165,36,0.12);color:var(--amber,var(--warning));font-size:0.75rem;font-weight:700">${pendingAssignment} unassigned</span>
+      </div>
+      <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:var(--text-dim)">
+        ${newToday > 0 && resolvedToday > 0 ? `Net ${newToday > resolvedToday ? "+" : ""}${newToday - resolvedToday} tickets ${newToday > resolvedToday ? "added" : "cleared"} today` : newToday > 0 ? "All pending action" : "Clean slate today"}
+      </div>
+    </div>
+  </div>
+</div>`;
+    const firstGrid = container.querySelector(".grid-stats");
+    if (firstGrid) firstGrid.insertAdjacentHTML("beforebegin", scorecardHtml);
+    else container.insertAdjacentHTML("beforeend", scorecardHtml);
+
+    container.querySelector("#daily-target-input")?.addEventListener("change", (e) => {
+      const v = Math.max(1, parseInt(e.target.value, 10) || 8);
+      e.target.value = v;
+      localStorage.setItem("nest-daily-target", String(v));
+      const bar = container.querySelector("#target-progress-bar");
+      if (bar) {
+        bar.style.width = Math.min(100, Math.round((resolvedToday / v) * 100)) + "%";
+        bar.style.background = resolvedToday >= v ? "var(--success)" : "var(--primary)";
+      }
+    });
   }
 
   // ── Convert the dense record tables into design list-cards ───────
