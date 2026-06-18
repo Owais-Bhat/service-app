@@ -1197,46 +1197,27 @@ export async function renderEmployeeDashboard(container) {
         ${attendance?.location ? `<p class="attendance-location" style="margin-top:8px;justify-content:flex-start;">${ICONS.pin}<span>${escapeHtml(attendance.location)}</span></p>` : ''}
       </div>
       <div class="emp-clock-right">
+        ${(isClockedIn || isClockedOut || missedEods.length > 0) ? `
+          <button class="btn btn-sm emp-eod-btn ${eodReport ? 'emp-eod-ok' : missedEods.length ? (strictEodBlock ? 'emp-eod-err' : 'emp-eod-warn') : 'emp-eod-ok'}" id="btn-eod-status">
+            ${eodReport ? ICONS.check : missedEods.length ? ICONS.alert : ICONS.clipboard}
+            <span>${eodReport ? 'EOD Submitted' : missedEods.length ? (strictEodBlock ? 'Restricted' : 'EOD Warning') : 'EOD Status'}</span>
+          </button>
+        ` : ''}
+        ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-bottom:8px;">${ICONS.clock}<span>Closed after ${clockOutSetting.label}</span></p>` : ''}
         <button class="btn ${canClockOut ? 'btn-danger' : 'btn-primary'} emp-clock-toggle" id="btn-clock-toggle" ${isClockedOut || (!canClockOut && (strictEodBlock || clockInClosed)) ? 'disabled' : ''}>
           ${canClockOut ? ICONS.pause : ICONS.play}
           <span>${isClockedOut ? 'Session Done' : canClockOut ? 'Clock Out' : 'Clock In'}</span>
         </button>
-        ${isClockedIn && !isClockedOut && !eodReport ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-top:6px;">${ICONS.clipboard}<span>EOD required to clock out</span></p>` : ''}
-        ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-top:6px;">${ICONS.clock}<span>Closed after ${clockOutSetting.label}</span></p>` : ''}
-        ${strictEodBlock && !canClockOut ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-top:6px;color:var(--danger);">${ICONS.alert}<span>Restricted — contact admin</span></p>` : ''}
       </div>
     </div>
 
-    <!-- ── Carousel: EOD Status + Notice Board ── -->
-    <div class="card emp-carousel" style="margin-bottom:18px;">
-      <div class="emp-carousel-inner">
-        <div class="emp-car-track" id="emp-car-track">
-          <div class="emp-car-slide">
-            <div class="emp-slide-head">
-              <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;color:${missedEods.length ? (strictEodBlock ? 'var(--danger)' : 'var(--warning)') : 'var(--success)'};">
-                ${missedEods.length ? ICONS.alert : ICONS.check}
-                ${missedEods.length ? (strictEodBlock ? 'Clock-in Restricted' : 'EOD Warning') : 'EOD Up to Date'}
-              </span>
-            </div>
-            <p style="margin:8px 0 0;font-size:0.87rem;color:var(--text-soft);line-height:1.5;">${missedEods.length ? `You have ${missedEods.length} missed EOD report${missedEods.length === 1 ? '' : 's'}. ${strictEodBlock ? 'Please contact admin before starting a new shift.' : 'Submit your EOD report before the day closes.'}` : 'All past EOD reports are submitted. Great work!'}</p>
-          </div>
-          <div class="emp-car-slide">
-            <div class="emp-slide-head">
-              <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;">${ICONS.bell} Notice Board</span>
-              ${notices.length ? `<span class="df-badge" style="background:var(--primary);margin-left:4px;">${notices.length}</span>` : ''}
-            </div>
-            ${notices.length === 0 ? `<p style="margin:10px 0 0;font-size:0.87rem;color:var(--text-dim);">No active notices right now.</p>` : `<div class="emp-notices-list">${notices.map((n, i) => `<div class="emp-notice-item" data-notice-idx="${i}" role="button" tabindex="0"><div class="emp-notice-ico">${ICONS.bell}</div><div style="flex:1;min-width:0;"><div class="emp-notice-title">${escapeHtml(n.title || 'Notice')}</div><div class="emp-notice-date">${formatDate(n.created_at)}</div></div><span style="color:var(--text-dim);flex-shrink:0;">${ICONS.arrowRight}</span></div>`).join('')}</div>`}
-          </div>
-        </div>
+    <!-- ── Notice Board ── -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="emp-slide-head">
+        <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;">${ICONS.bell} Notice Board</span>
+        ${notices.length ? `<span class="df-badge" style="background:var(--primary);margin-left:4px;">${notices.length}</span>` : ''}
       </div>
-      <div class="emp-carousel-nav">
-        <button class="emp-car-arrow" id="emp-car-prev">&#8249;</button>
-        <div class="emp-car-dots">
-          <span class="emp-dot active" data-idx="0"></span>
-          <span class="emp-dot" data-idx="1"></span>
-        </div>
-        <button class="emp-car-arrow" id="emp-car-next">&#8250;</button>
-      </div>
+      ${notices.length === 0 ? `<p style="margin:10px 18px 14px;font-size:0.87rem;color:var(--text-dim);">No active notices right now.</p>` : `<div class="emp-notices-list">${notices.map((n, i) => `<div class="emp-notice-item" data-notice-idx="${i}" role="button" tabindex="0"><div class="emp-notice-ico">${ICONS.bell}</div><div style="flex:1;min-width:0;"><div class="emp-notice-title">${escapeHtml(n.title || 'Notice')}</div><div class="emp-notice-date">${formatDate(n.created_at)}</div></div><span style="color:var(--text-dim);flex-shrink:0;">${ICONS.arrowRight}</span></div>`).join('')}</div>`}
     </div>
 
     ${pendingInquiries.length ? `
@@ -1486,18 +1467,34 @@ export async function renderEmployeeDashboard(container) {
       await doClockOut();
     };
   };
-  // Carousel
-  let _carIdx = 0;
-  const _carTrack = container.querySelector('#emp-car-track');
-  const _carDots = container.querySelectorAll('.emp-dot');
-  const _slideTo = (idx) => {
-    _carIdx = Math.max(0, Math.min(1, idx));
-    if (_carTrack) _carTrack.style.transform = `translateX(-${_carIdx * 100}%)`;
-    _carDots.forEach((d, i) => d.classList.toggle('active', i === _carIdx));
-  };
-  container.querySelector('#emp-car-prev')?.addEventListener('click', () => _slideTo(_carIdx - 1));
-  container.querySelector('#emp-car-next')?.addEventListener('click', () => _slideTo(_carIdx + 1));
-  _carDots.forEach((d, i) => d.addEventListener('click', () => _slideTo(i)));
+  // EOD status button popup
+  container.querySelector('#btn-eod-status')?.addEventListener('click', () => {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    const isOk = !!eodReport;
+    const isErr = !isOk && strictEodBlock && missedEods.length > 0;
+    const isWarn = !isOk && !isErr && missedEods.length > 0;
+    const iconColor = isOk ? 'var(--success)' : isErr ? 'var(--danger)' : 'var(--warning)';
+    const title = isOk ? 'EOD Submitted' : isErr ? 'Clock-in Restricted' : 'EOD Warning';
+    const icon = isOk ? ICONS.check : ICONS.alert;
+    const body = isOk
+      ? 'Your End of Day report for today has been submitted successfully. Great work!'
+      : `You have ${missedEods.length} missed EOD report${missedEods.length === 1 ? '' : 's'}. ${isErr ? 'Clock-in is restricted until you contact admin.' : 'Please submit your EOD report before the day closes.'}`;
+    ov.innerHTML = `
+      <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+          <span class="modal-title" style="color:${iconColor};">${icon}<span>${title}</span></span>
+          <button class="modal-close" id="eod-status-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="margin:0;font-size:0.9rem;color:var(--text-soft);line-height:1.6;">${body}</p>
+          ${missedEods.length > 0 ? `<div style="margin-top:14px;padding:10px 12px;background:var(--bg-soft);border-radius:8px;font-size:0.83rem;color:var(--text-dim);">Missed dates: ${missedEods.map(d => formatDate(d)).join(', ')}</div>` : ''}
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#eod-status-close').onclick = () => ov.remove();
+    ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  });
 
   // Notice modal
   container.querySelectorAll('.emp-notice-item').forEach(el => {
