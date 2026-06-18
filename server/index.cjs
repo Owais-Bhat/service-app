@@ -4539,22 +4539,32 @@ app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
 // Returns aggregated review stats per employee for a given month (YYYY-MM) and all-time.
 // Bypasses the employee-scoped RLS so every employee can see the full ranking.
 app.get('/api/leaderboard', authenticateToken, async (req, res) => {
+    let connection;
     try {
-        const connection = await getConn();
+        connection = await getConn();
         const monthKey = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
             ? req.query.month : null;
 
-        // All employees with zero-seeded stats
         const [empRows] = await connection.execute(
             "SELECT id, full_name FROM profiles WHERE role = 'employee' ORDER BY full_name ASC"
         );
 
-        // All feedback rows (all employees)
-        const [fbRows] = await connection.execute(
-            `SELECT feedback_employee_id, assigned_employee_id, feedback_rating, employee_rating, feedback_at, updated_at
-             FROM inquiries WHERE feedback_rating IS NOT NULL`
-        );
+        // Try extended columns first; fall back to base columns if schema is older.
+        let fbRows;
+        try {
+            [fbRows] = await connection.execute(
+                `SELECT assigned_employee_id, feedback_employee_id, feedback_rating, employee_rating, feedback_at, updated_at
+                 FROM inquiries WHERE feedback_rating > 0`
+            );
+        } catch (_) {
+            [fbRows] = await connection.execute(
+                `SELECT assigned_employee_id, feedback_rating, updated_at
+                 FROM inquiries WHERE feedback_rating > 0`
+            );
+        }
+
         connection.release();
+        connection = null;
 
         const agg = (rows) => {
             const map = new Map();
@@ -4581,6 +4591,7 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
 
         res.json({ monthly, allTime });
     } catch (error) {
+        if (connection) connection.release();
         console.error('GET leaderboard error:', error);
         res.status(500).json({ error: error.message });
     }
