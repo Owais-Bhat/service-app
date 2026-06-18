@@ -312,7 +312,6 @@ export async function renderPopupAdsTab(container) {
       </div>
     </div>
   `;
-  container.querySelector('#media-refresh').onclick = () => renderPopupAdsTab(container);
   container.querySelector('#media-save').onclick = async () => {
     const btn = container.querySelector('#media-save');
     const file = container.querySelector('#media-file').files[0];
@@ -387,7 +386,6 @@ export async function renderTrainingAdminTab(container) {
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div><h1>Employee Tutorials</h1><p>Upload training media and monitor completion live</p></div>
-      <button class="btn btn-secondary" id="training-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
 
     <div class="stats-grid" style="margin-bottom:22px;">
@@ -454,7 +452,6 @@ export async function renderTrainingAdminTab(container) {
       }).join('')}
     </div>
   `;
-  container.querySelector('#training-refresh').onclick = () => renderTrainingAdminTab(container);
   container.querySelector('#training-save').onclick = async () => {
     const btn = container.querySelector('#training-save');
     const file = container.querySelector('#training-file').files[0];
