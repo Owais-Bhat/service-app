@@ -1835,7 +1835,6 @@ export async function renderEmployeeCash(container) {
         <h1>My Cash</h1>
         <p>Cash you've collected from clients. Hand it to admin to clear the pending balance.</p>
       </div>
-      <button class="btn btn-secondary" id="cash-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
 
     <div class="stats-grid" style="margin-bottom:24px;">
@@ -1886,8 +1885,6 @@ export async function renderEmployeeCash(container) {
       </div>
     </div>
   `;
-
-  container.querySelector('#cash-refresh').onclick = () => renderEmployeeCash(container);
 
   const cashTabs = { pending, submitted, all: list };
   const cashPanel = container.querySelector('#cash-panel');
@@ -2673,9 +2670,6 @@ export async function renderEmployeeTasks(container) {
         </h1>
         <p>All your assigned tasks, service jobs, and pending assignments</p>
       </div>
-      <div style="display:flex; gap:10px; align-items:center;">
-        <button class="btn btn-secondary" id="tasks-refresh">${ICONS.refresh}<span>Refresh</span></button>
-      </div>
     </div>
 
     ${pendingInquiries.length > 0 ? `
@@ -2782,16 +2776,6 @@ export async function renderEmployeeTasks(container) {
   // Populate the "Devices in Service" container (tickets sent to the service
   // center). Visibility is controlled by the "Device Follow Up" filter tab.
   populateDevicesInService(container, user.id, { deferShow: true });
-
-  // Refresh
-  container.querySelector('#tasks-refresh').onclick = async () => {
-    const restore = setButtonLoading(container.querySelector('#tasks-refresh'), 'Loading');
-    try {
-      await renderEmployeeTasks(container);
-    } finally {
-      restore();
-    }
-  };
 
   // Live auto-refresh: re-render this view the moment admin assigns/updates a
   // request for this employee — no manual refresh needed.
