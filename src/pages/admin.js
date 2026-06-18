@@ -16,7 +16,6 @@ import {
   showLoader,
 } from "../utils.js";
 import { openPremiumBillModal, shareBillToPublicLink } from "./employee.js";
-import { renderDashboardHero } from "./dashboard-widgets.js";
 const API_BASE =
   window.location.hostname !== "localhost" &&
   window.location.hostname !== "127.0.0.1"
@@ -479,7 +478,7 @@ export async function renderAdminDashboard(container) {
       });
     });
   const onlineCardHtml = `      <div class="card" id="online-now-card">        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">          <span class="card-title" data-card="online" style="display:inline-flex;align-items:center;gap:8px;"><span style="width:9px;height:9px;border-radius:50%;background:var(--success,#22c55e);box-shadow:0 0 0 0 rgba(34,197,94,0.6);animation:onlinePulse 1.8s infinite;"></span>Online Now</span>          <span class="badge badge-resolved">${onlineEmployees.length}</span>        </div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Employee</th><th>Since</th><th>Location</th></tr></thead>            <tbody>              ${onlineEmployees.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-dim)">No one is online right now</td></tr>' : onlineEmployees.map((e) => `<tr>                  <td><span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--success,#22c55e);flex:none;"></span><b>${escapeHtml(e.name)}</b></span>${e.role ? `<br/><small style="color:var(--text-dim);margin-left:16px">${escapeHtml(e.role)}</small>` : ""}</td>                  <td><span class="badge badge-open">${formatTime(e.clockIn)}</span></td>                  <td><small style="color:var(--text-dim)">${e.location ? escapeHtml(e.location) : "&mdash;"}</small></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>`;
-  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Admin Hub</h1>        <p>Real-time operations monitoring</p>      </div>      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">        <div style="display:inline-flex;align-items:center;gap:10px;padding:6px 14px;border-radius:100px;background:var(--panel-2,var(--bg-soft));border:1px solid var(--line,var(--border));">          <span style="font-size:0.82rem;font-weight:700;color:var(--text-dim);">Auto Assign:</span>          <label class="switch-container" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">            <div class="switch-outer" id="dash-auto-assign-switch-outer" style="position:relative;width:44px;height:22px;background:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);">              <div class="switch-inner" id="dash-auto-assign-switch-inner" style="position:absolute;top:2px;left:${autoAssignStatus.auto_assignment_enabled ? "24px" : "2px"};width:18px;height:18px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>            </div>            <span style="font-size:0.85rem;font-weight:700;color:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--text-dim)"};" id="dash-auto-assign-status-text">${autoAssignStatus.auto_assignment_enabled ? "ON" : "OFF"}</span>            <input type="checkbox" id="dash-auto-assign-toggle-input" style="display:none;" ${autoAssignStatus.auto_assignment_enabled ? "checked" : ""} />          </label>        </div>        <button class="btn btn-primary" id="admin-dashboard-register">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="admin-refresh">Refresh</button>      </div>    </div>    <div id="admin-kpi-hero" class="dash-hero"></div>    <div class="grid-stats" style="margin-top:18px">      <div class="glass stat-mini">        <div class="ic bg-sky">${ICONS.inbox}</div>        <div class="v c-sky">${newToday}</div>        <div class="l">New Today</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-amber">${ICONS.clock}</div>        <div class="v c-amber">${pendingAssignment}</div>        <div class="l">Pending Assignment</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-violet">${ICONS.refresh}</div>        <div class="v c-violet">${inProgress}</div>        <div class="l">In Progress</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-accent">${ICONS.check}</div>        <div class="v c-accent">${resolvedToday}</div>        <div class="l">Resolved Today</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-rose">${ICONS.receipt}</div>        <div class="v c-rose">${unpaidBills}</div>        <div class="l">Unpaid Bills</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-amber">${ICONS.rupee}</div>        <div class="v" style="font-size:1.55rem;color:var(--amber,var(--warning))">${money(cashPending)}</div>        <div class="l">Cash Pending</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-rose">${ICONS.shield}</div>        <div class="v c-rose">${openComplaints.length}</div>        <div class="l">Open Complaints</div>      </div>      <div class="glass stat-mini">        <div class="ic bg-amber">${ICONS.clipboard}</div>        <div class="v" style="color:${eodWarnings.length ? "var(--amber,var(--warning))" : "var(--accent,var(--success))"}">${eodWarnings.length}</div>        <div class="l">EOD Warnings</div>      </div>    </div>      ${
+  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Admin Hub</h1>        <p>Real-time operations monitoring</p>      </div>      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">        <div style="display:inline-flex;align-items:center;gap:10px;padding:6px 14px;border-radius:100px;background:var(--panel-2,var(--bg-soft));border:1px solid var(--line,var(--border));">          <span style="font-size:0.82rem;font-weight:700;color:var(--text-dim);">Auto Assign:</span>          <label class="switch-container" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">            <div class="switch-outer" id="dash-auto-assign-switch-outer" style="position:relative;width:44px;height:22px;background:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);">              <div class="switch-inner" id="dash-auto-assign-switch-inner" style="position:absolute;top:2px;left:${autoAssignStatus.auto_assignment_enabled ? "24px" : "2px"};width:18px;height:18px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>            </div>            <span style="font-size:0.85rem;font-weight:700;color:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--text-dim)"};" id="dash-auto-assign-status-text">${autoAssignStatus.auto_assignment_enabled ? "ON" : "OFF"}</span>            <input type="checkbox" id="dash-auto-assign-toggle-input" style="display:none;" ${autoAssignStatus.auto_assignment_enabled ? "checked" : ""} />          </label>        </div>        <button class="btn btn-primary" id="admin-dashboard-register">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="admin-refresh">Refresh</button>      </div>    </div>    ${onlineCardHtml}      ${
     eodWarnings.length
       ? `      <div class="card">        <div class="card-header"><span class="card-title" data-card="eod">EOD Warnings</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Employee</th><th>Missed EOD</th><th>Last Attendance</th><th>Action</th></tr></thead>            <tbody>              ${eodWarnings
           .slice(0, 5)
@@ -492,233 +491,8 @@ export async function renderAdminDashboard(container) {
           )}            </tbody>          </table>        </div>      </div>`
       : ""
   }      <!-- Actionable service queue -->      <div class="card">        <div class="card-header"><span class="card-title" data-card="attn">Needs Attention</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Customer</th><th>Reason</th><th></th></tr></thead>            <tbody>              ${attentionItems.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No requests need attention</td></tr>' : attentionItems.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "â€”"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.company_name || x.service_item || "Service request"}</small></td>                  <td><span class="badge badge-${x._reason === "Declined" ? "danger" : "medium"}">${x._reason}</span></td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <!-- Service Requests Card (From Guests) -->      <div class="card">        <div class="card-header"><span class="card-title" data-card="recent">Recent Service Requests</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Customer</th><th>Company</th><th>Status</th><th></th></tr></thead>            <tbody>              ${activeInquiries.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No active requests</td></tr>' : activeInquiries.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "—"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${x.full_name}</b></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <div class="card">        <div class="card-header"><span class="card-title" data-card="complaints">Recent Complaints</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Phone</th><th>Status</th><th></th></tr></thead>            <tbody>              ${recentComplaints.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No complaints yet</td></tr>' : recentComplaints.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${escapeHtml(x.ticket_no || "-")}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${escapeHtml(x.phone || "-")}</b><br/><small style="color:var(--text-dim);display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.complaint_text || "Complaint")}</small></td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm cmp-dash-btn" data-id="${escapeHtml(x.id)}">Respond</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <div class="card" style="margin-top:24px">        <div class="card-header"><span class="card-title" data-card="resolved">Resolved Services</span></div>        <div class="table-wrap recent-requests-scroll">        <table>          <thead><tr><th>Ticket</th><th>Service Date</th><th>Company</th><th>Name</th><th>Status</th><th></th></tr></thead>          <tbody>            ${resolvedInquiries.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-dim)">No resolved services yet</td></tr>' : resolvedInquiries.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "â€”"}</code></td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">â€”</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>    <div class="card" style="margin-top:24px" id="company-svc-card">      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">        <span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span>        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">          <select id="company-status-filter" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-weight:700;">            <option value="all" ${reportFilters.status === "all" ? "selected" : ""}>All</option>            <option value="active" ${reportFilters.status === "active" ? "selected" : ""}>Active</option>            <option value="resolved" ${reportFilters.status === "resolved" ? "selected" : ""}>Resolved</option>            <option value="paid" ${reportFilters.status === "paid" ? "selected" : ""}>Paid</option>            <option value="unpaid" ${reportFilters.status === "unpaid" ? "selected" : ""}>Unpaid</option>          </select>          <input type="date" id="company-from" value="${reportFilters.from}" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);"/>          <input type="date" id="company-to" value="${reportFilters.to}" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);"/>        <div class="search-input-wrap" style="min-width:160px;max-width:260px;">          <span>${ICONS.search}</span>          <input class="search-input" id="company-search" placeholder="Filter company…" style="padding:6px 10px;font-size:0.82rem;"/>        </div>        <button class="btn btn-secondary btn-sm" id="company-export">Export All</button>        <button class="btn btn-secondary btn-sm" id="company-clear-filters">Clear</button>        </div>      </div>      <div class="table-wrap" id="company-table-wrap">        <table id="company-svc-table">          <thead><tr><th>Company</th><th>Total</th><th>Active</th><th>Resolved</th><th></th></tr></thead>          <tbody>            ${companyRows.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No service data yet</td></tr>' : companyRows.map(([company, counts]) => `<tr data-company="${company}">                  <td><b>${company}</b></td>                  <td><span class="badge badge-open">${counts.total}</span></td>                  <td style="color:var(--warning);font-weight:700">${counts.active}</td>                  <td style="color:var(--success);font-weight:700">${counts.resolved}</td>                  <td><button class="btn btn-secondary btn-sm view-company-btn" data-company="${company}" style="white-space:nowrap">View All</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
-  // ── Roll the second stat-card grid up into a design-style donut ──
-  {
-    const opsGrid = container.querySelectorAll(".grid-stats")[1];
-    if (opsGrid) {
-      const segs = [
-        { label: "New Today", value: newToday, color: "#2e9bff" },
-        { label: "Pending Assignment", value: pendingAssignment, color: "#f5a524" },
-        { label: "In Progress", value: inProgress, color: "#7c5cfc" },
-        { label: "Resolved Today", value: resolvedToday, color: "#15a05a" },
-      ];
-      const tot = segs.reduce((s, x) => s + x.value, 0);
-      const C = 2 * Math.PI * 44;
-      let acc = 0;
-      const arcs = tot === 0 ? "" : segs.filter((s) => s.value > 0).map((s) => {
-        const d = (s.value / tot) * C;
-        const arc = `<circle cx="60" cy="60" r="44" fill="none" stroke="${s.color}" stroke-width="14" stroke-dasharray="${d.toFixed(2)} ${(C - d).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}"/>`;
-        acc += d;
-        return arc;
-      }).join("");
-      const miniStats = [
-        { label: "Unpaid Bills", value: unpaidBills, color: "#f0556d" },
-        { label: "Cash Pending", value: money(cashPending), color: "#f5a524" },
-        { label: "Open Complaints", value: openComplaints.length, color: "#ef4444" },
-        { label: "EOD Warnings", value: eodWarnings.length, color: "#7c5cfc" },
-      ];
-      opsGrid.outerHTML = `
-        <div class="card list-card" style="margin-top:18px">
-          <div class="card-head"><h3>${ICONS.clipboard} Today's Operations</h3><span class="chip">${tot}</span></div>
-          <div style="flex:1; display:flex; align-items:center; justify-content:center; gap:28px; flex-wrap:wrap; padding:20px;">
-            <svg width="150" height="150" viewBox="0 0 120 120" role="img" aria-label="Today's operations breakdown">
-              <g transform="rotate(-90 60 60)">
-                <circle cx="60" cy="60" r="44" fill="none" stroke="var(--line, var(--border))" stroke-width="14"/>
-                ${arcs}
-              </g>
-              <text x="60" y="58" text-anchor="middle" font-size="24" font-weight="800" fill="var(--text)" font-family="var(--font-display)">${tot}</text>
-              <text x="60" y="74" text-anchor="middle" font-size="8" font-weight="700" letter-spacing="1" fill="var(--text-dim)">TODAY</text>
-            </svg>
-            <div style="display:flex; flex-direction:column; gap:9px; min-width:200px;">
-              ${segs.map((s) => `
-                <div style="display:flex; align-items:center; gap:10px;">
-                  <span style="width:10px; height:10px; border-radius:50%; background:${s.color}; flex-shrink:0;"></span>
-                  <span style="flex:1; font-size:0.84rem; font-weight:600; color:var(--text-soft);">${s.label}</span>
-                  <span style="font-size:0.9rem; font-weight:800;">${s.value}</span>
-                </div>`).join("")}
-              <div style="height:1px; background:var(--line, var(--border)); margin:4px 0;"></div>
-              ${miniStats.map((s) => `
-                <div style="display:flex; align-items:center; gap:10px;">
-                  <span style="width:10px; height:10px; border-radius:3px; background:${s.color}; flex-shrink:0;"></span>
-                  <span style="flex:1; font-size:0.84rem; font-weight:600; color:var(--text-soft);">${s.label}</span>
-                  <span style="font-size:0.9rem; font-weight:800;">${s.value}</span>
-                </div>`).join("")}
-            </div>
-          </div>
-        </div>`;
-    }
-  }
 
-  // ── Real-data KPI gauges + charts hero ──────────────────────────
-  const heroEl = container.querySelector("#admin-kpi-hero");
-  if (heroEl) {
-    const totalReq = allRows.length;
-    const resolvedCount = resolvedInquiries.length;
-    const assignedCount = allRows.filter((x) => x.assigned_employee_id).length;
-    const billedCount = allRows.filter((x) => x.bill_amount).length;
-    const paidCount = allRows.filter((x) => x.bill_amount && x.payment_status === "paid").length;
-    const empTotal = p.filter((x) => x.role === "employee").length;
 
-    // 6-month request trend from real created_at.
-    const months = [];
-    const nowD = new Date();
-    for (let k = 5; k >= 0; k--) months.push(new Date(nowD.getFullYear(), nowD.getMonth() - k, 1));
-    const trendLabels = months.map((d) => d.toLocaleDateString("en-US", { month: "short" }));
-    const trendValues = months.map((d) =>
-      allRows.filter((x) => {
-        const c = new Date(x.created_at);
-        return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
-      }).length,
-    );
-
-    // Non-overlapping status buckets.
-    let sOpen = 0, sProg = 0, sResolved = 0, sOther = 0;
-    allRows.forEach((x) => {
-      if (["resolved", "closed"].includes(x.status)) sResolved++;
-      else if (displayStatus(x.status) === "in_progress") sProg++;
-      else if (["pending", "open"].includes(displayStatus(x.status))) sOpen++;
-      else sOther++;
-    });
-    const statusSegs = [
-      { label: "Open", color: "#3B82F6", value: sOpen },
-      { label: "In Progress", color: "#f5a524", value: sProg },
-      { label: "Resolved", color: "#15a05a", value: sResolved },
-    ];
-    if (sOther) statusSegs.push({ label: "Other", color: "#94a3b8", value: sOther });
-
-    const pipeline = [
-      { label: "New", value: newToday, color: "var(--primary)" },
-      { label: "Pending", value: pendingAssignment, color: "#f5a524" },
-      { label: "In Progress", value: inProgress, color: "#2e9bff" },
-      { label: "Resolved", value: resolvedToday, color: "var(--success)" },
-    ];
-    const alerts = [
-      { label: "Low Stock", value: lowStock, color: "#f5a524" },
-      { label: "Unpaid", value: unpaidBills, color: "#f0556d" },
-      { label: "Complaints", value: openComplaints.length, color: "#ef4444" },
-      { label: "EOD Warn", value: eodWarnings.length, color: "#7c5cfc" },
-    ];
-
-    // Service category breakdown from service_item field
-    const _catMap = new Map([['CCTV', 0], ['Networking', 0], ['Biometric', 0], ['Gate Automation', 0], ['Other', 0]]);
-    allRows.forEach(x => {
-      const s = (x.service_item || '').toLowerCase();
-      if (s.includes('cctv') || s.includes('camera') || s.includes('dvr') || s.includes('nvr') || s.includes('hikvision'))
-        _catMap.set('CCTV', _catMap.get('CCTV') + 1);
-      else if (s.includes('network') || s.includes('wifi') || s.includes('switch') || s.includes('router') || s.includes('lan'))
-        _catMap.set('Networking', _catMap.get('Networking') + 1);
-      else if (s.includes('biometric') || s.includes('attendance') || s.includes('fingerprint') || s.includes('face'))
-        _catMap.set('Biometric', _catMap.get('Biometric') + 1);
-      else if (s.includes('gate') || s.includes('barrier') || s.includes('boom') || s.includes('automation'))
-        _catMap.set('Gate Automation', _catMap.get('Gate Automation') + 1);
-      else
-        _catMap.set('Other', _catMap.get('Other') + 1);
-    });
-    const categorySegs = [
-      { label: 'CCTV', value: _catMap.get('CCTV'), color: '#15a05a' },
-      { label: 'Networking', value: _catMap.get('Networking'), color: '#0ea5a5' },
-      { label: 'Biometric', value: _catMap.get('Biometric'), color: '#6366f1' },
-      { label: 'Gate Auto', value: _catMap.get('Gate Automation'), color: '#e08a14' },
-      { label: 'Other', value: _catMap.get('Other'), color: '#94a3b8' },
-    ].filter(s => s.value > 0);
-
-    // Top technicians by resolved job count
-    const _techMap = new Map();
-    allRows.forEach(x => {
-      if (!x.assigned_employee_id || !['resolved', 'closed'].includes(x.status)) return;
-      const prof = profileById.get(x.assigned_employee_id);
-      if (!prof?.full_name || prof.role === 'admin') return;
-      const k = x.assigned_employee_id;
-      if (!_techMap.has(k)) _techMap.set(k, { name: prof.full_name, jobs: 0 });
-      _techMap.get(k).jobs++;
-    });
-    const topTechs = [..._techMap.values()].sort((a, b) => b.jobs - a.jobs).slice(0, 6);
-
-    heroEl.innerHTML = renderDashboardHero({
-      resolutionRate: totalReq ? (resolvedCount / totalReq) * 100 : 0,
-      assignmentRate: totalReq ? (assignedCount / totalReq) * 100 : 0,
-      collectionRate: billedCount ? (paidCount / billedCount) * 100 : 0,
-      attendanceRate: empTotal ? (a.length / empTotal) * 100 : 0,
-      resolved: resolvedCount, totalReq, assigned: assignedCount,
-      paid: paidCount, billed: billedCount, inCount: a.length, empTotal,
-      trendLabels, trendValues, statusSegs,
-      pipeline, alerts, companies: companyRows.slice(0, 8), topTechs, categorySegs,
-    });
-    // Place "Online Now" right after the KPI gauges, above Service Requests Trend.
-    const _kpisEl = heroEl.querySelector(".dash-kpis");
-    if (_kpisEl) _kpisEl.insertAdjacentHTML("afterend", onlineCardHtml);
-    else heroEl.insertAdjacentHTML("afterbegin", onlineCardHtml);
-  }
-
-  // ── Today's Scorecard — daily target + on-time rate ──────────────
-  {
-    const targetPct = Math.min(100, Math.round((resolvedToday / todayTarget) * 100));
-    const scorecardHtml = `
-<div class="card" id="today-scorecard" style="margin-bottom:20px">
-  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-    <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;">
-      <span style="width:8px;height:8px;border-radius:50%;background:${resolvedToday >= todayTarget ? "var(--success)" : "var(--primary)"};display:inline-block"></span>
-      Today's Scorecard
-    </span>
-    <div style="display:inline-flex;align-items:center;gap:8px;font-size:0.82rem;">
-      <span style="color:var(--text-dim);font-weight:600;">Daily Target:</span>
-      <input type="number" id="daily-target-input" min="1" max="999" value="${todayTarget}"
-             style="width:64px;padding:4px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-weight:700;font-size:0.9rem;text-align:center;">
-    </div>
-  </div>
-  <div class="card-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:0;">
-    <div style="padding:20px 24px;text-align:center;border-right:1px solid var(--border);">
-      <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Resolved Today</div>
-      <div style="font-size:2.8rem;font-weight:800;line-height:1;color:${resolvedToday >= todayTarget ? "var(--success)" : "var(--text)"}">
-        ${resolvedToday}<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim)"> / ${todayTarget}</span>
-      </div>
-      <div style="margin-top:14px;height:8px;background:var(--border);border-radius:6px;overflow:hidden">
-        <div id="target-progress-bar" style="height:100%;width:${targetPct}%;background:${resolvedToday >= todayTarget ? "var(--success)" : "var(--primary)"};border-radius:6px;transition:width 0.5s ease;min-width:${resolvedToday > 0 ? 4 : 0}px"></div>
-      </div>
-      <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:${resolvedToday >= todayTarget ? "var(--success)" : "var(--text-dim)"}">
-        ${resolvedToday >= todayTarget ? "🎯 Goal reached!" : `${todayTarget - resolvedToday} more to reach goal`}
-      </div>
-    </div>
-    <div style="padding:20px 24px;text-align:center;border-right:1px solid var(--border);">
-      <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">On-Time Rate Today</div>
-      <div style="font-size:2.8rem;font-weight:800;line-height:1;color:${onTimeRate >= 80 ? "var(--success)" : onTimeRate >= 60 ? "var(--warning)" : resolvedToday === 0 ? "var(--text-dim)" : "var(--danger)"}">
-        ${onTimeRate}<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim)">%</span>
-      </div>
-      <div style="margin-top:14px;height:8px;background:var(--border);border-radius:6px;overflow:hidden">
-        <div style="height:100%;width:${onTimeRate}%;background:${onTimeRate >= 80 ? "var(--success)" : onTimeRate >= 60 ? "var(--warning)" : "var(--danger)"};border-radius:6px;min-width:${onTimeToday > 0 ? 4 : 0}px"></div>
-      </div>
-      <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:var(--text-dim)">
-        ${resolvedToday === 0 ? "No tickets resolved yet today" : `${onTimeToday} of ${resolvedToday} within SLA (12 hrs)`}
-      </div>
-    </div>
-    <div style="padding:20px 24px;text-align:center;">
-      <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">New Today</div>
-      <div style="font-size:2.8rem;font-weight:800;line-height:1;color:var(--primary)">${newToday}</div>
-      <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-        <span style="padding:3px 10px;border-radius:20px;background:rgba(124,92,252,0.12);color:var(--violet,#7c5cfc);font-size:0.75rem;font-weight:700">${inProgress} in progress</span>
-        <span style="padding:3px 10px;border-radius:20px;background:rgba(245,165,36,0.12);color:var(--amber,var(--warning));font-size:0.75rem;font-weight:700">${pendingAssignment} unassigned</span>
-      </div>
-      <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:var(--text-dim)">
-        ${newToday > 0 && resolvedToday > 0 ? `Net ${newToday > resolvedToday ? "+" : ""}${newToday - resolvedToday} tickets ${newToday > resolvedToday ? "added" : "cleared"} today` : newToday > 0 ? "All pending action" : "Clean slate today"}
-      </div>
-    </div>
-  </div>
-</div>`;
-    const firstGrid = container.querySelector(".grid-stats");
-    if (firstGrid) firstGrid.insertAdjacentHTML("beforebegin", scorecardHtml);
-    else container.insertAdjacentHTML("beforeend", scorecardHtml);
-
-    container.querySelector("#daily-target-input")?.addEventListener("change", (e) => {
-      const v = Math.max(1, parseInt(e.target.value, 10) || 8);
-      e.target.value = v;
-      localStorage.setItem("nest-daily-target", String(v));
-      const bar = container.querySelector("#target-progress-bar");
-      if (bar) {
-        bar.style.width = Math.min(100, Math.round((resolvedToday / v) * 100)) + "%";
-        bar.style.background = resolvedToday >= v ? "var(--success)" : "var(--primary)";
-      }
-    });
-  }
 
   // ── Convert the dense record tables into design list-cards ───────
   const lrow = (icon, title, sub, badge, btnHtml) =>
@@ -771,16 +545,6 @@ export async function renderAdminDashboard(container) {
     }
   }
 
-  // Layout: lift the "Needs Attention" + "Recent Service Requests" row up to sit
-  // right after the KPI gauges (above Online Now and the charts).
-  {
-    const _kpisRow = heroEl && heroEl.querySelector(".dash-kpis");
-    const _attnHead = [...container.querySelectorAll(".list-card h3")].find(
-      (h) => /Needs Attention/i.test(h.textContent || ""),
-    );
-    const _attnGrid = _attnHead && _attnHead.closest(".grid-2-1");
-    if (_kpisRow && _attnGrid) _kpisRow.insertAdjacentElement("afterend", _attnGrid);
-  }
 
   const bind = (sel, cb) => {
     const el = container.querySelector(sel);

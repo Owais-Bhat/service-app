@@ -7608,9 +7608,11 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 }
 .df-panel {
   position: absolute; top: calc(100% + 8px); left: 0; z-index: 300;
-  background: var(--bg2, #0f1726); border: 1px solid var(--border);
-  border-radius: 16px; padding: 18px; min-width: 270px;
-  box-shadow: 0 10px 36px rgba(0,0,0,.24);
+  background: var(--bg-soft);
+  border: 1px solid var(--line, var(--border));
+  border-radius: 16px; padding: 18px;
+  width: 290px; max-width: min(290px, calc(100vw - 24px));
+  box-shadow: 0 12px 32px rgba(0,0,0,.18);
   display: flex; flex-direction: column; gap: 14px;
   animation: dfFadeIn .14s ease;
 }
@@ -7619,17 +7621,24 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .df-label { font-size: 0.72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim); }
 .df-field input, .df-field select {
   padding: 9px 13px; border-radius: 10px;
-  border: 1.5px solid var(--border); background: var(--bg3, #0b1220);
+  border: 1.5px solid var(--line, var(--border));
+  background: var(--bg);
   color: var(--text); font-size: 0.9rem; width: 100%; outline: none;
   transition: border-color .15s;
 }
-.df-field input:focus, .df-field select:focus { border-color: var(--primary); }
+.df-field input::placeholder { color: var(--text-dim); }
+.df-field input:focus, .df-field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--accent-soft); }
 .df-footer {
   display: flex; justify-content: flex-end;
-  border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px;
+  border-top: 1px solid var(--line, var(--border)); padding-top: 10px; margin-top: 2px;
 }
-@media (max-width: 480px) {
-  .df-panel { left: auto; right: 0; min-width: min(270px, calc(100vw - 24px)); }
+@media (max-width: 600px) {
+  .df-panel {
+    left: 0;
+    right: auto;
+    width: 86vw;
+    max-width: 86vw;
+  }
 }
 
 /* ── Employee: horizontal clock row ── */
