@@ -416,7 +416,6 @@ export async function renderAdminStats(container) {
         <h1 style="display:inline-flex;align-items:center;gap:10px">${ICONS.dashboard}<span>Stats</span></h1>
         <p style="color:var(--text-soft);margin:4px 0 0">Live analytics — charts, trends &amp; metrics</p>
       </div>
-      <button class="btn btn-secondary" id="stats-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
 
     <div id="stats-hero" class="dash-hero"></div>
@@ -510,7 +509,6 @@ export async function renderAdminStats(container) {
   });
 
   // ── Events ────────────────────────────────────────────────────────────
-  container.querySelector('#stats-refresh')?.addEventListener('click', () => renderAdminStats(container));
   container.querySelector('#daily-target-input')?.addEventListener('change', (e) => {
     const v = Math.max(1, parseInt(e.target.value, 10) || 8);
     e.target.value = v;

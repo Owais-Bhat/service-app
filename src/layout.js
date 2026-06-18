@@ -108,9 +108,31 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
     rfab.className = 'global-refresh-fab';
     rfab.title = 'Refresh page';
     rfab.setAttribute('aria-label', 'Refresh page');
-    rfab.innerHTML = ICONS.refresh;
+    rfab.innerHTML = `<svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="rfab-sphere" cx="38%" cy="32%" r="65%" fx="38%" fy="32%">
+          <stop offset="0%" stop-color="#a78bfa"/>
+          <stop offset="55%" stop-color="#6d28d9"/>
+          <stop offset="100%" stop-color="#3b0764"/>
+        </radialGradient>
+        <radialGradient id="rfab-shine" cx="40%" cy="28%" r="45%">
+          <stop offset="0%" stop-color="white" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="white" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <circle cx="18" cy="18" r="17" fill="url(#rfab-sphere)"/>
+      <circle cx="18" cy="18" r="17" fill="url(#rfab-shine)"/>
+      <circle cx="18" cy="18" r="17" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+      <path d="M11 18a7 7 0 0 1 12.12-4.77" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-opacity="0.95"/>
+      <path d="M25 18a7 7 0 0 1-12.12 4.77" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-opacity="0.95"/>
+      <polyline points="23.5,10 24,14.5 19.5,14.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.95"/>
+      <polyline points="12.5,26 12,21.5 16.5,21.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.95"/>
+    </svg>`;
     document.body.appendChild(rfab);
-    rfab.addEventListener('click', () => location.reload());
+    rfab.addEventListener('click', () => {
+      if (typeof window.__softRefresh === 'function') window.__softRefresh();
+      else location.reload();
+    });
   }
 
   app.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);

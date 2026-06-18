@@ -5811,18 +5811,17 @@ input, select, textarea { max-width: 100%; }
 
 /* Refresh FAB — floats above the AI assistant button */
 .global-refresh-fab {
-  position: fixed; right: 22px; bottom: 90px; z-index: 1199;
-  width: 46px; height: 46px; border-radius: 50%;
-  background: var(--bg-soft); border: 1px solid var(--border);
-  color: var(--text-soft); cursor: pointer;
+  position: fixed; right: 24px; bottom: 92px; z-index: 1199;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: none; border: none; padding: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 14px rgba(0,0,0,.15);
-  transition: transform .2s ease, box-shadow .2s ease, color .15s;
+  filter: drop-shadow(0 6px 16px rgba(109,40,217,.55)) drop-shadow(0 2px 4px rgba(0,0,0,.3));
+  transition: transform .25s cubic-bezier(.34,1.56,.64,1), filter .2s ease;
 }
-.global-refresh-fab svg { width: 18px; height: 18px; }
-.global-refresh-fab:hover { transform: translateY(-2px) rotate(30deg); box-shadow: 0 8px 20px rgba(0,0,0,.2); color: var(--primary); }
-.global-refresh-fab:active { transform: rotate(180deg); }
-@media (max-width: 560px) { .global-refresh-fab { right: 16px; bottom: 80px; } }
+.global-refresh-fab svg { width: 52px; height: 52px; display: block; }
+.global-refresh-fab:hover { transform: rotate(72deg) scale(1.1); filter: drop-shadow(0 10px 22px rgba(109,40,217,.7)) drop-shadow(0 3px 6px rgba(0,0,0,.3)); }
+.global-refresh-fab:active { transform: rotate(180deg) scale(.95); transition-duration: .15s; }
+@media (max-width: 560px) { .global-refresh-fab { right: 18px; bottom: 82px; width: 46px; height: 46px; } .global-refresh-fab svg { width: 46px; height: 46px; } }
 
 .ai-panel {
   position: fixed; right: 22px; bottom: 24px; z-index: 1201;
