@@ -531,6 +531,18 @@ export async function renderAdminDashboard(container) {
   swapCard("resolved", listCard(ICONS.check, "Resolved Services", resolvedInquiries.length,
     resolvedInquiries.map((x) => inqRow(x, ICONS.check)).join("")));
 
+  // Move Recent Service Requests + Complaints to top of the list-card stack.
+  {
+    const _lcs = [...container.querySelectorAll('.list-card')];
+    const _recent = _lcs.find(c => c.querySelector('.card-head h3')?.textContent?.includes('Recent Service Requests'));
+    const _compl  = _lcs.find(c => c.querySelector('.card-head h3')?.textContent?.includes('Recent Complaints'));
+    if (_recent && _compl) {
+      const _first = _lcs[0];
+      if (_first && _first !== _recent) _first.before(_recent);
+      _recent.after(_compl);
+    }
+  }
+
   // Pair list-cards into grid-2-1 rows matching design layout.
   // Cards in the same row stretch to equal height (grid default).
   {

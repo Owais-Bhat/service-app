@@ -1977,19 +1977,20 @@ export async function renderEmployeeLeaderboard(container) {
 
   const buildRows = (sourceRows) => {
     const agg = new Map();
+    // Seed every employee with zero stats so they always appear.
+    employees.forEach((_, id) => agg.set(id, { total: 0, count: 0, fiveStars: 0 }));
     sourceRows.forEach(r => {
       const empId = r.feedback_employee_id || r.assigned_employee_id;
-      if (!empId || !employees.has(empId)) return;
+      if (!empId || !agg.has(empId)) return;
       const score = Number(r.employee_rating || r.feedback_rating || 0);
       if (!score) return;
-      if (!agg.has(empId)) agg.set(empId, { total: 0, count: 0, fiveStars: 0 });
       const entry = agg.get(empId);
       entry.total += score;
       entry.count += 1;
       if (score >= 5) entry.fiveStars += 1;
     });
     return [...agg.entries()]
-      .map(([id, a]) => ({ id, name: employees.get(id)?.full_name || 'Employee', avg: a.total / a.count, count: a.count, fiveStars: a.fiveStars }))
+      .map(([id, a]) => ({ id, name: employees.get(id)?.full_name || 'Employee', avg: a.count > 0 ? a.total / a.count : 0, count: a.count, fiveStars: a.fiveStars }))
       // Sort by most reviews first; tie-break by avg rating then 5-stars.
       .sort((a, b) => b.count - a.count || b.avg - a.avg || b.fiveStars - a.fiveStars);
   };
@@ -1999,6 +2000,7 @@ export async function renderEmployeeLeaderboard(container) {
   const myMonthly = monthly.find(x => x.id === user.id);
   const myAllTime = allTime.find(x => x.id === user.id);
   const myRank = monthly.findIndex(x => x.id === user.id) + 1;
+  const myAllTimeRank = allTime.findIndex(x => x.id === user.id) + 1;
 
   // Podium: arrange as 2nd | 1st | 3rd
   const MEDAL = ['🥇', '🥈', '🥉'];
@@ -2020,7 +2022,7 @@ export async function renderEmployeeLeaderboard(container) {
               <div class="lb-podium-avatar ${isYou ? 'lb-podium-you' : ''}">${initials(e.name)}</div>
               <div class="lb-podium-name">${escapeHtml(e.name)}${isYou ? ' <span class="lb-you-tag">You</span>' : ''}</div>
               <div class="lb-podium-reviews"><b>${e.count}</b> review${e.count !== 1 ? 's' : ''}</div>
-              <div class="lb-podium-stars">${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span></div>
+              <div class="lb-podium-stars">${e.count > 0 ? `${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span>` : '<span style="color:var(--text-dim);font-size:0.75rem;">No reviews yet</span>'}</div>
               <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};"></div>
             </div>`;
         }).join('')}
@@ -2036,6 +2038,38 @@ export async function renderEmployeeLeaderboard(container) {
       <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${myRank || '-'}</div><div class="stat-label">Your Monthly Rank</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${myMonthly ? myMonthly.avg.toFixed(2) : '0.00'} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Your Month Rating</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--success)">${myMonthly ? myMonthly.count : 0}</div><div class="stat-label">Your Reviews This Month</div></div>
+    </div>
+
+    <!-- Your Rank Card -->
+    <div class="lb-my-rank-card" style="margin-bottom:18px;">
+      <div class="lb-my-rank-left">
+        <div class="lb-my-rank-avatar">${initials(myMonthly?.name || 'Me')}</div>
+        <div>
+          <div class="lb-my-rank-name">${escapeHtml(myMonthly?.name || 'You')}</div>
+          <div class="lb-my-rank-sub">Your position this month</div>
+        </div>
+      </div>
+      <div class="lb-my-rank-stats">
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">#${myRank || '—'}</div>
+          <div class="lb-my-stat-label">Rank</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">${myMonthly?.count ?? 0}</div>
+          <div class="lb-my-stat-label">Reviews</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">${myMonthly && myMonthly.count > 0 ? myMonthly.avg.toFixed(1) : '—'}</div>
+          <div class="lb-my-stat-label">Avg Rating</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">#${myAllTimeRank || '—'}</div>
+          <div class="lb-my-stat-label">All-Time</div>
+        </div>
+      </div>
     </div>
 
     <!-- Podium -->
@@ -2060,8 +2094,8 @@ export async function renderEmployeeLeaderboard(container) {
                   <td><b>${medalCell}#${idx + 1}</b></td>
                   <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
                   <td><b style="color:var(--primary)">${e.count}</b></td>
-                  <td>${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span></td>
-                  <td><span class="badge badge-resolved">${e.fiveStars}</span></td>
+                  <td>${e.count > 0 ? `${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
+                  <td>${e.count > 0 ? `<span class="badge badge-resolved">${e.fiveStars}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
                 </tr>`;
               }).join('')}
           </tbody>
@@ -2082,7 +2116,7 @@ export async function renderEmployeeLeaderboard(container) {
                   <td><b>${medalCell}#${idx + 1}</b></td>
                   <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
                   <td><b style="color:var(--primary)">${e.count}</b></td>
-                  <td>${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span></td>
+                  <td>${e.count > 0 ? `${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
                 </tr>`;
               }).join('')}
           </tbody>

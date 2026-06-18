@@ -7779,6 +7779,49 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .route-sub { font-size:0.77rem; color:var(--text-dim); margin-top:3px; line-height:1.4; }
 .route-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
 
+/* ── Leaderboard — Your Rank Card ──────────────────────────────── */
+.lb-my-rank-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(109,40,217,0.35);
+}
+.lb-my-rank-left { display: flex; align-items: center; gap: 14px; }
+.lb-my-rank-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.1rem; color: #fff;
+  border: 2px solid rgba(255,255,255,0.5);
+  flex-shrink: 0;
+}
+.lb-my-rank-name { font-weight: 800; font-size: 1rem; color: #fff; }
+.lb-my-rank-sub  { font-size: 0.78rem; color: rgba(255,255,255,0.75); margin-top: 2px; }
+.lb-my-rank-stats {
+  display: flex; align-items: center; gap: 0;
+  background: rgba(255,255,255,0.15);
+  border-radius: 12px; overflow: hidden;
+}
+.lb-my-stat {
+  padding: 10px 20px;
+  text-align: center;
+  min-width: 70px;
+}
+.lb-my-stat-val   { font-weight: 800; font-size: 1.3rem; color: #fff; line-height: 1.1; }
+.lb-my-stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.75); margin-top: 2px; white-space: nowrap; }
+.lb-my-stat-div   { width: 1px; height: 36px; background: rgba(255,255,255,0.25); flex-shrink: 0; }
+@media (max-width: 560px) {
+  .lb-my-rank-card { flex-direction: column; align-items: flex-start; }
+  .lb-my-rank-stats { width: 100%; justify-content: space-around; }
+  .lb-my-stat { padding: 10px 12px; min-width: 0; flex: 1; }
+}
+
 /* ── Leaderboard Podium ─────────────────────────────────────────── */
 .lb-podium {
   display: flex;
