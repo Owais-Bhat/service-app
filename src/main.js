@@ -94,6 +94,7 @@ function getNavItems(role) {
   ];
   if (role === 'employee') {
     const items = [...common,
+      { id: 'my-stats', icon: ICONS.star, label: 'My Stats' },
       { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
       { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
       { type: 'section', label: 'Work' },
@@ -120,6 +121,7 @@ function getNavItems(role) {
     return filterTabs(items);
   }
   return [...common,
+    { id: 'stats', icon: ICONS.clipboard, label: 'Stats' },
     { id: 'all-tickets', icon: ICONS.ticket, label: 'All Tickets' },
     { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
     { type: 'section', label: 'Operations' },
@@ -166,6 +168,7 @@ function getNavItems(role) {
 const PAGE_LOADERS = {
   employee: {
     dashboard: () => import('./pages/employee.js').then(m => m.renderEmployeeDashboard),
+    'my-stats': () => import('./pages/stats.js').then(m => m.renderEmployeeStats),
     'all-tickets': () => import('./pages/employee.js').then(m => m.renderEmployeeTasks),
     'my-attendance': () => import('./pages/employee.js').then(m => m.renderEmployeeAttendanceRecords),
     'my-leaves': () => import('./pages/employee.js').then(m => m.renderEmployeeLeaveRequests),
@@ -184,6 +187,7 @@ const PAGE_LOADERS = {
   },
   admin: {
     dashboard: () => import('./pages/admin.js').then(m => m.renderAdminDashboard),
+    stats: () => import('./pages/stats.js').then(m => m.renderAdminStats),
     'all-tickets': () => import('./pages/admin.js').then(m => m.renderAllTickets),
     attendance: () => import('./pages/admin.js').then(m => m.renderAttendance),
     inquiries: () => import('./pages/admin.js').then(m => m.renderInquiries),
