@@ -5,6 +5,7 @@
 import { supabase } from '../supabase.js';
 import { showLoader, toast, calculateSLA } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { renderDashboardHero } from './dashboard-widgets.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dateKey = (d) => (d ? new Date(d).toLocaleDateString('en-CA') : '');
@@ -238,99 +239,246 @@ export async function renderAdminStats(container) {
   const today = new Date().toLocaleDateString('en-CA');
   const storageKey = 'nest-custom-stats-admin';
 
-  let inquiries = [], attendance = [], complaints = [], profiles = [], eodReports = [];
+  let inquiries = [], attendance = [], complaints = [], profiles = [], eodReports = [], stocks = [];
   try {
-    const [inqRes, attRes, cmpRes, prfRes, eodRes] = await Promise.all([
+    const [inqRes, attRes, cmpRes, prfRes, eodRes, invRes] = await Promise.all([
       supabase.from('inquiries').select('*').order('created_at', { ascending: false }),
       supabase.from('attendance').select('*').order('clock_in', { ascending: false }),
       supabase.from('complaints').select('*'),
       supabase.from('profiles').select('*'),
       supabase.from('eod_reports').select('*').order('date', { ascending: false }),
+      supabase.from('inventory').select('id,quantity,min_stock'),
     ]);
-    inquiries   = inqRes.data  || [];
-    attendance  = attRes.data  || [];
-    complaints  = cmpRes.data  || [];
-    profiles    = prfRes.data  || [];
-    eodReports  = eodRes.data  || [];
+    inquiries  = inqRes.data  || [];
+    attendance = attRes.data  || [];
+    complaints = cmpRes.data  || [];
+    profiles   = prfRes.data  || [];
+    eodReports = eodRes.data  || [];
+    stocks     = invRes.data  || [];
   } catch (err) {
     container.innerHTML = `<div class="card" style="text-align:center;padding:40px"><p style="color:var(--danger)">${esc(err.message)}</p></div>`;
     return;
   }
 
-  // ── Compute stats ─────────────────────────────────────────────────────
   const allRows = inquiries;
   const resolved = allRows.filter(x => ['resolved', 'closed'].includes(x.status));
   const active   = allRows.filter(x => !['resolved', 'closed', 'issue_not_resolved'].includes(x.status));
 
-  const newToday       = allRows.filter(x => dateKey(x.created_at) === today).length;
-  const resolvedToday  = resolved.filter(x => dateKey(x.updated_at || x.created_at) === today).length;
-  const inProgress     = allRows.filter(x => x.status === 'in_progress').length;
-  const pendingAssign  = active.filter(x => !x.assigned_employee_id).length;
-  const unpaidBills    = allRows.filter(x => x.bill_amount && x.payment_status !== 'paid').length;
-  const cashPending    = allRows
+  // ── Daily metrics ──────────────────────────────────────────────────────
+  const newToday      = allRows.filter(x => dateKey(x.created_at) === today).length;
+  const resolvedToday = resolved.filter(x => dateKey(x.updated_at || x.created_at) === today).length;
+  const inProgress    = allRows.filter(x => x.status === 'in_progress').length;
+  const pendingAssign = active.filter(x => !x.assigned_employee_id).length;
+  const unpaidBills   = allRows.filter(x => x.bill_amount && x.payment_status !== 'paid').length;
+  const cashPending   = allRows
     .filter(x => x.payment_method === 'cash' && x.payment_status === 'paid' && x.cash_collected_at && !x.cash_submitted_at)
     .reduce((s, x) => s + (Number(x.bill_total) || 0), 0);
-  const openComplaints = complaints.filter(x => !['resolved', 'closed'].includes(String(x.status || '').toLowerCase())).length;
+  const openCmp       = complaints.filter(x => !['resolved', 'closed'].includes(String(x.status || '').toLowerCase())).length;
+  const lowStock      = stocks.filter(x => x.quantity <= x.min_stock).length;
 
-  // On-time resolved today
+  // On-time rate
   const onTimeToday = resolved.filter(x => {
     if (dateKey(x.updated_at || x.created_at) !== today) return false;
     return new Date(x.updated_at || x.created_at) <= calculateSLA(x.created_at);
   }).length;
-  const onTimeRate  = resolvedToday > 0 ? Math.round((onTimeToday / resolvedToday) * 100) : 0;
+  const onTimeRate = resolvedToday > 0 ? Math.round((onTimeToday / resolvedToday) * 100) : 0;
 
-  // Attendance today (employees clocked in, not out)
-  const empProfiles   = profiles.filter(x => x.role === 'employee');
-  const empTotal      = empProfiles.length;
-  const todayAtt      = attendance.filter(x => dateKey(x.clock_in) === today);
-  const clockedIn     = todayAtt.filter(x => x.clock_in && !x.clock_out).length;
+  // Attendance & EOD
+  const empTotal   = profiles.filter(x => x.role === 'employee').length;
+  const todayAtt   = attendance.filter(x => dateKey(x.clock_in) === today);
+  const clockedIn  = todayAtt.filter(x => x.clock_in && !x.clock_out).length;
+  const attendedIds = new Set(todayAtt.map(x => x.user_id).filter(Boolean));
+  const eodTodayIds = new Set(eodReports.filter(x => x.date === today).map(x => x.employee_id).filter(Boolean));
+  const eodWarnCount = [...attendedIds].filter(id => !eodTodayIds.has(id)).length;
 
-  // EOD warnings (employees with attendance today but no EOD)
-  const attendedIds   = new Set(todayAtt.map(x => x.user_id).filter(Boolean));
-  const eodTodayIds   = new Set(eodReports.filter(x => x.date === today).map(x => x.employee_id).filter(Boolean));
-  const eodWarnings   = [...attendedIds].filter(id => !eodTodayIds.has(id)).length;
+  // Billing
+  const billed        = allRows.filter(x => x.bill_amount || x.bill_total).length;
+  const paid          = allRows.filter(x => x.payment_status === 'paid').length;
+  const assignedCount = allRows.filter(x => x.assigned_employee_id).length;
 
-  // Daily target from localStorage
-  const todayTarget  = Math.max(1, parseInt(localStorage.getItem('nest-daily-target') || '8', 10));
-  const targetPct    = Math.min(100, Math.round((resolvedToday / todayTarget) * 100));
+  // Daily target
+  const todayTarget = Math.max(1, parseInt(localStorage.getItem('nest-daily-target') || '8', 10));
+  const targetPct   = Math.min(100, Math.round((resolvedToday / todayTarget) * 100));
 
-  const billed       = allRows.filter(x => x.bill_amount || x.bill_total).length;
-  const paid         = allRows.filter(x => x.payment_status === 'paid').length;
-  const collPct      = billed > 0 ? Math.round((paid / billed) * 100) : 0;
+  // ── 6-month trend ─────────────────────────────────────────────────────
+  const months = [];
+  const nowD = new Date();
+  for (let k = 5; k >= 0; k--) months.push(new Date(nowD.getFullYear(), nowD.getMonth() - k, 1));
+  const trendLabels = months.map(d => d.toLocaleDateString('en-US', { month: 'short' }));
+  const trendValues = months.map(d =>
+    allRows.filter(x => {
+      const c = new Date(x.created_at);
+      return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
+    }).length
+  );
 
-  // ── Build live section ────────────────────────────────────────────────
-  const liveCards = [
-    liveCard(ICONS.inbox,     newToday,                  'New Today',           '#2e9bff'),
-    liveCard(ICONS.check,     `${resolvedToday} / ${todayTarget}`, 'Resolved / Target', resolvedToday >= todayTarget ? 'var(--success)' : 'var(--primary)',
-      `<div style="margin-top:6px;height:5px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;width:${targetPct}%;background:${resolvedToday >= todayTarget ? 'var(--success)' : 'var(--primary)'};border-radius:3px"></div></div>`),
-    liveCard(ICONS.hourglass, `${onTimeRate}%`,           'On-Time Rate',        onTimeRate >= 80 ? 'var(--success)' : onTimeRate >= 60 ? 'var(--warning)' : resolvedToday === 0 ? 'var(--text-dim)' : 'var(--danger)',
-      resolvedToday === 0 ? 'none resolved yet' : `${onTimeToday}/${resolvedToday} within SLA`),
-    liveCard(ICONS.refresh,   inProgress,                'In Progress',         '#7c5cfc'),
-    liveCard(ICONS.clock,     pendingAssign,             'Pending Assignment',  'var(--warning)'),
-    liveCard(ICONS.receipt,   unpaidBills,               'Unpaid Bills',        'var(--danger)'),
-    liveCard(ICONS.rupee,     money(cashPending),        'Cash Pending',        'var(--warning)'),
-    liveCard(ICONS.shield,    openComplaints,            'Open Complaints',     'var(--danger)'),
-    liveCard(ICONS.clipboard, eodWarnings,               'EOD Warnings',        eodWarnings > 0 ? 'var(--warning)' : 'var(--success)'),
-    liveCard(ICONS.clock,     clockedIn,                 'Clocked In Now',      'var(--success)',  `of ${empTotal} employees`),
-    liveCard(ICONS.ticket,    allRows.length,            'Total Requests',      'var(--primary)',  'all time'),
-    liveCard(ICONS.check,     resolved.length,           'Total Resolved',      'var(--success)',  'all time'),
-    liveCard(ICONS.card,      `${collPct}%`,             'Collection Rate',     collPct >= 80 ? 'var(--success)' : 'var(--warning)', `${paid}/${billed} bills paid`),
-    liveCard(ICONS.users,     empTotal,                  'Total Employees',     '#0ea5a5'),
+  // ── Category breakdown ────────────────────────────────────────────────
+  const catMap = new Map([['CCTV', 0], ['Networking', 0], ['Biometric', 0], ['Gate Automation', 0], ['Other', 0]]);
+  allRows.forEach(x => {
+    const s = (x.service_item || '').toLowerCase();
+    if (s.includes('cctv') || s.includes('camera') || s.includes('dvr') || s.includes('nvr'))
+      catMap.set('CCTV', catMap.get('CCTV') + 1);
+    else if (s.includes('network') || s.includes('wifi') || s.includes('switch') || s.includes('router'))
+      catMap.set('Networking', catMap.get('Networking') + 1);
+    else if (s.includes('biometric') || s.includes('attendance') || s.includes('fingerprint'))
+      catMap.set('Biometric', catMap.get('Biometric') + 1);
+    else if (s.includes('gate') || s.includes('barrier') || s.includes('boom') || s.includes('automation'))
+      catMap.set('Gate Automation', catMap.get('Gate Automation') + 1);
+    else
+      catMap.set('Other', catMap.get('Other') + 1);
+  });
+  const categorySegs = [
+    { label: 'CCTV',       value: catMap.get('CCTV'),           color: '#15a05a' },
+    { label: 'Networking',  value: catMap.get('Networking'),      color: '#0ea5a5' },
+    { label: 'Biometric',   value: catMap.get('Biometric'),       color: '#6366f1' },
+    { label: 'Gate Auto',   value: catMap.get('Gate Automation'), color: '#e08a14' },
+    { label: 'Other',       value: catMap.get('Other'),           color: '#94a3b8' },
+  ].filter(s => s.value > 0);
+
+  // ── Pipeline & Alerts ─────────────────────────────────────────────────
+  const pipeline = [
+    { label: 'New',         value: newToday,      color: 'var(--primary)' },
+    { label: 'Pending',     value: pendingAssign, color: '#f5a524' },
+    { label: 'In Progress', value: inProgress,    color: '#2e9bff' },
+    { label: 'Resolved',    value: resolvedToday, color: 'var(--success)' },
+  ];
+  const alertData = [
+    { label: 'Low Stock',  value: lowStock,      color: '#f5a524' },
+    { label: 'Unpaid',     value: unpaidBills,   color: '#f0556d' },
+    { label: 'Complaints', value: openCmp,       color: '#ef4444' },
+    { label: 'EOD Warn',   value: eodWarnCount,  color: '#7c5cfc' },
+  ];
+
+  // ── Company bars ──────────────────────────────────────────────────────
+  const phoneToCompany = new Map();
+  const profileById    = new Map();
+  profiles.forEach(pr => {
+    if (pr.phone && pr.company) phoneToCompany.set(pr.phone, pr.company);
+    if (pr.id) profileById.set(pr.id, pr);
+  });
+  const companyMap = new Map();
+  allRows.forEach(inq => {
+    const company = inq.company_name || phoneToCompany.get(inq.phone) || 'Walk-in / Unregistered';
+    if (!companyMap.has(company)) companyMap.set(company, { total: 0, active: 0, resolved: 0 });
+    const e = companyMap.get(company);
+    e.total++;
+    if (['resolved', 'closed'].includes(inq.status)) e.resolved++; else e.active++;
+  });
+  const companyRows = [...companyMap.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+
+  // ── Top technicians ───────────────────────────────────────────────────
+  const techMap = new Map();
+  allRows.forEach(x => {
+    if (!x.assigned_employee_id || !['resolved', 'closed'].includes(x.status)) return;
+    const prof = profileById.get(x.assigned_employee_id);
+    if (!prof?.full_name || prof.role === 'admin') return;
+    if (!techMap.has(x.assigned_employee_id))
+      techMap.set(x.assigned_employee_id, { name: prof.full_name, jobs: 0 });
+    techMap.get(x.assigned_employee_id).jobs++;
+  });
+  const topTechs = [...techMap.values()].sort((a, b) => b.jobs - a.jobs).slice(0, 6);
+
+  // Status segs for fallback donut
+  let sOpen = 0, sProg = 0, sRes = 0, sOther = 0;
+  allRows.forEach(x => {
+    if (['resolved', 'closed'].includes(x.status)) sRes++;
+    else if (x.status === 'in_progress') sProg++;
+    else if (['pending', 'open'].includes(x.status)) sOpen++;
+    else sOther++;
+  });
+  const statusSegs = [
+    { label: 'Open',        color: '#3B82F6', value: sOpen },
+    { label: 'In Progress', color: '#f5a524', value: sProg },
+    { label: 'Resolved',    color: '#15a05a', value: sRes  },
+  ];
+  if (sOther) statusSegs.push({ label: 'Other', color: '#94a3b8', value: sOther });
+
+  // ── Mini stat cards ───────────────────────────────────────────────────
+  const miniCards = [
+    liveCard(ICONS.inbox,     newToday,            'New Today',          '#2e9bff'),
+    liveCard(ICONS.clock,     pendingAssign,       'Pending Assignment', 'var(--warning)'),
+    liveCard(ICONS.refresh,   inProgress,          'In Progress',        '#7c5cfc'),
+    liveCard(ICONS.check,     resolvedToday,       'Resolved Today',     'var(--success)'),
+    liveCard(ICONS.receipt,   unpaidBills,         'Unpaid Bills',       'var(--danger)'),
+    liveCard(ICONS.rupee,     money(cashPending),  'Cash Pending',       'var(--warning)'),
+    liveCard(ICONS.shield,    openCmp,             'Open Complaints',    'var(--danger)'),
+    liveCard(ICONS.clipboard, eodWarnCount,        'EOD Warnings',       eodWarnCount > 0 ? 'var(--warning)' : 'var(--success)'),
   ].join('');
 
-  // ── Custom section ────────────────────────────────────────────────────
+  // ── Custom cards ──────────────────────────────────────────────────────
   let customCards = [];
   try { customCards = JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { customCards = []; }
 
+  // ── Render page shell ─────────────────────────────────────────────────
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px">
       <div>
         <h1 style="display:inline-flex;align-items:center;gap:10px">${ICONS.dashboard}<span>Stats</span></h1>
-        <p style="color:var(--text-soft);margin:4px 0 0">All metrics in one place — live data + your custom cards</p>
+        <p style="color:var(--text-soft);margin:4px 0 0">Live analytics — charts, trends &amp; metrics</p>
       </div>
       <button class="btn btn-secondary" id="stats-refresh">${ICONS.refresh}<span>Refresh</span></button>
     </div>
-    ${section('Live Operations', 'auto-refreshes on reload', 'live-stats-grid', liveCards)}
+
+    <div id="stats-hero" class="dash-hero"></div>
+
+    <div class="card" id="today-scorecard" style="margin-bottom:20px">
+      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${resolvedToday >= todayTarget ? 'var(--success)' : 'var(--primary)'};display:inline-block"></span>
+          Today's Scorecard
+        </span>
+        <div style="display:inline-flex;align-items:center;gap:8px;font-size:0.82rem;">
+          <span style="color:var(--text-dim);font-weight:600;">Daily Target:</span>
+          <input type="number" id="daily-target-input" min="1" max="999" value="${todayTarget}"
+                 style="width:64px;padding:4px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-weight:700;font-size:0.9rem;text-align:center;">
+        </div>
+      </div>
+      <div class="card-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:0;">
+        <div style="padding:20px 24px;text-align:center;border-right:1px solid var(--border);">
+          <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Resolved Today</div>
+          <div style="font-size:2.8rem;font-weight:800;line-height:1;color:${resolvedToday >= todayTarget ? 'var(--success)' : 'var(--text)'}">
+            ${resolvedToday}<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim)"> / ${todayTarget}</span>
+          </div>
+          <div style="margin-top:14px;height:8px;background:var(--border);border-radius:6px;overflow:hidden">
+            <div id="target-progress-bar" style="height:100%;width:${targetPct}%;background:${resolvedToday >= todayTarget ? 'var(--success)' : 'var(--primary)'};border-radius:6px;transition:width 0.5s ease;min-width:${resolvedToday > 0 ? 4 : 0}px"></div>
+          </div>
+          <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:${resolvedToday >= todayTarget ? 'var(--success)' : 'var(--text-dim)'}">
+            ${resolvedToday >= todayTarget ? '🎯 Goal reached!' : `${todayTarget - resolvedToday} more to reach goal`}
+          </div>
+        </div>
+        <div style="padding:20px 24px;text-align:center;border-right:1px solid var(--border);">
+          <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">On-Time Rate Today</div>
+          <div style="font-size:2.8rem;font-weight:800;line-height:1;color:${onTimeRate >= 80 ? 'var(--success)' : onTimeRate >= 60 ? 'var(--warning)' : resolvedToday === 0 ? 'var(--text-dim)' : 'var(--danger)'}">
+            ${onTimeRate}<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim)">%</span>
+          </div>
+          <div style="margin-top:14px;height:8px;background:var(--border);border-radius:6px;overflow:hidden">
+            <div style="height:100%;width:${onTimeRate}%;background:${onTimeRate >= 80 ? 'var(--success)' : onTimeRate >= 60 ? 'var(--warning)' : 'var(--danger)'};border-radius:6px;min-width:${onTimeToday > 0 ? 4 : 0}px"></div>
+          </div>
+          <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:var(--text-dim)">
+            ${resolvedToday === 0 ? 'No tickets resolved yet today' : `${onTimeToday} of ${resolvedToday} within SLA (12 hrs)`}
+          </div>
+        </div>
+        <div style="padding:20px 24px;text-align:center;">
+          <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">New Today</div>
+          <div style="font-size:2.8rem;font-weight:800;line-height:1;color:var(--primary)">${newToday}</div>
+          <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <span style="padding:3px 10px;border-radius:20px;background:rgba(124,92,252,0.12);color:var(--violet,#7c5cfc);font-size:0.75rem;font-weight:700">${inProgress} in progress</span>
+            <span style="padding:3px 10px;border-radius:20px;background:rgba(245,165,36,0.12);color:var(--amber,var(--warning));font-size:0.75rem;font-weight:700">${pendingAssign} unassigned</span>
+          </div>
+          <div style="margin-top:8px;font-size:0.78rem;font-weight:600;color:var(--text-dim)">
+            ${newToday > 0 && resolvedToday > 0 ? `Net ${newToday > resolvedToday ? '+' : ''}${newToday - resolvedToday} tickets ${newToday > resolvedToday ? 'added' : 'cleared'} today` : newToday > 0 ? 'All pending action' : 'Clean slate today'}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header"><span class="card-title">Quick Metrics</span></div>
+      <div class="card-body" style="padding-top:0">
+        <div class="grid-stats">${miniCards}</div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div>
@@ -345,7 +493,34 @@ export async function renderAdminStats(container) {
       </div>
     </div>`;
 
+  // ── Inject charts hero ────────────────────────────────────────────────
+  container.querySelector('#stats-hero').innerHTML = renderDashboardHero({
+    resolutionRate:  allRows.length ? (resolved.length / allRows.length) * 100 : 0,
+    assignmentRate:  allRows.length ? (assignedCount / allRows.length) * 100    : 0,
+    collectionRate:  billed         ? (paid / billed) * 100                     : 0,
+    attendanceRate:  empTotal       ? (clockedIn / empTotal) * 100              : 0,
+    resolved: resolved.length, totalReq: allRows.length,
+    assigned: assignedCount,
+    paid, billed,
+    inCount: clockedIn, empTotal,
+    trendLabels, trendValues, statusSegs,
+    pipeline, alerts: alertData,
+    companies: companyRows,
+    topTechs, categorySegs,
+  });
+
+  // ── Events ────────────────────────────────────────────────────────────
   container.querySelector('#stats-refresh')?.addEventListener('click', () => renderAdminStats(container));
+  container.querySelector('#daily-target-input')?.addEventListener('change', (e) => {
+    const v = Math.max(1, parseInt(e.target.value, 10) || 8);
+    e.target.value = v;
+    localStorage.setItem('nest-daily-target', String(v));
+    const bar = container.querySelector('#target-progress-bar');
+    if (bar) {
+      bar.style.width = Math.min(100, Math.round((resolvedToday / v) * 100)) + '%';
+      bar.style.background = resolvedToday >= v ? 'var(--success)' : 'var(--primary)';
+    }
+  });
   bindCustomActions(container, storageKey, customCards);
 }
 

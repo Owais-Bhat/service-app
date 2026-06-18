@@ -1403,12 +1403,20 @@ export async function renderAttendance(container) {
             return `<tr>          <td>${formatDate(x.date)}</td>          <td><b>${x.profiles?.full_name || "—"}</b></td>          <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : hasMissedEod(x) ? '<span class="badge badge-danger">Missing EOD</span>' : '<span class="badge badge-open">Active</span>'}</td>          <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>          <td><small>${x.location || "—"}</small></td>        </tr>`;
           })
           .join("");
-  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Attendance Logs</h1>        <p>Track employee check-ins and locations</p>      </div>      <button class="btn btn-secondary" id="att-export">${ICONS.clipboard}<span>Export CSV</span></button>    </div>    <div class="stats-grid" style="margin-bottom:24px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${todayLogs.length}</div>        <div class="stat-label">Today's Attendance</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>        <div class="stat-label">Currently Active</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${forgottenLogs.length ? "var(--danger)" : "var(--success)"}">${forgottenLogs.length}</div>        <div class="stat-label">Forgot EOD</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${restrictedEmployees.length ? "var(--danger)" : "var(--success)"}">${restrictedEmployees.length}</div>        <div class="stat-label">Restricted Users</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>        <div class="stat-label">Avg Hours Today</div>      </div>    </div>    ${restrictedEmployees.length ? `      <div class="card" style="margin-bottom:24px;border:1px solid rgba(239,68,68,0.35);">        <div class="card-header">          <span class="card-title sr-icon-title">${ICONS.alert}<span>Clock-in Restrictions</span></span>        </div>        <div class="card-body">          <div class="table-wrap">            <table>              <thead><tr><th>Employee</th><th>Missed EODs</th><th>Latest Missed</th><th>Action</th></tr></thead>              <tbody>                ${restrictedEmployees.map((x) => `                  <tr>                    <td><b>${escapeHtml(x.name)}</b></td>                    <td><span class="badge badge-danger">${x.rows.length}</span></td>                    <td><small>${formatDateTime(x.rows[0]?.clock_in)}</small></td>                    <td><button class="btn btn-primary btn-sm resolve-attendance-restriction" data-user-id="${escapeHtml(x.userId)}">Resolve restriction</button></td>                  </tr>                `).join("")}              </tbody>            </table>          </div>        </div>      </div>    ` : ""}    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">      <div class="search-input-wrap" style="flex:1; min-width:200px;">        <span>${ICONS.search}</span>        <input class="search-input" id="att-search" placeholder="Filter by employee name..."/>      </div>      <input type="date" id="att-date" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--bg3); color:var(--text);"/>      <button class="btn btn-secondary" id="att-clear">Clear</button>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th></tr></thead>          <tbody id="attendance-log-rows">${rowHtml(list)}</tbody>        </table>      </div>    </div>  `;
-  const search = container.querySelector("#att-search");
-  const date = container.querySelector("#att-date");
+  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Attendance Logs</h1>        <p>Track employee check-ins and locations</p>      </div>      <button class="btn btn-secondary" id="att-export">${ICONS.clipboard}<span>Export CSV</span></button>    </div>    <div class="stats-grid" style="margin-bottom:24px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${todayLogs.length}</div>        <div class="stat-label">Today's Attendance</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>        <div class="stat-label">Currently Active</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${forgottenLogs.length ? "var(--danger)" : "var(--success)"}">${forgottenLogs.length}</div>        <div class="stat-label">Forgot EOD</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${restrictedEmployees.length ? "var(--danger)" : "var(--success)"}">${restrictedEmployees.length}</div>        <div class="stat-label">Restricted Users</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>        <div class="stat-label">Avg Hours Today</div>      </div>    </div>    ${restrictedEmployees.length ? `      <div class="card" style="margin-bottom:24px;border:1px solid rgba(239,68,68,0.35);">        <div class="card-header">          <span class="card-title sr-icon-title">${ICONS.alert}<span>Clock-in Restrictions</span></span>        </div>        <div class="card-body">          <div class="table-wrap">            <table>              <thead><tr><th>Employee</th><th>Missed EODs</th><th>Latest Missed</th><th>Action</th></tr></thead>              <tbody>                ${restrictedEmployees.map((x) => `                  <tr>                    <td><b>${escapeHtml(x.name)}</b></td>                    <td><span class="badge badge-danger">${x.rows.length}</span></td>                    <td><small>${formatDateTime(x.rows[0]?.clock_in)}</small></td>                    <td><button class="btn btn-primary btn-sm resolve-attendance-restriction" data-user-id="${escapeHtml(x.userId)}">Resolve restriction</button></td>                  </tr>                `).join("")}              </tbody>            </table>          </div>        </div>      </div>    ` : ""}    <div class="df-wrap" style="margin-bottom:24px;">      <button class="btn btn-secondary df-toggle" id="att-filter-btn">${ICONS.filter}<span>Filters</span><span class="df-badge" id="att-badge" style="display:none">0</span></button>      <div class="df-panel" id="att-panel" style="display:none">        <div class="df-field"><span class="df-label">Employee</span><input type="text" id="att-search" placeholder="Search by name…"/></div>        <div class="df-field"><span class="df-label">Date</span><input type="date" id="att-date"/></div>        <div class="df-footer"><button class="btn btn-ghost btn-sm" id="att-clear">Clear all</button></div>      </div>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th></tr></thead>          <tbody id="attendance-log-rows">${rowHtml(list)}</tbody>        </table>      </div>    </div>  `;
+  const attSearch = container.querySelector("#att-search");
+  const attDate = container.querySelector("#att-date");
+  const attBadge = container.querySelector("#att-badge");
+  const attPanel = container.querySelector("#att-panel");
+  const attBtn = container.querySelector("#att-filter-btn");
+  const updateAttBadge = () => {
+    const n = (attSearch.value ? 1 : 0) + (attDate.value ? 1 : 0);
+    attBadge.textContent = n;
+    attBadge.style.display = n ? "" : "none";
+  };
   const doFilter = () => {
-    const q = search.value.toLowerCase();
-    const d = date.value;
+    const q = attSearch.value.toLowerCase();
+    const d = attDate.value;
     const filtered = list.filter((x) => {
       const matchesName = (x.profiles?.full_name || "")
         .toLowerCase()
@@ -1418,11 +1426,30 @@ export async function renderAttendance(container) {
     });
     container.querySelector("#attendance-log-rows").innerHTML =
       rowHtml(filtered);
+    updateAttBadge();
   };
-  search.oninput = doFilter;
-  date.onchange = doFilter;
-  container.querySelector("#att-clear").onclick = () =>
+  attSearch.oninput = doFilter;
+  attDate.onchange = doFilter;
+  const attOutside = (e) => {
+    if (!attBtn.closest(".df-wrap").contains(e.target)) {
+      attPanel.style.display = "none";
+      document.removeEventListener("click", attOutside);
+    }
+  };
+  attBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (attPanel.style.display === "none") {
+      attPanel.style.display = "";
+      setTimeout(() => document.addEventListener("click", attOutside), 0);
+    } else {
+      attPanel.style.display = "none";
+      document.removeEventListener("click", attOutside);
+    }
+  };
+  container.querySelector("#att-clear").onclick = () => {
+    document.removeEventListener("click", attOutside);
     renderAttendance(container);
+  };
   container
     .querySelectorAll(".resolve-attendance-restriction")
     .forEach((btn) => {
@@ -1700,17 +1727,55 @@ export async function renderInquiries(container) {
     ["paid", "Paid"],
     ["all", "All"],
   ];
-  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Service Requests</h1>        <p>Manage customer service requests, billing and payments</p>      </div>      <div style="display:flex;gap:10px;flex-wrap:wrap;">        <button class="btn btn-primary" id="sr-new">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="sr-export">${ICONS.clipboard}<span>Export</span></button>        <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>      </div>    </div>    <div class="sr-filter-bar">      ${tabs.map(([k, label]) => `        <button class="sr-filter ${k === filterKey ? "active" : ""}" data-key="${k}">          <span>${label}</span><span class="sr-filter-count">${counts[k]}</span>        </button>      `).join("")}    </div>    <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">      <div class="search-input-wrap" style="flex:1; min-width:220px;">        <span>${ICONS.search}</span>        <input class="search-input" id="sr-company-filter" placeholder="Filter by company..." value="${companyFilter}"/>      </div>      <button class="btn btn-secondary" id="sr-company-clear">Clear Company</button>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead>            <tr>              <th>Ticket</th><th>Service Date</th><th>Company</th><th>Customer</th><th>Phone</th><th>Service</th>              <th>Assigned Employee</th><th>Status</th><th>Payment</th><th></th>            </tr>          </thead>          <tbody>            ${filtered.length === 0 ? `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>` : filtered.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0, 8)}</code>${Number(x.reopened) === 1 ? ' <span title="Reopened — free rework" style="color:var(--warning);font-weight:700;">🔁</span>' : ''}</td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td><small style="color:var(--text-dim)">${x.phone || "—"}</small></td>                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || "—"}</td>                  <td>${x.assigned_employee_id ? `<b>${employeeNames.get(x.assigned_employee_id) || "Assigned"}</b>` : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>                  <td>${statusBadge(x.status)}</td>                  <td>${x.bill_amount ? (x.payment_status === "paid" ? '<span class="badge badge-resolved">Paid</span>' : '<span class="badge badge-medium">Unpaid</span>') : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td style="display:flex;gap:6px;white-space:nowrap;"><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button><button class="btn btn-danger btn-sm inq-del" data-id="${x.id}" title="Delete request">${ICONS.close}</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
+  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Service Requests</h1>        <p>Manage customer service requests, billing and payments</p>      </div>      <div style="display:flex;gap:10px;flex-wrap:wrap;">        <button class="btn btn-primary" id="sr-new">${ICONS.plus}<span>Register Request</span></button>        <button class="btn btn-secondary" id="sr-export">${ICONS.clipboard}<span>Export</span></button>        <button class="btn btn-secondary" id="sr-refresh">${ICONS.refresh}<span>Refresh</span></button>      </div>    </div>    <div class="df-wrap" style="margin-bottom:20px;">      <button class="btn btn-secondary df-toggle" id="sr-filter-btn">${ICONS.filter}<span>Filters</span>${((filterKey !== "all" ? 1 : 0) + (companyFilter ? 1 : 0)) > 0 ? `<span class="df-badge">${(filterKey !== "all" ? 1 : 0) + (companyFilter ? 1 : 0)}</span>` : ""}</button>      <div class="df-panel" id="sr-filter-panel" ${container.dataset.srDfOpen === "1" ? "" : 'style="display:none"'}>        <div class="df-field"><span class="df-label">Status</span><select id="sr-status-sel">${tabs.map(([k, label]) => `<option value="${k}" ${k === filterKey ? "selected" : ""}>${label} (${counts[k] !== undefined ? counts[k] : 0})</option>`).join("")}</select></div>        <div class="df-field"><span class="df-label">Company</span><input type="text" id="sr-company-filter" placeholder="Filter by company…" value="${companyFilter}"/></div>        <div class="df-footer"><button class="btn btn-ghost btn-sm" id="sr-filter-clear">Clear all</button></div>      </div>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead>            <tr>              <th>Ticket</th><th>Service Date</th><th>Company</th><th>Customer</th><th>Phone</th><th>Service</th>              <th>Assigned Employee</th><th>Status</th><th>Payment</th><th></th>            </tr>          </thead>          <tbody>            ${filtered.length === 0 ? `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No requests in this view</td></tr>` : filtered.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0, 8)}</code>${Number(x.reopened) === 1 ? ' <span title="Reopened — free rework" style="color:var(--warning);font-weight:700;">🔁</span>' : ''}</td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td><small style="color:var(--text-dim)">${x.phone || "—"}</small></td>                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.service_item || "—"}</td>                  <td>${x.assigned_employee_id ? `<b>${employeeNames.get(x.assigned_employee_id) || "Assigned"}</b>` : '<span style="color:var(--text-dim)">Unassigned</span>'}</td>                  <td>${statusBadge(x.status)}</td>                  <td>${x.bill_amount ? (x.payment_status === "paid" ? '<span class="badge badge-resolved">Paid</span>' : '<span class="badge badge-medium">Unpaid</span>') : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td style="display:flex;gap:6px;white-space:nowrap;"><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button><button class="btn btn-danger btn-sm inq-del" data-id="${x.id}" title="Delete request">${ICONS.close}</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
   container.querySelector("#sr-refresh").onclick = () =>
     renderInquiries(container);
   container.querySelector("#sr-new").onclick = () =>
     openAdminRequestModal(() => renderInquiries(container));
-  container.querySelector("#sr-company-filter").oninput = (e) => {
-    container.dataset.srCompany = e.target.value.trim();
+  const srPanel = container.querySelector("#sr-filter-panel");
+  const srBtn = container.querySelector("#sr-filter-btn");
+  const srOutside = (e) => {
+    if (srBtn && !srBtn.closest(".df-wrap").contains(e.target)) {
+      srPanel.style.display = "none";
+      container.dataset.srDfOpen = "";
+      document.removeEventListener("click", srOutside);
+    }
+  };
+  srBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (srPanel.style.display === "none") {
+      srPanel.style.display = "";
+      container.dataset.srDfOpen = "1";
+      setTimeout(() => document.addEventListener("click", srOutside), 0);
+    } else {
+      srPanel.style.display = "none";
+      container.dataset.srDfOpen = "";
+      document.removeEventListener("click", srOutside);
+    }
+  };
+  if (container.dataset.srDfOpen === "1") {
+    setTimeout(() => document.addEventListener("click", srOutside), 0);
+    const companyInput = container.querySelector("#sr-company-filter");
+    if (companyInput) {
+      companyInput.focus();
+      companyInput.setSelectionRange(companyInput.value.length, companyInput.value.length);
+    }
+  }
+  container.querySelector("#sr-status-sel").onchange = (e) => {
+    container.dataset.srFilter = e.target.value;
+    container.dataset.srDfOpen = "1";
     renderInquiries(container);
   };
-  container.querySelector("#sr-company-clear").onclick = () => {
+  container.querySelector("#sr-company-filter").oninput = (e) => {
+    container.dataset.srCompany = e.target.value.trim();
+    container.dataset.srDfOpen = "1";
+    renderInquiries(container);
+  };
+  container.querySelector("#sr-filter-clear").onclick = () => {
+    container.dataset.srFilter = "active";
     container.dataset.srCompany = "";
+    container.dataset.srDfOpen = "";
+    document.removeEventListener("click", srOutside);
     renderInquiries(container);
   };
   container.querySelector("#sr-export").onclick = () => {
@@ -1733,20 +1798,6 @@ export async function renderInquiries(container) {
       })),
     );
   };
-  if (companyFilter) {
-    const companyInput = container.querySelector("#sr-company-filter");
-    companyInput.focus();
-    companyInput.setSelectionRange(
-      companyInput.value.length,
-      companyInput.value.length,
-    );
-  }
-  container.querySelectorAll(".sr-filter").forEach((btn) => {
-    btn.onclick = () => {
-      container.dataset.srFilter = btn.dataset.key;
-      renderInquiries(container);
-    };
-  });
   container.querySelectorAll(".inq-btn").forEach((btn) => {
     btn.onclick = () =>
       openInquiryDetailWithLoader(btn, btn.dataset.id, () =>
@@ -1816,12 +1867,20 @@ export async function renderEODReports(container) {
     .order("date", { ascending: false });
   const list = reports || [];
   const render = (items) => {
-    container.innerHTML = `      <div class="page-header">        <h1>Daily Summaries</h1>        <p>End-of-day progress reports from staff</p>      </div>      <div class="filter-bar" style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">        <div class="search-input-wrap" style="flex:1; min-width:200px;">          <span>${ICONS.search}</span>          <input class="search-input" id="eod-search" placeholder="Filter by staff name..."/>        </div>        <input type="date" id="eod-date" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--bg3); color:var(--text);"/>        <button class="btn btn-secondary" id="eod-clear">Clear</button>      </div>      <div class="card">        <div class="table-wrap">          <table>            <thead><tr><th>Date</th><th>Staff</th><th>Summary</th></tr></thead>            <tbody>              ${items.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No reports found</td></tr>' : items.map((x) => `<tr>                <td>${formatDate(x.date)}</td>                <td><b>${x.profiles?.full_name || "—"}</b></td>                <td style="max-width:400px;font-size:.9rem; line-height:1.5; padding:16px 8px;">${x.content}</td>              </tr>`).join("")}            </tbody>          </table>        </div>      </div>    `;
-    const search = container.querySelector("#eod-search");
-    const date = container.querySelector("#eod-date");
+    container.innerHTML = `      <div class="page-header">        <h1>Daily Summaries</h1>        <p>End-of-day progress reports from staff</p>      </div>      <div class="df-wrap" style="margin-bottom:24px;">        <button class="btn btn-secondary df-toggle" id="eod-filter-btn">${ICONS.filter}<span>Filters</span><span class="df-badge" id="eod-badge" style="display:none">0</span></button>        <div class="df-panel" id="eod-panel" style="display:none">          <div class="df-field"><span class="df-label">Staff</span><input type="text" id="eod-search" placeholder="Search by name…"/></div>          <div class="df-field"><span class="df-label">Date</span><input type="date" id="eod-date"/></div>          <div class="df-footer"><button class="btn btn-ghost btn-sm" id="eod-clear">Clear all</button></div>        </div>      </div>      <div class="card">        <div class="table-wrap">          <table>            <thead><tr><th>Date</th><th>Staff</th><th>Summary</th></tr></thead>            <tbody>              ${items.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-dim)">No reports found</td></tr>' : items.map((x) => `<tr>                <td>${formatDate(x.date)}</td>                <td><b>${x.profiles?.full_name || "—"}</b></td>                <td style="max-width:400px;font-size:.9rem; line-height:1.5; padding:16px 8px;">${x.content}</td>              </tr>`).join("")}            </tbody>          </table>        </div>      </div>    `;
+    const eodSearch = container.querySelector("#eod-search");
+    const eodDate = container.querySelector("#eod-date");
+    const eodBadge = container.querySelector("#eod-badge");
+    const eodPanel = container.querySelector("#eod-panel");
+    const eodBtn = container.querySelector("#eod-filter-btn");
+    const updateEodBadge = () => {
+      const n = (eodSearch.value ? 1 : 0) + (eodDate.value ? 1 : 0);
+      eodBadge.textContent = n;
+      eodBadge.style.display = n ? "" : "none";
+    };
     const doFilter = () => {
-      const q = search.value.toLowerCase();
-      const d = date.value;
+      const q = eodSearch.value.toLowerCase();
+      const d = eodDate.value;
       const filtered = list.filter((x) => {
         const matchesName = (x.profiles?.full_name || "")
           .toLowerCase()
@@ -1830,11 +1889,30 @@ export async function renderEODReports(container) {
         return matchesName && matchesDate;
       });
       renderItems(filtered);
+      updateEodBadge();
     };
-    search.oninput = doFilter;
-    date.onchange = doFilter;
-    container.querySelector("#eod-clear").onclick = () =>
+    eodSearch.oninput = doFilter;
+    eodDate.onchange = doFilter;
+    const eodOutside = (e) => {
+      if (!eodBtn.closest(".df-wrap").contains(e.target)) {
+        eodPanel.style.display = "none";
+        document.removeEventListener("click", eodOutside);
+      }
+    };
+    eodBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (eodPanel.style.display === "none") {
+        eodPanel.style.display = "";
+        setTimeout(() => document.addEventListener("click", eodOutside), 0);
+      } else {
+        eodPanel.style.display = "none";
+        document.removeEventListener("click", eodOutside);
+      }
+    };
+    container.querySelector("#eod-clear").onclick = () => {
+      document.removeEventListener("click", eodOutside);
       renderEODReports(container);
+    };
   };
   const renderItems = (items) => {
     const tbody = container.querySelector("tbody");

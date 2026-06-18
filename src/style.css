@@ -7596,3 +7596,38 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .tut-viewer-info { padding:16px 20px; background:var(--surface,#fff); }
 .tut-viewer-title { font-weight:800; font-size:1.1rem; }
 .tut-viewer-info p { margin:6px 0 0; color:var(--text-soft); font-size:0.9rem; line-height:1.5; }
+
+/* ─── DROPDOWN FILTER ─── */
+.df-wrap { position: relative; display: inline-flex; }
+.df-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.df-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--primary); color: #fff;
+  font-size: 0.68rem; font-weight: 800; line-height: 1;
+}
+.df-panel {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 300;
+  background: var(--bg2, #0f1726); border: 1px solid var(--border);
+  border-radius: 16px; padding: 18px; min-width: 270px;
+  box-shadow: 0 10px 36px rgba(0,0,0,.24);
+  display: flex; flex-direction: column; gap: 14px;
+  animation: dfFadeIn .14s ease;
+}
+@keyframes dfFadeIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+.df-field { display: flex; flex-direction: column; gap: 6px; }
+.df-label { font-size: 0.72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim); }
+.df-field input, .df-field select {
+  padding: 9px 13px; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--bg3, #0b1220);
+  color: var(--text); font-size: 0.9rem; width: 100%; outline: none;
+  transition: border-color .15s;
+}
+.df-field input:focus, .df-field select:focus { border-color: var(--primary); }
+.df-footer {
+  display: flex; justify-content: flex-end;
+  border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px;
+}
+@media (max-width: 480px) {
+  .df-panel { left: auto; right: 0; min-width: min(270px, calc(100vw - 24px)); }
+}

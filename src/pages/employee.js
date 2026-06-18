@@ -1818,11 +1818,17 @@ export async function renderEmployeeCash(container) {
         You have <b>₹${Math.round(totalPending).toLocaleString('en-IN')}</b> in cash to hand over to admin. Once admin records the submission in their Cash Collections tab, these entries will move to <b>Submitted</b>.
       </div>` : ''}
 
-    <div class="filter-bar" style="margin-bottom:16px;">
-      <div class="sr-filter-bar" id="cash-tabs">
-        <button class="sr-filter active" data-tab="pending">Pending <span class="sr-filter-count">${pending.length}</span></button>
-        <button class="sr-filter" data-tab="submitted">Submitted <span class="sr-filter-count">${submitted.length}</span></button>
-        <button class="sr-filter" data-tab="all">All <span class="sr-filter-count">${list.length}</span></button>
+    <div class="df-wrap" style="margin-bottom:16px;">
+      <button class="btn btn-secondary df-toggle" id="cash-filter-btn">${ICONS.filter}<span>Filters</span></button>
+      <div class="df-panel" id="cash-panel" style="display:none">
+        <div class="df-field">
+          <span class="df-label">Status</span>
+          <select id="cash-status-sel">
+            <option value="pending">Pending (${pending.length})</option>
+            <option value="submitted">Submitted (${submitted.length})</option>
+            <option value="all">All (${list.length})</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -1838,15 +1844,31 @@ export async function renderEmployeeCash(container) {
 
   container.querySelector('#cash-refresh').onclick = () => renderEmployeeCash(container);
 
-  const tabs = { pending, submitted, all: list };
-  container.querySelectorAll('#cash-tabs .sr-filter').forEach(btn => {
-    btn.onclick = () => {
-      container.querySelectorAll('#cash-tabs .sr-filter').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const items = tabs[btn.dataset.tab] || list;
-      container.querySelector('tbody').innerHTML = rowHtml(items);
-    };
-  });
+  const cashTabs = { pending, submitted, all: list };
+  const cashPanel = container.querySelector('#cash-panel');
+  const cashBtn = container.querySelector('#cash-filter-btn');
+  const cashOutside = (e) => {
+    if (!cashBtn.closest('.df-wrap').contains(e.target)) {
+      cashPanel.style.display = 'none';
+      document.removeEventListener('click', cashOutside);
+    }
+  };
+  cashBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (cashPanel.style.display === 'none') {
+      cashPanel.style.display = '';
+      setTimeout(() => document.addEventListener('click', cashOutside), 0);
+    } else {
+      cashPanel.style.display = 'none';
+      document.removeEventListener('click', cashOutside);
+    }
+  };
+  container.querySelector('#cash-status-sel').onchange = (e) => {
+    const items = cashTabs[e.target.value] || list;
+    container.querySelector('tbody').innerHTML = rowHtml(items);
+    cashPanel.style.display = 'none';
+    document.removeEventListener('click', cashOutside);
+  };
 }
 
 export async function renderEmployeeSalary(container) {
@@ -2722,19 +2744,28 @@ export async function renderEmployeeTasks(container) {
       </div>
     ` : ''}
 
-    <div class="filter-bar" style="margin-bottom:16px;">
-      <div class="sr-filter-bar" id="task-filter-tabs">
-        <button class="sr-filter active" data-filter="in_progress"><span>In Progress</span><span class="sr-filter-count">${statusCounts.in_progress + statusCounts.active}</span></button>
-        ${reopenedCount ? `<button class="sr-filter" data-filter="reopened"><span>🔁 Reopened</span><span class="sr-filter-count">${reopenedCount}</span></button>` : ''}
-        <button class="sr-filter" data-filter="resolved"><span>Resolved</span><span class="sr-filter-count">${statusCounts.resolved}</span></button>
-        <button class="sr-filter" data-filter="issue_not_resolved"><span>Issue Not Resolved</span><span class="sr-filter-count">${statusCounts.issue_not_resolved}</span></button>
-        <button class="sr-filter" data-filter="device_followup"><span>Device Follow Up</span></button>
-        <button class="sr-filter" data-filter="case_closed"><span>Case Closed</span><span class="sr-filter-count">${statusCounts.case_closed}</span></button>
+    <div class="df-wrap" style="margin-bottom:24px;">
+      <button class="btn btn-secondary df-toggle" id="task-filter-btn">${ICONS.filter}<span>Filters</span><span class="df-badge" id="task-badge" style="display:none">0</span></button>
+      <div class="df-panel" id="task-panel" style="display:none">
+        <div class="df-field">
+          <span class="df-label">Status</span>
+          <select id="task-status-sel">
+            <option value="in_progress">In Progress (${statusCounts.in_progress + statusCounts.active})</option>
+            ${reopenedCount ? `<option value="reopened">🔁 Reopened (${reopenedCount})</option>` : ''}
+            <option value="resolved">Resolved (${statusCounts.resolved})</option>
+            <option value="issue_not_resolved">Issue Not Resolved (${statusCounts.issue_not_resolved})</option>
+            <option value="device_followup">Device Follow Up</option>
+            <option value="case_closed">Case Closed (${statusCounts.case_closed})</option>
+          </select>
+        </div>
+        <div class="df-field">
+          <span class="df-label">Search</span>
+          <input id="task-search" type="search" placeholder="Search by title, client, or ticket…" autocomplete="off"/>
+        </div>
+        <div class="df-footer">
+          <button class="btn btn-ghost btn-sm" id="task-filter-clear">Clear all</button>
+        </div>
       </div>
-    </div>
-    <div class="emp-task-search" style="margin-bottom:24px;">
-      <span class="emp-task-search-ico">${ICONS.search}</span>
-      <input id="task-search" type="search" placeholder="Search by title, client, or ticket number..." autocomplete="off"/>
     </div>
 
     <div id="task-list">
@@ -2862,19 +2893,49 @@ export async function renderEmployeeTasks(container) {
     if (empty) empty.style.display = shown ? 'none' : '';
   };
 
-  container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(btn => {
-    btn.onclick = () => {
-      container.querySelectorAll('#task-filter-tabs .sr-filter').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeFilter = btn.dataset.filter;
-      applyFilters();
-    };
-  });
-
+  const taskPanel = container.querySelector('#task-panel');
+  const taskBtn = container.querySelector('#task-filter-btn');
+  const taskBadge = container.querySelector('#task-badge');
+  const updateTaskBadge = () => {
+    const n = (activeFilter !== 'in_progress' ? 1 : 0) + (searchQuery ? 1 : 0);
+    taskBadge.textContent = n;
+    taskBadge.style.display = n ? '' : 'none';
+  };
+  const taskOutside = (e) => {
+    if (!taskBtn.closest('.df-wrap').contains(e.target)) {
+      taskPanel.style.display = 'none';
+      document.removeEventListener('click', taskOutside);
+    }
+  };
+  taskBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (taskPanel.style.display === 'none') {
+      taskPanel.style.display = '';
+      setTimeout(() => document.addEventListener('click', taskOutside), 0);
+    } else {
+      taskPanel.style.display = 'none';
+      document.removeEventListener('click', taskOutside);
+    }
+  };
+  container.querySelector('#task-status-sel').onchange = (e) => {
+    activeFilter = e.target.value;
+    applyFilters();
+    updateTaskBadge();
+  };
   const searchInput = container.querySelector('#task-search');
   if (searchInput) {
-    searchInput.oninput = (e) => { searchQuery = e.target.value; applyFilters(); };
+    searchInput.oninput = (e) => { searchQuery = e.target.value; applyFilters(); updateTaskBadge(); };
   }
+  container.querySelector('#task-filter-clear').onclick = () => {
+    activeFilter = 'in_progress';
+    searchQuery = '';
+    container.querySelector('#task-status-sel').value = 'in_progress';
+    if (searchInput) searchInput.value = '';
+    applyFilters();
+    updateTaskBadge();
+    taskPanel.style.display = 'none';
+    document.removeEventListener('click', taskOutside);
+  };
   applyFilters();
 
   // Task update buttons
