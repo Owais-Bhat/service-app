@@ -4535,18 +4535,53 @@ app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
 
 // --- DATABASE ROUTES ---
 
-// Returns all employee profiles — accessible to any authenticated user so the
-// leaderboard works for both admin and employee roles (bypasses Supabase RLS).
-app.get('/api/employees', authenticateToken, async (req, res) => {
+// Leaderboard endpoint — accessible to any authenticated user (employee or admin).
+// Returns aggregated review stats per employee for a given month (YYYY-MM) and all-time.
+// Bypasses the employee-scoped RLS so every employee can see the full ranking.
+app.get('/api/leaderboard', authenticateToken, async (req, res) => {
     try {
         const connection = await getConn();
-        const [rows] = await connection.execute(
+        const monthKey = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+            ? req.query.month : null;
+
+        // All employees with zero-seeded stats
+        const [empRows] = await connection.execute(
             "SELECT id, full_name FROM profiles WHERE role = 'employee' ORDER BY full_name ASC"
         );
+
+        // All feedback rows (all employees)
+        const [fbRows] = await connection.execute(
+            `SELECT feedback_employee_id, assigned_employee_id, feedback_rating, employee_rating, feedback_at, updated_at
+             FROM inquiries WHERE feedback_rating IS NOT NULL`
+        );
         connection.release();
-        res.json(rows);
+
+        const agg = (rows) => {
+            const map = new Map();
+            empRows.forEach(e => map.set(e.id, { id: e.id, name: e.full_name, count: 0, total: 0, fiveStars: 0 }));
+            rows.forEach(r => {
+                const empId = r.feedback_employee_id || r.assigned_employee_id;
+                if (!empId || !map.has(empId)) return;
+                const score = Number(r.employee_rating || r.feedback_rating || 0);
+                if (!score) return;
+                const entry = map.get(empId);
+                entry.total += score;
+                entry.count += 1;
+                if (score >= 5) entry.fiveStars += 1;
+            });
+            return [...map.values()]
+                .map(e => ({ ...e, avg: e.count > 0 ? e.total / e.count : 0 }))
+                .sort((a, b) => b.count - a.count || b.avg - a.avg || b.fiveStars - a.fiveStars);
+        };
+
+        const allTime = agg(fbRows);
+        const monthly = monthKey
+            ? agg(fbRows.filter(r => String(r.feedback_at || r.updated_at || '').startsWith(monthKey)))
+            : allTime;
+
+        res.json({ monthly, allTime });
     } catch (error) {
-        console.error('GET employees error:', error);
+        console.error('GET leaderboard error:', error);
         res.status(500).json({ error: error.message });
     }
 });

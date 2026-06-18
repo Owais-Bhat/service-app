@@ -1964,39 +1964,18 @@ export async function renderEmployeeLeaderboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const monthKey = getMonthKey();
-  const token = (await supabase.auth.getSession()).data.session?.access_token;
-  const [{ data: rows }, empRes] = await Promise.all([
-    supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at').order('feedback_at', { ascending: false }),
-    fetch('/api/employees', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []).catch(() => []),
-  ]);
+  const token = localStorage.getItem('auth_token');
+  const lbData = await fetch(`/api/leaderboard?month=${monthKey}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then(r => r.ok ? r.json() : null).catch(() => null);
 
-  const employees = new Map((Array.isArray(empRes) ? empRes : [])
-    .map(p => [p.id, p]));
-  const feedbackRows = (rows || []).filter(r => r.feedback_rating != null);
-  const monthRows = feedbackRows.filter(r => String(r.feedback_at || r.updated_at || '').startsWith(monthKey));
+  if (!lbData) {
+    container.innerHTML = '<div class="card" style="padding:32px;text-align:center;color:var(--text-dim)">Could not load leaderboard. Please try again.</div>';
+    return;
+  }
 
-  const buildRows = (sourceRows) => {
-    const agg = new Map();
-    // Seed every employee with zero stats so they always appear.
-    employees.forEach((_, id) => agg.set(id, { total: 0, count: 0, fiveStars: 0 }));
-    sourceRows.forEach(r => {
-      const empId = r.feedback_employee_id || r.assigned_employee_id;
-      if (!empId || !agg.has(empId)) return;
-      const score = Number(r.employee_rating || r.feedback_rating || 0);
-      if (!score) return;
-      const entry = agg.get(empId);
-      entry.total += score;
-      entry.count += 1;
-      if (score >= 5) entry.fiveStars += 1;
-    });
-    return [...agg.entries()]
-      .map(([id, a]) => ({ id, name: employees.get(id)?.full_name || 'Employee', avg: a.count > 0 ? a.total / a.count : 0, count: a.count, fiveStars: a.fiveStars }))
-      // Sort by most reviews first; tie-break by avg rating then 5-stars.
-      .sort((a, b) => b.count - a.count || b.avg - a.avg || b.fiveStars - a.fiveStars);
-  };
-
-  const monthly = buildRows(monthRows);
-  const allTime = buildRows(feedbackRows);
+  const monthly = lbData.monthly || [];
+  const allTime = lbData.allTime || [];
   const myMonthly = monthly.find(x => x.id === user.id);
   const myAllTime = allTime.find(x => x.id === user.id);
   const myRank = monthly.findIndex(x => x.id === user.id) + 1;
