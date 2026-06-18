@@ -3868,7 +3868,7 @@ export async function renderFeedbackTab(container) {
   const MEDAL = ["🥇", "🥈", "🥉"];
   const initials = (name) => String(name).trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
   const PODIUM_ORDER = [1, 0, 2];
-  const PODIUM_H = ["96px", "120px", "80px"];
+  const PODIUM_H = ["120px", "88px", "64px"]; // 1st tallest, 2nd medium, 3rd shortest
   // Always show all 3 podium slots — pad with placeholder if fewer than 3 employees.
   const podiumSlots = PODIUM_ORDER.map((i) => monthRows[i] || { id: null, name: "—", count: 0, avg: 0, fiveStars: 0, _empty: true });
 
@@ -3899,6 +3899,20 @@ export async function renderFeedbackTab(container) {
           <td>${e.count > 0 ? `<span class="badge badge-resolved">${e.fiveStars}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
         </tr>`;
       }).join("");
+
+  // ── Reviews by Company ─────────────────────────────────────────
+  const companyFb = new Map();
+  all.forEach((r) => {
+    const co = r.company_name || "Walk-in / Individual";
+    if (!companyFb.has(co)) companyFb.set(co, { count: 0, total: 0, fiveStars: 0 });
+    const c = companyFb.get(co);
+    c.count += 1;
+    c.total += Number(r.feedback_rating || 0);
+    if (r.feedback_rating >= 5) c.fiveStars += 1;
+  });
+  const companyRows = [...companyFb.entries()]
+    .map(([name, c]) => ({ name, count: c.count, avg: c.total / c.count, fiveStars: c.fiveStars }))
+    .sort((a, b) => b.count - a.count || b.avg - a.avg);
 
   container.innerHTML = `
     <div class="page-header">
@@ -3937,6 +3951,27 @@ export async function renderFeedbackTab(container) {
         <table>
           <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th><th>5★</th></tr></thead>
           <tbody>${lbTableRows(allTimeRows)}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Reviews by Company -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">🏢 Reviews by Company</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Company</th><th>Reviews</th><th>Avg Rating</th><th>5★</th></tr></thead>
+          <tbody>
+            ${companyRows.length === 0
+              ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-dim)">No company reviews yet</td></tr>'
+              : companyRows.map((c, idx) => `
+                <tr style="${idx === 0 ? 'background:rgba(255,200,0,0.05);' : ''}">
+                  <td><b>${escapeHtml(c.name)}</b></td>
+                  <td><b style="color:var(--primary)">${c.count}</b></td>
+                  <td>${starsHtml(c.avg)} <span style="margin-left:4px;font-weight:700">${c.avg.toFixed(2)}</span></td>
+                  <td><span class="badge badge-resolved">${c.fiveStars}</span></td>
+                </tr>`).join("")}
+          </tbody>
         </table>
       </div>
     </div>

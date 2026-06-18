@@ -2004,7 +2004,7 @@ export async function renderEmployeeLeaderboard(container) {
 
   // Podium: arrange as 2nd | 1st | 3rd
   const MEDAL = ['🥇', '🥈', '🥉'];
-  const PODIUM_H = ['96px', '120px', '80px']; // bar heights for 1st/2nd/3rd
+  const PODIUM_H = ['120px', '88px', '64px']; // bar heights: 1st tallest, 2nd medium, 3rd shortest
   const PODIUM_ORDER = [1, 0, 2];             // display order: 2nd, 1st, 3rd
   const initials = (name) => String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
