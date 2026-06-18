@@ -4585,9 +4585,17 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
                 .sort((a, b) => b.count - a.count || b.avg - a.avg || b.fiveStars - a.fiveStars);
         };
 
+        // mysql2 returns TIMESTAMP columns as Date objects; convert to ISO before
+        // doing a YYYY-MM prefix match.
+        const monthOf = (v) => {
+            if (!v) return '';
+            if (v instanceof Date) return isNaN(v) ? '' : v.toISOString().slice(0, 7);
+            return String(v).slice(0, 7);
+        };
+
         const allTime = agg(fbRows);
         const monthly = monthKey
-            ? agg(fbRows.filter(r => String(r.feedback_at || r.created_at || '').startsWith(monthKey)))
+            ? agg(fbRows.filter(r => monthOf(r.feedback_at || r.created_at) === monthKey))
             : allTime;
 
         res.json({ monthly, allTime });
