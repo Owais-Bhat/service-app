@@ -1964,9 +1964,10 @@ export async function renderEmployeeLeaderboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const monthKey = getMonthKey();
+  const token = (await supabase.auth.getSession()).data.session?.access_token;
   const [{ data: rows }, empRes] = await Promise.all([
-    supabase.from('inquiries').select('*').order('feedback_at', { ascending: false }),
-    fetch('/api/employees', { headers: { Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } }).then(r => r.json()),
+    supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at').order('feedback_at', { ascending: false }),
+    fetch('/api/employees', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []).catch(() => []),
   ]);
 
   const employees = new Map((Array.isArray(empRes) ? empRes : [])
