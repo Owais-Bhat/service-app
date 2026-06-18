@@ -7642,17 +7642,12 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 }
 
 /* ── Employee: horizontal clock row ── */
-.emp-clock-row { display:flex; align-items:center; gap:20px; padding:20px 24px; margin-bottom:18px; }
-.emp-clock-left { flex:1; display:flex; flex-direction:column; gap:4px; }
-.emp-clock-right { display:flex; flex-direction:column; align-items:center; gap:10px; min-width:160px; }
-.emp-clock-row .clock-time { font-family:var(--font-mono); font-size:clamp(1.8rem,3.5vw,2.4rem); font-weight:700; letter-spacing:-.02em; }
+.emp-clock-row { display:flex; align-items:center; gap:16px; padding:20px 18px; margin-bottom:18px; }
+.emp-clock-left { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.emp-clock-right { display:flex; flex-direction:column; align-items:stretch; gap:8px; width:148px; flex-shrink:0; }
+.emp-clock-row .clock-time { font-family:var(--font-mono); font-size:clamp(1.4rem,5vw,2.4rem); font-weight:700; letter-spacing:-.02em; }
 .emp-clock-row .clock-date { font-size:0.82rem; color:var(--text-3,var(--text-dim)); margin:0; }
-.emp-clock-toggle { width:100%; padding:14px 20px; font-size:1rem; }
-@media (max-width:560px) {
-  .emp-clock-row { flex-direction:column; align-items:stretch; }
-  .emp-clock-right { min-width:0; align-items:stretch; }
-  .emp-clock-toggle { width:100%; }
-}
+.emp-clock-toggle { width:100%; padding:12px 14px; font-size:0.95rem; }
 
 /* ── Employee: EOD status button ── */
 .emp-eod-btn { width:100%; justify-content:center; gap:8px; }
