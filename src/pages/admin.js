@@ -4826,7 +4826,6 @@ export async function renderAutoAssignmentTab(container) {
               <input type="checkbox" id="auto-assign-toggle-input" style="display:none;" ${status.auto_assignment_enabled ? "checked" : ""} />
             </label>
           </div>
-          <button class="btn btn-secondary" id="auto-assign-refresh">${ICONS.refresh}<span>Refresh</span></button>
         </div>
       </div>
       <div class="stats-grid" style="margin-bottom:24px;">
@@ -4906,8 +4905,6 @@ export async function renderAutoAssignmentTab(container) {
       };
     }
 
-    container.querySelector("#auto-assign-refresh").onclick = () =>
-      renderAutoAssignmentTab(container);
   } catch (err) {
     container.innerHTML = `<div class="page-header"><h1>Auto Assignment</h1><p style="color:var(--danger)">${escapeHtml(err.message || "Could not load auto assignment")}</p></div>`;
     toast(err.message || "Could not load auto assignment", "error");
