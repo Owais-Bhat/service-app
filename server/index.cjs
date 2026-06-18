@@ -459,10 +459,28 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Keep uploads in memory then persist the bytes to MySQL — the on-disk uploads/
 // folder is ephemeral (wiped on rebuild / not shipped on deploy), which made
-// previously uploaded images break. 10 MB cap keeps inserts within MySQL limits.
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+// previously uploaded images break. Cap sized to fit landing-page videos while
+// staying within typical MySQL max_allowed_packet (default 64 MB on shared hosts).
+const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: UPLOAD_MAX_BYTES } });
 
-app.post('/api/upload', authenticateToken, upload.single('file'), async (req, res) => {
+// Run multer manually so size/format errors return JSON instead of Express's
+// default HTML error page (which the frontend tries to res.json() and chokes on
+// with "Unexpected token '<', '<!DOCTYPE …'").
+function uploadSingle(field) {
+    return (req, res, next) => {
+        upload.single(field)(req, res, (err) => {
+            if (!err) return next();
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({ error: `File too large. Max ${Math.round(UPLOAD_MAX_BYTES / (1024 * 1024))} MB.` });
+            }
+            console.error('[upload] multer error:', err);
+            return res.status(400).json({ error: err.message || 'Upload error' });
+        });
+    };
+}
+
+app.post('/api/upload', authenticateToken, uploadSingle('file'), async (req, res) => {
     if (!['admin', 'employee'].includes(req.user.role)) return res.sendStatus(403);
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const ext = path.extname(req.file.originalname || '') || '';
