@@ -37,46 +37,29 @@ async function setTicketDeviceFlag(inquiryId, enabled) {
   return res.json();
 }
 
-// Watches for several GPS fixes within `maxWaitMs`, returns the most accurate
-// reading seen - or short-circuits as soon as accuracy <= desiredAccuracy.
-// The cold first fix is usually 100-500m off; this keeps sampling until we
-// see a real GPS lock (typically <20m on phones).
-function getHighAccuracyPosition({ desiredAccuracy = 25, maxWaitMs = 12000 } = {}) {
+// Tries GPS first (enableHighAccuracy), falls back to network-based location
+// (WiFi/cell) if GPS doesn't respond in time. The fallback is instant on
+// iPhone and avoids the 12-second freeze from watchPosition on iOS Safari.
+function getHighAccuracyPosition({ maxWaitMs = 8000 } = {}) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
-    let best = null;
-    let settled = false;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
-        if (pos.coords.accuracy <= desiredAccuracy && !settled) {
-          settled = true;
-          navigator.geolocation.clearWatch(watchId);
-          clearTimeout(timer);
-          resolve(best);
-        }
-      },
-      (err) => {
-        if (settled) return;
-        if (best) {
-          settled = true;
-          navigator.geolocation.clearWatch(watchId);
-          clearTimeout(timer);
-          resolve(best);
-        } else {
-          settled = true;
-          reject(err);
-        }
-      },
+    let done = false;
+
+    const tryLow = () => {
+      navigator.geolocation.getCurrentPosition(
+        pos => { if (!done) { done = true; resolve(pos); } },
+        err => { if (!done) { done = true; reject(err); } },
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+      );
+    };
+
+    const fallbackTimer = setTimeout(tryLow, maxWaitMs);
+
+    navigator.geolocation.getCurrentPosition(
+      pos => { clearTimeout(fallbackTimer); if (!done) { done = true; resolve(pos); } },
+      ()  => { clearTimeout(fallbackTimer); if (!done) tryLow(); },
       { enableHighAccuracy: true, timeout: maxWaitMs, maximumAge: 0 }
     );
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      navigator.geolocation.clearWatch(watchId);
-      if (best) resolve(best);
-      else reject(new Error('Geolocation timed out'));
-    }, maxWaitMs);
   });
 }
 
