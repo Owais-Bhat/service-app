@@ -1990,58 +1990,101 @@ export async function renderEmployeeLeaderboard(container) {
     });
     return [...agg.entries()]
       .map(([id, a]) => ({ id, name: employees.get(id)?.full_name || 'Employee', avg: a.total / a.count, count: a.count, fiveStars: a.fiveStars }))
-      .sort((a, b) => b.avg - a.avg || b.count - a.count || b.fiveStars - a.fiveStars);
+      // Sort by most reviews first; tie-break by avg rating then 5-stars.
+      .sort((a, b) => b.count - a.count || b.avg - a.avg || b.fiveStars - a.fiveStars);
   };
 
   const monthly = buildRows(monthRows);
   const allTime = buildRows(feedbackRows);
-  const winner = monthly[0] || null;
   const myMonthly = monthly.find(x => x.id === user.id);
   const myAllTime = allTime.find(x => x.id === user.id);
   const myRank = monthly.findIndex(x => x.id === user.id) + 1;
 
+  // Podium: arrange as 2nd | 1st | 3rd
+  const MEDAL = ['🥇', '🥈', '🥉'];
+  const PODIUM_H = ['96px', '120px', '80px']; // bar heights for 1st/2nd/3rd
+  const PODIUM_ORDER = [1, 0, 2];             // display order: 2nd, 1st, 3rd
+  const initials = (name) => String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+  const podiumSlots = PODIUM_ORDER.map(i => monthly[i] || null);
+
+  const podiumHtml = monthly.length === 0
+    ? `<div style="text-align:center;padding:48px;color:var(--text-dim)">No reviews this month yet</div>`
+    : `<div class="lb-podium">
+        ${podiumSlots.map((e, slot) => {
+          const rank = PODIUM_ORDER[slot]; // 0-based index in monthly array
+          if (!e) return `<div class="lb-podium-slot lb-podium-slot-${rank}"></div>`;
+          const isYou = e.id === user.id;
+          return `
+            <div class="lb-podium-slot lb-podium-slot-${rank}">
+              <div class="lb-podium-medal">${MEDAL[rank]}</div>
+              <div class="lb-podium-avatar ${isYou ? 'lb-podium-you' : ''}">${initials(e.name)}</div>
+              <div class="lb-podium-name">${escapeHtml(e.name)}${isYou ? ' <span class="lb-you-tag">You</span>' : ''}</div>
+              <div class="lb-podium-reviews"><b>${e.count}</b> review${e.count !== 1 ? 's' : ''}</div>
+              <div class="lb-podium-stars">${starsHtml(e.avg)} <span>${e.avg.toFixed(1)}</span></div>
+              <div class="lb-podium-bar" style="height:${PODIUM_H[rank]};"></div>
+            </div>`;
+        }).join('')}
+      </div>`;
+
   container.innerHTML = `
     <div class="page-header">
       <h1>Leaderboard</h1>
-      <p>Employee of the month is calculated from resolved service feedback.</p>
+      <p>Ranked by most reviews received this month.</p>
     </div>
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.8rem">${winner ? escapeHtml(winner.name) : '-'}</div><div class="stat-label">Employee of Month</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.6rem">${monthly[0] ? escapeHtml(monthly[0].name) : '-'}</div><div class="stat-label">Most Reviews This Month</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${myRank || '-'}</div><div class="stat-label">Your Monthly Rank</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${myMonthly ? myMonthly.avg.toFixed(2) : '0.00'} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Your Month Rating</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${myAllTime ? myAllTime.count : 0}</div><div class="stat-label">Your Total Reviews</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${myMonthly ? myMonthly.count : 0}</div><div class="stat-label">Your Reviews This Month</div></div>
     </div>
+
+    <!-- Podium -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">🏆 Top 3 — Most Reviews</span></div>
+      <div style="padding:24px 16px 8px;">
+        ${podiumHtml}
+      </div>
+    </div>
+
     <div class="card">
-      <div class="card-header"><span class="card-title">This Month</span></div>
+      <div class="card-header"><span class="card-title">This Month — Full Rankings</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Rank</th><th>Employee</th><th>Rating</th><th>Reviews</th><th>5-Star</th></tr></thead>
+          <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th><th>5-Star</th></tr></thead>
           <tbody>
             ${monthly.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">No feedback this month yet</td></tr>' :
-              monthly.map((e, idx) => `<tr style="${e.id === user.id ? 'background:rgba(16,185,129,0.06)' : ''}">
-                <td><b>#${idx + 1}</b></td>
-                <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
-                <td>${starsHtml(e.avg)} <span style="margin-left:6px;font-weight:700">${e.avg.toFixed(2)}</span></td>
-                <td>${e.count}</td>
-                <td><span class="badge badge-resolved">${e.fiveStars}</span></td>
-              </tr>`).join('')}
+              monthly.map((e, idx) => {
+                const medalCell = idx < 3 ? `${MEDAL[idx]} ` : '';
+                const rowBg = idx === 0 ? 'background:rgba(255,200,0,0.07);' : idx === 1 ? 'background:rgba(180,180,190,0.07);' : idx === 2 ? 'background:rgba(180,110,50,0.07);' : e.id === user.id ? 'background:rgba(16,185,129,0.06);' : '';
+                return `<tr style="${rowBg}">
+                  <td><b>${medalCell}#${idx + 1}</b></td>
+                  <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
+                  <td><b style="color:var(--primary)">${e.count}</b></td>
+                  <td>${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span></td>
+                  <td><span class="badge badge-resolved">${e.fiveStars}</span></td>
+                </tr>`;
+              }).join('')}
           </tbody>
         </table>
       </div>
     </div>
     <div class="card" style="margin-top:24px">
-      <div class="card-header"><span class="card-title">All-Time Ranking</span></div>
+      <div class="card-header"><span class="card-title">All-Time Rankings</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Rank</th><th>Employee</th><th>Rating</th><th>Reviews</th></tr></thead>
+          <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th></tr></thead>
           <tbody>
             ${allTime.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No ratings yet</td></tr>' :
-              allTime.map((e, idx) => `<tr style="${e.id === user.id ? 'background:rgba(16,185,129,0.06)' : ''}">
-                <td><b>#${idx + 1}</b></td>
-                <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
-                <td>${starsHtml(e.avg)} <span style="margin-left:6px;font-weight:700">${e.avg.toFixed(2)}</span></td>
-                <td>${e.count}</td>
-              </tr>`).join('')}
+              allTime.map((e, idx) => {
+                const medalCell = idx < 3 ? `${MEDAL[idx]} ` : '';
+                const rowBg = e.id === user.id ? 'background:rgba(16,185,129,0.06);' : '';
+                return `<tr style="${rowBg}">
+                  <td><b>${medalCell}#${idx + 1}</b></td>
+                  <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
+                  <td><b style="color:var(--primary)">${e.count}</b></td>
+                  <td>${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span></td>
+                </tr>`;
+              }).join('')}
           </tbody>
         </table>
       </div>

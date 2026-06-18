@@ -478,19 +478,7 @@ export async function renderAdminStats(container) {
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div>
-          <span class="card-title">Custom Stats</span>
-          <span style="font-size:0.78rem;color:var(--text-dim);margin-left:10px">add, edit or remove your own cards</span>
-        </div>
-      </div>
-      <div class="card-body" style="padding-top:0">
-        <div class="grid-stats" id="custom-stats-grid">
-          ${customCards.map((c, i) => customCard(c, i)).join('')}${addCard()}
-        </div>
-      </div>
-    </div>`;
+  `;
 
   // ── Inject charts hero ────────────────────────────────────────────────
   container.querySelector('#stats-hero').innerHTML = renderDashboardHero({
@@ -718,19 +706,7 @@ export async function renderEmployeeStats(container) {
         </div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div>
-          <span class="card-title">Custom Stats</span>
-          <span style="font-size:0.78rem;color:var(--text-dim);margin-left:10px">add your own cards</span>
-        </div>
-      </div>
-      <div class="card-body" style="padding-top:0">
-        <div class="grid-stats" id="custom-stats-grid">
-          ${customCards.map((c, i) => customCard(c, i)).join('')}${addCard()}
-        </div>
-      </div>
-    </div>`;
+  `;
 
   bindCustomActions(container, storageKey, customCards);
 

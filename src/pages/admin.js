@@ -1989,6 +1989,7 @@ export async function renderUsers(container) {
   const canSeeCollections = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-collections"); };
   const canSeeAttendance  = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-attendance"); };
   const canSeeLeaves      = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-leaves"); };
+  const canSeeStats       = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-stats"); };
 
   const makeTabSwitch = (u, tabId, cssPrefix, canSee) =>
     u.role === "employee"
@@ -2001,10 +2002,11 @@ export async function renderUsers(container) {
         </div>`
       : '<span style="color:var(--text-dim)">-</span>';
 
-  // Inline "Collections" tab access toggle in the Users table.
+  // Inline tab access toggles in the Users table.
   const collectionsCell = (u) => makeTabSwitch(u, "my-collections", "coll",   canSeeCollections(u));
   const attendanceCell  = (u) => makeTabSwitch(u, "my-attendance",  "att",    canSeeAttendance(u));
   const leavesCell      = (u) => makeTabSwitch(u, "my-leaves",      "leaves", canSeeLeaves(u));
+  const statsCell       = (u) => makeTabSwitch(u, "my-stats",       "stats",  canSeeStats(u));
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -2028,6 +2030,7 @@ export async function renderUsers(container) {
               <th>Attendance Tab</th>
               <th>Leave Tab</th>
               <th>Collections Tab</th>
+              <th>Stats Tab</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -2052,6 +2055,7 @@ export async function renderUsers(container) {
                 <td>${attendanceCell(u)}</td>
                 <td>${leavesCell(u)}</td>
                 <td>${collectionsCell(u)}</td>
+                <td>${statsCell(u)}</td>
                 <td>
                   <div style="display:flex;gap:8px;">
                     <button class="btn btn-secondary btn-sm edit-user-btn" data-uid="${u.id}">${ICONS.edit || "📝"}<span>Edit</span></button>
@@ -2062,7 +2066,7 @@ export async function renderUsers(container) {
             `,
                     )
                     .join("")
-                : '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
+                : '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
             }
           </tbody>
         </table>
@@ -2163,6 +2167,7 @@ export async function renderUsers(container) {
   bindTabSwitch(".att-access-chk",    ".att-switch-outer",    ".att-status-text",    "Attendance tab");
   bindTabSwitch(".leaves-access-chk", ".leaves-switch-outer", ".leaves-status-text", "Leave tab");
   bindTabSwitch(".coll-access-chk",   ".coll-switch-outer",   ".coll-status-text",   "Collections tab");
+  bindTabSwitch(".stats-access-chk",  ".stats-switch-outer",  ".stats-status-text",  "Stats tab");
 
   container.querySelectorAll(".delete-user-btn").forEach((btn) => {
     btn.onclick = async () => {
