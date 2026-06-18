@@ -4240,7 +4240,7 @@ app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (r
                 i.full_name,
                 i.phone,
                 i.service_item,
-                i.address,
+                i.location AS address,
                 i.company_name,
                 i.device_type,
                 i.device_serial_no,
@@ -4550,15 +4550,16 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
         );
 
         // Try extended columns first; fall back to base columns if schema is older.
+        // Note: the inquiries table has no updated_at — use created_at as the secondary timestamp.
         let fbRows;
         try {
             [fbRows] = await connection.execute(
-                `SELECT assigned_employee_id, feedback_employee_id, feedback_rating, employee_rating, feedback_at, updated_at
+                `SELECT assigned_employee_id, feedback_employee_id, feedback_rating, employee_rating, feedback_at, created_at
                  FROM inquiries WHERE feedback_rating > 0`
             );
         } catch (_) {
             [fbRows] = await connection.execute(
-                `SELECT assigned_employee_id, feedback_rating, updated_at
+                `SELECT assigned_employee_id, feedback_rating, created_at
                  FROM inquiries WHERE feedback_rating > 0`
             );
         }
@@ -4586,7 +4587,7 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
 
         const allTime = agg(fbRows);
         const monthly = monthKey
-            ? agg(fbRows.filter(r => String(r.feedback_at || r.updated_at || '').startsWith(monthKey)))
+            ? agg(fbRows.filter(r => String(r.feedback_at || r.created_at || '').startsWith(monthKey)))
             : allTime;
 
         res.json({ monthly, allTime });
