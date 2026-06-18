@@ -67,7 +67,8 @@
       "Bash(awk '/Rendered \\([0-9]+\\)\\\\/10140/{n=substr\\($2,1,index\\($2,\"/\"\\)-1\\)+0; if\\(n==5000||n==10140\\) print; next} /Encoded 10140|website-demo-full|Done|error|Error|failed/{print}')",
       "mcp__claude_ai_Higgsfield__balance",
       "mcp__claude_ai_Higgsfield__list_workspaces",
-      "PowerShell(Get-ChildItem -Path \"E:\\\\service app\" | Select-Object Name, @{N=\"Type\";E={if\\($_.PSIsContainer\\){\"Dir\"}else{\"File\"}}} | Format-Table -AutoSize)"
+      "PowerShell(Get-ChildItem -Path \"E:\\\\service app\" | Select-Object Name, @{N=\"Type\";E={if\\($_.PSIsContainer\\){\"Dir\"}else{\"File\"}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"E:\\\\service app\\\\server\" | Where-Object { $_.PSIsContainer -eq $false } | Select-Object Name)"
     ]
   }
 }

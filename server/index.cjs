@@ -4535,6 +4535,22 @@ app.post('/api/auth/update-password', authenticateToken, async (req, res) => {
 
 // --- DATABASE ROUTES ---
 
+// Returns all employee profiles — accessible to any authenticated user so the
+// leaderboard works for both admin and employee roles (bypasses Supabase RLS).
+app.get('/api/employees', authenticateToken, async (req, res) => {
+    try {
+        const connection = await getConn();
+        const [rows] = await connection.execute(
+            "SELECT id, full_name FROM profiles WHERE role = 'employee' ORDER BY full_name ASC"
+        );
+        connection.release();
+        res.json(rows);
+    } catch (error) {
+        console.error('GET employees error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
     try {
         const connection = await getConn();

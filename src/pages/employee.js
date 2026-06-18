@@ -1964,13 +1964,12 @@ export async function renderEmployeeLeaderboard(container) {
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const monthKey = getMonthKey();
-  const [{ data: rows }, { data: profiles }] = await Promise.all([
+  const [{ data: rows }, empRes] = await Promise.all([
     supabase.from('inquiries').select('*').order('feedback_at', { ascending: false }),
-    supabase.from('profiles').select('id,full_name,role'),
+    fetch('/api/employees', { headers: { Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } }).then(r => r.json()),
   ]);
 
-  const employees = new Map((profiles || [])
-    .filter(p => p.role === 'employee')
+  const employees = new Map((Array.isArray(empRes) ? empRes : [])
     .map(p => [p.id, p]));
   const feedbackRows = (rows || []).filter(r => r.feedback_rating != null);
   const monthRows = feedbackRows.filter(r => String(r.feedback_at || r.updated_at || '').startsWith(monthKey));
