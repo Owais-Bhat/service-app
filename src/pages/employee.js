@@ -1106,7 +1106,7 @@ export async function renderEmployeeDashboard(container) {
 
     pendingInquiries = allInquiries.filter(x => x.assignment_status === 'pending').sort(byNewestCreated);
     acceptedInquiries = allInquiries
-      .filter(x => x.assignment_status === 'accepted' && !taskInquiryIds.has(x.id) && !['resolved', 'closed', 'issue_not_resolved'].includes(x.status))
+      .filter(x => x.assignment_status === 'accepted' && !taskInquiryIds.has(x.id) && !['resolved', 'closed', 'case_closed', 'paid', 'foc', 'issue_not_resolved'].includes(x.status))
       .sort(byNewestCreated)
       .map(x => ({ ...x, _company: x.company_name || null }));
   } catch (err) {
@@ -1115,12 +1115,13 @@ export async function renderEmployeeDashboard(container) {
   }
 
   const t = tasks || [];
+  const _DONE_ST = new Set(['resolved', 'case_closed', 'foc', 'paid']);
   const activeTasks = t.filter(x => {
     const status = displayStatus(x.status);
-    if (status === 'resolved') return false;
+    if (_DONE_ST.has(status)) return false;
     const inq = x.inquiries?.[0];
     if (!inq) return status === 'assigned' || status === 'in_progress' || status === 'open';
-    return inq.assignment_status === 'accepted' && displayStatus(inq.status) !== 'resolved';
+    return inq.assignment_status === 'accepted' && !_DONE_ST.has(displayStatus(inq.status));
   });
   const isClockedIn = !!attendance?.clock_in;
   const isClockedOut = !!attendance?.clock_out;
@@ -1136,6 +1137,8 @@ export async function renderEmployeeDashboard(container) {
     ...activeTasks,
     ...acceptedInquiries,
   ].sort(byNewestCreated);
+  const routeActiveCount = todayTasks.filter(item => displayStatus((item.inquiries?.[0] || item).status || item.status) === 'in_progress').length;
+  const routePct = todayTasks.length ? Math.round((routeActiveCount / todayTasks.length) * 100) : 0;
 
   // Reopened tickets (customer clicked "issue not resolved") — shown separately.
   const reopenedItems = todayTasks.filter(item => Number((item.inquiries?.[0] || item)?.reopened) === 1);
@@ -1259,29 +1262,50 @@ export async function renderEmployeeDashboard(container) {
     ` : ''}
 
     <!-- Today's Route (full-width) -->
-    <div class="card list-card" style="margin-bottom:18px;">
-      <div class="card-head">
+    <div class="card" style="margin-bottom:18px;overflow:hidden;">
+      <div class="card-head" style="padding:16px 18px 14px;">
         <h3>${ICONS.wrench} Today's Route</h3>
         <span class="chip">${todayTasks.length} stop${todayTasks.length === 1 ? '' : 's'}</span>
       </div>
-      <div class="list">
-        ${todayTasks.length === 0 ? `<div style="text-align:center;padding:28px;color:var(--text-3, var(--text-dim));font-size:0.86rem;">No in-progress tasks right now.</div>` : todayTasks.map(item => {
-          const inq = item.inquiries?.[0] || item;
-          const id = item.inquiries ? item.id : (inq.ticket_id || '');
-          const st = displayStatus(inq.status || item.status || 'assigned');
-          const badgeCls = st === 'in_progress' ? 'progress' : st === 'resolved' ? 'resolved' : st === 'assigned' ? 'assigned' : 'open';
-          return `
-            <div class="lrow">
-              <div class="lrow-ico">${ICONS.wrench}</div>
-              <div class="lrow-main">
-                <b>${escapeHtml(inq.full_name || item.title || 'Service task')}</b>
-                <span class="lsub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || item.description || 'Service request')} · ${formatDateTime(inq.created_at || item.created_at)}</span>
-              </div>
-              <span class="badge ${badgeCls} hide-sm">${statusText(inq.status || item.status || 'assigned')}</span>
-              <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
-            </div>
-          `;
-        }).join('')}
+      ${todayTasks.length > 0 ? `
+      <div class="route-progress-wrap">
+        <div class="route-progress-label">
+          <span>${routeActiveCount ? `${routeActiveCount} in progress` : 'Not started yet'}</span>
+          <span>${routePct}%</span>
+        </div>
+        <div class="bar"><i style="width:${routePct}%;"></i></div>
+      </div>` : ''}
+      <div>
+        ${todayTasks.length === 0
+          ? `<div style="text-align:center;padding:32px 18px;color:var(--text-3,var(--text-dim));font-size:0.86rem;">No tasks assigned right now.</div>`
+          : todayTasks.map((item, idx) => {
+              const inq = item.inquiries?.[0] || item;
+              const id = item.inquiries ? item.id : (inq.ticket_id || '');
+              const st = displayStatus(inq.status || item.status || 'assigned');
+              const isActive = st === 'in_progress';
+              const isLast = idx === todayTasks.length - 1;
+              const badgeCls = isActive ? 'progress' : st === 'assigned' ? 'assigned' : 'open';
+              return `
+              <div class="route-stop">
+                <div class="route-track">
+                  <div class="route-dot ${isActive ? 'route-dot-active' : 'route-dot-pending'}">
+                    ${isActive
+                      ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 2a6 6 0 0 1 6 6"/><path d="M8 5v3l2.5 1.5"/></svg>`
+                      : `${idx + 1}`}
+                  </div>
+                  ${!isLast ? '<div class="route-line"></div>' : ''}
+                </div>
+                <div class="route-body">
+                  <div class="route-name">${escapeHtml(inq.full_name || item.title || 'Service task')}</div>
+                  <div class="route-sub"><em class="id-mono" style="font-style:normal">${escapeHtml(inq.ticket_no || 'No ticket')}</em> · ${escapeHtml(inq.service_item || item.description || 'Service request')}</div>
+                  <div class="route-sub" style="margin-top:2px;">${formatDateTime(inq.created_at || item.created_at)}</div>
+                  <div class="route-actions">
+                    <span class="badge ${badgeCls}">${statusText(inq.status || item.status || 'assigned')}</span>
+                    <button class="btn btn-secondary btn-sm task-btn" data-id="${escapeAttr(id)}" data-inq-id="${escapeAttr(inq.id || '')}" data-status="${escapeAttr(inq.status || item.status || 'assigned')}">${ICONS.edit}<span>Open</span></button>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}
       </div>
     </div>
 
@@ -1868,6 +1892,7 @@ export async function renderEmployeeCash(container) {
             <option value="all">All (${list.length})</option>
           </select>
         </div>
+        <div class="df-footer"><button class="btn btn-ghost btn-sm" id="cash-clear">Clear</button><button class="btn btn-primary btn-sm" id="cash-ok">Apply</button></div>
       </div>
     </div>
 
@@ -1892,21 +1917,23 @@ export async function renderEmployeeCash(container) {
       document.removeEventListener('click', cashOutside);
     }
   };
+  const cashClose = () => { cashPanel.style.display = 'none'; document.removeEventListener('click', cashOutside); };
   cashBtn.onclick = (e) => {
     e.stopPropagation();
     if (cashPanel.style.display === 'none') {
       cashPanel.style.display = '';
       setTimeout(() => document.addEventListener('click', cashOutside), 0);
-    } else {
-      cashPanel.style.display = 'none';
-      document.removeEventListener('click', cashOutside);
-    }
+    } else { cashClose(); }
   };
-  container.querySelector('#cash-status-sel').onchange = (e) => {
-    const items = cashTabs[e.target.value] || list;
+  container.querySelector('#cash-ok').onclick = () => {
+    const items = cashTabs[container.querySelector('#cash-status-sel').value] || list;
     container.querySelector('tbody').innerHTML = rowHtml(items);
-    cashPanel.style.display = 'none';
-    document.removeEventListener('click', cashOutside);
+    cashClose();
+  };
+  container.querySelector('#cash-clear').onclick = () => {
+    container.querySelector('#cash-status-sel').value = 'pending';
+    container.querySelector('tbody').innerHTML = rowHtml(pending);
+    cashClose();
   };
 }
 
@@ -2802,7 +2829,8 @@ export async function renderEmployeeTasks(container) {
           <input id="task-search" type="search" placeholder="Search by title, client, or ticket…" autocomplete="off"/>
         </div>
         <div class="df-footer">
-          <button class="btn btn-ghost btn-sm" id="task-filter-clear">Clear all</button>
+          <button class="btn btn-ghost btn-sm" id="task-filter-clear">Clear</button>
+          <button class="btn btn-primary btn-sm" id="task-ok">Apply</button>
         </div>
       </div>
     </div>
@@ -2956,15 +2984,15 @@ export async function renderEmployeeTasks(container) {
       document.removeEventListener('click', taskOutside);
     }
   };
-  container.querySelector('#task-status-sel').onchange = (e) => {
-    activeFilter = e.target.value;
+  const searchInput = container.querySelector('#task-search');
+  const taskClose = () => { taskPanel.style.display = 'none'; document.removeEventListener('click', taskOutside); };
+  container.querySelector('#task-ok').onclick = () => {
+    activeFilter = container.querySelector('#task-status-sel').value;
+    searchQuery = searchInput ? searchInput.value : '';
     applyFilters();
     updateTaskBadge();
+    taskClose();
   };
-  const searchInput = container.querySelector('#task-search');
-  if (searchInput) {
-    searchInput.oninput = (e) => { searchQuery = e.target.value; applyFilters(); updateTaskBadge(); };
-  }
   container.querySelector('#task-filter-clear').onclick = () => {
     activeFilter = 'in_progress';
     searchQuery = '';
@@ -2972,8 +3000,7 @@ export async function renderEmployeeTasks(container) {
     if (searchInput) searchInput.value = '';
     applyFilters();
     updateTaskBadge();
-    taskPanel.style.display = 'none';
-    document.removeEventListener('click', taskOutside);
+    taskClose();
   };
   applyFilters();
 

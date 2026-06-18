@@ -122,7 +122,6 @@ function getNavItems(role) {
   }
   return [...common,
     { id: 'stats', icon: ICONS.clipboard, label: 'Stats' },
-    { id: 'all-tickets', icon: ICONS.ticket, label: 'All Tickets' },
     { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
     { type: 'section', label: 'Operations' },
     { id: 'attendance', icon: ICONS.clock, label: 'Attendance' },
@@ -188,7 +187,6 @@ const PAGE_LOADERS = {
   admin: {
     dashboard: () => import('./pages/admin.js').then(m => m.renderAdminDashboard),
     stats: () => import('./pages/stats.js').then(m => m.renderAdminStats),
-    'all-tickets': () => import('./pages/admin.js').then(m => m.renderAllTickets),
     attendance: () => import('./pages/admin.js').then(m => m.renderAttendance),
     inquiries: () => import('./pages/admin.js').then(m => m.renderInquiries),
     contacts: () => import('./pages/admin.js').then(m => m.renderContacts),

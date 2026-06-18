@@ -7629,7 +7629,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .df-field input::placeholder { color: var(--text-dim); }
 .df-field input:focus, .df-field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--accent-soft); }
 .df-footer {
-  display: flex; justify-content: flex-end;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   border-top: 1px solid var(--line, var(--border)); padding-top: 10px; margin-top: 2px;
 }
 @media (max-width: 600px) {
@@ -7674,3 +7674,20 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .emp-notice-ico svg { width:16px; height:16px; }
 .emp-notice-title { font-weight:700; font-size:0.9rem; }
 .emp-notice-date { font-size:0.74rem; color:var(--text-dim); margin-top:2px; }
+
+/* ── Today's Route: vertical tick stepper ── */
+.route-progress-wrap { padding:0 18px 14px; }
+.route-progress-label { display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--text-dim); font-weight:700; margin-bottom:7px; }
+.route-stop { display:flex; }
+.route-track { display:flex; flex-direction:column; align-items:center; width:46px; flex-shrink:0; padding-top:14px; }
+.route-dot { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.75rem; font-family:var(--font-mono); flex-shrink:0; transition:box-shadow .2s ease; }
+.route-dot-pending { background:var(--panel-3,var(--row-hover)); border:2px solid var(--line,var(--border)); color:var(--text-dim); }
+.route-dot-active { background:var(--primary); color:#fff; box-shadow:0 0 0 4px var(--accent-soft); animation:routePulse 2.2s ease-in-out infinite; }
+.route-dot-active svg { width:13px; height:13px; }
+@keyframes routePulse { 0%,100%{box-shadow:0 0 0 4px var(--accent-soft);}50%{box-shadow:0 0 0 8px var(--accent-soft);} }
+.route-line { width:2px; flex:1; min-height:18px; background:var(--line,var(--border)); border-radius:2px; margin:4px 0; }
+.route-body { flex:1; min-width:0; padding:14px 18px 14px 4px; border-bottom:1px solid var(--line,var(--border)); }
+.route-stop:last-child .route-body { border-bottom:none; }
+.route-name { font-weight:700; font-size:0.9rem; line-height:1.3; }
+.route-sub { font-size:0.77rem; color:var(--text-dim); margin-top:3px; line-height:1.4; }
+.route-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
