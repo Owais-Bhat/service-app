@@ -359,7 +359,7 @@ const readAllowedTabs = (u) => {
   let v = u?.allowed_tabs;
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return null; } }
-  return (Array.isArray(v) && v.length) ? new Set(v.map(String)) : null;
+  return Array.isArray(v) ? new Set(v.map(String)) : null;
 };
 
 let _profileChannel = null;
