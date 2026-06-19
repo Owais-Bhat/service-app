@@ -2059,7 +2059,7 @@ body:has(.tut-viewer) {
   max-width: 580px;
   max-height: 90vh;
   overflow-y: auto;
-  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 .modal-header {
@@ -2127,7 +2127,7 @@ body:has(.tut-viewer) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 .modal-card .modal-header,
@@ -7502,8 +7502,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 
 /* ── Full-screen notification detail (notify-center.js) ────────────── */
 .ntf-fullscreen{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,12,20,.72);}
-@keyframes ntfFade{from{opacity:0}to{opacity:1}}
-.ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--bg,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:var(--neu-shadow);animation:ntfPop .35s cubic-bezier(0.16,1,0.3,1);}
+.ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--bg,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:var(--neu-shadow);animation:ntfPop .35s cubic-bezier(0.16,1,0.3,1) backwards;}
 @keyframes ntfPop{from{transform:translateY(10px) scale(.98)}to{transform:none}}
 .ntf-fullscreen-close{position:absolute;top:12px;right:14px;border:none;background:transparent;font-size:1.7rem;line-height:1;color:var(--text-dim);cursor:pointer;}
 .ntf-fullscreen-icon{font-size:3rem;line-height:1;margin-bottom:8px;}
