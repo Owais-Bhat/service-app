@@ -2030,6 +2030,11 @@ tr:hover td {
 }
 
 /* ─── MODALS ─── */
+/* Lock background scroll whenever any modal is open — covers all 20+ modals automatically */
+body:has(.modal-overlay) {
+  overflow: hidden;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
