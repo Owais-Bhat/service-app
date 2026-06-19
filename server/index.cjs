@@ -2972,10 +2972,10 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
-        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0 };
+        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null };
 
         // Block client logins — clients use the public landing page, not the dashboard.
         if (profile.role !== 'admin' && profile.role !== 'employee') {
@@ -2989,7 +2989,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs }
         });
     } catch (error) {
         console.error('Signin error:', error);
