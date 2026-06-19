@@ -7656,12 +7656,12 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .df-toggle {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 9px 18px; border-radius: 999px;
-  background: var(--bg-soft);
-  border: 1.5px solid var(--border);
-  color: var(--text-soft);
+  background: var(--primary);
+  border: 1.5px solid var(--primary);
+  color: #fff;
   font-size: 0.85rem; font-weight: 700;
   cursor: pointer; position: relative; overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,.07), inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow: 0 2px 8px rgba(16,185,129,.25), inset 0 1px 0 rgba(255,255,255,.12);
   transition: transform .18s cubic-bezier(.34,1.56,.64,1),
               box-shadow .18s ease,
               border-color .15s ease,
@@ -7679,9 +7679,10 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .df-toggle svg { width: 16px; height: 16px; flex-shrink: 0; transition: transform .2s cubic-bezier(.34,1.56,.64,1); }
 .df-toggle:hover {
   transform: translateY(-2px);
-  border-color: var(--primary);
-  color: var(--primary);
-  box-shadow: 0 6px 18px rgba(0,0,0,.12), 0 0 0 3px var(--accent-soft, rgba(16,185,129,.12));
+  background: var(--primary-hover, #0d9455);
+  border-color: var(--primary-hover, #0d9455);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(16,185,129,.35), 0 0 0 3px var(--accent-soft, rgba(16,185,129,.18));
 }
 .df-toggle:hover svg { transform: rotate(-15deg) scale(1.15); }
 .df-toggle:active { transform: translateY(0) scale(.97); box-shadow: 0 1px 4px rgba(0,0,0,.1); transition-duration: .08s; }
