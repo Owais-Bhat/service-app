@@ -7224,7 +7224,8 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .srf-card-wrap { max-width: none; justify-self: stretch; gap: 0; }
 @media (max-width: 940px) {
   .srf-main { grid-template-columns: 1fr; }
-  .srf-intro { order: 2; }
+  .srf-intro { order: 1; }
+  .srf-card-wrap { order: 2; }
   .srf-intro .promo { min-height: 240px; }
 }
 
