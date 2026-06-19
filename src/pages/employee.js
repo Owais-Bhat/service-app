@@ -1500,8 +1500,10 @@ export async function renderEmployeeDashboard(container) {
           </div>
         </div>`;
       document.body.appendChild(ov);
-      ov.querySelector('#notice-close-btn').onclick = () => ov.remove();
-      ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+      document.body.style.overflow = 'hidden';
+      const close = () => { ov.remove(); document.body.style.overflow = ''; };
+      ov.querySelector('#notice-close-btn').onclick = close;
+      ov.onclick = (e) => { if (e.target === ov) close(); };
     };
   });
 
