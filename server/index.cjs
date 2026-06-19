@@ -3226,6 +3226,12 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             }
 
             await connection.commit();
+
+            // Broadcast profile change so the employee's live session picks
+            // up new allowed_tabs/permissions without requiring a re-login.
+            const [freshProfile] = await connection.execute('SELECT * FROM profiles WHERE id = ?', [userId]);
+            if (freshProfile[0]) broadcastChange('UPDATE', 'profiles', freshProfile[0]);
+
             res.json({ message: 'User updated successfully' });
         } catch (error) {
             await connection.rollback();

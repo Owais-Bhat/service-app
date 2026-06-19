@@ -30,7 +30,8 @@ const updateServiceWorker = registerSW({
     });
   },
   onNeedRefresh() {
-    updateServiceWorker(true);
+    // immediate:true already activates the new SW on next navigation —
+    // forcing a reload here caused random page reloads mid-session.
   },
   onOfflineReady() {},
 });
@@ -361,6 +362,23 @@ const readAllowedTabs = (u) => {
   return (Array.isArray(v) && v.length) ? new Set(v.map(String)) : null;
 };
 
+let _profileChannel = null;
+function watchMyProfile(userId) {
+  if (_profileChannel) { supabase.removeChannel(_profileChannel); _profileChannel = null; }
+  _profileChannel = supabase.channel('my-profile')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, (payload) => {
+      const fresh = payload.new;
+      if (!fresh) return;
+      if (currentRole === 'employee') {
+        canAddService = readCanAddService(fresh);
+        allowedTabs = readAllowedTabs(fresh);
+        // Re-render nav so hidden/shown tabs take effect immediately.
+        navigate(activePage, { push: false });
+      }
+    })
+    .subscribe();
+}
+
 function showAuth() {
   renderAuth(
     async (user, role) => {
@@ -375,6 +393,7 @@ function showAuth() {
       currentRole = role;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
       if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); }
+      watchMyProfile(user.id);
       navigate('dashboard');
     },
     () => goToLanding()
@@ -451,6 +470,7 @@ async function boot() {
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
       if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); }
+      watchMyProfile(currentUser.id);
       navigate('dashboard');
     } catch (err) {
       console.warn('[boot] dashboard load failed', err);
