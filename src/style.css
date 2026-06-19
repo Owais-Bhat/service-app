@@ -2465,15 +2465,8 @@ tr:hover td {
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(30px);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  from { transform: translateY(18px); }
+  to   { transform: translateY(0); }
 }
 
 /* ─── TOAST ─── */
