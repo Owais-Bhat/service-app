@@ -2030,8 +2030,10 @@ tr:hover td {
 }
 
 /* ─── MODALS ─── */
-/* Lock background scroll whenever any modal is open — covers all 20+ modals automatically */
-body:has(.modal-overlay) {
+/* Lock background scroll whenever any overlay is open */
+body:has(.modal-overlay),
+body:has(.ntf-fullscreen),
+body:has(.tut-viewer) {
   overflow: hidden;
 }
 
@@ -7499,10 +7501,10 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .qz-match-row .qz-feedback { display: inline-flex; margin-top: 0; margin-left: 8px; padding: 4px 10px; }
 
 /* ── Full-screen notification detail (notify-center.js) ────────────── */
-.ntf-fullscreen{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,12,20,.62);backdrop-filter:blur(6px);animation:ntfFade .18s ease;}
+.ntf-fullscreen{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,12,20,.72);}
 @keyframes ntfFade{from{opacity:0}to{opacity:1}}
 .ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--bg,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:var(--neu-shadow);animation:ntfPop .22s cubic-bezier(.2,.9,.3,1.2);}
-@keyframes ntfPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes ntfPop{from{transform:translateY(14px) scale(.96)}to{transform:none}}
 .ntf-fullscreen-close{position:absolute;top:12px;right:14px;border:none;background:transparent;font-size:1.7rem;line-height:1;color:var(--text-dim);cursor:pointer;}
 .ntf-fullscreen-icon{font-size:3rem;line-height:1;margin-bottom:8px;}
 .ntf-fullscreen-kicker{text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;color:var(--primary);margin-bottom:6px;}
@@ -7638,7 +7640,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .tut-admin-actions { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
 .tut-admin-actions .btn { flex:1; min-width:84px; }
 
-.tut-viewer { position:fixed; inset:0; z-index:4200; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(6,10,18,.82); backdrop-filter:blur(6px); animation:ntfFade .18s ease; }
+.tut-viewer { position:fixed; inset:0; z-index:4200; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(6,10,18,.88); }
 .tut-viewer-card { position:relative; width:100%; max-width:880px; background:var(--surface,#0b1220); border-radius:18px; overflow:hidden; box-shadow:0 30px 70px rgba(0,0,0,.5); }
 .tut-viewer-close { position:absolute; top:10px; right:14px; z-index:2; width:38px; height:38px; border-radius:50%; border:none; background:rgba(0,0,0,.5); color:#fff; font-size:1.5rem; cursor:pointer; }
 .tut-viewer-media { background:#000; max-height:74vh; display:flex; align-items:center; justify-content:center; }
