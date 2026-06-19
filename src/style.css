@@ -2472,8 +2472,8 @@ body:has(.tut-viewer) {
 }
 
 @keyframes slideUp {
-  from { transform: translateY(14px) scale(0.97); opacity: 0.4; }
-  to   { transform: none; opacity: 1; }
+  from { transform: translateY(12px) scale(0.98); }
+  to   { transform: none; }
 }
 
 /* ─── TOAST ─── */
@@ -6861,7 +6861,7 @@ input, select, textarea { max-width: 100%; }
 /* ── Entrance animations ── */
 .in { opacity: 1; }
 .anim-ready .in { animation: rise 0.4s cubic-bezier(0.16,1,0.3,1) both; animation-delay: var(--d, 0s); }
-@keyframes rise { from { transform: translateY(10px); opacity: 0.3; } to { transform: none; opacity: 1; } }
+@keyframes rise { from { transform: translateY(8px); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .anim-ready .in { animation: none; transform: none; } }
 
 /* ── Landing: staff button ── */
@@ -7504,7 +7504,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .ntf-fullscreen{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,12,20,.72);}
 @keyframes ntfFade{from{opacity:0}to{opacity:1}}
 .ntf-fullscreen-card{position:relative;width:100%;max-width:460px;background:var(--bg,#fff);border:1px solid var(--border);border-radius:22px;padding:34px 26px 26px;text-align:center;box-shadow:var(--neu-shadow);animation:ntfPop .35s cubic-bezier(0.16,1,0.3,1);}
-@keyframes ntfPop{from{transform:translateY(12px) scale(.97);opacity:.4}to{transform:none;opacity:1}}
+@keyframes ntfPop{from{transform:translateY(10px) scale(.98)}to{transform:none}}
 .ntf-fullscreen-close{position:absolute;top:12px;right:14px;border:none;background:transparent;font-size:1.7rem;line-height:1;color:var(--text-dim);cursor:pointer;}
 .ntf-fullscreen-icon{font-size:3rem;line-height:1;margin-bottom:8px;}
 .ntf-fullscreen-kicker{text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;color:var(--primary);margin-bottom:6px;}
