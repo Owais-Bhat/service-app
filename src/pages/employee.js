@@ -2014,15 +2014,17 @@ export async function renderEmployeeLeaderboard(container) {
       <h1>Leaderboard</h1>
       <p>Ranked by most reviews received this month.</p>
     </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value" style="color:var(--warning);font-size:1.6rem">${monthly[0] ? escapeHtml(monthly[0].name) : '-'}</div><div class="stat-label">Most Reviews This Month</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${myRank || '-'}</div><div class="stat-label">Your Monthly Rank</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${myMonthly ? myMonthly.avg.toFixed(2) : '0.00'} <span style="font-size:1rem">/ 5</span></div><div class="stat-label">Your Month Rating</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--success)">${myMonthly ? myMonthly.count : 0}</div><div class="stat-label">Your Reviews This Month</div></div>
+
+    <!-- Podium -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">🏆 Top 3 — Most Reviews</span></div>
+      <div style="padding:24px 16px 8px;">
+        ${podiumHtml}
+      </div>
     </div>
 
-    <!-- Your Rank Card -->
-    <div class="lb-my-rank-card" style="margin-bottom:18px;">
+    <!-- Monthly Rank Card -->
+    <div class="lb-my-rank-card" style="margin-bottom:14px;">
       <div class="lb-my-rank-left">
         <div class="lb-my-rank-avatar">${initials(myMonthly?.name || 'Me')}</div>
         <div>
@@ -2047,61 +2049,41 @@ export async function renderEmployeeLeaderboard(container) {
         </div>
         <div class="lb-my-stat-div"></div>
         <div class="lb-my-stat">
-          <div class="lb-my-stat-val">#${myAllTimeRank || '—'}</div>
-          <div class="lb-my-stat-label">All-Time</div>
+          <div class="lb-my-stat-val">${myMonthly?.fiveStars ?? 0}</div>
+          <div class="lb-my-stat-label">5-Stars</div>
         </div>
       </div>
     </div>
 
-    <!-- Podium -->
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">🏆 Top 3 — Most Reviews</span></div>
-      <div style="padding:24px 16px 8px;">
-        ${podiumHtml}
+    <!-- All-Time Rank Card -->
+    <div class="lb-my-rank-card" style="margin-bottom:14px;">
+      <div class="lb-my-rank-left">
+        <div class="lb-my-rank-avatar">${initials(myAllTime?.name || 'Me')}</div>
+        <div>
+          <div class="lb-my-rank-name">${escapeHtml(myAllTime?.name || 'You')}</div>
+          <div class="lb-my-rank-sub">Your all-time position</div>
+        </div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-title">This Month — Full Rankings</span></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th><th>5-Star</th></tr></thead>
-          <tbody>
-            ${monthly.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">No feedback this month yet</td></tr>' :
-              monthly.map((e, idx) => {
-                const medalCell = idx < 3 ? `${MEDAL[idx]} ` : '';
-                const rowBg = idx === 0 ? 'background:rgba(255,200,0,0.07);' : idx === 1 ? 'background:rgba(180,180,190,0.07);' : idx === 2 ? 'background:rgba(180,110,50,0.07);' : e.id === user.id ? 'background:rgba(16,185,129,0.06);' : '';
-                return `<tr style="${rowBg}">
-                  <td><b>${medalCell}#${idx + 1}</b></td>
-                  <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
-                  <td><b style="color:var(--primary)">${e.count}</b></td>
-                  <td>${e.count > 0 ? `${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
-                  <td>${e.count > 0 ? `<span class="badge badge-resolved">${e.fiveStars}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
-                </tr>`;
-              }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card" style="margin-top:24px">
-      <div class="card-header"><span class="card-title">All-Time Rankings</span></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Rank</th><th>Employee</th><th>Reviews</th><th>Rating</th></tr></thead>
-          <tbody>
-            ${allTime.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No ratings yet</td></tr>' :
-              allTime.map((e, idx) => {
-                const medalCell = idx < 3 ? `${MEDAL[idx]} ` : '';
-                const rowBg = e.id === user.id ? 'background:rgba(16,185,129,0.06);' : '';
-                return `<tr style="${rowBg}">
-                  <td><b>${medalCell}#${idx + 1}</b></td>
-                  <td><b>${escapeHtml(e.name)}</b>${e.id === user.id ? ' <span class="badge badge-open">You</span>' : ''}</td>
-                  <td><b style="color:var(--primary)">${e.count}</b></td>
-                  <td>${e.count > 0 ? `${starsHtml(e.avg)} <span style="margin-left:4px;font-weight:700">${e.avg.toFixed(2)}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>
-                </tr>`;
-              }).join('')}
-          </tbody>
-        </table>
+      <div class="lb-my-rank-stats">
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">#${myAllTimeRank || '—'}</div>
+          <div class="lb-my-stat-label">Rank</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">${myAllTime?.count ?? 0}</div>
+          <div class="lb-my-stat-label">Reviews</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">${myAllTime && myAllTime.count > 0 ? myAllTime.avg.toFixed(1) : '—'}</div>
+          <div class="lb-my-stat-label">Avg Rating</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val">${myAllTime?.fiveStars ?? 0}</div>
+          <div class="lb-my-stat-label">5-Stars</div>
+        </div>
       </div>
     </div>
   `;

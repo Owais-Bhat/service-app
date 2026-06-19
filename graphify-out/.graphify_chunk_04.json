@@ -1,0 +1,170 @@
+{
+  "nodes": [
+    {
+      "id": "screenshot_2026_06_03_150803_service_portal_landing_page",
+      "label": "JRT Service Portal Landing Page – Need Help Screen",
+      "file_type": "image",
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-03",
+      "author": null,
+      "contributor": null,
+      "description": "Browser screenshot of a service portal landing page. Top heading reads 'Need help? We'll be there in minutes.' with a subheading about getting your appointment booked. Left panel shows IEST branding with a 'JRT SERVICE PORTAL COMING SOON' banner featuring a badge indicating a 12-hour response time. Right panel shows a mobile OTP verification form ('Enter your mobile number') with a phone number input and 'Send OTP by SMS' CTA button. Bottom footer displays a phone number (+91 80891 50146) and support contact info, along with Call and WhatsApp action buttons. The page background is a soft green gradient.",
+      "properties": {
+        "page_purpose": "Service portal pre-launch landing page with lead capture via mobile OTP",
+        "brand": "IEST / JRT Service Portal",
+        "key_ui_sections": [
+          "Hero headline: Need help? We'll be there in minutes.",
+          "IEST logo and branding panel (left)",
+          "Coming Soon banner with 12-hour response badge",
+          "Mobile number entry + OTP verification form (right)",
+          "Footer with phone number, Call button, WhatsApp button"
+        ],
+        "design_patterns": [
+          "Split layout: promotional content left, action form right",
+          "Green gradient background",
+          "CTA: Send OTP by SMS",
+          "Trust signal: 12-hour response time badge",
+          "Multi-channel contact: Call + WhatsApp"
+        ],
+        "status": "Coming Soon",
+        "response_time_promise": "12 hours",
+        "contact_phone": "+91 80891 50146"
+      }
+    },
+    {
+      "id": "iest_jrt_brand_identity",
+      "label": "IEST / JRT Brand Identity",
+      "file_type": "concept",
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "description": "Brand presence for IEST and the JRT Service Portal as seen on the landing page. Logo appears top-left of the promotional panel.",
+      "properties": {
+        "brand_name": "IEST",
+        "sub_brand": "JRT Service Portal",
+        "visual_style": "Green accent, bold serif-like logo text"
+      }
+    },
+    {
+      "id": "otp_mobile_verification_form",
+      "label": "Mobile OTP Verification Form",
+      "file_type": "concept",
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "description": "Lead capture form on the right side of the landing page. User enters mobile number; an OTP is sent by SMS to verify identity before booking.",
+      "properties": {
+        "fields": ["Phone number (with country code +91)"],
+        "cta": "Send OTP by SMS",
+        "purpose": "User authentication / lead capture via mobile verification"
+      }
+    },
+    {
+      "id": "coming_soon_12hr_response_banner",
+      "label": "Coming Soon Banner with 12-Hour Response Badge",
+      "file_type": "concept",
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "description": "Promotional banner inside the IEST panel stating 'JRT SERVICE PORTAL COMING SOON' with a circular badge showing '12 HOURS' as the response time commitment.",
+      "properties": {
+        "status_label": "Coming Soon",
+        "trust_signal": "12-hour response time",
+        "visual": "Circular badge overlay on banner image of a house"
+      }
+    },
+    {
+      "id": "footer_contact_bar",
+      "label": "Footer Contact Bar (Call + WhatsApp)",
+      "file_type": "concept",
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "description": "Bottom footer showing phone number +91 80891 50146, a caption about supported appliance types, and two CTA buttons: Call and WhatsApp.",
+      "properties": {
+        "phone": "+91 80891 50146",
+        "channels": ["Call", "WhatsApp"],
+        "purpose": "Multi-channel direct customer support contact"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "screenshot_2026_06_03_150803_service_portal_landing_page",
+      "target": "iest_jrt_brand_identity",
+      "relation": "displays",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "screenshot_2026_06_03_150803_service_portal_landing_page",
+      "target": "otp_mobile_verification_form",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "screenshot_2026_06_03_150803_service_portal_landing_page",
+      "target": "coming_soon_12hr_response_banner",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "screenshot_2026_06_03_150803_service_portal_landing_page",
+      "target": "footer_contact_bar",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "iest_jrt_brand_identity",
+      "target": "coming_soon_12hr_response_banner",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "otp_mobile_verification_form",
+      "target": "footer_contact_bar",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "design-reference/service/project/Screenshot 2026-06-03 150803.png",
+      "source_location": null,
+      "weight": 0.7
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

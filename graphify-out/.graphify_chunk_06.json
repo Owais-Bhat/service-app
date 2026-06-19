@@ -1,0 +1,26 @@
+{
+  "nodes": [
+    {
+      "id": "logo1780741540196_nes_brand_logo",
+      "label": "NES Brand Logo",
+      "file_type": "image",
+      "source_file": "design-reference/service/project/uploads/logo-1780741540196.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "description": "Bold wordmark logo displaying 'NES' in dark forest green on a light/white background. The letter 'E' is stylized with horizontal parallel lines replacing the standard middle crossbar, giving the mark a distinctive typographic character. Clean, minimal design with strong brand identity.",
+      "brand_name": "NES",
+      "color_scheme": ["dark green (#1a5c2a approx)", "white/light grey background"],
+      "design_style": "minimalist wordmark",
+      "typography": "bold sans-serif with custom stylized E",
+      "notable_elements": ["stylized E with horizontal line strokes", "monochromatic green palette"],
+      "confidence_score": 1.0
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

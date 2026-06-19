@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "id": "logo1780741540196_nes_brand_logo",
+      "label": "NES Brand Logo",
+      "file_type": "image",
+      "source_file": "design-reference2/service/project/uploads/logo-1780741540196.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "confidence_score": 1.0,
+      "attributes": {
+        "brand_name": "NES",
+        "logo_type": "wordmark",
+        "primary_color": "#1a6b2a",
+        "color_description": "dark green",
+        "background_color": "#ffffff",
+        "background_description": "white",
+        "typography_style": "bold sans-serif",
+        "design_detail": "horizontal lines replace the middle bar of the letter E, suggesting layered or structured data",
+        "visual_style": "minimalist",
+        "category": "brand_identity"
+      }
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
