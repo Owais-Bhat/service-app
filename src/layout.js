@@ -137,9 +137,35 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   app.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);
 
-  document.getElementById('logout-btn').addEventListener('click', async () => {
-    await signOut();
-    location.reload();
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    const existing = document.getElementById('logout-confirm-modal');
+    if (existing) return;
+    const modal = document.createElement('div');
+    modal.id = 'logout-confirm-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:360px;">
+        <div class="modal-body" style="padding:32px;text-align:center;">
+          <div style="width:60px;height:60px;border-radius:50%;background:var(--danger-soft,#fee2e2);color:var(--danger,#ef4444);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+            ${ICONS.logout}
+          </div>
+          <h3 style="margin:0 0 8px;font-family:var(--font-display);">Sign Out?</h3>
+          <p style="color:var(--text-soft);font-size:0.9rem;margin:0 0 24px;line-height:1.5;">You'll be returned to the login screen.</p>
+          <div style="display:flex;gap:12px;">
+            <button class="btn btn-secondary" id="logout-cancel" style="flex:1;">Cancel</button>
+            <button class="btn btn-danger" id="logout-confirm" style="flex:1;">Sign Out</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#logout-cancel').onclick = () => modal.remove();
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    modal.querySelector('#logout-confirm').onclick = async () => {
+      modal.querySelector('#logout-confirm').disabled = true;
+      modal.querySelector('#logout-confirm').textContent = 'Signing out…';
+      await signOut();
+      location.reload();
+    };
   });
 
   const sidebar = document.getElementById('sidebar');
