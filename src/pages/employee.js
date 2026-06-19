@@ -1187,8 +1187,9 @@ export async function renderEmployeeDashboard(container) {
             <span>${eodReport ? 'EOD Submitted' : missedEods.length ? (strictEodBlock ? 'Restricted' : 'EOD Warning') : 'EOD Status'}</span>
           </button>
         ` : ''}
+        ${isBeforeClockInWindow() && !isClockedIn ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-bottom:8px;">${ICONS.clock}<span>Clock-in opens at 8:30 AM</span></p>` : ''}
         ${clockInClosed && !isClockedIn ? `<p class="attendance-lock-note" style="text-align:center;justify-content:center;margin-bottom:8px;">${ICONS.clock}<span>Closed after ${clockOutSetting.label}</span></p>` : ''}
-        <button class="btn ${canClockOut ? 'btn-danger' : 'btn-primary'} emp-clock-toggle" id="btn-clock-toggle" ${isClockedOut || (!canClockOut && (strictEodBlock || clockInClosed)) ? 'disabled' : ''}>
+        <button class="btn ${canClockOut ? 'btn-danger' : 'btn-primary'} emp-clock-toggle" id="btn-clock-toggle" ${isClockedOut || (!canClockOut && (strictEodBlock || clockInClosed || isBeforeClockInWindow())) ? 'disabled' : ''}>
           ${canClockOut ? ICONS.pause : ICONS.play}
           <span>${isClockedOut ? 'Session Done' : canClockOut ? 'Clock Out' : 'Clock In'}</span>
         </button>
@@ -1383,6 +1384,10 @@ export async function renderEmployeeDashboard(container) {
       toast('Clock-in is restricted because you have 4 or more missed EOD reports. Contact admin.', 'error');
       return;
     }
+    if (isBeforeClockInWindow()) {
+      toast('Clock-in is not allowed before 8:00 AM.', 'error');
+      return;
+    }
     if (isPastAutoClockOut()) {
       toast(`Clock-in is closed after ${parseClockOutTime().label}. Please contact admin.`, 'error');
       return;
@@ -1543,7 +1548,7 @@ export async function renderEmployeeDashboard(container) {
     document.body.appendChild(gate);
     gate.querySelector('#gate-clock-in').onclick = () => {
       gate.remove();
-      container.querySelector('#btn-clock-in')?.click();
+      container.querySelector('#btn-clock-toggle')?.click();
     };
   }
 
