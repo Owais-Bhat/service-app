@@ -2130,14 +2130,6 @@ export async function renderEmployeeEstimatorTab(container) {
         <div class="card estimator-form-card">
           <div class="card-header"><span class="card-title sr-icon-title">${ICONS.user}<span>Client Details</span></span></div>
           <div class="card-body">
-            <div class="form-group" style="margin-bottom:14px;position:relative;">
-              <label>Search Existing Client</label>
-              <div class="search-input-wrap" style="position:relative;">
-                <span>${ICONS.search}</span>
-                <input class="search-input" id="est-client-search" placeholder="Search by name, phone, ticket…" autocomplete="off">
-              </div>
-              <div id="est-client-results" style="display:none;position:absolute;left:0;right:0;z-index:200;background:var(--bg);border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.13);margin-top:4px;max-height:220px;overflow-y:auto;"></div>
-            </div>
             <div class="estimator-grid">
               <div class="form-group"><label>Client Name</label><input id="est-client-name" type="text" placeholder="Client name"></div>
               <div class="form-group"><label>WhatsApp Number</label><input id="est-client-phone" type="tel" placeholder="10 digit mobile number"></div>
@@ -2162,6 +2154,13 @@ export async function renderEmployeeEstimatorTab(container) {
             ${mainOptions.length === 0 ? `
               <div style="padding:14px;border-radius:12px;background:var(--bg-soft);color:var(--text-dim);font-size:0.9rem;">No service pricing is available yet.</div>
             ` : `
+              <div class="form-group" style="position:relative;margin-bottom:12px;">
+                <div class="search-input-wrap">
+                  <span>${ICONS.search}</span>
+                  <input class="search-input" id="est-svc-search" placeholder="Search service by name…" autocomplete="off">
+                </div>
+                <div id="est-svc-results" style="display:none;position:absolute;left:0;right:0;z-index:300;background:var(--bg);border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:4px;max-height:240px;overflow-y:auto;"></div>
+              </div>
               <div class="svc-picker-wrap">
                 <select id="est-svc-main" class="svc-picker">
                   <option value="">Select Main Category...</option>
@@ -2236,51 +2235,59 @@ export async function renderEmployeeEstimatorTab(container) {
       ? companyCustom.value.trim()
       : companySel.value.trim();
 
-    // ── Client search ──
-    const searchInput = get('#est-client-search');
-    const resultsBox = get('#est-client-results');
-    let searchTimer = null;
-    const hideResults = () => { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; };
-    searchInput.oninput = () => {
-      clearTimeout(searchTimer);
-      const q = searchInput.value.trim();
-      if (q.length < 2) { hideResults(); return; }
-      searchTimer = setTimeout(async () => {
-        const { data } = await supabase.from('inquiries')
-          .select('full_name,phone,device_type,address,ticket_no')
-          .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,ticket_no.ilike.%${q}%`)
-          .order('created_at', { ascending: false })
-          .limit(8);
-        if (!data || !data.length) {
-          resultsBox.innerHTML = '<div style="padding:14px 16px;color:var(--text-dim);font-size:0.87rem;">No clients found</div>';
-          resultsBox.style.display = 'block';
+    // ── Service search ──
+    const svcSearchInput = get('#est-svc-search');
+    const svcResultsBox = get('#est-svc-results');
+    if (svcSearchInput) {
+      // Flatten the pricing tree into a searchable list once
+      const allServices = (pricing || []).map(p => ({
+        id: p.id,
+        leaf: p.sub_sub_category || p.name || '',
+        sub: (p.sub_category && p.sub_category.trim()) || '',
+        main: p.category || '',
+        cost: Number(p.cost) || 0,
+      })).filter(s => s.leaf);
+
+      const hideSvcResults = () => { svcResultsBox.style.display = 'none'; svcResultsBox.innerHTML = ''; };
+      svcSearchInput.oninput = () => {
+        const q = svcSearchInput.value.trim().toLowerCase();
+        if (q.length < 1) { hideSvcResults(); return; }
+        const matches = allServices.filter(s =>
+          s.leaf.toLowerCase().includes(q) ||
+          s.sub.toLowerCase().includes(q) ||
+          s.main.toLowerCase().includes(q)
+        ).slice(0, 10);
+        if (!matches.length) {
+          svcResultsBox.innerHTML = '<div style="padding:12px 16px;color:var(--text-dim);font-size:0.87rem;">No services found</div>';
+          svcResultsBox.style.display = 'block';
           return;
         }
-        resultsBox.innerHTML = data.map((r, i) => `
-          <div class="est-client-result" data-idx="${i}" style="padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:2px;transition:background .12s;">
-            <span style="font-weight:700;font-size:0.9rem;">${escapeHtml(r.full_name || '—')}</span>
-            <span style="font-size:0.78rem;color:var(--text-dim);">${escapeHtml(r.phone || '')}${r.device_type ? ' · ' + escapeHtml(r.device_type) : ''}${r.ticket_no ? ' · ' + escapeHtml(r.ticket_no) : ''}</span>
+        svcResultsBox.innerHTML = matches.map((s, i) => `
+          <div class="est-svc-result" data-idx="${i}" style="padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;transition:background .12s;">
+            <div style="min-width:0;">
+              <div style="font-weight:700;font-size:0.88rem;">${escapeHtml(s.leaf)}</div>
+              <div style="font-size:0.75rem;color:var(--text-dim);">${escapeHtml([s.main, s.sub].filter(Boolean).join(' › '))}</div>
+            </div>
+            <span style="font-weight:700;color:var(--primary);white-space:nowrap;font-size:0.88rem;">₹${s.cost.toLocaleString('en-IN')}</span>
           </div>`).join('');
-        resultsBox.style.display = 'block';
-        resultsBox.querySelectorAll('.est-client-result').forEach((el, i) => {
+        svcResultsBox.style.display = 'block';
+        svcResultsBox.querySelectorAll('.est-svc-result').forEach((el, i) => {
           el.onmouseenter = () => { el.style.background = 'var(--bg-soft)'; };
           el.onmouseleave = () => { el.style.background = ''; };
           el.onclick = () => {
-            const r = data[i];
-            get('#est-client-name').value = r.full_name || '';
-            get('#est-client-phone').value = r.phone || '';
-            get('#est-location').value = r.address || '';
-            if (r.device_type) get('#est-service-title').value = r.device_type;
-            searchInput.value = '';
-            hideResults();
+            const s = matches[i];
+            selectedServices.push({ ...s });
+            svcSearchInput.value = '';
+            hideSvcResults();
+            renderSelected();
             renderSlip();
           };
         });
-      }, 280);
-    };
-    container.addEventListener('click', (e) => {
-      if (!e.target.closest('#est-client-search') && !e.target.closest('#est-client-results')) hideResults();
-    });
+      };
+      container.addEventListener('click', (e) => {
+        if (!e.target.closest('#est-svc-search') && !e.target.closest('#est-svc-results')) hideSvcResults();
+      });
+    }
 
     const calc = () => {
       const servicesSubtotal = selectedServices.reduce((sum, item) => sum + Number(item.cost || 0), 0);
