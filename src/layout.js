@@ -12,6 +12,41 @@ const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('auth_token
 let _bellUnsub = null;
 let _bellDocBound = false;
 
+// Delegated logout handler — wired once at module load so it works regardless
+// of how many times renderLayout is called or which render path is taken.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#logout-btn')) return;
+  if (document.getElementById('logout-confirm-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'logout-confirm-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:360px;">
+      <div class="modal-body" style="padding:32px;text-align:center;">
+        <div style="width:60px;height:60px;border-radius:50%;background:rgba(239,68,68,0.12);color:var(--danger,#ef4444);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </div>
+        <h3 style="margin:0 0 8px;font-family:var(--font-display);">Sign Out?</h3>
+        <p style="color:var(--text-soft);font-size:0.9rem;margin:0 0 24px;line-height:1.5;">You'll be returned to the login screen.</p>
+        <div style="display:flex;gap:12px;">
+          <button class="btn btn-secondary" id="logout-cancel" style="flex:1;">Cancel</button>
+          <button class="btn btn-primary" id="logout-confirm" style="flex:1;background:var(--danger,#ef4444);border-color:var(--danger,#ef4444);">Sign Out</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('#logout-cancel').onclick = close;
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  modal.querySelector('#logout-confirm').onclick = async () => {
+    const btn = modal.querySelector('#logout-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Signing out…';
+    await signOut();
+    location.reload();
+  };
+});
+
 export function renderLayout({ user, role, activePage, navItems, onNav, pageContent }) {
   const app = document.getElementById('app');
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
@@ -137,36 +172,6 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   app.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);
 
-  document.getElementById('logout-btn').addEventListener('click', () => {
-    const existing = document.getElementById('logout-confirm-modal');
-    if (existing) return;
-    const modal = document.createElement('div');
-    modal.id = 'logout-confirm-modal';
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal" style="max-width:360px;">
-        <div class="modal-body" style="padding:32px;text-align:center;">
-          <div style="width:60px;height:60px;border-radius:50%;background:var(--danger-soft,#fee2e2);color:var(--danger,#ef4444);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
-            ${ICONS.logout}
-          </div>
-          <h3 style="margin:0 0 8px;font-family:var(--font-display);">Sign Out?</h3>
-          <p style="color:var(--text-soft);font-size:0.9rem;margin:0 0 24px;line-height:1.5;">You'll be returned to the login screen.</p>
-          <div style="display:flex;gap:12px;">
-            <button class="btn btn-secondary" id="logout-cancel" style="flex:1;">Cancel</button>
-            <button class="btn btn-danger" id="logout-confirm" style="flex:1;">Sign Out</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.querySelector('#logout-cancel').onclick = () => modal.remove();
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-    modal.querySelector('#logout-confirm').onclick = async () => {
-      modal.querySelector('#logout-confirm').disabled = true;
-      modal.querySelector('#logout-confirm').textContent = 'Signing out…';
-      await signOut();
-      location.reload();
-    };
-  });
 
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
