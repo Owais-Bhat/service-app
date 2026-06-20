@@ -1086,6 +1086,7 @@ const requiredColumns = {
         { name: 'expires_at', definition: 'TIMESTAMP NULL' },
         { name: 'placement', definition: "VARCHAR(20) DEFAULT 'landing'" },
         { name: 'device_target', definition: "VARCHAR(20) DEFAULT 'both'" },
+        { name: 'audio_enabled', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     notices: [
         { name: 'priority', definition: "VARCHAR(20) DEFAULT 'normal'" },
@@ -1163,6 +1164,7 @@ const requiredTables = [
         active TINYINT(1) DEFAULT 1,
         placement VARCHAR(20) DEFAULT 'landing',
         device_target VARCHAR(20) DEFAULT 'both',
+        audio_enabled TINYINT(1) DEFAULT 0,
         position INT DEFAULT 0,
         starts_at TIMESTAMP NULL,
         expires_at TIMESTAMP NULL,

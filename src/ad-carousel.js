@@ -81,8 +81,9 @@ export class AdCarousel {
     const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
 
     if (isVideo) {
+      const isMuted = !ad.audio_enabled;
       mediaSlot.innerHTML = `
-        <video class="ad-carousel__video" autoplay muted playsinline loop>
+        <video class="ad-carousel__video" autoplay ${isMuted ? 'muted' : ''} playsinline loop>
           <source src="${ad.url}" />
         </video>
       `;
