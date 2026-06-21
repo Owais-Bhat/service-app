@@ -480,17 +480,84 @@ function uploadSingle(field) {
     };
 }
 
+// --- Video normalization ---------------------------------------------------
+// Phone / WhatsApp videos are usually variable-frame-rate (VFR) and are not
+// web-optimized, which is exactly why a sponsor clip plays back "slow and
+// ruk-ruk" (choppy) in the browser. When ffmpeg is available we re-encode
+// uploaded videos to a clean, constant-30fps H.264 + AAC MP4 with the moov
+// atom moved to the front (+faststart) so the video streams and plays
+// smoothly. If ffmpeg is missing or the encode fails, we transparently fall
+// back to storing the original bytes so uploads never break.
+let FFMPEG_BIN = null; // null = unchecked, false = unavailable, string = path
+function ffmpegPath() {
+    if (FFMPEG_BIN !== null) return FFMPEG_BIN;
+    const { spawnSync } = require('child_process');
+    for (const bin of ['ffmpeg', '/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg']) {
+        try {
+            const r = spawnSync(bin, ['-version'], { stdio: 'ignore' });
+            if (!r.error && r.status === 0) { FFMPEG_BIN = bin; return bin; }
+        } catch (_) { /* keep looking */ }
+    }
+    FFMPEG_BIN = false;
+    console.warn('[upload] ffmpeg not found — videos will be stored as-is (no smoothing).');
+    return false;
+}
+
+async function normalizeVideo(buffer, originalExt) {
+    const bin = ffmpegPath();
+    if (!bin) return null; // signal caller to keep the original
+    const os = require('os');
+    const { spawn } = require('child_process');
+    const tmp = os.tmpdir();
+    const tag = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const inPath = path.join(tmp, `up-${tag}${originalExt || '.bin'}`);
+    const outPath = path.join(tmp, `up-${tag}-web.mp4`);
+    try {
+        await fsp.writeFile(inPath, buffer);
+        await new Promise((resolve, reject) => {
+            const args = [
+                '-y', '-i', inPath,
+                '-vsync', 'cfr', '-r', '30',          // force constant 30fps — main fix for choppiness
+                '-vf', "scale='min(1280,iw)':'min(1280,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                '-c:v', 'libx264', '-profile:v', 'high', '-level', '4.0',
+                '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '23',
+                '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
+                '-movflags', '+faststart',            // moov atom up front for instant streaming
+                outPath,
+            ];
+            const ff = spawn(bin, args, { stdio: 'ignore' });
+            ff.on('error', reject);
+            ff.on('close', code => (code === 0 ? resolve() : reject(new Error('ffmpeg exited ' + code))));
+        });
+        const out = await fsp.readFile(outPath);
+        return out && out.length ? out : null;
+    } catch (err) {
+        console.warn('[upload] video normalize failed, keeping original:', err.message);
+        return null;
+    } finally {
+        fsp.unlink(inPath).catch(() => {});
+        fsp.unlink(outPath).catch(() => {});
+    }
+}
+
 app.post('/api/upload', authenticateToken, uploadSingle('file'), async (req, res) => {
     if (!['admin', 'employee'].includes(req.user.role)) return res.sendStatus(403);
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const ext = path.extname(req.file.originalname || '') || '';
+    let ext = path.extname(req.file.originalname || '') || '';
+    let mime = req.file.mimetype || 'application/octet-stream';
+    let data = req.file.buffer;
+    // Re-encode videos so sponsor clips play back smoothly (see normalizeVideo).
+    if (mime.startsWith('video/')) {
+        const normalized = await normalizeVideo(data, ext);
+        if (normalized) { data = normalized; mime = 'video/mp4'; ext = '.mp4'; }
+    }
     const id = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
     let connection;
     try {
         connection = await getConn();
         await connection.query(
             'INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)',
-            [id, req.file.mimetype || 'application/octet-stream', req.file.buffer]
+            [id, mime, data]
         );
         res.json({ url: `/uploads/${id}` });
     } catch (err) {

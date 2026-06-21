@@ -81,12 +81,19 @@ export class AdCarousel {
     const isVideo = (ad.kind || 'image').toLowerCase() === 'video';
 
     if (isVideo) {
-      const isMuted = !ad.audio_enabled;
+      // Browsers block autoplay-with-sound, so we show the first frame as a
+      // poster (#t=0.1 + preload=metadata) with a play button. Clicking plays
+      // the video UNMUTED -- the click is a user gesture, so sound is allowed.
       mediaSlot.innerHTML = `
-        <video class="ad-carousel__video" autoplay ${isMuted ? 'muted' : ''} playsinline loop>
-          <source src="${ad.url}" />
-        </video>
+        <div class="ad-carousel__video-wrap">
+          <video class="ad-carousel__video" preload="metadata" playsinline controls
+                 src="${ad.url}#t=0.1"></video>
+          <button type="button" class="ad-carousel__video-play" aria-label="Play ad with sound">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
       `;
+      this.bindVideoPlayback(mediaSlot);
     } else {
       mediaSlot.innerHTML = `
         <img class="ad-carousel__image" src="${ad.url}" alt="Ad" loading="lazy" />
@@ -96,6 +103,27 @@ export class AdCarousel {
     // Update indicators
     this.container.querySelectorAll('.ad-carousel__indicator').forEach((ind, i) => {
       ind.classList.toggle('active', i === this.currentIndex);
+    });
+  }
+
+  bindVideoPlayback(mediaSlot) {
+    const video = mediaSlot.querySelector('.ad-carousel__video');
+    const playBtn = mediaSlot.querySelector('.ad-carousel__video-play');
+    if (!video || !playBtn) return;
+
+    const start = () => {
+      this.pauseAutoRotate();        // don't rotate away while the sponsor clip plays
+      video.muted = false;           // sound on (user gesture)
+      const p = video.play();
+      if (p && p.catch) p.catch(() => {});
+    };
+
+    playBtn.addEventListener('click', start);
+    video.addEventListener('play', () => playBtn.classList.add('is-hidden'));
+    video.addEventListener('pause', () => playBtn.classList.remove('is-hidden'));
+    video.addEventListener('ended', () => {
+      playBtn.classList.remove('is-hidden');
+      this.resumeAutoRotate();       // resume rotation once the clip finishes
     });
   }
 

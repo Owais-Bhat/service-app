@@ -508,7 +508,7 @@ export function renderLandingPage(container, onPortalClick) {
         <button type="button" class="media-popup-close" aria-label="Close">${ICONS.close}</button>
         <div class="media-popup-frame">
           ${isVideo
-            ? `<video src="${escapeAttr(item.url)}" controls autoplay muted playsinline></video>`
+            ? `<video src="${escapeAttr(item.url)}#t=0.1" controls playsinline preload="metadata"></video>`
             : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.caption || 'Advertisement')}"/>`}
         </div>
         ${item.caption ? `<div class="media-popup-caption">${escapeHTML(item.caption)}</div>` : ''}
