@@ -3566,8 +3566,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <div style="padding:14px; background:var(--bg-soft); border-radius:14px; border:1px solid var(--border);">
                 <div class="icon-text-label" style="font-weight:700; font-size:0.85rem; margin-bottom:10px; color:var(--text)">${ICONS.card}<span>Payment Link & QR</span></div>
                 <div style="display:flex; gap:8px; margin-bottom:10px;">
-                  <input id="emp-pay-link" type="url" placeholder="Payment link will appear here..." style="flex:1; font-size:0.82rem;" readonly/>
-                  <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap">${ICONS.link}<span>Generate</span></button>
+                  <input id="emp-pay-link" type="url" placeholder="Payment link will appear here..." style="flex:1 1 auto; min-width:0; font-size:0.82rem;" readonly/>
+                  <button class="btn btn-secondary btn-sm" id="emp-gen-link" style="white-space:nowrap; flex:0 0 auto;">${ICONS.link}<span>Generate</span></button>
                 </div>
                 <div id="emp-qr-wrap" style="display:none; text-align:center; margin-bottom:10px;">
                   <img id="emp-qr-img" src="" alt="QR Code" style="width:160px; height:160px; border-radius:12px; border:2px solid var(--primary);"/>
