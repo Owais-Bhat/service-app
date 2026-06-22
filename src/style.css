@@ -8074,3 +8074,42 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   .lb-podium-avatar { width: 44px; height: 44px; font-size: 0.9rem; }
   .lb-podium-name { font-size: 0.74rem; }
 }
+
+/* ============================================================
+   LANDING (srf-) RESPONSIVE HARDENING — appended last so it wins
+   the cascade. Fixes 4-tab overflow, fluid hero, install cards,
+   and guarantees nothing exceeds the viewport on any screen.
+   ============================================================ */
+.srf-page, .srf-page *, .media-popup-overlay, .media-popup-overlay * { box-sizing: border-box; }
+.srf-main, .srf-top-banner, .srf-contact-section { width: 100%; max-width: 100%; }
+.srf-req-card, .srf-card, .srf-card-wrap, .srf-intro, .srf-contact-card { max-width: 100%; min-width: 0; }
+.srf-input, .srf-input-wrap, .srf-select, .srf-segmented, .srf-stepper { max-width: 100%; }
+.srf-mode-tab span { min-width: 0; }
+
+/* Mode-tab bar now has 4 tabs — wrap to 2 rows on phones instead of
+   overflowing (the parent clips overflow, which was cutting tabs off). */
+@media (max-width: 640px) {
+  .srf-mode-tabs { flex-wrap: wrap; }
+  .srf-mode-tab { flex: 1 1 calc(50% - 4px); min-width: 0; padding: 11px 8px; font-size: 0.84rem; }
+  .srf-mode-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (max-width: 380px) {
+  .srf-mode-tab { font-size: 0.78rem; padding: 10px 5px; gap: 6px; }
+  .srf-mode-tab svg { width: 15px; height: 15px; }
+}
+
+/* Hero title scales smoothly down to the smallest phones. */
+.srf-title { font-size: clamp(1.7rem, 7.4vw, 4.6rem) !important; }
+.srf-sub { font-size: clamp(0.92rem, 3.4vw, 1.08rem); }
+
+/* Installation cards: 1 column on phones, auto-fit above, never overflow. */
+.srf-install-grid { grid-template-columns: 1fr; }
+@media (min-width: 480px) { .srf-install-grid { grid-template-columns: repeat(auto-fit, minmax(208px, 1fr)); } }
+.srf-install-card, .srf-install-banner { min-width: 0; max-width: 100%; }
+.srf-install-name, .srf-install-tag, .srf-install-banner-name, .srf-install-list li { overflow-wrap: anywhere; }
+.srf-install-banner { flex-wrap: wrap; }
+.srf-install-book { width: 100%; }
+
+/* Tighter card padding on small screens. */
+@media (max-width: 480px) { .srf-req-body { padding: 22px 16px; } }
+@media (max-width: 360px) { .srf-req-body { padding: 16px 12px; } }
