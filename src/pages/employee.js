@@ -3608,6 +3608,23 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       overlay.querySelector('[data-pane="status"]')?.appendChild(updateBox);
     }
 
+    // ── Persist the "Work Details" draft so going back / closing the modal /
+    // switching tabs never loses what the employee typed. The text is restored
+    // when the modal reopens and cleared only after a successful save.
+    const _draftKey = 'svc-progress-draft:' + (inqId || taskId || '');
+    const _progressEl = overlay.querySelector('#progress-detail');
+    const _statusEl = overlay.querySelector('#new-status');
+    if (_progressEl) {
+      let _savedDraft = '';
+      try { _savedDraft = sessionStorage.getItem(_draftKey) || ''; } catch (_) {}
+      // Prefer an unsaved draft; otherwise fall back to the last detail that was
+      // actually submitted, so the employee can edit instead of retyping.
+      _progressEl.value = _savedDraft || inquiryRow?.employee_update_detail || '';
+      const _saveDraft = () => { try { sessionStorage.setItem(_draftKey, _progressEl.value); } catch (_) {} };
+      _progressEl.addEventListener('input', _saveDraft);
+      if (_statusEl) _statusEl.addEventListener('change', _saveDraft);
+    }
+
     // Tab switcher - also drives the footer button label (Next → on intermediate tabs, Save on the last).
     const TAB_ORDER = ['status', 'device', 'bill'];
     const getActiveTab = () => overlay.querySelector('.mst-tab.active')?.dataset.tab || TAB_ORDER[0];
@@ -4788,6 +4805,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }));
 
       await Promise.all(ops);
+      // Saved successfully — drop the local draft so it doesn't resurface later.
+      try { sessionStorage.removeItem(_draftKey); } catch (_) {}
       toast('Task updated!', 'success');
 
       if (newStatus === 'resolved') {
