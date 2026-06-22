@@ -3179,15 +3179,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const isNetworkingExperts = companyName.toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
       const platform = isNetworkingExperts ? 50 : 100;
 
-      const preDiscount = servicesSubtotal + extra + platform + transport;
-      const autoDiscount = preDiscount > 250 ? 30 : 0;
-
-      const presetId = inquiryRow.discount_preset_id;
-      const preset = discountPresetList.find(d => d.id === presetId);
-      const presetDiscount = preset ? (Number(preset.amount) || 0) : 0;
-
+      // Coupon (if any) is auto-re-applied after the modal mounts; the manual
+      // remainder is then back-filled. Start the manual field from the full
+      // stored discount so a coupon-less reopen reproduces the same total.
       const totalDiscount = Number(inquiryRow.discount_amount) || 0;
-      initialManualDiscount = Math.max(0, totalDiscount - autoDiscount - presetDiscount);
+      initialManualDiscount = Math.max(0, totalDiscount);
     }
 
     const overlay = document.createElement('div');
@@ -3493,19 +3489,19 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               </div>
 
               <div class="form-group">
-                <label>Discount</label>
-                <select id="admin-discount-preset" class="svc-picker" style="margin-bottom:8px;">
-                  <option value="">No admin discount</option>
-                  ${discountPresetList.map(d => {
-                    const isSel = inquiryRow?.discount_preset_id === d.id;
-                    return `<option value="${escapeAttr(d.id)}" data-amount="${Number(d.amount) || 0}" data-name="${escapeAttr(d.name || 'Discount')}" ${isSel ? 'selected' : ''}>${escapeHtml(d.name || 'Discount')} - Rs.${Math.round(Number(d.amount) || 0).toLocaleString('en-IN')}</option>`;
-                  }).join('')}
-                </select>
+                <label>Redeem Coupon</label>
+                <div style="display:flex;gap:8px;align-items:stretch;">
+                  <input type="text" id="coupon-code" placeholder="Enter coupon code (e.g. SAVE50)" value="${escapeHtml(inquiryRow?.coupon_code || '')}" style="flex:1 1 auto;min-width:0;text-transform:uppercase;letter-spacing:.04em;font-weight:700;"/>
+                  <button type="button" class="btn btn-secondary btn-sm" id="coupon-apply" style="white-space:nowrap;flex:0 0 auto;">Apply</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="coupon-clear" style="white-space:nowrap;flex:0 0 auto;display:none;">Remove</button>
+                </div>
+                <small id="coupon-msg" style="display:none;margin-top:6px;font-size:0.75rem;font-weight:600;"></small>
+                <label style="margin-top:12px;">Employee Discount (optional)</label>
                 <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;">
-                  <input type="number" id="manual-discount" min="0" step="1" placeholder="Employee discount Rs.0" value="${initialManualDiscount || ''}"/>
+                  <input type="number" id="manual-discount" min="0" step="1" placeholder="Extra discount Rs.0" value="${initialManualDiscount || ''}"/>
                   <input type="text" id="discount-reason" placeholder="Reason required for employee discount" value="${escapeHtml(inquiryRow?.discount_reason || '')}"/>
                 </div>
-                <small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.75rem;">Admin dropdown discounts do not need a reason. Employee/manual discount requires a reason and appears in Admin Discount Details.</small>
+                <small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.75rem;">Coupons apply automatically once validated. Any extra employee/manual discount requires a reason and appears in Discount Details.</small>
               </div>
 
               <div class="form-group">
@@ -3524,7 +3520,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <div class="bill-row" id="br-extra-row" style="display:none;"><span id="br-extra-label">Additional charges</span><b id="br-extra">₹0</b></div>
                 <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
                 <div class="bill-row"><span>Transport (<span id="br-km">0</span> km x ₹5)</span><b id="br-transport">₹0</b></div>
-                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Loyalty discount (over ₹250)</span><b id="br-discount">-₹30</b></div>
+                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Discount</span><b id="br-discount">-₹0</b></div>
                 <div class="bill-row"><span>GST (18%)</span><b id="br-gst">₹0</b></div>
                 <div class="bill-row bill-row-total"><span>Final total</span><b id="br-total">₹0</b></div>
                 <input type="hidden" id="total-bill-display" value="0"/>
@@ -3663,7 +3659,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const totalDisplay = overlay.querySelector('#total-bill-display');
     const extraInput = overlay.querySelector('#extra-cost');
     const extraReasonInput = overlay.querySelector('#extra-reason');
-    const discountPresetInput = overlay.querySelector('#admin-discount-preset');
+    const couponCodeInput = overlay.querySelector('#coupon-code');
+    const couponApplyBtn = overlay.querySelector('#coupon-apply');
+    const couponClearBtn = overlay.querySelector('#coupon-clear');
+    const couponMsg = overlay.querySelector('#coupon-msg');
     const manualDiscountInput = overlay.querySelector('#manual-discount');
     const discountReasonInput = overlay.querySelector('#discount-reason');
     const kmInput = overlay.querySelector('#transport-km');
@@ -3674,8 +3673,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     // Roads aren't straight lines — multiply the straight-line (haversine) distance
     // by this factor to approximate real driving distance for the transport fee.
     const ROAD_FACTOR = 1.3;
-    const DISCOUNT_THRESHOLD = 250;
-    const DISCOUNT_AMOUNT = 30;
     const GST_RATE = 0.18;
     const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
@@ -3718,7 +3715,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     // Live breakdown - also stored on a closure object so the bill modal can read it.
     const bill = {
       servicesSubtotal: 0, extra: 0, platform: getPlatformFee(),
-      km: 0, transport: 0, autoDiscount: 0, presetDiscount: 0, manualDiscount: 0,
+      km: 0, transport: 0, couponDiscount: 0, couponCode: '', couponLabel: '', manualDiscount: 0,
       discount: 0, discountLabel: '', discountReason: '', discountPresetId: null,
       taxable: 0, gst: 0, total: 0,
     };
@@ -3767,16 +3764,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
       bill.platform = getPlatformFee();
       const preDiscount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
-      bill.autoDiscount = preDiscount > DISCOUNT_THRESHOLD ? DISCOUNT_AMOUNT : 0;
-      const selectedPreset = discountPresetInput?.selectedOptions?.[0];
-      bill.discountPresetId = discountPresetInput?.value || null;
-      bill.presetDiscount = bill.discountPresetId ? (Number(selectedPreset?.dataset.amount) || 0) : 0;
+      // Coupon discount is capped so it can never exceed the current pre-discount
+      // amount (services may change after a coupon was applied).
+      const couponDiscount = Math.min(bill.couponDiscount || 0, preDiscount);
       bill.manualDiscount = Math.max(0, Number(manualDiscountInput?.value) || 0);
-      bill.discount = Math.min(preDiscount, bill.autoDiscount + bill.presetDiscount + bill.manualDiscount);
+      bill.discount = Math.min(preDiscount, couponDiscount + bill.manualDiscount);
       const labels = [];
-      if (bill.autoDiscount) labels.push('Loyalty discount');
-      if (bill.presetDiscount) labels.push(selectedPreset?.dataset.name || 'Admin discount');
-      if (bill.manualDiscount) labels.push('Employee discount');
+      if (couponDiscount > 0) labels.push(bill.couponLabel || (bill.couponCode ? `Coupon ${bill.couponCode}` : 'Coupon'));
+      if (bill.manualDiscount > 0) labels.push('Employee discount');
       bill.discountLabel = labels.join(' + ') || '';
       bill.discountReason = discountReasonInput?.value.trim() || '';
       bill.taxable = preDiscount - bill.discount;
@@ -4308,9 +4303,101 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     }
     extraInput.oninput = () => { calcTotal(); renderPayStatus(); };
     if (extraReasonInput) extraReasonInput.oninput = () => { calcTotal(); renderPayStatus(); };
-    if (discountPresetInput) discountPresetInput.onchange = () => { calcTotal(); renderPayStatus(); };
     if (manualDiscountInput) manualDiscountInput.oninput = () => { calcTotal(); renderPayStatus(); };
     if (discountReasonInput) discountReasonInput.oninput = () => { calcTotal(); renderPayStatus(); };
+
+    // ── Coupon redeem ────────────────────────────────────────────────────────
+    const setCouponMsg = (text, kind) => {
+      if (!couponMsg) return;
+      if (!text) { couponMsg.style.display = 'none'; return; }
+      couponMsg.style.display = 'block';
+      couponMsg.textContent = text;
+      couponMsg.style.color = kind === 'error' ? 'var(--danger)' : 'var(--primary)';
+    };
+    const reflectCouponApplied = (applied) => {
+      if (couponClearBtn) couponClearBtn.style.display = applied ? 'inline-flex' : 'none';
+      if (couponApplyBtn) couponApplyBtn.style.display = applied ? 'none' : 'inline-flex';
+      if (couponCodeInput) couponCodeInput.readOnly = applied;
+    };
+    const clearCoupon = () => {
+      bill.couponDiscount = 0; bill.couponCode = ''; bill.couponLabel = '';
+      if (couponCodeInput) couponCodeInput.value = '';
+      setCouponMsg('', 'info');
+      reflectCouponApplied(false);
+      calcTotal(); renderPayStatus();
+    };
+    const applyCoupon = async ({ silent = false } = {}) => {
+      const code = (couponCodeInput?.value || '').trim().toUpperCase();
+      if (!code) { if (!silent) toast('Enter a coupon code', 'warning'); return false; }
+      // The amount the coupon is measured against = pre-discount bill total.
+      calcTotal();
+      const amount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+      if (couponApplyBtn) { couponApplyBtn.disabled = true; couponApplyBtn.textContent = '...'; }
+      try {
+        const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch('/api/coupons/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ code, amount }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.valid) {
+          if (!silent) { bill.couponDiscount = 0; bill.couponCode = ''; bill.couponLabel = ''; }
+          setCouponMsg(data.error || 'Invalid coupon', 'error');
+          reflectCouponApplied(false);
+          calcTotal(); renderPayStatus();
+          return false;
+        }
+        bill.couponDiscount = Number(data.discount) || 0;
+        bill.couponCode = code;
+        bill.couponLabel = data.label || `Coupon ${code}`;
+        setCouponMsg(`Applied: −₹${Math.round(bill.couponDiscount).toLocaleString('en-IN')} (${bill.couponLabel})`, 'info');
+        reflectCouponApplied(true);
+        calcTotal(); renderPayStatus();
+        return true;
+      } catch (err) {
+        setCouponMsg('Could not validate coupon — check your connection', 'error');
+        return false;
+      } finally {
+        if (couponApplyBtn) { couponApplyBtn.disabled = false; couponApplyBtn.textContent = 'Apply'; }
+      }
+    };
+    if (couponApplyBtn) couponApplyBtn.onclick = () => applyCoupon();
+    if (couponClearBtn) couponClearBtn.onclick = clearCoupon;
+    if (couponCodeInput) couponCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } });
+
+    // Consume one use of the applied coupon (best-effort; server is idempotent
+    // per inquiry so calling it from multiple save paths won't double-count).
+    const redeemCouponIfAny = async () => {
+      if (!bill.couponCode) return;
+      try {
+        const amount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+        const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch('/api/coupons/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ code: bill.couponCode, amount, inquiry_id: inqId || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 409) toast(data.error || 'Coupon usage limit reached', 'warning');
+        }
+      } catch (_) { /* best-effort — discount already reflected in the bill */ }
+    };
+
+    // Re-apply a coupon that was saved on this inquiry, then back-fill the manual
+    // remainder so the reopened bill reproduces the same total without double-counting.
+    if (inquiryRow?.coupon_code && couponCodeInput) {
+      (async () => {
+        const ok = await applyCoupon({ silent: true });
+        if (ok) {
+          const stored = Number(inquiryRow.discount_amount) || 0;
+          const remainder = Math.max(0, stored - bill.couponDiscount);
+          if (manualDiscountInput) manualDiscountInput.value = remainder || '';
+          calcTotal(); renderPayStatus();
+        }
+      })();
+    }
 
     // Active auto-poller: asks the backend to verify Razorpay directly, then falls
     // back to the saved DB state if the gateway cannot be reached.
@@ -4475,6 +4562,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Failed');
           showQR(data.short_url);
+          await redeemCouponIfAny();
           // Persist full bill breakdown so admin can render the same template.
           await supabase.from('inquiries').update({
             payment_link: data.short_url,
@@ -4487,6 +4575,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             discount_label: bill.discountLabel || null,
             discount_reason: bill.manualDiscount > 0 ? bill.discountReason : null,
             discount_preset_id: bill.discountPresetId || null,
+            coupon_code: bill.couponCode || null,
             gst_amount: bill.gst,
             bill_total: bill.total,
             bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
@@ -4531,6 +4620,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           billPdfUrl = pdfUrl;
 
           if (inqId) {
+            await redeemCouponIfAny();
             const updates = {
               bill_amount: bill.servicesSubtotal + bill.extra,
               transport_km: bill.km,
@@ -4540,6 +4630,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               discount_label: bill.discountLabel || null,
               discount_reason: bill.manualDiscount > 0 ? bill.discountReason : null,
               discount_preset_id: bill.discountPresetId || null,
+              coupon_code: bill.couponCode || null,
               gst_amount: bill.gst,
               bill_total: bill.total,
               bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
@@ -4639,6 +4730,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         markCashBtn.innerHTML = '<span>Saving...</span>';
         try {
           await ensureCompanyExists(compVal);
+          await redeemCouponIfAny();
           const nowIso = new Date().toISOString().slice(0,19).replace('T',' ');
           const updates = {
             payment_method: 'cash',
@@ -4655,6 +4747,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             discount_label: bill.discountLabel || null,
             discount_reason: bill.manualDiscount > 0 ? bill.discountReason : null,
             discount_preset_id: bill.discountPresetId || null,
+            coupon_code: bill.couponCode || null,
             gst_amount: bill.gst,
             bill_total: bill.total,
             bill_generated_at: nowIso,
@@ -4775,11 +4868,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         inqUpdates.discount_label = bill.discountLabel || null;
         inqUpdates.discount_reason = bill.manualDiscount > 0 ? bill.discountReason : null;
         inqUpdates.discount_preset_id = bill.discountPresetId || null;
+        inqUpdates.coupon_code = bill.couponCode || null;
         inqUpdates.gst_amount = bill.gst;
         inqUpdates.bill_total = bill.total;
         inqUpdates.employee_bill_lat = billLoc.lat;
         inqUpdates.employee_bill_lng = billLoc.lng;
       }
+      if (resolving && bill.total > 0) await redeemCouponIfAny();
 
       if (inqId) {
         ops.push(supabase.from('inquiries').update(inqUpdates).eq('id', inqId));

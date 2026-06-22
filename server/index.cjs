@@ -1114,6 +1114,7 @@ const requiredColumns = {
         { name: 'discount_reason', definition: 'TEXT' },
         { name: 'discount_label', definition: 'VARCHAR(160)' },
         { name: 'discount_preset_id', definition: 'VARCHAR(36)' },
+        { name: 'coupon_code', definition: 'VARCHAR(40)' },
         { name: 'gst_amount', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'bill_total', definition: 'DECIMAL(10, 2)' },
         { name: 'bill_generated_at', definition: 'TIMESTAMP NULL' },
@@ -1282,6 +1283,22 @@ const requiredTables = [
         active TINYINT(1) DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_discount_presets_active (active)
+    )`,
+    `CREATE TABLE IF NOT EXISTS coupons (
+        id VARCHAR(36) PRIMARY KEY,
+        code VARCHAR(40) NOT NULL UNIQUE,
+        type VARCHAR(10) NOT NULL DEFAULT 'fixed',
+        value DECIMAL(10, 2) NOT NULL,
+        max_discount DECIMAL(10, 2) NULL,
+        min_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        expires_at DATETIME NULL,
+        usage_limit INT NULL,
+        used_count INT NOT NULL DEFAULT 0,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_coupons_active (active),
+        INDEX idx_coupons_code (code)
     )`,
     `CREATE TABLE IF NOT EXISTS app_settings (
         setting_key VARCHAR(100) PRIMARY KEY,
@@ -2092,7 +2109,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
     'payments', 'bills', 'complaints', 'ads', 'companies', 'notices', 'discount_presets',
-    'training_items', 'training_completions',
+    'coupons', 'training_items', 'training_completions',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -2118,7 +2135,7 @@ const EMPLOYEE_WRITE_FIELDS = {
         'payment_link', 'payment_link_id', 'payment_status', 'payment_method', 'payment_received_at',
         'cash_collected_at', 'bill_amount', 'extra_cost', 'extra_cost_reason', 'transport_km',
         'transport_fee', 'platform_fee', 'discount_amount', 'gst_amount', 'bill_total',
-        'discount_reason', 'discount_label', 'discount_preset_id',
+        'discount_reason', 'discount_label', 'discount_preset_id', 'coupon_code',
         'bill_generated_at', 'bill_pdf_url', 'bill_no',
         'employee_bill_lat', 'employee_bill_lng',
         'employee_update_detail', 'employee_update_status', 'employee_update_at',
@@ -2266,7 +2283,7 @@ async function assertEmployeeInsertAllowed(connection, table, user, data) {
                 'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
                 'bill_no', 'service_item', 'description', 'ticket_no', 'preferred_time',
                 'assigned_employee_id', 'ticket_id',
-                'discount_reason', 'discount_label', 'discount_preset_id',
+                'discount_reason', 'discount_label', 'discount_preset_id', 'coupon_code',
             ]);
             if (String(data.assigned_employee_id) !== String(id)) {
                 return 'Cannot register a request assigned to another employee';
@@ -3476,6 +3493,103 @@ app.put('/api/settings/popup', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Popup settings update error:', error);
         res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+// ── COUPONS ──────────────────────────────────────────────────────────────
+// Compute the discount a coupon yields on a given pre-discount amount, and
+// return a plain-English reason if the coupon cannot be applied.
+function evaluateCoupon(coupon, amount) {
+    const amt = Number(amount) || 0;
+    if (!coupon) return { ok: false, reason: 'Invalid coupon code' };
+    if (Number(coupon.active) !== 1) return { ok: false, reason: 'This coupon is no longer active' };
+    if (coupon.expires_at && new Date(coupon.expires_at).getTime() < Date.now()) {
+        return { ok: false, reason: 'This coupon has expired' };
+    }
+    if (coupon.usage_limit != null && Number(coupon.used_count) >= Number(coupon.usage_limit)) {
+        return { ok: false, reason: 'This coupon has reached its usage limit' };
+    }
+    const minAmount = Number(coupon.min_amount) || 0;
+    if (amt < minAmount) {
+        return { ok: false, reason: `Coupon needs a minimum bill of ₹${Math.round(minAmount)}` };
+    }
+    let discount;
+    if (String(coupon.type) === 'percent') {
+        discount = Math.round((amt * Number(coupon.value)) / 100);
+        if (coupon.max_discount != null) discount = Math.min(discount, Number(coupon.max_discount));
+    } else {
+        discount = Math.round(Number(coupon.value));
+    }
+    discount = Math.max(0, Math.min(discount, Math.round(amt)));
+    const label = String(coupon.type) === 'percent'
+        ? `Coupon ${coupon.code} (${Number(coupon.value)}% off)`
+        : `Coupon ${coupon.code}`;
+    return { ok: true, discount, label };
+}
+
+// Validate a coupon and preview the discount — no usage is consumed here.
+app.post('/api/coupons/validate', authenticateToken, async (req, res) => {
+    if (!['admin', 'employee'].includes(req.user.role)) return res.sendStatus(403);
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    const amount = Number(req.body?.amount) || 0;
+    if (!code) return res.status(400).json({ error: 'Coupon code is required' });
+    try {
+        const connection = await getConn();
+        const [rows] = await connection.execute('SELECT * FROM coupons WHERE code = ? LIMIT 1', [code]);
+        connection.release();
+        const result = evaluateCoupon(rows[0], amount);
+        if (!result.ok) return res.status(404).json({ valid: false, error: result.reason });
+        res.json({ valid: true, code, discount: result.discount, label: result.label });
+    } catch (error) {
+        console.error('Coupon validate error:', error);
+        res.status(500).json({ error: 'Could not validate coupon' });
+    }
+});
+
+// Redeem a coupon at bill-save time. Atomically consumes one use unless this
+// inquiry already has the same coupon recorded (idempotent on re-save).
+app.post('/api/coupons/redeem', authenticateToken, async (req, res) => {
+    if (!['admin', 'employee'].includes(req.user.role)) return res.sendStatus(403);
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    const amount = Number(req.body?.amount) || 0;
+    const inquiryId = req.body?.inquiry_id || null;
+    if (!code) return res.status(400).json({ error: 'Coupon code is required' });
+    try {
+        const connection = await getConn();
+        try {
+            const [rows] = await connection.execute('SELECT * FROM coupons WHERE code = ? LIMIT 1', [code]);
+            const coupon = rows[0];
+            const result = evaluateCoupon(coupon, amount);
+            if (!result.ok) return res.status(404).json({ valid: false, error: result.reason });
+
+            // Idempotency: if this inquiry already recorded this coupon, don't
+            // consume another use.
+            let alreadyApplied = false;
+            if (inquiryId) {
+                const [inq] = await connection.execute(
+                    'SELECT coupon_code FROM inquiries WHERE id = ? LIMIT 1', [inquiryId]
+                );
+                alreadyApplied = inq.length > 0 && String(inq[0].coupon_code || '').toUpperCase() === code;
+            }
+
+            if (!alreadyApplied) {
+                const [upd] = await connection.execute(
+                    `UPDATE coupons SET used_count = used_count + 1
+                       WHERE code = ? AND active = 1
+                         AND (usage_limit IS NULL OR used_count < usage_limit)`,
+                    [code]
+                );
+                if (upd.affectedRows === 0) {
+                    return res.status(409).json({ valid: false, error: 'This coupon has reached its usage limit' });
+                }
+            }
+            res.json({ valid: true, code, discount: result.discount, label: result.label });
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error('Coupon redeem error:', error);
+        res.status(500).json({ error: 'Could not redeem coupon' });
     }
 });
 

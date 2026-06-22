@@ -201,6 +201,15 @@ function mapLink(lat, lng) {
 // ────────────────────────────────────────────────────────────────────
 // State + flow
 // ────────────────────────────────────────────────────────────────────
+const INSTALL_TYPES = [
+  { label: 'CCTV Camera Installation', icon: '📹', tagline: 'HD/IP cameras, DVR/NVR & remote viewing', includes: ['Site survey & camera placement', 'Cabling, DVR/NVR & storage setup', 'Mobile + desktop remote viewing', 'Demo & 30-day support'] },
+  { label: 'Networking & LAN Setup', icon: '🌐', tagline: 'Structured cabling, switches & routers', includes: ['LAN/WAN design & cabling', 'Router, switch & firewall config', 'IP planning & testing', 'Labelling & documentation'] },
+  { label: 'WiFi / Access Point Setup', icon: '📶', tagline: 'Whole-home / office coverage', includes: ['Coverage heat-map survey', 'Access point mounting & config', 'Seamless roaming setup', 'Speed & coverage testing'] },
+  { label: 'Biometric & Access Control', icon: '🔒', tagline: 'Fingerprint, RFID & door locks', includes: ['Device mounting & wiring', 'User enrolment & software', 'Door lock / strike integration', 'Attendance & report setup'] },
+  { label: 'Video Door Phone / Intercom', icon: '🔔', tagline: 'See & speak to visitors', includes: ['Outdoor + indoor unit install', 'Wiring & power setup', 'Mobile call forwarding', 'Demo & handover'] },
+  { label: 'Smart Home Automation', icon: '🏠', tagline: 'Lights, sensors & smart control', includes: ['Needs assessment', 'Device & hub installation', 'App & voice control setup', 'Training & support'] },
+];
+
 export function renderLandingPage(container, onPortalClick) {
   // Read URL params — support ?tab=track&ticket=NE-...&phone=...
   const urlParams = new URLSearchParams(window.location.search);
@@ -259,12 +268,14 @@ export function renderLandingPage(container, onPortalClick) {
     adsLoading: false,
     popupAds: cachedBootstrap?.popupAds || [],
     popupEnabled: cachedBootstrap?.popupEnabled !== false,
+    _popupShown: false,
     adIndex: 0,
     _adTimer: null,
     issueOptions: Array.isArray(cachedBootstrap?.issueOptions) && cachedBootstrap.issueOptions.length
       ? cachedBootstrap.issueOptions
       : FALLBACK_ISSUE_OPTIONS,
     issueValue: '',
+    installType: '',
   };
 
   function render() {
@@ -287,6 +298,22 @@ export function renderLandingPage(container, onPortalClick) {
           0% { opacity: 0; transform: translateY(15px); }
           100% { opacity: 1; transform: translateY(0); }
         }
+        .srf-install-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:6px; }
+        .srf-install-card { border:1px solid var(--border); border-radius:16px; padding:16px; background:var(--bg); display:flex; flex-direction:column; gap:12px; transition:transform .15s, box-shadow .15s, border-color .15s; }
+        .srf-install-card:hover { transform:translateY(-3px); box-shadow:0 12px 30px rgba(15,23,42,0.10); border-color:var(--primary); }
+        .srf-install-head { display:flex; align-items:flex-start; gap:12px; }
+        .srf-install-emoji { font-size:1.7rem; line-height:1; }
+        .srf-install-name { font-weight:800; font-size:0.98rem; color:var(--text); }
+        .srf-install-tag { font-size:0.78rem; color:var(--text-dim); margin-top:2px; }
+        .srf-install-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px; }
+        .srf-install-list li { display:flex; align-items:flex-start; gap:8px; font-size:0.82rem; color:var(--text-soft); }
+        .srf-install-list li svg { width:15px; height:15px; color:var(--primary); flex:0 0 auto; margin-top:2px; }
+        .srf-install-book { margin-top:auto; }
+        .srf-install-banner { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px; background:rgba(16,185,129,0.08); border:1px solid var(--primary); margin-bottom:14px; }
+        .srf-install-banner svg { width:22px; height:22px; color:var(--primary); flex:0 0 auto; }
+        .srf-install-banner-label { font-size:0.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--primary); font-weight:800; }
+        .srf-install-banner-name { font-weight:800; color:var(--text); font-size:0.95rem; }
+        .srf-install-change { margin-left:auto; background:none; border:1px solid var(--border); border-radius:10px; padding:6px 12px; font-size:0.78rem; font-weight:700; color:var(--text); cursor:pointer; }
       </style>
       <div class="srf-page">
         ${state.adsLoading ? `
@@ -354,6 +381,9 @@ export function renderLandingPage(container, onPortalClick) {
                 </button>
                 <button class="srf-mode-tab ${state.mode === 'complaint' ? 'active' : ''}" data-mode="complaint" role="tab">
                   ${ICONS.shield}<span>Complaint</span>
+                </button>
+                <button class="srf-mode-tab ${state.mode === 'install' ? 'active' : ''}" data-mode="install" role="tab">
+                  ${ICONS.box}<span>Installation</span>
                 </button>
               </div>
               <div class="srf-req-body">
@@ -521,9 +551,10 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   async function maybeShowLandingPopup() {
+    if (state._popupShown) return;
     const item = state.popupAds.find(Boolean);
     if (!item || state.popupEnabled === false) return;
-
+    state._popupShown = true;
     setTimeout(() => showPopupAd(item), 500);
   }
 
@@ -627,6 +658,7 @@ export function renderLandingPage(container, onPortalClick) {
   function renderStep() {
     if (state.mode === 'track') return stepTrack();
     if (state.mode === 'complaint') return stepComplaint();
+    if (state.mode === 'install') return stepInstall();
     if (state.step === 1) return stepPhone();
     if (state.step === 2) return stepOTP();
     if (state.step === 3) return stepForm();
@@ -690,8 +722,8 @@ export function renderLandingPage(container, onPortalClick) {
   // ── STEP 3: service form ─────────────────────────────
   function stepForm() {
     return `
-      <h2 class="srf-card-title">Tell us what's wrong</h2>
-      <p class="srf-card-sub">A few quick details so we can help fast.</p>
+      <h2 class="srf-card-title">${state.installType ? 'Book your installation' : "Tell us what's wrong"}</h2>
+      <p class="srf-card-sub">${state.installType ? "A few details and we'll schedule your visit." : 'A few quick details so we can help fast.'}</p>
 
       <label class="srf-label" for="srf-name">Your name</label>
       <div class="srf-input-wrap">
@@ -744,23 +776,29 @@ export function renderLandingPage(container, onPortalClick) {
         <input id="srf-bill" type="text" placeholder="e.g. INV-2024-001" class="srf-input" value="${escapeAttr(state.billNo)}" />
       </div>
 
+      ${state.installType ? `
+      <div class="srf-install-banner">
+        ${ICONS.shield}
+        <div>
+          <div class="srf-install-banner-label">Installation booking</div>
+          <div class="srf-install-banner-name">${escapeHTML(state.installType)}</div>
+        </div>
+        <button type="button" class="srf-install-change" id="srf-install-change">Change</button>
+      </div>
+      ` : `
       <label class="srf-label" for="srf-issue">What's the issue?</label>
       <div class="srf-input-wrap">
         <span class="srf-input-icon">${ICONS.wrench}</span>
         <select id="srf-issue" class="srf-input srf-select">
           <option value="">Select an issue…</option>
-          ${state.issueOptions.map(o => `
-            <option value="${escapeAttr(o.value)}" ${state.issueValue === o.value ? 'selected' : ''}>
-              ${escapeHTML(o.label)}
-            </option>
-          `).join('')}
+          ${state.issueOptions.map(o => `<option value="${escapeAttr(o.value)}" ${state.issueValue === o.value ? 'selected' : ''}>${escapeHTML(o.label)}</option>`).join('')}
         </select>
       </div>
-
       <div class="srf-input-wrap srf-other-wrap" id="srf-other-wrap" style="display:none;">
         <span class="srf-input-icon">${ICONS.edit}</span>
         <input id="srf-other" type="text" placeholder="Describe your issue briefly" class="srf-input" value="${escapeAttr(state.otherIssue)}" />
       </div>
+      `}
 
       <label class="srf-label" for="srf-desc">Describe the problem <span class="srf-optional">(optional)</span></label>
       <div class="srf-input-wrap" style="align-items:flex-start;">
@@ -778,6 +816,43 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   // ── STEP 4: success ──────────────────────────────────
+  function stepInstall() {
+    return `
+      <h2 class="srf-card-title">Book an installation</h2>
+      <p class="srf-card-sub">Pick what you'd like installed — we'll verify your number and schedule a visit.</p>
+      <div class="srf-install-grid">
+        ${INSTALL_TYPES.map(t => `
+          <div class="srf-install-card">
+            <div class="srf-install-head">
+              <span class="srf-install-emoji">${t.icon}</span>
+              <div>
+                <div class="srf-install-name">${escapeHTML(t.label)}</div>
+                <div class="srf-install-tag">${escapeHTML(t.tagline)}</div>
+              </div>
+            </div>
+            <ul class="srf-install-list">
+              ${t.includes.map(x => `<li>${ICONS.check}<span>${escapeHTML(x)}</span></li>`).join('')}
+            </ul>
+            <button class="srf-btn srf-btn-primary srf-install-book" data-install="${escapeAttr(t.label)}">
+              <span>Book this</span> ${ICONS.arrowRight}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function bindInstall() {
+    container.querySelectorAll('.srf-install-book').forEach(btn => {
+      btn.onclick = () => {
+        state.installType = btn.dataset.install || '';
+        state.mode = 'new';
+        state.step = 1;
+        render();
+      };
+    });
+  }
+
   function stepSuccess() {
     return `
       <div class="srf-success">
@@ -1083,6 +1158,7 @@ export function renderLandingPage(container, onPortalClick) {
     container.querySelectorAll('.srf-mode-tab').forEach(t => {
       t.onclick = () => {
         if (state.mode === t.dataset.mode) return;
+        state.installType = '';
         state.mode = t.dataset.mode;
         if (state.mode === 'track') {
           state.trackResult = null;
@@ -1099,6 +1175,7 @@ export function renderLandingPage(container, onPortalClick) {
   function bindStep() {
     if (state.mode === 'track') return bindTrack();
     if (state.mode === 'complaint') return bindComplaint();
+    if (state.mode === 'install') return bindInstall();
     if (state.step === 1) bindPhone();
     else if (state.step === 2) bindOTP();
     else if (state.step === 3) bindForm();
@@ -1209,11 +1286,15 @@ export function renderLandingPage(container, onPortalClick) {
       state.description = container.querySelector('#srf-desc')?.value || '';
       state.locationValue = container.querySelector('#srf-location')?.value || state.locationValue;
     };
-    otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
-    issueEl.onchange = () => {
-      state.issueValue = issueEl.value;
+    if (issueEl && otherWrap) {
       otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
-    };
+      issueEl.onchange = () => {
+        state.issueValue = issueEl.value;
+        otherWrap.style.display = issueEl.value === 'other' ? '' : 'none';
+      };
+    }
+    const changeBtn = container.querySelector('#srf-install-change');
+    if (changeBtn) changeBtn.onclick = () => { state.installType = ''; state.mode = 'install'; render(); };
 
     container.querySelectorAll('.srf-seg').forEach(seg => {
       seg.onclick = () => {
@@ -1298,17 +1379,21 @@ export function renderLandingPage(container, onPortalClick) {
       const name = container.querySelector('#srf-name').value.trim();
       const bill = container.querySelector('#srf-bill').value.trim();
       const preferred_time = container.querySelector('#srf-time').value;
-      const issueVal = issueEl.value;
+      const issueVal = issueEl ? issueEl.value : '';
       state.issueValue = issueVal;
       const issueLabel = state.issueOptions.find(o => o.value === issueVal)?.label || '';
       const otherText = container.querySelector('#srf-other')?.value.trim() || '';
 
       if (!name) return toast('Please enter your name', 'error');
       if (!state.locationValue) return toast('Please add your location', 'error');
-      if (!issueVal) return toast('Please pick an issue', 'error');
-      if (issueVal === 'other' && !otherText) return toast('Please describe the issue', 'error');
+      if (!state.installType) {
+        if (!issueVal) return toast('Please pick an issue', 'error');
+        if (issueVal === 'other' && !otherText) return toast('Please describe the issue', 'error');
+      }
 
-      const service_item = issueVal === 'other' ? `Other: ${otherText}` : issueLabel;
+      const service_item = state.installType
+        ? `Installation — ${state.installType}`
+        : (issueVal === 'other' ? `Other: ${otherText}` : issueLabel);
       const description = (state.description || '').trim().slice(0, 1000) || null;
       const submitBtn = container.querySelector('#srf-submit');
       submitBtn.disabled = true;
@@ -1377,6 +1462,7 @@ export function renderLandingPage(container, onPortalClick) {
       state.otherIssue = '';
       state.description = '';
       state.issueValue = '';
+      state.installType = '';
       render();
     });
   }
@@ -1779,6 +1865,9 @@ export function renderLandingPage(container, onPortalClick) {
 
   render();
   if (!state.isFeedbackPage) {
+    // Show a popup straight from cache if we already have one, so it never
+    // depends on the bootstrap fetch succeeding; the guard keeps it single-shot.
+    maybeShowLandingPopup();
     loadLandingBootstrap();
   }
 

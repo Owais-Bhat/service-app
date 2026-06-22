@@ -150,7 +150,7 @@ function getNavItems(role) {
     { id: 'ads', icon: ICONS.box, label: 'Landing Ads' },
     { id: 'popup-ads', icon: ICONS.box, label: 'Popup Ads' },
     { id: 'notices', icon: ICONS.clipboard, label: 'Notices' },
-    { id: 'discounts', icon: ICONS.receipt, label: 'Add Discounts' },
+    { id: 'discounts', icon: ICONS.receipt, label: 'Coupons' },
     { id: 'discount-details', icon: ICONS.receipt, label: 'Discount Details' },
     { id: 'pricing', icon: ICONS.receipt, label: 'Service Pricing' },
     { type: 'section', label: 'Config' },
