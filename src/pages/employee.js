@@ -402,9 +402,9 @@ export function renderPremiumBillHTML(data) {
     Number(data.extra) > 0 ? breakdownRow('Extra charges', inr(data.extra)) : '',
     breakdownRow('Platform fee', inr(data.platform)),
     breakdownRow('Transport', inr(data.transport)),
-    Number(data.discount) > 0 ? breakdownRow(esc(data.discountLabel || 'Discount'), `-${inr(data.discount)}`, { color: '#059669' }) : '',
     breakdownRow('Taxable', inr(data.taxable), { bold: true, border: 'border-top:1px solid #eee !important; padding-top:5px !important;' }),
     breakdownRow('GST (18%)', inr(data.gst)),
+    Number(data.discount) > 0 ? breakdownRow(esc(data.discountLabel || 'Discount'), `-${inr(data.discount)}`, { color: '#059669' }) : '',
     breakdownRow('Total', inr(data.total), { bold: true, total: true, border: 'border-top:2px solid #10B981 !important; margin-top:2px !important;' }),
   ].join('');
 
@@ -3520,8 +3520,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <div class="bill-row" id="br-extra-row" style="display:none;"><span id="br-extra-label">Additional charges</span><b id="br-extra">₹0</b></div>
                 <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
                 <div class="bill-row"><span>Transport (<span id="br-km">0</span> km x ₹5)</span><b id="br-transport">₹0</b></div>
-                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Discount</span><b id="br-discount">-₹0</b></div>
                 <div class="bill-row"><span>GST (18%)</span><b id="br-gst">₹0</b></div>
+                <div class="bill-row bill-row-discount" id="br-discount-row" style="display:none;"><span>Discount</span><b id="br-discount">-₹0</b></div>
                 <div class="bill-row bill-row-total"><span>Final total</span><b id="br-total">₹0</b></div>
                 <input type="hidden" id="total-bill-display" value="0"/>
               </div>
@@ -3763,20 +3763,21 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       bill.km = Math.max(0, Number(kmInput.value) || 0);
       bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
       bill.platform = getPlatformFee();
-      const preDiscount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
-      // Coupon discount is capped so it can never exceed the current pre-discount
-      // amount (services may change after a coupon was applied).
-      const couponDiscount = Math.min(bill.couponDiscount || 0, preDiscount);
+      const base = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+      bill.taxable = base;
+      // GST is charged on the full base, then the coupon/discount comes off the
+      // GRAND total (services + platform + transport + GST), per business rule.
+      bill.gst = Math.round(base * GST_RATE);
+      const grossTotal = base + bill.gst;
+      const couponDiscount = Math.min(bill.couponDiscount || 0, grossTotal);
       bill.manualDiscount = Math.max(0, Number(manualDiscountInput?.value) || 0);
-      bill.discount = Math.min(preDiscount, couponDiscount + bill.manualDiscount);
+      bill.discount = Math.min(grossTotal, couponDiscount + bill.manualDiscount);
       const labels = [];
       if (couponDiscount > 0) labels.push(bill.couponLabel || (bill.couponCode ? `Coupon ${bill.couponCode}` : 'Coupon'));
       if (bill.manualDiscount > 0) labels.push('Employee discount');
       bill.discountLabel = labels.join(' + ') || '';
       bill.discountReason = discountReasonInput?.value.trim() || '';
-      bill.taxable = preDiscount - bill.discount;
-      bill.gst = Math.round(bill.taxable * GST_RATE);
-      bill.total = bill.taxable + bill.gst;
+      bill.total = grossTotal - bill.discount;
 
       const serviceLines = overlay.querySelector('#br-service-lines');
       if (serviceLines) {
@@ -4331,7 +4332,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (!code) { if (!silent) toast('Enter a coupon code', 'warning'); return false; }
       // The amount the coupon is measured against = pre-discount bill total.
       calcTotal();
-      const amount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+      const amount = bill.taxable + bill.gst;
       if (couponApplyBtn) { couponApplyBtn.disabled = true; couponApplyBtn.textContent = '...'; }
       try {
         const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
@@ -4371,7 +4372,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const redeemCouponIfAny = async () => {
       if (!bill.couponCode) return;
       try {
-        const amount = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+        const amount = bill.taxable + bill.gst;
         const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
         const res = await fetch('/api/coupons/redeem', {
           method: 'POST',
@@ -4383,6 +4384,17 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           if (res.status === 409) toast(data.error || 'Coupon usage limit reached', 'warning');
         }
       } catch (_) { /* best-effort — discount already reflected in the bill */ }
+    };
+
+    // Persist the added service line items so they survive the employee going
+    // "back" and reopening (the saved amount alone can't be edited without them).
+    const persistSelectedServices = async () => {
+      if (!inqId) return;
+      try {
+        await supabase.from('inquiry_services').delete().eq('inquiry_id', inqId);
+        const ids = selectedServices.map(s => s.id).filter(Boolean);
+        if (ids.length) await supabase.from('inquiry_services').insert(ids.map(sid => ({ inquiry_id: inqId, service_id: sid })));
+      } catch (_) { /* best-effort */ }
     };
 
     // Re-apply a coupon that was saved on this inquiry, then back-fill the manual
@@ -4563,6 +4575,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           if (!res.ok) throw new Error(data.error || 'Failed');
           showQR(data.short_url);
           await redeemCouponIfAny();
+          await persistSelectedServices();
           // Persist full bill breakdown so admin can render the same template.
           await supabase.from('inquiries').update({
             payment_link: data.short_url,
@@ -4621,6 +4634,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           if (inqId) {
             await redeemCouponIfAny();
+            await persistSelectedServices();
             const updates = {
               bill_amount: bill.servicesSubtotal + bill.extra,
               transport_km: bill.km,
@@ -4731,6 +4745,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         try {
           await ensureCompanyExists(compVal);
           await redeemCouponIfAny();
+          await persistSelectedServices();
           const nowIso = new Date().toISOString().slice(0,19).replace('T',' ');
           const updates = {
             payment_method: 'cash',

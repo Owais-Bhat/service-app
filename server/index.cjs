@@ -6157,10 +6157,10 @@ async function buildInvoicePdfBuffer(billData) {
     if (Number(d.extra) > 0) tRows.push(['Extra charges', inr(d.extra)]);
     tRows.push(['Platform fee', inr(d.platform)]);
     tRows.push(['Transport' + (Number(d.km) > 0 ? ` (${d.km} km)` : ''), inr(d.transport)]);
-    if (Number(d.discount) > 0) tRows.push([d.discountLabel || 'Discount', '-' + inr(d.discount), GREEN]);
     const taxIdx = tRows.length; // separator drawn above this row
     tRows.push(['Taxable', inr(d.taxable)]);
     tRows.push(['GST (18%)', inr(d.gst)]);
+    if (Number(d.discount) > 0) tRows.push([d.discountLabel || 'Discount', '-' + inr(d.discount), GREEN]);
     const boxW = 270, boxX = right - boxW, pad = 12, lh = 18;
     const boxH = pad + tRows.length * lh + 6 + 34 + pad;
     if (y + boxH > doc.page.height - 70) { doc.addPage(); y = M; }
