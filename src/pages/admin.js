@@ -296,7 +296,7 @@ export async function renderAdminDashboard(container) {
   const authHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
   });
-  let tickets, inquiries, attendance, eodReports, stocks, profiles, complaints, autoAssignStatus;
+  let tickets, inquiries, attendance, eodReports, stocks, profiles, complaints, autoAssignStatus, installations;
   try {
     const res = await Promise.all([
       supabase
@@ -322,7 +322,11 @@ export async function renderAdminDashboard(container) {
         .from("eod_reports")
         .select("*")
         .order("date", { ascending: false }),
-      fetch(`${apiBase}/auto-assignment/status`, { headers: authHeaders() }).then(r => r.ok ? r.json() : { auto_assignment_enabled: false })
+      fetch(`${apiBase}/auto-assignment/status`, { headers: authHeaders() }).then(r => r.ok ? r.json() : { auto_assignment_enabled: false }),
+      supabase
+        .from("installations")
+        .select("*")
+        .order("created_at", { ascending: false })
     ]);
     tickets = res[0].data;
     inquiries = res[1].data;
@@ -332,7 +336,8 @@ export async function renderAdminDashboard(container) {
     complaints = res[5].data;
     eodReports = res[6].data;
     autoAssignStatus = res[7];
-    const firstErr = res.slice(0, 7).find((r) => r.error)?.error;
+    installations = res[8].data;
+    const firstErr = [res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[8]].find((r) => r.error)?.error;
     if (firstErr) console.warn("[Admin] Partial load issue:", firstErr.message);
   } catch (err) {
     container.innerHTML = `<div class="card" style="text-align:center;padding:40px;"><h2 style="color:var(--primary);">Initialization Error</h2><p>${err.message}</p></div>`;
@@ -398,6 +403,11 @@ export async function renderAdminDashboard(container) {
     .sort((a, b) => b[1].total - a[1].total)
     .slice(0, 10);
   const activeInquiries = [...i].sort(newestFirst);
+  const insts = installations || [];
+  const activeInstallations = insts
+    .filter((x) => !["completed", "cancelled"].includes(x.status))
+    .sort(newestFirst);
+  const employeesOnly = p.filter((row) => row.role === "employee");
   const allRows = allInquiries || [];
   const resolvedInquiries = (allInquiries || [])
     .filter((x) => ["resolved", "closed"].includes(x.status))
@@ -490,7 +500,43 @@ export async function renderAdminDashboard(container) {
             "",
           )}            </tbody>          </table>        </div>      </div>`
       : ""
-  }      <!-- Actionable service queue -->      <div class="card">        <div class="card-header"><span class="card-title" data-card="attn">Needs Attention</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Customer</th><th>Reason</th><th></th></tr></thead>            <tbody>              ${attentionItems.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No requests need attention</td></tr>' : attentionItems.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "â€”"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.company_name || x.service_item || "Service request"}</small></td>                  <td><span class="badge badge-${x._reason === "Declined" ? "danger" : "medium"}">${x._reason}</span></td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <!-- Service Requests Card (From Guests) -->      <div class="card">        <div class="card-header"><span class="card-title" data-card="recent">Recent Service Requests</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Customer</th><th>Company</th><th>Status</th><th></th></tr></thead>            <tbody>              ${activeInquiries.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No active requests</td></tr>' : activeInquiries.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "—"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${x.full_name}</b></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <div class="card">        <div class="card-header"><span class="card-title" data-card="complaints">Recent Complaints</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Phone</th><th>Status</th><th></th></tr></thead>            <tbody>              ${recentComplaints.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No complaints yet</td></tr>' : recentComplaints.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${escapeHtml(x.ticket_no || "-")}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${escapeHtml(x.phone || "-")}</b><br/><small style="color:var(--text-dim);display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.complaint_text || "Complaint")}</small></td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm cmp-dash-btn" data-id="${escapeHtml(x.id)}">Respond</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <div class="card" style="margin-top:24px">        <div class="card-header"><span class="card-title" data-card="resolved">Resolved Services</span></div>        <div class="table-wrap recent-requests-scroll">        <table>          <thead><tr><th>Ticket</th><th>Service Date</th><th>Company</th><th>Name</th><th>Status</th><th></th></tr></thead>          <tbody>            ${resolvedInquiries.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-dim)">No resolved services yet</td></tr>' : resolvedInquiries.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "â€”"}</code></td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">â€”</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>    <div class="card" style="margin-top:24px" id="company-svc-card">      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">        <span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span>        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">          <select id="company-status-filter" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-weight:700;">            <option value="all" ${reportFilters.status === "all" ? "selected" : ""}>All</option>            <option value="active" ${reportFilters.status === "active" ? "selected" : ""}>Active</option>            <option value="resolved" ${reportFilters.status === "resolved" ? "selected" : ""}>Resolved</option>            <option value="paid" ${reportFilters.status === "paid" ? "selected" : ""}>Paid</option>            <option value="unpaid" ${reportFilters.status === "unpaid" ? "selected" : ""}>Unpaid</option>          </select>          <input type="date" id="company-from" value="${reportFilters.from}" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);"/>          <input type="date" id="company-to" value="${reportFilters.to}" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);"/>        <div class="search-input-wrap" style="min-width:160px;max-width:260px;">          <span>${ICONS.search}</span>          <input class="search-input" id="company-search" placeholder="Filter company…" style="padding:6px 10px;font-size:0.82rem;"/>        </div>        <button class="btn btn-secondary btn-sm" id="company-export">Export All</button>        <button class="btn btn-secondary btn-sm" id="company-clear-filters">Clear</button>        </div>      </div>      <div class="table-wrap" id="company-table-wrap">        <table id="company-svc-table">          <thead><tr><th>Company</th><th>Total</th><th>Active</th><th>Resolved</th><th></th></tr></thead>          <tbody>            ${companyRows.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No service data yet</td></tr>' : companyRows.map(([company, counts]) => `<tr data-company="${company}">                  <td><b>${company}</b></td>                  <td><span class="badge badge-open">${counts.total}</span></td>                  <td style="color:var(--warning);font-weight:700">${counts.active}</td>                  <td style="color:var(--success);font-weight:700">${counts.resolved}</td>                  <td><button class="btn btn-secondary btn-sm view-company-btn" data-company="${company}" style="white-space:nowrap">View All</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
+  }      <!-- Actionable service queue -->      <div class="card">        <div class="card-header"><span class="card-title" data-card="attn">Needs Attention</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Customer</th><th>Reason</th><th></th></tr></thead>            <tbody>              ${attentionItems.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-dim)">No requests need attention</td></tr>' : attentionItems.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "—"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${x.full_name}</b><br/><small style="color:var(--text-dim)">${x.company_name || x.service_item || "Service request"}</small></td>                  <td><span class="badge badge-${x._reason === "Declined" ? "danger" : "medium"}">${x._reason}</span></td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <!-- Service Requests Card (From Guests) -->
+      <div class="card">
+        <div class="card-header"><span class="card-title" data-card="recent">Recent Service Requests</span></div>
+        <div class="table-wrap recent-requests-scroll">
+          <table>
+            <thead><tr><th>Ticket</th><th>Customer</th><th>Company</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${activeInquiries.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No active requests</td></tr>' : activeInquiries.map((x) => `<tr>
+                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "—"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>
+                  <td><b>${x.full_name}</b></td>
+                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>
+                  <td>${statusBadge(x.status)}</td>
+                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Recent Installation Requests Card -->
+      <div class="card">
+        <div class="card-header"><span class="card-title" data-card="inst-requests">Recent Installation Requests</span></div>
+        <div class="table-wrap recent-requests-scroll">
+          <table>
+            <thead><tr><th>Ticket</th><th>Customer</th><th>Service</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${activeInstallations.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No active installations</td></tr>' : activeInstallations.map((x) => `<tr>
+                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "—"}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>
+                  <td><b>${x.full_name}</b></td>
+                  <td><b>${x.installation_type || "Installation"}</b></td>
+                  <td>${statusBadge(x.status)}</td>
+                  <td><button class="btn btn-primary btn-sm inst-dash-btn" data-id="${x.id}">Manage</button></td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">        <div class="card-header"><span class="card-title" data-card="complaints">Recent Complaints</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Ticket</th><th>Phone</th><th>Status</th><th></th></tr></thead>            <tbody>              ${recentComplaints.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-dim)">No complaints yet</td></tr>' : recentComplaints.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${escapeHtml(x.ticket_no || "-")}</code><br/><small style="color:var(--text-dim)">${formatDateTime(x.created_at)}</small></td>                  <td><b>${escapeHtml(x.phone || "-")}</b><br/><small style="color:var(--text-dim);display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.complaint_text || "Complaint")}</small></td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm cmp-dash-btn" data-id="${escapeHtml(x.id)}">Respond</button></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>      <div class="card" style="margin-top:24px">        <div class="card-header"><span class="card-title" data-card="resolved">Resolved Services</span></div>        <div class="table-wrap recent-requests-scroll">        <table>          <thead><tr><th>Ticket</th><th>Service Date</th><th>Company</th><th>Name</th><th>Status</th><th></th></tr></thead>          <tbody>            ${resolvedInquiries.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-dim)">No resolved services yet</td></tr>' : resolvedInquiries.map((x) => `<tr>                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || "—"}</code></td>                  <td><small>${formatDateTime(x.created_at)}</small></td>                  <td>${x.company_name ? `<b>${x.company_name}</b>` : '<span style="color:var(--text-dim)">—</span>'}</td>                  <td><b>${x.full_name}</b></td>                  <td>${statusBadge(x.status)}</td>                  <td><button class="btn btn-primary btn-sm inq-btn" data-id="${x.id}">Manage</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>    <div class="card" style="margin-top:24px" id="company-svc-card">      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">        <span class="card-title">${ICONS.building}<span style="margin-left:8px">Services by Company</span></span>        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">          <select id="company-status-filter" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-weight:700;">            <option value="all" ${reportFilters.status === "all" ? "selected" : ""}>All</option>            <option value="active" ${reportFilters.status === "active" ? "selected" : ""}>Active</option>            <option value="resolved" ${reportFilters.status === "resolved" ? "selected" : ""}>Resolved</option>            <option value="paid" ${reportFilters.status === "paid" ? "selected" : ""}>Paid</option>            <option value="unpaid" ${reportFilters.status === "unpaid" ? "selected" : ""}>Unpaid</option>          </select>          <input type="date" id="company-from" value="${reportFilters.from}" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);"/>          <input type="date" id="company-to" value="${reportFilters.to}" style="padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);"/>        <div class="search-input-wrap" style="min-width:160px;max-width:260px;">          <span>${ICONS.search}</span>          <input class="search-input" id="company-search" placeholder="Filter company…" style="padding:6px 10px;font-size:0.82rem;"/>        </div>        <button class="btn btn-secondary btn-sm" id="company-export">Export All</button>        <button class="btn btn-secondary btn-sm" id="company-clear-filters">Clear</button>        </div>      </div>      <div class="table-wrap" id="company-table-wrap">        <table id="company-svc-table">          <thead><tr><th>Company</th><th>Total</th><th>Active</th><th>Resolved</th><th></th></tr></thead>          <tbody>            ${companyRows.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No service data yet</td></tr>' : companyRows.map(([company, counts]) => `<tr data-company="${company}">                  <td><b>${company}</b></td>                  <td><span class="badge badge-open">${counts.total}</span></td>                  <td style="color:var(--warning);font-weight:700">${counts.active}</td>                  <td style="color:var(--success);font-weight:700">${counts.resolved}</td>                  <td><button class="btn btn-secondary btn-sm view-company-btn" data-company="${company}" style="white-space:nowrap">View All</button></td>                </tr>`).join("")}          </tbody>        </table>      </div>    </div>  `;
 
 
 
@@ -516,6 +562,14 @@ export async function renderAdminDashboard(container) {
       escapeHtml(x.employee?.full_name || "Employee"),
       `${x.count} missed day${x.count === 1 ? "" : "s"} · last in ${formatDateTime(x.latest?.clock_in)}`,
       `<span class="badge ${x.count >= STRICT_EOD_LIMIT ? "badge-danger" : "badge-medium"}">${x.count >= STRICT_EOD_LIMIT ? "Strict: block clock-in" : "Warn employee"}</span>`)).join("")));
+  const instRow = (x, icon) => lrow(
+    icon,
+    escapeHtml(x.full_name || "—"),
+    `<em class="id-mono" style="font-style:normal">${escapeHtml(x.ticket_no || "—")}</em> · ${escapeHtml(x.installation_type || "Installation")} · ${formatDateTime(x.created_at)}`,
+    statusBadge(x.status),
+    `<button class="btn btn-secondary btn-sm inst-dash-btn" data-id="${x.id}">Manage</button>`,
+  );
+
   swapCard("attn", listCard(ICONS.alert, "Needs Attention", attentionItems.length,
     attentionItems.map((x) => lrow(ICONS.ticket, escapeHtml(x.full_name || "—"),
       `<em class="id-mono" style="font-style:normal">${escapeHtml(x.ticket_no || "—")}</em> · ${escapeHtml(x.company_name || x.service_item || "Service request")} · ${formatDateTime(x.created_at)}`,
@@ -523,6 +577,8 @@ export async function renderAdminDashboard(container) {
       `<button class="btn btn-secondary btn-sm inq-btn" data-id="${x.id}">Manage</button>`)).join("")));
   swapCard("recent", listCard(ICONS.inbox, "Recent Service Requests", activeInquiries.length,
     activeInquiries.map((x) => inqRow(x, ICONS.ticket)).join("")));
+  swapCard("inst-requests", listCard(ICONS.box, "Recent Installation Requests", activeInstallations.length,
+    activeInstallations.slice(0, 5).map((x) => instRow(x, ICONS.box)).join("")));
   swapCard("complaints", listCard(ICONS.phone, "Recent Complaints", openComplaints.length,
     recentComplaints.map((x) => lrow(ICONS.alert, escapeHtml(x.phone || "—"),
       `<em class="id-mono" style="font-style:normal">${escapeHtml(x.ticket_no || "—")}</em> · ${escapeHtml((x.complaint_text || "Complaint").slice(0, 42))} · ${formatDateTime(x.created_at)}`,
@@ -531,15 +587,17 @@ export async function renderAdminDashboard(container) {
   swapCard("resolved", listCard(ICONS.check, "Resolved Services", resolvedInquiries.length,
     resolvedInquiries.map((x) => inqRow(x, ICONS.check)).join("")));
 
-  // Move Recent Service Requests + Complaints to top of the list-card stack.
+  // Move Recent Service Requests + Recent Installation Requests + Complaints to top of the list-card stack.
   {
     const _lcs = [...container.querySelectorAll('.list-card')];
     const _recent = _lcs.find(c => c.querySelector('.card-head h3')?.textContent?.includes('Recent Service Requests'));
+    const _install = _lcs.find(c => c.querySelector('.card-head h3')?.textContent?.includes('Recent Installation Requests'));
     const _compl  = _lcs.find(c => c.querySelector('.card-head h3')?.textContent?.includes('Recent Complaints'));
-    if (_recent && _compl) {
+    if (_recent && _install && _compl) {
       const _first = _lcs[0];
       if (_first && _first !== _recent) _first.before(_recent);
-      _recent.after(_compl);
+      _recent.after(_install);
+      _install.after(_compl);
     }
   }
 
@@ -748,6 +806,13 @@ export async function renderAdminDashboard(container) {
         renderAdminDashboard(container),
       );
   });
+  container.querySelectorAll(".inst-dash-btn").forEach((btn) => {
+    btn.onclick = () => {
+      openInstallationDetail(btn.dataset.id, employeesOnly, () =>
+        renderAdminDashboard(container),
+      );
+    };
+  });
   container.querySelectorAll(".cmp-dash-btn").forEach((btn) => {
     btn.onclick = () =>
       openComplaintResponder(
@@ -772,6 +837,27 @@ export async function renderAdminDashboard(container) {
           type: "alert",
           tag: `new-request-${row.id || Date.now()}`,
         });
+        refreshDashboard();
+      },
+    )
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "installations" },
+      (payload) => {
+        const row = payload.new || {};
+        showNotification({
+          title: "New Installation Request",
+          body: `${row.ticket_no || "New request"} from ${row.full_name || "client"}`,
+          type: "alert",
+          tag: `new-install-${row.id || Date.now()}`,
+        });
+        refreshDashboard();
+      },
+    )
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "installations" },
+      () => {
         refreshDashboard();
       },
     )
