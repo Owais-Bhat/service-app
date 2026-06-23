@@ -8,6 +8,24 @@ const SERVICE_CONTACT_DISPLAY = '+91 88991 33144';
 const SERVICE_CONTACT_TEL = `tel:+91${SERVICE_CONTACT_PHONE}`;
 const SERVICE_CONTACT_WHATSAPP = `https://wa.me/91${SERVICE_CONTACT_PHONE}?text=${encodeURIComponent('Hello Networking Experts, I need help with a new installation.')}`;
 
+const API_URL = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? '/api'
+  : 'http://localhost:5000/api';
+
+async function postPublicApi(path, body) {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'Request failed' };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Network request failed' };
+  }
+}
+
 const INSTALL_TYPES = [
   { label: 'CCTV Camera Installation', icon: '📹', tagline: 'HD/IP cameras, DVR/NVR & remote viewing', color: '#10B981', includes: ['Site survey & camera placement', 'Cabling, DVR/NVR & storage setup', 'Mobile + desktop remote viewing', 'Demo & 30-day support'], highlights: ['4K/2K options', 'Night vision', 'Cloud storage'] },
   { label: 'Networking & LAN Setup', icon: '🌐', tagline: 'Structured cabling, switches & routers', color: '#3B82F6', includes: ['LAN/WAN design & cabling', 'Router, switch & firewall config', 'IP planning & testing', 'Labelling & documentation'], highlights: ['Cat6/Cat6A', 'Managed switches', 'VLAN setup'] },
@@ -19,6 +37,15 @@ const INSTALL_TYPES = [
 
 function escapeHTML(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function generateInstallTicketNo() {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const rnd = String(Math.floor(1000 + Math.random() * 9000));
+  return `INST-${yy}${mm}${dd}-${rnd}`;
 }
 
 export function renderInstallPage(container, onBack) {
@@ -282,10 +309,94 @@ export function renderInstallPage(container, onBack) {
       }
       .inst-trust-item svg { width: 18px; height: 18px; color: var(--primary); }
 
+      /* Modal overlay for verification and form */
+      .inst-modal-overlay {
+        position: fixed; inset: 0; z-index: 1000;
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px; animation: instFadeIn 0.2s ease-out;
+      }
+      .inst-modal {
+        background: var(--glass-bg, var(--bg-soft));
+        border: 1px solid var(--glass-border, var(--border));
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        width: 100%; max-width: 520px; border-radius: 24px;
+        box-shadow: 0 25px 60px rgba(15, 23, 42, 0.3);
+        display: flex; flex-direction: column; overflow: hidden;
+        animation: instSlideUp 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+        position: relative;
+      }
+      .inst-modal-header {
+        padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+      }
+      .inst-modal-title { font-size: 1.15rem; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 8px; }
+      .inst-modal-title svg { width: 20px; height: 20px; color: var(--primary); }
+      .inst-modal-close {
+        background: none; border: none; font-size: 1.4rem; color: var(--text-dim); cursor: pointer;
+        padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        transition: background 0.2s, color 0.2s; width: 32px; height: 32px;
+      }
+      .inst-modal-close:hover { background: var(--border); color: var(--text); }
+      .inst-modal-body { padding: 24px; overflow-y: auto; max-height: 80vh; }
+      
+      /* Steps bar */
+      .inst-steps { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; position: relative; }
+      .inst-step-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 700; color: var(--text-dim); z-index: 2; }
+      .inst-step-item.active { color: var(--primary); }
+      .inst-step-num {
+        width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        background: var(--bg-soft); border: 2px solid var(--border); color: var(--text-dim); font-size: 0.75rem; transition: all 0.25s;
+      }
+      .inst-step-item.active .inst-step-num { background: var(--primary); border-color: var(--primary); color: #fff; }
+      .inst-step-line {
+        position: absolute; top: 13px; left: 10px; right: 10px; height: 2px;
+        background: var(--border); z-index: 1;
+      }
+      
+      /* Form Layouts */
+      .inst-form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+      .inst-form-group label { font-size: 0.82rem; font-weight: 700; color: var(--text-soft); }
+      .inst-input {
+        width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+        background: var(--bg); color: var(--text); font-family: inherit; font-size: 0.92rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .inst-input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
+      .inst-input::placeholder { color: var(--text-dim); opacity: 0.6; }
+      .inst-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      
+      .inst-btn {
+        width: 100%; padding: 13px 20px; border: none; border-radius: 12px;
+        font-family: inherit; font-size: 0.92rem; font-weight: 700; color: #fff; cursor: pointer;
+        background: var(--gradient); display: flex; align-items: center; justify-content: center; gap: 8px;
+        box-shadow: 0 4px 14px rgba(16,185,129,0.2);
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .inst-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(16,185,129,0.3); }
+      .inst-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; box-shadow: none; }
+      
+      .inst-timer-text { font-size: 0.8rem; color: var(--text-dim); text-align: center; margin-top: 14px; line-height: 1.4; }
+      .inst-resend-link { color: var(--primary); text-decoration: none; font-weight: 700; cursor: pointer; margin-left: 4px; }
+      .inst-resend-link.disabled { color: var(--text-dim); cursor: not-allowed; text-decoration: none; font-weight: normal; }
+
+      /* Success Screen */
+      .inst-success-box { text-align: center; padding: 16px 0; }
+      .inst-success-icon {
+        width: 64px; height: 64px; border-radius: 50%; background: rgba(16,185,129,0.1);
+        border: 2px solid var(--primary); color: var(--primary); display: flex; align-items: center;
+        justify-content: center; margin: 0 auto 18px; font-size: 2rem;
+      }
+
+      @keyframes instFadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes instSlideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
       @media (max-width: 640px) {
         .inst-nav-word { display: none !important; }
         .inst-grid { grid-template-columns: 1fr; }
         .inst-hero h1 { font-size: 1.7rem; }
+        .inst-form-row { grid-template-columns: 1fr; gap: 0; }
       }
     </style>
 
@@ -383,11 +494,348 @@ export function renderInstallPage(container, onBack) {
     renderInstallPage(container, onBack);
   });
 
-  // Book buttons — go back to landing with installType pre-set
+  // Book buttons — open the interactive OTP/booking modal
   container.querySelectorAll('.inst-book-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const label = btn.dataset.install || '';
-      if (typeof onBack === 'function') onBack(label);
+      openBookingModal(label);
     });
   });
+}
+
+function openBookingModal(installType) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'inst-modal-overlay';
+  document.body.appendChild(overlay);
+
+  let state = {
+    step: 1, // 1: Enter Phone, 2: Enter OTP, 3: Form details, 4: Success
+    phone: '',
+    otp: '',
+    timer: 60,
+    timerInterval: null
+  };
+
+  function cleanupTimer() {
+    if (state.timerInterval) {
+      clearInterval(state.timerInterval);
+      state.timerInterval = null;
+    }
+  }
+
+  function startCountdown() {
+    cleanupTimer();
+    state.timer = 60;
+    state.timerInterval = setInterval(() => {
+      state.timer--;
+      const textEl = overlay.querySelector('#inst-timer-display');
+      if (textEl) {
+        if (state.timer > 0) {
+          textEl.innerHTML = `Resend code in <b>${state.timer}s</b>`;
+        } else {
+          cleanupTimer();
+          textEl.innerHTML = `Didn't get code? <span class="inst-resend-link" id="inst-resend-btn">Resend OTP</span>`;
+          overlay.querySelector('#inst-resend-btn')?.addEventListener('click', handleResendOtp);
+        }
+      }
+    }, 1000);
+  }
+
+  async function handleSendOtp() {
+    const phoneInput = overlay.querySelector('#inst-phone-field');
+    const phoneVal = (phoneInput?.value || '').replace(/\D/g, '');
+    if (phoneVal.length !== 10) {
+      toast('Please enter a valid 10-digit mobile number.', 'error');
+      return;
+    }
+    const fullPhone = `+91${phoneVal}`;
+    
+    const sendBtn = overlay.querySelector('#inst-send-otp-btn');
+    const restoreBtn = setButtonLoading(sendBtn, 'Sending');
+
+    const res = await postPublicApi('/otp/send', { phone: fullPhone });
+    restoreBtn();
+
+    if (res.ok) {
+      state.phone = fullPhone;
+      state.step = 2;
+      renderModalBody();
+      startCountdown();
+      toast('OTP sent successfully!', 'success');
+    } else {
+      toast(res.error || 'Failed to send OTP. Please try again.', 'error');
+    }
+  }
+
+  async function handleResendOtp() {
+    const res = await postPublicApi('/otp/resend', { phone: state.phone });
+    if (res.ok) {
+      startCountdown();
+      toast('OTP resent successfully!', 'success');
+    } else {
+      toast(res.error || 'Failed to resend OTP. Please try again.', 'error');
+    }
+  }
+
+  async function handleVerifyOtp() {
+    const otpInput = overlay.querySelector('#inst-otp-field');
+    const otpVal = (otpInput?.value || '').trim();
+    if (otpVal.length !== 6) {
+      toast('Please enter the 6-digit verification code.', 'error');
+      return;
+    }
+
+    const verifyBtn = overlay.querySelector('#inst-verify-otp-btn');
+    const restoreBtn = setButtonLoading(verifyBtn, 'Verifying');
+
+    const res = await postPublicApi('/otp/verify', { phone: state.phone, otp: otpVal });
+    restoreBtn();
+
+    if (res.ok && res.verified) {
+      cleanupTimer();
+      state.otp = otpVal;
+      state.step = 3;
+      renderModalBody();
+      toast('Phone verified successfully!', 'success');
+    } else {
+      toast(res.error || 'Incorrect code. Please check and try again.', 'error');
+    }
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    
+    const submitBtn = form.querySelector('#inst-submit-request-btn');
+    const restoreBtn = setButtonLoading(submitBtn, 'Registering');
+
+    const ticketNo = generateInstallTicketNo();
+
+    const payload = {
+      ticket_no: ticketNo,
+      full_name: form.elements.fullName.value.trim(),
+      phone: state.phone,
+      company_name: form.elements.companyName.value.trim() || null,
+      location: form.elements.locationName.value.trim(),
+      installation_type: installType,
+      preferred_date: form.elements.prefDate.value,
+      preferred_time: form.elements.prefTime.value,
+      address: form.elements.address.value.trim(),
+      description: form.elements.description.value.trim() || null,
+      status: 'pending'
+    };
+
+    const res = await postPublicApi('/data/installations', payload);
+    restoreBtn();
+
+    if (res.ok) {
+      state.step = 4;
+      state.ticketNo = ticketNo;
+      renderModalBody();
+      toast('Installation request booked!', 'success');
+    } else {
+      toast(res.error || 'Could not register installation. Please try again.', 'error');
+    }
+  }
+
+  function setButtonLoading(btn, label = 'Loading') {
+    if (!btn) return () => {};
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="srf-spinner"></span> ${label}...`;
+    return () => {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    };
+  }
+
+  function renderModalBody() {
+    let bodyHtml = '';
+
+    // Header progress tracker
+    let stepsHtml = '';
+    if (state.step <= 3) {
+      stepsHtml = `
+        <div class="inst-steps">
+          <div class="inst-step-line"></div>
+          <div class="inst-step-item ${state.step >= 1 ? 'active' : ''}">
+            <div class="inst-step-num">1</div>
+            <span>Phone</span>
+          </div>
+          <div class="inst-step-item ${state.step >= 2 ? 'active' : ''}">
+            <div class="inst-step-num">2</div>
+            <span>Verify</span>
+          </div>
+          <div class="inst-step-item ${state.step >= 3 ? 'active' : ''}">
+            <div class="inst-step-num">3</div>
+            <span>Details</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (state.step === 1) {
+      bodyHtml = `
+        ${stepsHtml}
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h3 style="margin:0 0 8px; color:var(--text)">Verify Your Mobile</h3>
+          <p style="margin:0; font-size:0.88rem; color:var(--text-dim)">To request an installation, please verify your mobile number first.</p>
+        </div>
+        <div class="inst-form-group">
+          <label for="inst-phone-field">Mobile Number</label>
+          <div style="display:flex; gap:8px;">
+            <input type="text" value="+91" disabled style="width:56px; text-align:center; padding:12px 0; border:1px solid var(--border); border-radius:12px; background:var(--bg-soft); color:var(--text); font-weight:700;" />
+            <input type="tel" id="inst-phone-field" class="inst-input" maxlength="10" placeholder="Enter 10-digit number" autocomplete="tel" style="flex:1;" />
+          </div>
+        </div>
+        <button class="inst-btn" id="inst-send-otp-btn" style="margin-top:10px;">
+          <span>Send OTP</span> ${ICONS.arrowRight}
+        </button>
+      `;
+    } else if (state.step === 2) {
+      bodyHtml = `
+        ${stepsHtml}
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h3 style="margin:0 0 8px; color:var(--text)">Enter Verification Code</h3>
+          <p style="margin:0; font-size:0.88rem; color:var(--text-dim)">We sent a 6-digit OTP code to <b style="color:var(--text)">${state.phone}</b></p>
+        </div>
+        <div class="inst-form-group">
+          <div style="display:flex; justify-content:center;">
+            <input type="text" id="inst-otp-field" class="inst-input" maxlength="6" placeholder="••••••" style="letter-spacing:0.4em; text-align:center; font-size:1.6rem; font-weight:800; max-width:200px; padding:10px;" />
+          </div>
+        </div>
+        <button class="inst-btn" id="inst-verify-otp-btn" style="margin-top:14px;">
+          <span>Verify & Proceed</span> ${ICONS.check}
+        </button>
+        <div class="inst-timer-text" id="inst-timer-display">Resend code in <b>60s</b></div>
+      `;
+    } else if (state.step === 3) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const minDate = tomorrow.toISOString().split('T')[0];
+
+      bodyHtml = `
+        ${stepsHtml}
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h3 style="margin:0 0 4px; color:var(--text)">Installation Details</h3>
+          <p style="margin:0; font-size:0.85rem; color:var(--text-dim)">Booking for: <b style="color:var(--primary)">${escapeHTML(installType)}</b></p>
+        </div>
+        <form id="inst-booking-form">
+          <div class="inst-form-group">
+            <label>Full Name</label>
+            <input type="text" name="fullName" class="inst-input" placeholder="Your full name" required />
+          </div>
+          <div class="inst-form-row">
+            <div class="inst-form-group">
+              <label>Company Name <span style="font-weight:normal;color:var(--text-dim)">(Optional)</span></label>
+              <input type="text" name="companyName" class="inst-input" placeholder="e.g. Acme Corp" />
+            </div>
+            <div class="inst-form-group">
+              <label>Location Name</label>
+              <input type="text" name="locationName" class="inst-input" placeholder="e.g. Home, Office, Server Room" required />
+            </div>
+          </div>
+          <div class="inst-form-row">
+            <div class="inst-form-group">
+              <label>Preferred Date</label>
+              <input type="date" name="prefDate" min="${minDate}" class="inst-input" required />
+            </div>
+            <div class="inst-form-group">
+              <label>Time Slot</label>
+              <select name="prefTime" class="inst-input" required>
+                <option value="10:00 AM - 01:00 PM">10:00 AM - 01:00 PM</option>
+                <option value="01:00 PM - 04:00 PM">01:00 PM - 04:00 PM</option>
+                <option value="04:00 PM - 07:00 PM">04:00 PM - 07:00 PM</option>
+              </select>
+            </div>
+          </div>
+          <div class="inst-form-group">
+            <label>Complete Installation Address</label>
+            <textarea name="address" class="inst-input" placeholder="House/Office No, Building name, Street details, Landmark" rows="3" required style="resize:vertical;"></textarea>
+          </div>
+          <div class="inst-form-group">
+            <label>Special Instructions <span style="font-weight:normal;color:var(--text-dim)">(Optional)</span></label>
+            <textarea name="description" class="inst-input" placeholder="Tell us about camera heights, specific cabling routes, etc." rows="2" style="resize:vertical;"></textarea>
+          </div>
+          <button type="submit" class="inst-btn" id="inst-submit-request-btn" style="margin-top:10px; width:100%;">
+            <span>Book Installation</span> ${ICONS.check}
+          </button>
+        </form>
+      `;
+    } else if (state.step === 4) {
+      bodyHtml = `
+        <div class="inst-success-box">
+          <div class="inst-success-icon">${ICONS.check}</div>
+          <h3 style="margin:0 0 8px; color:var(--text); font-size:1.4rem;">Booking Confirmed!</h3>
+          <p style="margin:0 0 24px; font-size:0.92rem; color:var(--text-dim); line-height:1.5;">
+            Your request for <b>${escapeHTML(installType)}</b> has been registered successfully.
+          </p>
+          <div style="background:var(--bg-soft); border:1px solid var(--border); padding:16px; border-radius:16px; margin-bottom:24px; text-align:center;">
+            <span style="font-size:0.75rem; font-weight:800; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; display:block; margin-bottom:4px;">Your Ticket Number</span>
+            <code style="font-size:1.25rem; font-weight:800; color:var(--primary); font-family:monospace; letter-spacing:0.02em;">${state.ticketNo}</code>
+          </div>
+          <p style="font-size:0.82rem; color:var(--text-dim); margin-bottom:24px;">An SMS confirmation with details has been sent to your verified mobile number.</p>
+          <button class="inst-btn" id="inst-success-close-btn" style="width:100%;">
+            <span>Finish</span>
+          </button>
+        </div>
+      `;
+    }
+
+    overlay.querySelector('.inst-modal-body').innerHTML = bodyHtml;
+
+    // Bind events inside the body
+    if (state.step === 1) {
+      const sendBtn = overlay.querySelector('#inst-send-otp-btn');
+      sendBtn.addEventListener('click', handleSendOtp);
+      const phoneInput = overlay.querySelector('#inst-phone-field');
+      phoneInput.focus();
+      phoneInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSendOtp();
+      });
+    } else if (state.step === 2) {
+      const verifyBtn = overlay.querySelector('#inst-verify-otp-btn');
+      verifyBtn.addEventListener('click', handleVerifyOtp);
+      const otpInput = overlay.querySelector('#inst-otp-field');
+      otpInput.focus();
+      otpInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleVerifyOtp();
+      });
+    } else if (state.step === 3) {
+      const form = overlay.querySelector('#inst-booking-form');
+      form.addEventListener('submit', handleFormSubmit);
+    } else if (state.step === 4) {
+      const closeBtn = overlay.querySelector('#inst-success-close-btn');
+      closeBtn.addEventListener('click', () => {
+        cleanupTimer();
+        overlay.remove();
+      });
+    }
+  }
+
+  // Initial modal shell paint
+  overlay.innerHTML = `
+    <div class="inst-modal">
+      <div class="inst-modal-header">
+        <span class="inst-modal-title">${ICONS.box} <span>Book Installation</span></span>
+        <button class="inst-modal-close" id="inst-modal-close-btn">${ICONS.close}</button>
+      </div>
+      <div class="inst-modal-body"></div>
+    </div>
+  `;
+
+  // Bind close buttons
+  overlay.querySelector('#inst-modal-close-btn').onclick = () => {
+    cleanupTimer();
+    overlay.remove();
+  };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      cleanupTimer();
+      overlay.remove();
+    }
+  };
+
+  renderModalBody();
 }

@@ -5051,3 +5051,413 @@ export async function renderAutoAssignmentTab(container) {
     toast(err.message || "Could not load auto assignment", "error");
   }
 }
+
+export async function renderInstallationsTab(container) {
+  showLoader(container);
+  
+  const filterKey = container.dataset.instFilter || "active";
+  const searchVal = container.dataset.instSearch || "";
+
+  // Fetch installations and profiles list in parallel
+  const [{ data: list, error }, { data: employees }] = await Promise.all([
+    supabase
+      .from("installations")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id, full_name").eq("role", "employee"),
+  ]);
+
+  if (error) console.warn("[Admin] installations load:", error.message);
+  
+  const employeeNames = new Map(
+    (employees || []).map((e) => [e.id, e.full_name]),
+  );
+
+  const all = list || [];
+  
+  // Calculate status counts
+  const counts = {
+    all: all.length,
+    active: all.filter((x) => ["pending", "assigned", "in_progress"].includes(x.status)).length,
+    pending: all.filter((x) => x.status === "pending").length,
+    assigned: all.filter((x) => x.status === "assigned").length,
+    in_progress: all.filter((x) => x.status === "in_progress").length,
+    completed: all.filter((x) => x.status === "completed").length,
+    cancelled: all.filter((x) => x.status === "cancelled").length,
+  };
+
+  // Status Filter
+  const statusFiltered = all.filter((x) => {
+    if (filterKey === "all") return true;
+    if (filterKey === "active") return ["pending", "assigned", "in_progress"].includes(x.status);
+    return x.status === filterKey;
+  });
+
+  // Search Filter
+  const searchLower = searchVal.toLowerCase();
+  const filtered = statusFiltered.filter((x) => {
+    if (!searchVal) return true;
+    return (
+      (x.ticket_no || "").toLowerCase().includes(searchLower) ||
+      (x.full_name || "").toLowerCase().includes(searchLower) ||
+      (x.phone || "").toLowerCase().includes(searchLower) ||
+      (x.company_name || "").toLowerCase().includes(searchLower) ||
+      (x.installation_type || "").toLowerCase().includes(searchLower) ||
+      (x.location || "").toLowerCase().includes(searchLower)
+    );
+  });
+
+  const tabs = [
+    ["active", "Active"],
+    ["pending", "Pending"],
+    ["assigned", "Assigned"],
+    ["in_progress", "In Progress"],
+    ["completed", "Completed"],
+    ["cancelled", "Cancelled"],
+    ["all", "All"],
+  ];
+
+  container.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <h1>Installation Requests</h1>
+        <p>Manage, schedule and assign client installation bookings</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" id="inst-export">${ICONS.clipboard}<span>Export</span></button>
+      </div>
+    </div>
+    
+    <div class="df-wrap" style="margin-bottom:20px;">
+      <button class="btn btn-secondary df-toggle" id="inst-filter-btn">
+        ${ICONS.filter}<span>Filters</span>
+        ${((filterKey !== "active" ? 1 : 0) + (searchVal ? 1 : 0)) > 0 ? `<span class="df-badge">${(filterKey !== "active" ? 1 : 0) + (searchVal ? 1 : 0)}</span>` : ""}
+      </button>
+      <div class="df-panel" id="inst-filter-panel" ${container.dataset.instDfOpen === "1" ? "" : 'style="display:none"'}>
+        <div class="df-field">
+          <span class="df-label">Status</span>
+          <select id="inst-status-sel">
+            ${tabs.map(([k, label]) => `<option value="${k}" ${k === filterKey ? "selected" : ""}>${label} (${counts[k] !== undefined ? counts[k] : 0})</option>`).join("")}
+          </select>
+        </div>
+        <div class="df-field">
+          <span class="df-label">Search Keyword</span>
+          <input type="text" id="inst-search-filter" placeholder="Search name, phone, ticket..." value="${searchVal}"/>
+        </div>
+        <div class="df-footer">
+          <button class="btn btn-ghost btn-sm" id="inst-filter-clear">Clear</button>
+          <button class="btn btn-primary btn-sm" id="inst-ok">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Date Requested</th>
+              <th>Customer</th>
+              <th>Installation Service</th>
+              <th>Location Name</th>
+              <th>Address</th>
+              <th>Preferred Slot</th>
+              <th>Assigned Technician</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.length === 0 
+              ? `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-dim)">No installations in this view</td></tr>` 
+              : filtered.map((x) => `
+                <tr>
+                  <td><code style="font-size:0.78rem;color:var(--primary)">${x.ticket_no || x.id.slice(0, 8)}</code></td>
+                  <td><small>${formatDateTime(x.created_at)}</small></td>
+                  <td>
+                    <b>${escapeHtml(x.full_name)}</b>
+                    ${x.company_name ? `<br/><small style="color:var(--text-dim)">${escapeHtml(x.company_name)}</small>` : ''}
+                    <br/><small style="color:var(--text-soft)">${escapeHtml(x.phone)}</small>
+                  </td>
+                  <td><b>${escapeHtml(x.installation_type)}</b></td>
+                  <td><span class="badge badge-open">${escapeHtml(x.location)}</span></td>
+                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(x.address)}">
+                    <small>${escapeHtml(x.address)}</small>
+                  </td>
+                  <td>
+                    <small>${formatDate(x.preferred_date)}</small>
+                    <br/><small style="color:var(--text-dim)">${escapeHtml(x.preferred_time)}</small>
+                  </td>
+                  <td>
+                    ${x.assigned_employee_id 
+                      ? `<b>${escapeHtml(employeeNames.get(x.assigned_employee_id) || "Assigned")}</b>` 
+                      : '<span style="color:var(--text-dim)">Unassigned</span>'}
+                  </td>
+                  <td>
+                    <span class="badge badge-${
+                      x.status === "completed" 
+                        ? "resolved" 
+                        : x.status === "in_progress" 
+                          ? "in_progress" 
+                          : x.status === "assigned"
+                            ? "assigned"
+                            : x.status === "cancelled"
+                              ? "danger"
+                              : "open"
+                    }">
+                      ${x.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style="display:flex;gap:6px;white-space:nowrap;">
+                    <button class="btn btn-primary btn-sm inst-manage-btn" data-id="${x.id}">Manage</button>
+                    <button class="btn btn-danger btn-sm inst-del-btn" data-id="${x.id}" title="Delete request">${ICONS.close}</button>
+                  </td>
+                </tr>
+              `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Bind Filter panel toggle
+  const panel = container.querySelector("#inst-filter-panel");
+  const btn = container.querySelector("#inst-filter-btn");
+  
+  const outsideClick = (e) => {
+    if (btn && !btn.closest(".df-wrap").contains(e.target)) {
+      panel.style.display = "none";
+      container.dataset.instDfOpen = "";
+      btn.classList.remove('df-open');
+      document.removeEventListener("click", outsideClick);
+    }
+  };
+
+  if (btn && panel) {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (panel.style.display === "none") {
+        panel.style.display = "";
+        container.dataset.instDfOpen = "1";
+        btn.classList.add('df-open');
+        setTimeout(() => document.addEventListener("click", outsideClick), 0);
+      } else {
+        panel.style.display = "none";
+        container.dataset.instDfOpen = "";
+        btn.classList.remove('df-open');
+        document.removeEventListener("click", outsideClick);
+      }
+    };
+  }
+
+  if (container.dataset.instDfOpen === "1") {
+    setTimeout(() => document.addEventListener("click", outsideClick), 0);
+  }
+
+  const closePanel = () => {
+    if (panel && btn) {
+      panel.style.display = "none";
+      container.dataset.instDfOpen = "";
+      btn.classList.remove('df-open');
+      document.removeEventListener("click", outsideClick);
+    }
+  };
+
+  const applyBtn = container.querySelector("#inst-ok");
+  if (applyBtn) {
+    applyBtn.onclick = () => {
+      container.dataset.instFilter = container.querySelector("#inst-status-sel").value;
+      container.dataset.instSearch = (container.querySelector("#inst-search-filter").value || "").trim();
+      closePanel();
+      renderInstallationsTab(container);
+    };
+  }
+
+  const clearBtn = container.querySelector("#inst-filter-clear");
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      container.dataset.instFilter = "active";
+      container.dataset.instSearch = "";
+      container.dataset.instDfOpen = "";
+      document.removeEventListener("click", outsideClick);
+      renderInstallationsTab(container);
+    };
+  }
+
+  const exportBtn = container.querySelector("#inst-export");
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      exportToCSV(
+        "installations.csv",
+        filtered.map((x) => ({
+          ticket: x.ticket_no || x.id,
+          created_at: x.created_at,
+          customer: x.full_name,
+          phone: x.phone,
+          company: x.company_name || "",
+          service: x.installation_type,
+          location_name: x.location,
+          address: x.address,
+          preferred_date: x.preferred_date,
+          preferred_time: x.preferred_time,
+          technician: employeeNames.get(x.assigned_employee_id) || "Unassigned",
+          status: x.status,
+        }))
+      );
+    };
+  }
+
+  // Manage button clicks
+  container.querySelectorAll(".inst-manage-btn").forEach((btn) => {
+    btn.onclick = () => {
+      openInstallationDetail(btn.dataset.id, employees, () => renderInstallationsTab(container));
+    };
+  });
+
+  // Delete button clicks
+  container.querySelectorAll(".inst-del-btn").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Are you sure you want to permanently delete this installation request?")) return;
+      const { error } = await supabase.from("installations").delete().eq("id", btn.dataset.id);
+      if (error) {
+        toast(error.message, "error");
+      } else {
+        toast("Installation request deleted", "success");
+        renderInstallationsTab(container);
+      }
+    };
+  });
+}
+
+async function openInstallationDetail(id, employees, onDone) {
+  const { data: inst, error } = await supabase
+    .from("installations")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    toast("Could not load installation details", "error");
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:540px">
+      <div class="modal-header">
+        <span class="modal-title">${ICONS.box}<span style="margin-left:8px">Installation Details</span></span>
+        <button class="modal-close" id="inst-detail-close-btn">${ICONS.close}</button>
+      </div>
+      <div class="modal-body">
+        <div class="sr-meta">
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Ticket</div><div class="sr-meta-value sr-mono">${inst.ticket_no || "—"}</div></div>
+            <div>
+              <div class="sr-meta-label">Status</div>
+              <div>
+                <span class="badge badge-${
+                  inst.status === "completed" 
+                    ? "resolved" 
+                    : inst.status === "in_progress" 
+                      ? "in_progress" 
+                      : inst.status === "assigned"
+                        ? "assigned"
+                        : inst.status === "cancelled"
+                          ? "danger"
+                          : "open"
+                }">
+                  ${inst.status.toUpperCase()}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Created At</div><div class="sr-meta-value">${formatDateTime(inst.created_at)}</div></div>
+            <div><div class="sr-meta-label">Installation Type</div><div class="sr-meta-value"><b>${escapeHtml(inst.installation_type)}</b></div></div>
+          </div>
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Customer Name</div><div class="sr-meta-value">${escapeHtml(inst.full_name)}</div></div>
+            <div><div class="sr-meta-label">Phone Number</div><div class="sr-meta-value">${escapeHtml(inst.phone)}</div></div>
+          </div>
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Location Name</div><div class="sr-meta-value"><span class="badge badge-open">${escapeHtml(inst.location)}</span></div></div>
+            <div><div class="sr-meta-label">Company Name</div><div class="sr-meta-value">${escapeHtml(inst.company_name || "—")}</div></div>
+          </div>
+          <div class="sr-meta-row">
+            <div><div class="sr-meta-label">Preferred Date</div><div class="sr-meta-value">${formatDate(inst.preferred_date)}</div></div>
+            <div><div class="sr-meta-label">Preferred Time Slot</div><div class="sr-meta-value">${escapeHtml(inst.preferred_time)}</div></div>
+          </div>
+          <div style="margin-top:12px;">
+            <div class="sr-meta-label">Complete Installation Address</div>
+            <div class="sr-meta-value" style="white-space:pre-wrap; line-height:1.45; background:var(--bg-soft); padding:10px; border-radius:8px; border:1px solid var(--border);">${escapeHtml(inst.address)}</div>
+          </div>
+          ${inst.description ? `
+            <div style="margin-top:12px;">
+              <div class="sr-meta-label">Special Instructions / Description</div>
+              <div class="sr-meta-value" style="white-space:pre-wrap; line-height:1.45; background:var(--bg-soft); padding:10px; border-radius:8px; border:1px solid var(--border);">${escapeHtml(inst.description)}</div>
+            </div>
+          ` : ""}
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;"/>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="font-weight:700; display:block; margin-bottom:6px;">Assign to Technician</label>
+          <select id="inst-assign-to" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+            <option value="">— None —</option>
+            ${(employees || []).map((e) => `
+              <option value="${e.id}" ${inst.assigned_employee_id === e.id ? "selected" : ""}>${escapeHtml(e.full_name)}</option>
+            `).join("")}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label style="font-weight:700; display:block; margin-bottom:6px;">Update Status</label>
+          <select id="inst-status-to" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+            <option value="pending" ${inst.status === "pending" ? "selected" : ""}>Pending</option>
+            <option value="assigned" ${inst.status === "assigned" ? "selected" : ""}>Assigned</option>
+            <option value="in_progress" ${inst.status === "in_progress" ? "selected" : ""}>In Progress</option>
+            <option value="completed" ${inst.status === "completed" ? "selected" : ""}>Completed</option>
+            <option value="cancelled" ${inst.status === "cancelled" ? "selected" : ""}>Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="inst-detail-close-btn2">Close</button>
+        <button class="btn btn-primary" id="inst-save-btn">${ICONS.check}<span>Save Updates</span></button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector("#inst-detail-close-btn").onclick = close;
+  overlay.querySelector("#inst-detail-close-btn2").onclick = close;
+  
+  overlay.querySelector("#inst-save-btn").onclick = async () => {
+    const assigned_employee_id = overlay.querySelector("#inst-assign-to").value || null;
+    let status = overlay.querySelector("#inst-status-to").value;
+
+    // Auto-advance status to 'assigned' if a technician was set but status remains 'pending'
+    if (assigned_employee_id && status === "pending") {
+      status = "assigned";
+    }
+
+    const { error: saveErr } = await supabase
+      .from("installations")
+      .update({ assigned_employee_id, status })
+      .eq("id", id);
+
+    if (saveErr) {
+      toast(saveErr.message, "error");
+    } else {
+      toast("Installation request updated successfully", "success");
+      close();
+      if (typeof onDone === "function") onDone();
+    }
+  };
+}

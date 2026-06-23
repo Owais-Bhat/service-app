@@ -135,3 +135,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
     setting_value TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS installations (
+    id VARCHAR(36) PRIMARY KEY,
+    ticket_no VARCHAR(50) UNIQUE,
+    full_name VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    company_name VARCHAR(150),
+    location VARCHAR(255) NOT NULL,
+    installation_type VARCHAR(100) NOT NULL,
+    preferred_date DATE NOT NULL,
+    preferred_time VARCHAR(100) NOT NULL,
+    address TEXT NOT NULL,
+    description TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    assigned_employee_id VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (assigned_employee_id) REFERENCES profiles(id) ON DELETE SET NULL
+);

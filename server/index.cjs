@@ -1437,6 +1437,24 @@ const requiredTables = [
         INDEX idx_push_user (user_id),
         INDEX idx_push_role (role)
     )`,
+    `CREATE TABLE IF NOT EXISTS installations (
+        id VARCHAR(36) PRIMARY KEY,
+        ticket_no VARCHAR(50) UNIQUE,
+        full_name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        company_name VARCHAR(150),
+        location VARCHAR(255) NOT NULL,
+        installation_type VARCHAR(100) NOT NULL,
+        preferred_date DATE NOT NULL,
+        preferred_time VARCHAR(100) NOT NULL,
+        address TEXT NOT NULL,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        assigned_employee_id VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_inst_status (status),
+        INDEX idx_inst_phone (phone)
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -2109,7 +2127,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
     'payments', 'bills', 'complaints', 'ads', 'companies', 'notices', 'discount_presets',
-    'coupons', 'training_items', 'training_completions',
+    'coupons', 'training_items', 'training_completions', 'installations',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -2123,13 +2141,14 @@ const ADMIN_ONLY_WRITE_COLUMNS = {
 const EMPLOYEE_READ_TABLES = new Set([
     'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
     'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types', 'companies',
-    'notices', 'discount_presets', 'ads', 'training_items', 'training_completions',
+    'notices', 'discount_presets', 'ads', 'training_items', 'training_completions', 'installations',
 ]);
 const EMPLOYEE_WRITE_FIELDS = {
     profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
     attendance: new Set(['id', 'user_id', 'clock_in', 'clock_out', 'date', 'status', 'location', 'latitude', 'longitude']),
     eod_reports: new Set(['id', 'employee_id', 'content', 'date']),
     leave_requests: new Set(['id', 'employee_id', 'start_date', 'end_date', 'reason', 'status']),
+    installations: new Set(['status', 'assigned_employee_id']),
     inquiries: new Set([
         'assignment_status', 'decline_reason', 'status', 'company_name', 'device_type', 'device_serial_no',
         'payment_link', 'payment_link_id', 'payment_status', 'payment_method', 'payment_received_at',
@@ -2243,6 +2262,10 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             whereClauses.push('?? = ?');
             params.push('active', 1);
             break;
+        case 'installations':
+            whereClauses.push('?? = ?');
+            params.push('assigned_employee_id', id);
+            break;
         default:
             return { error: 'Forbidden' };
     }
@@ -2352,9 +2375,24 @@ const PUBLIC_INQUIRY_CREATE_FIELDS = new Set([
 const PUBLIC_COMPLAINT_CREATE_FIELDS = new Set([
     'id', 'ticket_no', 'phone', 'complaint_text',
 ]);
+const PUBLIC_INSTALLATION_CREATE_FIELDS = new Set([
+    'id', 'ticket_no', 'full_name', 'phone', 'company_name', 'location',
+    'installation_type', 'preferred_date', 'preferred_time', 'address', 'description', 'status',
+]);
 const dataAuth = (req, res, next) => {
     if (!ALLOWED_DATA_TABLES.has(req.params.table)) {
         return res.status(404).json({ error: 'Unknown table' });
+    }
+    if (req.params.table === 'installations') {
+        if (req.method === 'POST') {
+            req.user = { role: 'public' };
+            return next();
+        }
+        const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
+        if (req.method === 'GET' && eqs.length === 1 && eqs[0].startsWith('phone:')) {
+            req.user = { role: 'public' };
+            return next();
+        }
     }
     if (req.params.table === 'inquiries') {
         const eqs = Array.isArray(req.query.eq) ? req.query.eq : (req.query.eq ? [req.query.eq] : []);
@@ -2688,6 +2726,10 @@ const SMS_TEMPLATE_ENV_ALIASES = {
     ],
     SMS_TID_PAYMENT: [
         'SMS_TID_PAYMENT_RECEIVED',
+    ],
+    SMS_TID_INSTALLATION: [
+        'SMS_TID_INSTALLATION_CONFIRMED',
+        'SMS_TID_INSTALLATION_CONFIRMATION',
     ],
 };
 
@@ -5329,6 +5371,43 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             }
         }
 
+        if (table === 'installations' && updatedRows.length > 0) {
+            const row = updatedRows[0];
+            const previousRow = previousRows.find(prev => prev.id === row.id);
+            const empIdToNotify = data.assigned_employee_id;
+            if (empIdToNotify && empIdToNotify !== previousRow?.assigned_employee_id) {
+                recordNotification({
+                    subject: 'new_assignment',
+                    title: '📋 New Installation Assignment',
+                    body: `${row.full_name || 'A client'} — ${row.installation_type || 'Installation'}${row.ticket_no ? ` (${row.ticket_no})` : ''}`,
+                    audience: { userId: empIdToNotify },
+                    data: { installation_id: row.id, ticket_no: row.ticket_no },
+                }).catch(() => {});
+                
+                (async () => {
+                    try {
+                        const conn = await getConn();
+                        const [emp] = await conn.execute(
+                            'SELECT phone, full_name FROM profiles WHERE id = ? LIMIT 1',
+                            [empIdToNotify]
+                        );
+                        conn.release();
+                        if (emp[0]?.phone) {
+                            smsNotify(emp[0].phone, 'SMS_TID_ASSIGN_EMP', [
+                                smsVar(row.ticket_no, 'N/A', 20),
+                                smsVar(row.installation_type, 'Installation', 80),
+                                smsVar(row.full_name, 'Customer', 60),
+                                smsPhoneVar(row.phone),
+                                smsVar(row.location, 'See app', 100),
+                            ]);
+                        }
+                    } catch (err) {
+                        console.error('[SMS SMS_TID_ASSIGN_EMP] db error for installation:', err.message);
+                    }
+                })();
+            }
+        }
+
         // Complaint admin_response updated → SMS to client with ticket no and reply
         // Template variables: {ticket_no} {admin_response}
         let smsResult = null;
@@ -5509,6 +5588,13 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
             data.status = 'open';
             data.admin_response = null;
             data.resolved_at = null;
+        } else if (table === 'installations') {
+            const blocked = Object.keys(data || {}).filter(k => !PUBLIC_INSTALLATION_CREATE_FIELDS.has(k));
+            if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
+            if (!data.full_name || !data.phone || !data.location || !data.installation_type || !data.preferred_date || !data.preferred_time || !data.address) {
+                return res.status(400).json({ error: 'full_name, phone, location, installation_type, preferred_date, preferred_time, and address are required' });
+            }
+            data.status = 'pending';
         } else {
             return res.status(403).json({ error: 'Forbidden' });
         }
@@ -5592,6 +5678,26 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 }
                 if (!inquiry.assigned_employee_id) {
                     autoAssignInquiry(inquiry.id);
+                }
+            });
+        }
+        if (table === 'installations') {
+            rowsToInsert.forEach(inst => {
+                broadcastNotify({
+                    subject: 'new_installation_request',
+                    title: 'New Installation Request',
+                    body: `${inst.full_name || 'Client'} - ${inst.installation_type || 'Installation'}`,
+                    audience: { role: 'admin' },
+                    data: { installation_id: inst.id, ticket_no: inst.ticket_no || null },
+                });
+                if (inst.phone && inst.ticket_no) {
+                    smsNotify(inst.phone, 'SMS_TID_INSTALLATION', [
+                        smsVar(inst.full_name, 'Customer', 60),
+                        smsVar(inst.installation_type, 'Installation', 80),
+                        smsVar(inst.ticket_no, 'N/A', 20),
+                    ]);
+                } else {
+                    console.warn(`[SMS SMS_TID_INSTALLATION] skipped: installation missing phone or ticket_no (id=${inst.id || 'unknown'})`);
                 }
             });
         }
