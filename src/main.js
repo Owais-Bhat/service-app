@@ -6,6 +6,7 @@ import { renderLayout } from './layout.js';
 // bundle is just the shell + auth + landing instead of every admin/employee
 // screen at once. Each role only downloads the code it actually opens.
 import { renderLandingPage } from './pages/landing.js';
+import { renderInstallPage } from './pages/install.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
 import { initPush } from './push.js';
 import { speak as speakNotification, openNotificationDetail, primeVoice } from './notify-center.js';
@@ -336,6 +337,27 @@ function goToLanding() {
   showPWAInstallBtn();
 }
 
+function goToInstall() {
+  hidePWAInstallBtn();
+  renderInstallPage(app, (installType) => {
+    if (installType) {
+      // User chose an installation type — go to landing with ?tab=install&type=...
+      window.history.replaceState({}, '', `/?tab=install&type=${encodeURIComponent(installType)}`);
+    } else {
+      window.history.replaceState({}, '', '/');
+    }
+    goToLanding();
+  });
+}
+
+// Expose for landing page to navigate to install page
+window.__goToInstall = goToInstall;
+
+function isInstallRoute() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('tab') === 'install' && !params.has('type');
+}
+
 function isFeedbackRoute() {
   const params = new URLSearchParams(window.location.search);
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -433,6 +455,12 @@ async function boot() {
   if (isFeedbackRoute()) {
     renderLandingPage(app, showAuth);
     hidePWAInstallBtn();
+    return;
+  }
+
+  // Direct link to install page (e.g. /?tab=install)
+  if (isInstallRoute()) {
+    goToInstall();
     return;
   }
 

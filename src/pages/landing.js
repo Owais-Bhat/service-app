@@ -216,6 +216,8 @@ export function renderLandingPage(container, onPortalClick) {
   const urlTab = urlParams.get('tab');
   const urlTicket = urlParams.get('ticket') || '';
   const urlPhone = (urlParams.get('phone') || '').replace(/^\+91/, '').replace(/\D/g, '');
+  // Handle install return: ?tab=install&type=CCTV...
+  const urlInstallType = (urlTab === 'install' && urlParams.get('type')) ? urlParams.get('type') : '';
   const pathFeedback = window.location.pathname.match(/^\/f\/([^/?#]+)/)?.[1] || '';
   const urlFeedback = (
     urlParams.get('token')
@@ -229,7 +231,7 @@ export function renderLandingPage(container, onPortalClick) {
 
   const state = {
     mode: (urlTab === 'track' || urlFeedback) ? 'track' : 'new',
-    step: 1,
+    step: urlInstallType ? 1 : 1,
     phone: '',
     otp: '',
     captcha: makeCaptcha(),
@@ -275,7 +277,7 @@ export function renderLandingPage(container, onPortalClick) {
       ? cachedBootstrap.issueOptions
       : FALLBACK_ISSUE_OPTIONS,
     issueValue: '',
-    installType: '',
+    installType: urlInstallType || '',
   };
 
   function render() {
@@ -1157,6 +1159,13 @@ export function renderLandingPage(container, onPortalClick) {
     bind('.srf-staff-btn', onPortalClick);
     container.querySelectorAll('.srf-mode-tab').forEach(t => {
       t.onclick = () => {
+        // Installation tab → navigate to separate install page
+        if (t.dataset.mode === 'install') {
+          if (typeof window.__goToInstall === 'function') {
+            window.__goToInstall();
+          }
+          return;
+        }
         if (state.mode === t.dataset.mode) return;
         state.installType = '';
         state.mode = t.dataset.mode;
@@ -1864,6 +1873,12 @@ export function renderLandingPage(container, onPortalClick) {
   }
 
   render();
+
+  // Clean up install return params from URL so a refresh doesn't re-trigger
+  if (urlInstallType) {
+    try { window.history.replaceState({}, '', '/'); } catch {}
+  }
+
   if (!state.isFeedbackPage) {
     // Show a popup straight from cache if we already have one, so it never
     // depends on the bootstrap fetch succeeding; the guard keeps it single-shot.
