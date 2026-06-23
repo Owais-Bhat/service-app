@@ -318,14 +318,14 @@ export function renderInstallPage(container, onBack) {
         padding: 16px; animation: instFadeIn 0.2s ease-out;
       }
       .inst-modal {
-        background: var(--glass-bg, var(--bg-soft));
-        border: 1px solid var(--glass-border, var(--border));
-        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-        width: 100%; max-width: 520px; border-radius: 24px;
-        box-shadow: 0 25px 60px rgba(15, 23, 42, 0.3);
+        background: var(--bg-soft, #ffffff);
+        border: 1px solid var(--border);
+        border-radius: 30px;
+        box-shadow: var(--neu-shadow, 0 25px 60px rgba(15, 23, 42, 0.15));
         display: flex; flex-direction: column; overflow: hidden;
         animation: instSlideUp 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
         position: relative;
+        width: 100%; max-width: 520px;
       }
       .inst-modal-header {
         padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;
