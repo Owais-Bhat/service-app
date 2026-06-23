@@ -339,6 +339,7 @@ export function renderInstallPage(container, onBack) {
         transition: background 0.2s, color 0.2s; width: 32px; height: 32px;
       }
       .inst-modal-close:hover { background: var(--border); color: var(--text); }
+      .inst-modal-close svg { width: 16px; height: 16px; flex-shrink: 0; }
       .inst-modal-body { padding: 24px; overflow-y: auto; max-height: 80vh; }
       
       /* Steps bar */
@@ -358,24 +359,7 @@ export function renderInstallPage(container, onBack) {
       /* Form Layouts */
       .inst-form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
       .inst-form-group label { font-size: 0.82rem; font-weight: 700; color: var(--text-soft); }
-      .inst-input {
-        width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
-        background: var(--bg); color: var(--text); font-family: inherit; font-size: 0.92rem;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      }
-      .inst-input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
-      .inst-input::placeholder { color: var(--text-dim); opacity: 0.6; }
       .inst-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      
-      .inst-btn {
-        width: 100%; padding: 13px 20px; border: none; border-radius: 12px;
-        font-family: inherit; font-size: 0.92rem; font-weight: 700; color: #fff; cursor: pointer;
-        background: var(--gradient); display: flex; align-items: center; justify-content: center; gap: 8px;
-        box-shadow: 0 4px 14px rgba(16,185,129,0.2);
-        transition: transform 0.15s, box-shadow 0.15s;
-      }
-      .inst-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(16,185,129,0.3); }
-      .inst-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; box-shadow: none; }
       
       .inst-timer-text { font-size: 0.8rem; color: var(--text-dim); text-align: center; margin-top: 14px; line-height: 1.4; }
       .inst-resend-link { color: var(--primary); text-decoration: none; font-weight: 700; cursor: pointer; margin-left: 4px; }
@@ -384,10 +368,11 @@ export function renderInstallPage(container, onBack) {
       /* Success Screen */
       .inst-success-box { text-align: center; padding: 16px 0; }
       .inst-success-icon {
-        width: 64px; height: 64px; border-radius: 50%; background: rgba(16,185,129,0.1);
+        width: 64px; height: 64px; border-radius: 50%; background: rgba(16, 185, 129, 0.1);
         border: 2px solid var(--primary); color: var(--primary); display: flex; align-items: center;
         justify-content: center; margin: 0 auto 18px; font-size: 2rem;
       }
+      .inst-success-icon svg { width: 32px; height: 32px; flex-shrink: 0; }
 
       @keyframes instFadeIn { from { opacity: 0; } to { opacity: 1; } }
       @keyframes instSlideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -639,14 +624,16 @@ function openBookingModal(installType) {
     }
   }
 
-  function setButtonLoading(btn, label = 'Loading') {
+  function setButtonLoading(btn, label = 'Loading...') {
     if (!btn) return () => {};
-    const originalText = btn.innerHTML;
+    const originalHTML = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = `<span class="srf-spinner"></span> ${label}...`;
+    btn.classList.add('is-loading');
+    btn.innerHTML = `<span class="btn-spinner"></span> <span>${label}</span>`;
     return () => {
       btn.disabled = false;
-      btn.innerHTML = originalText;
+      btn.classList.remove('is-loading');
+      btn.innerHTML = originalHTML;
     };
   }
 
@@ -683,13 +670,13 @@ function openBookingModal(installType) {
           <p style="margin:0; font-size:0.88rem; color:var(--text-dim)">To request an installation, please verify your mobile number first.</p>
         </div>
         <div class="inst-form-group">
-          <label for="inst-phone-field">Mobile Number</label>
-          <div style="display:flex; gap:8px;">
-            <input type="text" value="+91" disabled style="width:56px; text-align:center; padding:12px 0; border:1px solid var(--border); border-radius:12px; background:var(--bg-soft); color:var(--text); font-weight:700;" />
-            <input type="tel" id="inst-phone-field" class="inst-input" maxlength="10" placeholder="Enter 10-digit number" autocomplete="tel" style="flex:1;" />
+          <label class="srf-label" for="inst-phone-field">Mobile Number</label>
+          <div class="srf-input-wrap">
+            <span class="srf-cc">+91</span>
+            <input type="tel" id="inst-phone-field" class="srf-input" maxlength="10" placeholder="Enter 10-digit number" autocomplete="tel" />
           </div>
         </div>
-        <button class="inst-btn" id="inst-send-otp-btn" style="margin-top:10px;">
+        <button class="btn btn-primary btn-wide" id="inst-send-otp-btn" style="margin-top:10px;">
           <span>Send OTP</span> ${ICONS.arrowRight}
         </button>
       `;
@@ -701,11 +688,13 @@ function openBookingModal(installType) {
           <p style="margin:0; font-size:0.88rem; color:var(--text-dim)">We sent a 6-digit OTP code to <b style="color:var(--text)">${state.phone}</b></p>
         </div>
         <div class="inst-form-group">
-          <div style="display:flex; justify-content:center;">
-            <input type="text" id="inst-otp-field" class="inst-input" maxlength="6" placeholder="••••••" style="letter-spacing:0.4em; text-align:center; font-size:1.6rem; font-weight:800; max-width:200px; padding:10px;" />
+          <div style="display:flex; justify-content:center; width:100%;">
+            <div class="srf-input-wrap" style="max-width:200px; width:100%; justify-content:center;">
+              <input type="text" id="inst-otp-field" class="srf-input" maxlength="6" placeholder="••••••" style="letter-spacing:0.4em; text-align:center; font-size:1.6rem; font-weight:800; padding:10px 0; border:none; background:transparent;" />
+            </div>
           </div>
         </div>
-        <button class="inst-btn" id="inst-verify-otp-btn" style="margin-top:14px;">
+        <button class="btn btn-primary btn-wide" id="inst-verify-otp-btn" style="margin-top:14px;">
           <span>Verify & Proceed</span> ${ICONS.check}
         </button>
         <div class="inst-timer-text" id="inst-timer-display">Resend code in <b>60s</b></div>
@@ -723,42 +712,56 @@ function openBookingModal(installType) {
         </div>
         <form id="inst-booking-form">
           <div class="inst-form-group">
-            <label>Full Name</label>
-            <input type="text" name="fullName" class="inst-input" placeholder="Your full name" required />
-          </div>
-          <div class="inst-form-row">
-            <div class="inst-form-group">
-              <label>Company Name <span style="font-weight:normal;color:var(--text-dim)">(Optional)</span></label>
-              <input type="text" name="companyName" class="inst-input" placeholder="e.g. Acme Corp" />
-            </div>
-            <div class="inst-form-group">
-              <label>Location Name</label>
-              <input type="text" name="locationName" class="inst-input" placeholder="e.g. Home, Office, Server Room" required />
+            <label class="srf-label">Full Name</label>
+            <div class="srf-input-wrap">
+              <input type="text" name="fullName" class="srf-input" placeholder="Your full name" required />
             </div>
           </div>
           <div class="inst-form-row">
             <div class="inst-form-group">
-              <label>Preferred Date</label>
-              <input type="date" name="prefDate" min="${minDate}" class="inst-input" required />
+              <label class="srf-label">Company Name <span class="srf-optional">(Optional)</span></label>
+              <div class="srf-input-wrap">
+                <input type="text" name="companyName" class="srf-input" placeholder="e.g. Acme Corp" />
+              </div>
             </div>
             <div class="inst-form-group">
-              <label>Time Slot</label>
-              <select name="prefTime" class="inst-input" required>
-                <option value="10:00 AM - 01:00 PM">10:00 AM - 01:00 PM</option>
-                <option value="01:00 PM - 04:00 PM">01:00 PM - 04:00 PM</option>
-                <option value="04:00 PM - 07:00 PM">04:00 PM - 07:00 PM</option>
-              </select>
+              <label class="srf-label">Location Name</label>
+              <div class="srf-input-wrap">
+                <input type="text" name="locationName" class="srf-input" placeholder="e.g. Home, Office, Server Room" required />
+              </div>
+            </div>
+          </div>
+          <div class="inst-form-row">
+            <div class="inst-form-group">
+              <label class="srf-label">Preferred Date</label>
+              <div class="srf-input-wrap">
+                <input type="date" name="prefDate" min="${minDate}" class="srf-input" required style="width:100%; border:none; background:transparent;" />
+              </div>
+            </div>
+            <div class="inst-form-group">
+              <label class="srf-label">Time Slot</label>
+              <div class="srf-input-wrap">
+                <select name="prefTime" class="srf-input srf-select" required>
+                  <option value="10:00 AM - 01:00 PM">10:00 AM - 01:00 PM</option>
+                  <option value="01:00 PM - 04:00 PM">01:00 PM - 04:00 PM</option>
+                  <option value="04:00 PM - 07:00 PM">04:00 PM - 07:00 PM</option>
+                </select>
+              </div>
             </div>
           </div>
           <div class="inst-form-group">
-            <label>Complete Installation Address</label>
-            <textarea name="address" class="inst-input" placeholder="House/Office No, Building name, Street details, Landmark" rows="3" required style="resize:vertical;"></textarea>
+            <label class="srf-label">Complete Installation Address</label>
+            <div class="srf-input-wrap" style="align-items: flex-start; padding: 10px 14px;">
+              <textarea name="address" class="srf-input" placeholder="House/Office No, Building name, Street details, Landmark" rows="3" required style="resize:vertical; width:100%; border:none; background:transparent; font-family:inherit; font-size:0.98rem;"></textarea>
+            </div>
           </div>
           <div class="inst-form-group">
-            <label>Special Instructions <span style="font-weight:normal;color:var(--text-dim)">(Optional)</span></label>
-            <textarea name="description" class="inst-input" placeholder="Tell us about camera heights, specific cabling routes, etc." rows="2" style="resize:vertical;"></textarea>
+            <label class="srf-label">Special Instructions <span class="srf-optional">(Optional)</span></label>
+            <div class="srf-input-wrap" style="align-items: flex-start; padding: 10px 14px;">
+              <textarea name="description" class="srf-input" placeholder="Tell us about camera heights, specific cabling routes, etc." rows="2" style="resize:vertical; width:100%; border:none; background:transparent; font-family:inherit; font-size:0.98rem;"></textarea>
+            </div>
           </div>
-          <button type="submit" class="inst-btn" id="inst-submit-request-btn" style="margin-top:10px; width:100%;">
+          <button type="submit" class="btn btn-primary btn-wide" id="inst-submit-request-btn" style="margin-top:10px;">
             <span>Book Installation</span> ${ICONS.check}
           </button>
         </form>
@@ -776,7 +779,7 @@ function openBookingModal(installType) {
             <code style="font-size:1.25rem; font-weight:800; color:var(--primary); font-family:monospace; letter-spacing:0.02em;">${state.ticketNo}</code>
           </div>
           <p style="font-size:0.82rem; color:var(--text-dim); margin-bottom:24px;">An SMS confirmation with details has been sent to your verified mobile number.</p>
-          <button class="inst-btn" id="inst-success-close-btn" style="width:100%;">
+          <button class="btn btn-primary btn-wide" id="inst-success-close-btn">
             <span>Finish</span>
           </button>
         </div>
