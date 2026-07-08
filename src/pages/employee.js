@@ -3163,7 +3163,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
     }
     const linkedServicesSubtotal = () => selectedServices.reduce((acc, s) => acc + (Number(s.cost) || 0), 0);
-    const savedServicesSubtotal = () => Math.max(0, Number(inquiryRow?.bill_amount) || 0);
+    // bill_amount is stored as services + extra, so strip the extra back out
+    // or reopening the modal double-counts it (extra is re-added by calcTotal).
+    const savedServicesSubtotal = () =>
+      Math.max(0, (Number(inquiryRow?.bill_amount) || 0) - (Number(inquiryRow?.extra_cost) || 0));
     const billServicesSubtotal = () => {
       const linkedSubtotal = linkedServicesSubtotal();
       return linkedSubtotal > 0 ? linkedSubtotal : savedServicesSubtotal();
@@ -4581,6 +4584,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             payment_link: data.short_url,
             payment_link_id: data.id || null,
             bill_amount: bill.servicesSubtotal + bill.extra,
+            extra_cost: bill.extra,
+            extra_cost_reason: overlay.querySelector('#extra-reason')?.value.trim() || null,
             transport_km: bill.km,
             transport_fee: bill.transport,
             platform_fee: bill.platform,
@@ -4637,6 +4642,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             await persistSelectedServices();
             const updates = {
               bill_amount: bill.servicesSubtotal + bill.extra,
+              extra_cost: bill.extra,
+              extra_cost_reason: overlay.querySelector('#extra-reason')?.value.trim() || null,
               transport_km: bill.km,
               transport_fee: bill.transport,
               platform_fee: bill.platform,
