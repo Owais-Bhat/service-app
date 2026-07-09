@@ -1,0 +1,35 @@
+# Networking Experts
+
+> IT services company in Srinagar, Jammu & Kashmir, India. We install and
+> support CCTV cameras, computer networks, WiFi, biometric access control,
+> video door phones and smart home automation for homes and businesses.
+
+Customers book a service request online at
+https://services.networkingexperts.in/ and receive a ticket number
+(format NE-YYMMDD-XXXX) to track progress live. A technician is assigned
+and visits on site. Billing is GST-compliant with online payment links.
+
+## Services
+
+- CCTV Camera Installation: HD/IP cameras, DVR/NVR & storage setup, cabling,
+  mobile + desktop remote viewing, demo & 30-day support.
+- Networking & LAN Setup: structured cabling, LAN/WAN design, router, switch
+  & firewall configuration, IP planning, labelling & documentation.
+- WiFi / Access Point Setup: coverage heat-map survey, access point mounting
+  & configuration, seamless roaming, speed & coverage testing.
+- Biometric & Access Control: fingerprint/RFID devices, user enrolment,
+  door lock integration, attendance & report setup.
+- Video Door Phone / Intercom: outdoor + indoor units, wiring & power,
+  mobile call forwarding.
+- Smart Home Automation: smart lights, sensors & hubs, app and voice
+  control, training & support.
+- Repairs & support: internet down, slow connection, WiFi issues, CCTV
+  camera offline, hardware repair, software issues.
+
+## Contact
+
+- Phone / WhatsApp: +91 88991 33144
+- Email: support@networkingexperts.in
+- Location: Srinagar, Jammu & Kashmir, India
+- Working hours: 10:00-18:00 IST, Monday-Saturday
+- Book online: https://services.networkingexperts.in/

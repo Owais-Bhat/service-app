@@ -1,4 +1,4 @@
-import{g as e,t}from"./icons-j8TZxXx3.js";import{r as n}from"./index-BO2-RaLs.js";function r(e){return String(e||``).replace(/[&<>"']/g,e=>({"&":`&amp;`,"<":`&lt;`,">":`&gt;`,'"':`&quot;`,"'":`&#39;`})[e])}async function i(i){let{data:{user:a}}=await n.auth.getUser(),{data:o}=await n.from(`profiles`).select(`*`).eq(`id`,a.id).single(),s=o||{},c=s.role===`admin`||s.can_update_profile===1||s.can_update_profile===!0,l=c?``:`disabled aria-disabled="true"`;i.innerHTML=`
+import{g as e,t}from"./icons-j8TZxXx3.js";import{r as n}from"./index-CuPRPj-i.js";function r(e){return String(e||``).replace(/[&<>"']/g,e=>({"&":`&amp;`,"<":`&lt;`,">":`&gt;`,'"':`&quot;`,"'":`&#39;`})[e])}async function i(i){let{data:{user:a}}=await n.auth.getUser(),{data:o}=await n.from(`profiles`).select(`*`).eq(`id`,a.id).single(),s=o||{},c=s.role===`admin`||s.can_update_profile===1||s.can_update_profile===!0,l=c?``:`disabled aria-disabled="true"`;i.innerHTML=`
     <div class="page-header"><h1>My Profile</h1><p>Manage your account details</p></div>
     <div class="card" style="max-width:560px">
       <div class="card-header"><span class="card-title">Account Information</span></div>
