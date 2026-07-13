@@ -376,7 +376,9 @@ export async function renderAdminDashboard(container) {
         new Date(y.latest?.clock_in || 0) - new Date(x.latest?.clock_in || 0),
     );
   const strictEodUsers = new Set(
-    eodWarnings.filter((x) => x.count >= STRICT_EOD_LIMIT).map((x) => x.userId),
+    eodWarnings
+      .filter((x) => x.count >= STRICT_EOD_LIMIT && !x.employee?.eod_exempt)
+      .map((x) => x.userId),
   );
   a = a.filter((row) => !strictEodUsers.has(row.user_id));
   const { data: allInquiries } = await supabase
@@ -494,7 +496,7 @@ export async function renderAdminDashboard(container) {
           .slice(0, 5)
           .map(
             (x) =>
-              `<tr>                <td><b>${escapeHtml(x.employee?.full_name || "Employee")}</b></td>                <td><span class="badge ${x.count >= STRICT_EOD_LIMIT ? "badge-danger" : "badge-medium"}">${x.count} day${x.count === 1 ? "" : "s"}</span></td>                <td><small>${formatDateTime(x.latest?.clock_in)}</small></td>                <td>${x.count >= STRICT_EOD_LIMIT ? '<span class="badge badge-danger">Strict: block clock-in</span>' : '<span class="badge badge-medium">Warn employee</span>'}</td>              </tr>`,
+              `<tr>                <td><b>${escapeHtml(x.employee?.full_name || "Employee")}</b></td>                <td><span class="badge ${x.count >= STRICT_EOD_LIMIT ? "badge-danger" : "badge-medium"}">${x.count} day${x.count === 1 ? "" : "s"}</span></td>                <td><small>${formatDateTime(x.latest?.clock_in)}</small></td>                <td>${x.employee?.eod_exempt ? '<span class="badge badge-resolved">Exempt</span>' : x.count >= STRICT_EOD_LIMIT ? '<span class="badge badge-danger">Strict: block clock-in</span>' : '<span class="badge badge-medium">Warn employee</span>'}</td>              </tr>`,
           )
           .join(
             "",
@@ -561,7 +563,9 @@ export async function renderAdminDashboard(container) {
     eodWarnings.slice(0, 5).map((x) => lrow(ICONS.clipboard,
       escapeHtml(x.employee?.full_name || "Employee"),
       `${x.count} missed day${x.count === 1 ? "" : "s"} · last in ${formatDateTime(x.latest?.clock_in)}`,
-      `<span class="badge ${x.count >= STRICT_EOD_LIMIT ? "badge-danger" : "badge-medium"}">${x.count >= STRICT_EOD_LIMIT ? "Strict: block clock-in" : "Warn employee"}</span>`)).join("")));
+      x.employee?.eod_exempt
+        ? '<span class="badge badge-resolved">Exempt</span>'
+        : `<span class="badge ${x.count >= STRICT_EOD_LIMIT ? "badge-danger" : "badge-medium"}">${x.count >= STRICT_EOD_LIMIT ? "Strict: block clock-in" : "Warn employee"}</span>`)).join("")));
   const instRow = (x, icon) => lrow(
     icon,
     escapeHtml(x.full_name || "—"),
@@ -1212,13 +1216,17 @@ async function openInquiryDetail(id, onDone) {
 }
 export async function renderAttendance(container) {
   showLoader(container);
-  const [{ data: logs }, { data: eodReports }] = await Promise.all([
+  const [{ data: logs }, { data: eodReports }, { data: exemptProfiles }] = await Promise.all([
     supabase
       .from("attendance")
       .select("*, profiles(full_name)")
       .order("date", { ascending: false }),
     supabase.from("eod_reports").select("employee_id,date,created_at"),
+    supabase.from("profiles").select("id,eod_exempt").eq("role", "employee"),
   ]);
+  const eodExemptIds = new Set(
+    (exemptProfiles || []).filter((p) => p.eod_exempt).map((p) => p.id),
+  );
   const list = logs || [];
   const today = new Date().toLocaleDateString("en-CA");
   const todayLogs = list.filter((x) => x.date === today);
@@ -1233,7 +1241,7 @@ export async function renderAttendance(container) {
           attendanceDateKey(x) === attendanceDateKey(row)),
     );
   const restrictedEmployees = [...forgottenByEmployee.entries()]
-    .filter(([, rows]) => rows.length >= STRICT_EOD_LIMIT)
+    .filter(([userId, rows]) => rows.length >= STRICT_EOD_LIMIT && !eodExemptIds.has(userId))
     .map(([userId, rows]) => ({
       userId,
       rows: rows.sort(
@@ -1359,19 +1367,22 @@ async function openAdminRequestModal(onDone) {
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, phone")
+      .select("id, full_name, phone, eod_exempt")
       .eq("role", "employee"),
     supabase.from("service_pricing").select("category").order("category"),
     supabase.from("attendance").select("user_id,clock_in,clock_out,date"),
     supabase.from("eod_reports").select("employee_id,date,created_at"),
   ]);
+  const eodExemptIds = new Set(
+    (employees || []).filter((e) => e.eod_exempt).map((e) => e.id),
+  );
   const missedByEmployee = groupedMissedEods(
     activeAttendance || [],
     eodReports || [],
   );
   const restrictedEmployeeIds = new Set(
     [...missedByEmployee.entries()]
-      .filter(([, rows]) => rows.length >= STRICT_EOD_LIMIT)
+      .filter(([userId, rows]) => rows.length >= STRICT_EOD_LIMIT && !eodExemptIds.has(userId))
       .map(([userId]) => userId),
   );
   const onlineEmployeeIds = new Set(
@@ -2073,6 +2084,19 @@ export async function renderUsers(container) {
   `
       : '<span style="color:var(--text-dim)">-</span>';
 
+  const eodExemptCell = (u) =>
+    u.role === "employee"
+      ? `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="switch-outer eod-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.eod_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
+        <div class="switch-inner" style="position:absolute;top:2px;left:${u.eod_exempt ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+      </div>
+      <span class="eod-exempt-status-text" style="font-size:0.8rem;font-weight:700;color:${u.eod_exempt ? "var(--primary)" : "var(--text-dim)"};">${u.eod_exempt ? "ON" : "OFF"}</span>
+      <input type="checkbox" class="eod-exempt-chk" data-uid="${u.id}" ${u.eod_exempt ? "checked" : ""} style="display:none;" />
+    </div>
+  `
+      : '<span style="color:var(--text-dim)">-</span>';
+
   // Per-employee tab ids (must match getNavItems('employee') in main.js).
   const EMPLOYEE_TAB_IDS = ["all-tickets","my-attendance","my-leaves","my-eod","my-cash","my-collections","my-salary","leaderboard","employee-training","my-training-courses","device-followup","estimator","service-pricing"];
   const parseAllowedTabs = (u) => {
@@ -2125,6 +2149,7 @@ export async function renderUsers(container) {
               <th>Service Access</th>
               <th>Profile Access</th>
               <th>Always Assign</th>
+              <th>EOD Exempt</th>
               <th>Attendance Tab</th>
               <th>Leave Tab</th>
               <th>Collections Tab</th>
@@ -2150,6 +2175,7 @@ export async function renderUsers(container) {
                 <td>${accessCell(u)}</td>
                 <td>${profileCell(u)}</td>
                 <td>${alwaysAssignCell(u)}</td>
+                <td>${eodExemptCell(u)}</td>
                 <td>${attendanceCell(u)}</td>
                 <td>${leavesCell(u)}</td>
                 <td>${collectionsCell(u)}</td>
@@ -2164,7 +2190,7 @@ export async function renderUsers(container) {
             `,
                     )
                     .join("")
-                : '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
+                : '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
             }
           </tbody>
         </table>
@@ -2185,10 +2211,11 @@ export async function renderUsers(container) {
           return;
         }
         toast(`${label} updated`, "success");
-        if (column === "always_assign") {
-          const outer = chk.parentElement.querySelector(".always-assign-switch-outer");
+        if (column === "always_assign" || column === "eod_exempt") {
+          const prefix = column === "always_assign" ? "always-assign" : "eod-exempt";
+          const outer = chk.parentElement.querySelector(`.${prefix}-switch-outer`);
           const inner = chk.parentElement.querySelector(".switch-inner");
-          const text = chk.parentElement.querySelector(".always-assign-status-text");
+          const text = chk.parentElement.querySelector(`.${prefix}-status-text`);
           if (outer && inner && text) {
             outer.style.background = chk.checked ? "var(--primary)" : "var(--border)";
             inner.style.left = chk.checked ? "20px" : "2px";
@@ -2210,10 +2237,25 @@ export async function renderUsers(container) {
     "always_assign",
     "Always Assign priority",
   );
+  bindAccessToggle(
+    ".eod-exempt-chk",
+    "eod_exempt",
+    "No-restriction EOD exemption",
+  );
 
   container.querySelectorAll(".always-assign-switch-outer").forEach((div) => {
     div.onclick = () => {
       const chk = div.parentElement.querySelector(".always-assign-chk");
+      if (chk) {
+        chk.checked = !chk.checked;
+        chk.dispatchEvent(new Event("change"));
+      }
+    };
+  });
+
+  container.querySelectorAll(".eod-exempt-switch-outer").forEach((div) => {
+    div.onclick = () => {
+      const chk = div.parentElement.querySelector(".eod-exempt-chk");
       if (chk) {
         chk.checked = !chk.checked;
         chk.dispatchEvent(new Event("change"));
@@ -4541,10 +4583,10 @@ export async function renderSettingsTab(container) {
     .map(([userId]) => userId);
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id,full_name,role")
+    .select("id,full_name,role,eod_exempt")
     .eq("role", "employee");
-  const restrictedProfiles = (profiles || []).filter((p) =>
-    restrictedEmployees.includes(p.id),
+  const restrictedProfiles = (profiles || []).filter(
+    (p) => restrictedEmployees.includes(p.id) && !p.eod_exempt,
   );
   container.innerHTML = `
     <div class="page-header settings-header">

@@ -1073,6 +1073,7 @@ const requiredColumns = {
         { name: 'can_update_profile', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'always_assign', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'allowed_tabs', definition: 'TEXT COMMENT \'JSON array of tab ids this employee may see; null = all\'' },
+        { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -2134,7 +2135,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -4885,7 +4886,7 @@ app.get('/api/admin/inquiries/:id/manage-context', authenticateToken, async (req
         const today = localDateKey();
         const afterCutoff = isAfterAutoClockOutCutoff(new Date());
         const [employeeRows] = await connection.execute(
-            `SELECT p.id, p.full_name, p.phone, p.always_assign,
+            `SELECT p.id, p.full_name, p.phone, p.always_assign, p.eod_exempt,
                     CASE WHEN EXISTS (
                         SELECT 1
                           FROM attendance active
@@ -4934,7 +4935,8 @@ app.get('/api/admin/inquiries/:id/manage-context', authenticateToken, async (req
                 phone: row.phone,
                 always_assign: Boolean(row.always_assign),
                 clockedIn: Boolean(row.clocked_in),
-                restricted: Number(row.missed_eod_count) >= 4,
+                eodExempt: Boolean(row.eod_exempt),
+                restricted: Number(row.missed_eod_count) >= 4 && !row.eod_exempt,
                 missedEodCount: Number(row.missed_eod_count) || 0,
             })),
             billServices,

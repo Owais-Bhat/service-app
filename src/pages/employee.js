@@ -1060,7 +1060,7 @@ export async function renderEmployeeDashboard(container) {
 
   const today = new Date().toLocaleDateString('en-CA');
   const clockOutSetting = await loadEmployeeClockOutTime();
-  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [];
+  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [], eodExempt = false;
 
   try {
     const res = await Promise.all([
@@ -1073,8 +1073,10 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
       supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at'),
       supabase.from('profiles').select('id,full_name,role'),
+      supabase.from('profiles').select('eod_exempt').eq('id', user.id).maybeSingle(),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
+    eodExempt = Boolean(res[9]?.data?.eod_exempt);
     feedbackRows = (res[7]?.data || []).filter(r => r.feedback_rating != null);
     allProfiles = res[8]?.data || [];
     attendanceHistory = res[4].data || [];
@@ -1130,7 +1132,7 @@ export async function renderEmployeeDashboard(container) {
   // popup first (if not yet submitted), then clocks out.
   const canClockOut = isClockedIn && !isClockedOut;
   const missedEods = getMissedEodRows(attendanceHistory, eodHistory, today);
-  const strictEodBlock = missedEods.length >= STRICT_EOD_LIMIT;
+  const strictEodBlock = missedEods.length >= STRICT_EOD_LIMIT && !eodExempt;
   // Today's Route shows ALL in-progress / on-plate tasks (not just today's new
   // ones) so the employee always sees everything still to be done.
   const todayTasks = [
@@ -1640,7 +1642,7 @@ export async function renderEmployeeDashboard(container) {
 
 export async function renderEmployeeAttendanceRecords(container) {
   showLoader(container);
-  const { user, attendance, reports } = await getEmployeeContext();
+  const { user, profile, attendance, reports } = await getEmployeeContext();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
   const monthKey = getMonthKey();
@@ -1648,7 +1650,7 @@ export async function renderEmployeeAttendanceRecords(container) {
   const presentDays = new Set(monthRows.map(x => x.date)).size;
   const completed = monthRows.filter(x => x.clock_in && x.clock_out);
   const missedEodRows = getMissedEodRows(attendance, reports);
-  const strictEodBlock = missedEodRows.length >= STRICT_EOD_LIMIT;
+  const strictEodBlock = missedEodRows.length >= STRICT_EOD_LIMIT && !profile?.eod_exempt;
   const totalMins = completed.reduce((sum, x) => sum + Math.max(0, new Date(x.clock_out) - new Date(x.clock_in)) / 60000, 0);
   const totalHours = `${Math.floor(totalMins / 60)}h ${Math.round(totalMins % 60)}m`;
 
