@@ -20,7 +20,9 @@ const {
     normalizeIndianMobile,
     sendDltSms,
 } = require('./fast2sms.cjs');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+// Also load a fallback .env two levels up (the hosting domain dir): git deploys
+// recreate the app folder and delete server/.env, so secrets must live outside it.
+require('dotenv').config({ path: [path.join(__dirname, '.env'), path.join(__dirname, '..', '..', '.env')] });
 const {
     notifyServiceRequestEmail,
     notifyInstallationEmail,
