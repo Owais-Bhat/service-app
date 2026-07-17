@@ -21,6 +21,11 @@ const {
     sendDltSms,
 } = require('./fast2sms.cjs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+const {
+    notifyServiceRequestEmail,
+    notifyInstallationEmail,
+    notifyComplaintEmail,
+} = require('./mailer.cjs');
 
 // Fail fast if required env is missing — better than 500s at request time.
 const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME'];
@@ -5666,6 +5671,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                     audience: { role: 'admin' },
                     data: { inquiry_id: inquiry.id, ticket_no: inquiry.ticket_no || null },
                 });
+                notifyServiceRequestEmail(inquiry).catch(() => {});
                 // SMS to client: {name} {ticket_no} {service_item} {sla_deadline}
                 if (inquiry.phone && inquiry.ticket_no) {
                     const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(inquiry.created_at || new Date()));
@@ -5692,6 +5698,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                     audience: { role: 'admin' },
                     data: { installation_id: inst.id, ticket_no: inst.ticket_no || null },
                 });
+                notifyInstallationEmail(inst).catch(() => {});
                 if (inst.phone && inst.ticket_no) {
                     smsNotify(inst.phone, 'SMS_TID_INSTALLATION', [
                         smsVar(inst.full_name, 'Customer', 60),
@@ -5712,6 +5719,7 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                 audience: { role: 'admin' },
                 data: { complaint_id: data.id, ticket_no: data.ticket_no, inquiry_id: data.inquiry_id || null },
             });
+            notifyComplaintEmail(data).catch(() => {});
             // "Issue not resolved" on a paid/completed ticket → reopen it, unassign
             // the original employee, and route it to admin so they can reassign it
             // to a DIFFERENT employee. The rework is free (employee marks it FOC).
