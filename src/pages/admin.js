@@ -1270,7 +1270,8 @@ export async function renderAttendance(container) {
       : items
           .map((x) => {
             const hw = hoursWorked(x.clock_in, x.clock_out);
-            return `<tr>          <td>${formatDate(x.date)}</td>          <td><b>${x.profiles?.full_name || "—"}</b></td>          <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : hasMissedEod(x) ? '<span class="badge badge-danger">Missing EOD</span>' : '<span class="badge badge-open">Active</span>'}</td>          <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>          <td><small>${x.location || "—"}</small></td>        </tr>`;
+            const hasCoords = x.latitude != null && x.longitude != null;
+            return `<tr>          <td>${formatDate(x.date)}</td>          <td><b>${x.profiles?.full_name || "—"}</b></td>          <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : hasMissedEod(x) ? '<span class="badge badge-danger">Missing EOD</span>' : '<span class="badge badge-open">Active</span>'}</td>          <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>          <td style="display:flex;align-items:center;gap:6px;"><small>${x.location || "—"}</small>${hasCoords ? `<button type="button" class="btn-icon att-view-map" data-lat="${x.latitude}" data-lng="${x.longitude}" data-name="${escapeHtml(x.profiles?.full_name || "Employee")}" title="View on map" style="border:none;background:transparent;cursor:pointer;color:var(--primary);display:inline-flex;padding:2px;">${ICONS.pin}</button>` : ""}</td>        </tr>`;
           })
           .join("");
   container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Attendance Logs</h1>        <p>Track employee check-ins and locations</p>      </div>      <button class="btn btn-secondary" id="att-export">${ICONS.clipboard}<span>Export CSV</span></button>    </div>    <div class="stats-grid" style="margin-bottom:24px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${todayLogs.length}</div>        <div class="stat-label">Today's Attendance</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>        <div class="stat-label">Currently Active</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${forgottenLogs.length ? "var(--danger)" : "var(--success)"}">${forgottenLogs.length}</div>        <div class="stat-label">Forgot EOD</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${restrictedEmployees.length ? "var(--danger)" : "var(--success)"}">${restrictedEmployees.length}</div>        <div class="stat-label">Restricted Users</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>        <div class="stat-label">Avg Hours Today</div>      </div>    </div>    ${restrictedEmployees.length ? `      <div class="card" style="margin-bottom:24px;border:1px solid rgba(239,68,68,0.35);">        <div class="card-header">          <span class="card-title sr-icon-title">${ICONS.alert}<span>Clock-in Restrictions</span></span>        </div>        <div class="card-body">          <div class="table-wrap">            <table>              <thead><tr><th>Employee</th><th>Missed EODs</th><th>Latest Missed</th><th>Action</th></tr></thead>              <tbody>                ${restrictedEmployees.map((x) => `                  <tr>                    <td><b>${escapeHtml(x.name)}</b></td>                    <td><span class="badge badge-danger">${x.rows.length}</span></td>                    <td><small>${formatDateTime(x.rows[0]?.clock_in)}</small></td>                    <td><button class="btn btn-primary btn-sm resolve-attendance-restriction" data-user-id="${escapeHtml(x.userId)}">Resolve restriction</button></td>                  </tr>                `).join("")}              </tbody>            </table>          </div>        </div>      </div>    ` : ""}    <div class="df-wrap" style="margin-bottom:24px;">      <button class="btn btn-secondary df-toggle" id="att-filter-btn">${ICONS.filter}<span>Filters</span><span class="df-badge" id="att-badge" style="display:none">0</span></button>      <div class="df-panel" id="att-panel" style="display:none">        <div class="df-field"><span class="df-label">Employee</span><input type="text" id="att-search" placeholder="Search by name…"/></div>        <div class="df-field"><span class="df-label">Date</span><input type="date" id="att-date"/></div>        <div class="df-footer"><button class="btn btn-ghost btn-sm" id="att-clear">Clear</button><button class="btn btn-primary btn-sm" id="att-ok">Apply</button></div>      </div>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th></tr></thead>          <tbody id="attendance-log-rows">${rowHtml(list)}</tbody>        </table>      </div>    </div>  `;
@@ -1356,6 +1357,38 @@ export async function renderAttendance(container) {
     }));
     exportToCSV("attendance.csv", csvData);
   };
+  container.querySelector("#attendance-log-rows").onclick = (e) => {
+    const btn = e.target.closest(".att-view-map");
+    if (!btn) return;
+    openLocationMapModal(
+      parseFloat(btn.dataset.lat),
+      parseFloat(btn.dataset.lng),
+      btn.dataset.name,
+    );
+  };
+}
+function openLocationMapModal(lat, lng, label) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `    <div class="modal" style="max-width:420px">      <div class="modal-header">        <span class="modal-title">${escapeHtml(label || "Location")}</span>        <button class="modal-close" id="loc-map-close">${ICONS.close || "×"}</button>      </div>      <div class="modal-body" style="padding:0;">        <div id="loc-map-el" style="height:260px;width:100%;"></div>        <div style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center;">          <small style="color:var(--text-dim);">${lat.toFixed(6)}, ${lng.toFixed(6)}</small>          <a href="${mapLink(lat, lng)}" target="_blank" rel="noopener" style="color:var(--primary);font-size:0.82rem;text-decoration:none;">Open in Google Maps</a>        </div>      </div>    </div>  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector("#loc-map-close").onclick = close;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) close();
+  };
+  if (typeof L !== "undefined") {
+    const mapEl = overlay.querySelector("#loc-map-el");
+    const map = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+    L.marker([lat, lng]).addTo(map);
+    setTimeout(() => map.invalidateSize(), 50);
+  } else {
+    overlay.querySelector("#loc-map-el").innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);">Map failed to load</div>';
+  }
 }
 async function openAdminRequestModal(onDone) {
   const today = new Date().toLocaleDateString("en-CA");
