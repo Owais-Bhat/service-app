@@ -68,7 +68,13 @@
       "mcp__claude_ai_Higgsfield__balance",
       "mcp__claude_ai_Higgsfield__list_workspaces",
       "PowerShell(Get-ChildItem -Path \"E:\\\\service app\" | Select-Object Name, @{N=\"Type\";E={if\\($_.PSIsContainer\\){\"Dir\"}else{\"File\"}}} | Format-Table -AutoSize)",
-      "PowerShell(Get-ChildItem \"E:\\\\service app\\\\server\" | Where-Object { $_.PSIsContainer -eq $false } | Select-Object Name)"
+      "PowerShell(Get-ChildItem \"E:\\\\service app\\\\server\" | Where-Object { $_.PSIsContainer -eq $false } | Select-Object Name)",
+      "mcp__hostinger-hosting__hosting_listWebsitesV1",
+      "mcp__hostinger-hosting__hosting_createAccountCronJobV1",
+      "mcp__hostinger-hosting__hosting_getCronJobOutputV1",
+      "mcp__hostinger-hosting__hosting_deleteAccountCronJobV1",
+      "mcp__hostinger-hosting__hosting_restartNode_jsApplicationV1",
+      "mcp__hostinger-hosting__hosting_listJsDeployments"
     ]
   }
 }
