@@ -1012,6 +1012,14 @@ async function openInquiryDetail(id, onDone) {
   const hasBill = Number(i.bill_total) > 0;
   // Itemised "what service / what extra" rows for the Generated Bill Detail block.
   const billServicesSubtotal = Math.max(0, Number(i.bill_amount || 0) - Number(i.extra_cost || 0));
+  // Same fallback the employee-side bill preview uses when no inquiry_services
+  // rows were saved (old bills, or picker not used): show the service_item as
+  // a single line instead of an empty "No itemised services" list.
+  const billServicesForModal = billServices.length
+    ? billServices
+    : billServicesSubtotal > 0
+      ? [{ name: i.service_item || "Service", cost: billServicesSubtotal }]
+      : [];
   const billItemRows = billServices.length
     ? billServices
         .map(
@@ -1115,7 +1123,7 @@ async function openInquiryDetail(id, onDone) {
             ticket_no: i.ticket_no,
           },
           technician: technicianName,
-          services: billServices,
+          services: billServicesForModal,
           servicesSubtotal,
           extra: Number(i.extra_cost) || 0,
           extraReason: i.extra_cost_reason || "",
@@ -2768,7 +2776,7 @@ export async function renderBillsTab(container) {
         "service_id, service_pricing(name, category, sub_category, sub_sub_category, cost)",
       )
       .eq("inquiry_id", row.id);
-    const services = (links || []).map((r) => {
+    const linkedServices = (links || []).map((r) => {
       const p = r.service_pricing || {};
       const parts = [
         p.category,
@@ -2781,6 +2789,13 @@ export async function renderBillsTab(container) {
       0,
       Number(row.bill_amount || 0) - Number(row.extra_cost || 0),
     );
+    // Same fallback as the employee-side bill preview when no inquiry_services
+    // rows exist (old bills, or the picker wasn't used).
+    const services = linkedServices.length
+      ? linkedServices
+      : servicesSubtotal > 0
+        ? [{ name: row.service_item || "Service", cost: servicesSubtotal }]
+        : [];
     return {
       customer: {
         name: row.full_name,

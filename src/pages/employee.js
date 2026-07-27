@@ -4396,10 +4396,17 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const persistSelectedServices = async () => {
       if (!inqId) return;
       try {
-        await supabase.from('inquiry_services').delete().eq('inquiry_id', inqId);
+        const { error: delErr } = await supabase.from('inquiry_services').delete().eq('inquiry_id', inqId);
+        if (delErr) throw delErr;
         const ids = selectedServices.map(s => s.id).filter(Boolean);
-        if (ids.length) await supabase.from('inquiry_services').insert(ids.map(sid => ({ inquiry_id: inqId, service_id: sid })));
-      } catch (_) { /* best-effort */ }
+        if (ids.length) {
+          const { error: insErr } = await supabase.from('inquiry_services').insert(ids.map(sid => ({ inquiry_id: inqId, service_id: sid })));
+          if (insErr) throw insErr;
+        }
+      } catch (err) {
+        console.error('Failed to save bill line items:', err);
+        toast('Could not save itemised services — admin may only see the subtotal for this bill. Please retry.', 'warning');
+      }
     };
 
     // Re-apply a coupon that was saved on this inquiry, then back-fill the manual
