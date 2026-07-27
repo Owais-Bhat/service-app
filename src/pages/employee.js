@@ -2514,6 +2514,98 @@ export async function renderEmployeeEstimatorTab(container) {
   }
 }
 
+export async function renderEmployeeInstallations(container) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+  showLoader(container);
+
+  const { data: list, error } = await supabase
+    .from('installations')
+    .select('*')
+    .eq('assigned_employee_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);">Error</h3><p>${escapeHtml(error.message)}</p></div></div>`;
+    return;
+  }
+
+  const all = list || [];
+  const statusBadgeClass = (s) => ({
+    pending: 'badge-pending',
+    assigned: 'badge-assigned',
+    in_progress: 'badge-in_progress',
+    completed: 'badge-resolved',
+    cancelled: 'badge-danger',
+  }[s] || 'badge-open');
+
+  const nextAction = {
+    assigned: { label: 'Start Installation', next: 'in_progress' },
+    in_progress: { label: 'Mark Completed', next: 'completed' },
+  };
+
+  const card = (x) => {
+    const action = nextAction[x.status];
+    return `
+    <div class="emp-job-card" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; gap:10px;">
+        <div>
+          <div style="font-weight:800; font-size:1.1rem; color:var(--primary)">${escapeHtml(x.full_name || 'Customer')}</div>
+          ${x.company_name ? `<div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;">${escapeHtml(x.company_name)}</div>` : ''}
+        </div>
+        <span class="badge ${statusBadgeClass(x.status)}">${escapeHtml((x.status || '').replace(/_/g, ' ').toUpperCase())}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div><div class="sr-meta-label">Installation</div><div class="sr-meta-value"><b>${escapeHtml(x.installation_type || '-')}</b></div></div>
+        <div><div class="sr-meta-label">Ticket</div><div class="sr-meta-value sr-mono">${escapeHtml(x.ticket_no || '-')}</div></div>
+        <div><div class="sr-meta-label">Preferred Date</div><div class="sr-meta-value">${formatDate(x.preferred_date)}</div></div>
+        <div><div class="sr-meta-label">Preferred Slot</div><div class="sr-meta-value">${escapeHtml(x.preferred_time || '-')}</div></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <div class="sr-meta-label">Address</div>
+        <div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.4;">${escapeHtml(x.address || x.location || '-')}</div>
+      </div>
+      ${x.description ? `<div style="margin-bottom:12px;"><div class="sr-meta-label">Instructions</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.4;">${escapeHtml(x.description)}</div></div>` : ''}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${x.phone ? `<a class="btn btn-secondary btn-sm" href="tel:${escapeHtml(x.phone)}" style="text-decoration:none;">${ICONS.phone || ''}<span>Call</span></a>` : ''}
+        <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.address || x.location || '')}" style="text-decoration:none;">${ICONS.pin || ''}<span>Directions</span></a>
+        ${action ? `<button type="button" class="btn btn-primary btn-sm inst-action-btn" data-id="${x.id}" data-next="${action.next}">${action.label}</button>` : ''}
+      </div>
+    </div>`;
+  };
+
+  const active = all.filter((x) => !['completed', 'cancelled'].includes(x.status));
+  const done = all.filter((x) => ['completed', 'cancelled'].includes(x.status));
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>My Installations</h1>
+      <p>Installation jobs assigned to you</p>
+    </div>
+    ${all.length === 0 ? `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-dim)">No installations assigned to you yet</div></div>` : `
+      ${active.map(card).join('') || '<p style="color:var(--text-dim);margin-bottom:16px;">No active installations</p>'}
+      ${done.length ? `<h3 style="margin:24px 0 12px;color:var(--text-dim);font-size:0.9rem;text-transform:uppercase;">Completed / Cancelled</h3>${done.map(card).join('')}` : ''}
+    `}
+  `;
+
+  container.querySelectorAll('.inst-action-btn').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const { error: updErr } = await supabase
+        .from('installations')
+        .update({ status: btn.dataset.next })
+        .eq('id', btn.dataset.id);
+      if (updErr) {
+        toast(updErr.message, 'error');
+        btn.disabled = false;
+        return;
+      }
+      toast('Installation updated', 'success');
+      renderEmployeeInstallations(container);
+    };
+  });
+}
+
 export async function renderEmployeeTasks(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
