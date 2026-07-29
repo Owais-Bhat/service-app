@@ -485,11 +485,13 @@ export async function renderAdminDashboard(container) {
       onlineEmployees.push({
         name: row.profiles?.full_name || prof.full_name || "Employee",
         role: prof.role || prof.company || "",
+        workerType: prof.worker_type === "gig" ? "gig" : "fixed",
         clockIn: row.clock_in,
         location: row.location || "",
       });
     });
-  const onlineCardHtml = `      <div class="card" id="online-now-card">        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">          <span class="card-title" data-card="online" style="display:inline-flex;align-items:center;gap:8px;"><span style="width:9px;height:9px;border-radius:50%;background:var(--success,#22c55e);box-shadow:0 0 0 0 rgba(34,197,94,0.6);animation:onlinePulse 1.8s infinite;"></span>Online Now</span>          <span class="badge badge-resolved">${onlineEmployees.length}</span>        </div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Employee</th><th>Since</th><th>Location</th></tr></thead>            <tbody>              ${onlineEmployees.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-dim)">No one is online right now</td></tr>' : onlineEmployees.map((e) => `<tr>                  <td><span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--success,#22c55e);flex:none;"></span><b>${escapeHtml(e.name)}</b></span>${e.role ? `<br/><small style="color:var(--text-dim);margin-left:16px">${escapeHtml(e.role)}</small>` : ""}</td>                  <td><span class="badge badge-open">${formatTime(e.clockIn)}</span></td>                  <td><small style="color:var(--text-dim)">${e.location ? escapeHtml(e.location) : "&mdash;"}</small></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>`;
+  const gigOnlineCount = onlineEmployees.filter((e) => e.workerType === "gig").length;
+  const onlineCardHtml = `      <div class="card" id="online-now-card">        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">          <span class="card-title" data-card="online" style="display:inline-flex;align-items:center;gap:8px;"><span style="width:9px;height:9px;border-radius:50%;background:var(--success,#22c55e);box-shadow:0 0 0 0 rgba(34,197,94,0.6);animation:onlinePulse 1.8s infinite;"></span>Online Now</span>          <span style="display:flex;gap:6px;"><span class="badge badge-resolved">${onlineEmployees.length}</span>${gigOnlineCount ? `<span class="badge badge-assigned">${gigOnlineCount} gig</span>` : ""}</span>        </div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Employee</th><th>Since</th><th>Location</th></tr></thead>            <tbody>              ${onlineEmployees.length === 0 ? '<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-dim)">No one is online right now</td></tr>' : onlineEmployees.map((e) => `<tr>                  <td><span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--success,#22c55e);flex:none;"></span><b>${escapeHtml(e.name)}</b><span class="badge ${e.workerType === "gig" ? "badge-assigned" : "badge-in_progress"}" style="font-size:0.65rem;">${e.workerType === "gig" ? "Gig" : "Fixed"}</span></span>${e.role ? `<br/><small style="color:var(--text-dim);margin-left:16px">${escapeHtml(e.role)}</small>` : ""}</td>                  <td><span class="badge badge-open">${formatTime(e.clockIn)}</span></td>                  <td><small style="color:var(--text-dim)">${e.location ? escapeHtml(e.location) : "&mdash;"}</small></td>                </tr>`).join("")}            </tbody>          </table>        </div>      </div>`;
   container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Admin Hub</h1>        <p>Real-time operations monitoring</p>      </div>      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">        <div style="display:inline-flex;align-items:center;gap:10px;padding:6px 14px;border-radius:100px;background:var(--panel-2,var(--bg-soft));border:1px solid var(--line,var(--border));">          <span style="font-size:0.82rem;font-weight:700;color:var(--text-dim);">Auto Assign:</span>          <label class="switch-container" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">            <div class="switch-outer" id="dash-auto-assign-switch-outer" style="position:relative;width:44px;height:22px;background:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);">              <div class="switch-inner" id="dash-auto-assign-switch-inner" style="position:absolute;top:2px;left:${autoAssignStatus.auto_assignment_enabled ? "24px" : "2px"};width:18px;height:18px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>            </div>            <span style="font-size:0.85rem;font-weight:700;color:${autoAssignStatus.auto_assignment_enabled ? "var(--success)" : "var(--text-dim)"};" id="dash-auto-assign-status-text">${autoAssignStatus.auto_assignment_enabled ? "ON" : "OFF"}</span>            <input type="checkbox" id="dash-auto-assign-toggle-input" style="display:none;" ${autoAssignStatus.auto_assignment_enabled ? "checked" : ""} />          </label>        </div>        <button class="btn btn-primary" id="admin-dashboard-register">${ICONS.plus}<span>Register Request</span></button>      </div>    </div>    ${onlineCardHtml}      ${
     eodWarnings.length
       ? `      <div class="card">        <div class="card-header"><span class="card-title" data-card="eod">EOD Warnings</span></div>        <div class="table-wrap recent-requests-scroll">          <table>            <thead><tr><th>Employee</th><th>Missed EOD</th><th>Last Attendance</th><th>Action</th></tr></thead>            <tbody>              ${eodWarnings
@@ -1152,12 +1154,14 @@ async function openInquiryDetail(id, onDone) {
           km: Number(i.transport_km) || 0,
           transport: Number(i.transport_fee) || 0,
           discount: Number(i.discount_amount) || 0,
+          // Discount comes off the GRAND total (after GST), not the taxable base —
+          // GST was calculated on the full base, so "Taxable" must match that, not
+          // a discount-reduced figure (matches employee.js calcTotal exactly).
           taxable:
             servicesSubtotal +
             Number(i.extra_cost || 0) +
             Number(i.platform_fee || 0) +
-            Number(i.transport_fee || 0) -
-            Number(i.discount_amount || 0),
+            Number(i.transport_fee || 0),
           gst: Number(i.gst_amount) || 0,
           total: Number(i.bill_total) || 0,
           paymentLink: i.payment_link || "",
@@ -2847,12 +2851,13 @@ export async function renderBillsTab(container) {
       km: Number(row.transport_km) || 0,
       transport: Number(row.transport_fee) || 0,
       discount: Number(row.discount_amount) || 0,
+      // Discount comes off the GRAND total (after GST), not the taxable base —
+      // GST was calculated on the full base, so "Taxable" must match that.
       taxable:
         servicesSubtotal +
         Number(row.extra_cost || 0) +
         Number(row.platform_fee || 0) +
-        Number(row.transport_fee || 0) -
-        Number(row.discount_amount || 0),
+        Number(row.transport_fee || 0),
       gst: Number(row.gst_amount) || 0,
       total: Number(row.bill_total) || 0,
       paymentLink: row.payment_link || "",

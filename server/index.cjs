@@ -3917,6 +3917,7 @@ async function computeFinanceSummary(from, to) {
                         i.discount_amount, i.platform_fee, i.transport_fee, i.payment_status,
                         i.payment_method, i.bill_generated_at, i.created_at,
                         i.cash_collected_at, i.cash_submitted_at,
+                        i.is_gig_job, i.gig_payout_amount, i.gig_payout_status,
                         p.full_name AS technician
                    FROM inquiries i
                    LEFT JOIN profiles p ON p.id = i.assigned_employee_id
@@ -3952,6 +3953,7 @@ async function computeFinanceSummary(from, to) {
         const isPaid = (r) => r.payment_status === 'paid';
 
         let billed = 0, received = 0, pending = 0, gst = 0, discounts = 0, platform = 0, transport = 0, paidCount = 0, cashInHand = 0;
+        let gigBilled = 0, gigPayout = 0, gigCount = 0, gigUnpaidPayout = 0;
         const byTech = new Map(), byCompany = new Map(), byMonth = new Map();
         const byMethod = { cash: 0, online: 0, unknown: 0 };
         const aging = { '0-7': 0, '8-30': 0, '31+': 0 };
@@ -3975,6 +3977,13 @@ async function computeFinanceSummary(from, to) {
                 if (days <= 7) aging['0-7'] += a; else if (days <= 30) aging['8-30'] += a; else aging['31+'] += a;
             }
             if (r.cash_collected_at && !r.cash_submitted_at) cashInHand += a;
+
+            if (Number(r.is_gig_job) === 1) {
+                gigCount++;
+                gigBilled += a;
+                gigPayout += Number(r.gig_payout_amount) || 0;
+                if (r.gig_payout_status !== 'paid') gigUnpaidPayout += Number(r.gig_payout_amount) || 0;
+            }
 
             const tName = r.technician || 'Unassigned';
             const t = byTech.get(tName) || { name: tName, billed: 0, received: 0, jobs: 0 };
@@ -4022,6 +4031,13 @@ async function computeFinanceSummary(from, to) {
                 billed, received, pending, billsCount: rows.length, paidCount,
                 avgTicket: rows.length ? billed / rows.length : 0,
                 gst, discounts, platform, transport, cashInHand,
+            },
+            gig: {
+                count: gigCount,
+                billed: gigBilled,
+                payout: gigPayout,
+                companyKeeps: gigBilled - gigPayout,
+                unpaidPayout: gigUnpaidPayout,
             },
             byMethod, aging, previous, trend,
             byTechnician: [...byTech.values()].sort((a, b) => b.billed - a.billed),

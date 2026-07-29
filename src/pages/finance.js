@@ -383,6 +383,19 @@ export async function renderFinanceReportTab(container) {
       <div class="card fin-in" style="margin-bottom:20px;"><div class="card-header"><span class="card-title">Receivables Aging — how old is the pending money</span></div>
         <div class="card-body">${agingBlock(d)}</div></div>
 
+      ${d.gig && d.gig.count > 0 ? `
+      <div class="card fin-in" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title">Gig Worker Pool — ${d.gig.count} job${d.gig.count !== 1 ? 's' : ''}</span></div>
+        <div class="card-body">
+          <div class="fin-kpis" style="margin-bottom:0;">
+            ${kpi('Gig Billed', inr(d.gig.billed), 'var(--primary)', null, 'total from public-pool jobs')}
+            ${kpi('Company Keeps', inr(d.gig.companyKeeps), 'var(--success)', null, 'GST + platform fee')}
+            ${kpi('Worker Payouts', inr(d.gig.payout), 'var(--text)', null, 'earned by gig workers')}
+            ${kpi('Awaiting Payout', inr(d.gig.unpaidPayout), 'var(--warning)', null, 'not yet paid out')}
+          </div>
+        </div>
+      </div>` : ''}
+
       <div class="fin-grid-2">
         <div class="card fin-in fin-advisor"><div class="card-header"><span class="card-title">📈 Growth Advisor — what to do next</span></div>
           <div class="card-body">${insights.map(x => `

@@ -344,9 +344,13 @@ function adminTable(rows, profileById) {
 
 export async function renderAdminCollections(container) {
   showLoader(container);
-  const [{ data: rowsData }, { data: profiles }] = await Promise.all([
+  const [{ data: rowsData }, { data: profiles }, { data: gigRowsData }] = await Promise.all([
     supabase.from('inquiries').select('*').eq('payment_status', 'paid').order('payment_received_at', { ascending: false }),
-    supabase.from('profiles').select('id,full_name,phone').eq('role', 'employee'),
+    supabase.from('profiles').select('id,full_name,phone,worker_type').eq('role', 'employee'),
+    // Gig jobs shown regardless of payment status (billed-not-yet-paid still
+    // matters to the admin) — unlike the rest of this page, which is "money
+    // actually collected" and correctly excludes unpaid bills.
+    supabase.from('inquiries').select('*').eq('is_gig_job', 1),
   ]);
   const rows = (rowsData || []).filter(r => num(r.bill_total) > 0);
   const employees = profiles || [];
@@ -371,10 +375,12 @@ export async function renderAdminCollections(container) {
     return { id, name: profileById.get(id)?.full_name || 'Unassigned', ...s };
   }).sort((a, b) => b.net - a.net);
 
-  const gigVisible = visible.filter(r => Number(r.is_gig_job) === 1);
+  const gigAll = (gigRowsData || []).filter(r => num(r.bill_total) > 0);
+  const gigVisible = filterRows(gigAll, filters);
   const gigTotalPayout = gigVisible.reduce((sum, r) => sum + (Number(r.gig_payout_amount) || 0), 0);
   const gigNet = gigVisible.reduce((sum, r) => sum + num(r.bill_total), 0);
   const gigCompanyKeeps = gigNet - gigTotalPayout;
+  const gigUnpaidCount = gigVisible.filter(r => r.payment_status !== 'paid').length;
   const byGigWorker = new Map();
   gigVisible.forEach(r => {
     const id = r.claimed_by_gig_worker_id || r.assigned_employee_id || 'unknown';

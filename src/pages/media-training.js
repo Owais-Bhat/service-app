@@ -729,7 +729,7 @@ export async function renderAIReportTab(container) {
   showLoader(container);
   const [{ data: inquiries }, { data: employees }, { data: attendance }, { data: eodReports }, { data: cashCollections }] = await Promise.all([
     supabase.from('inquiries').select('*').order('created_at', { ascending: false }),
-    supabase.from('profiles').select('id,full_name').eq('role', 'employee'),
+    supabase.from('profiles').select('id,full_name,worker_type').eq('role', 'employee'),
     supabase.from('attendance').select('*').order('date', { ascending: false }),
     supabase.from('eod_reports').select('*').order('created_at', { ascending: false }),
     supabase.from('cash_collections').select('*').order('created_at', { ascending: false }),
@@ -737,6 +737,9 @@ export async function renderAIReportTab(container) {
   const serviceRows = inquiries || [];
   const paidRevenue = serviceRows.filter(x => x.payment_status === 'paid').reduce((sum, x) => sum + Number(x.bill_total || x.bill_amount || 0), 0);
   const unpaid = serviceRows.filter(x => x.bill_amount && x.payment_status !== 'paid').reduce((sum, x) => sum + Number(x.bill_total || x.bill_amount || 0), 0);
+  const gigRows = serviceRows.filter(x => Number(x.is_gig_job) === 1);
+  const gigRevenue = gigRows.filter(x => x.payment_status === 'paid').reduce((sum, x) => sum + Number(x.bill_total || 0), 0);
+  const gigPayoutTotal = gigRows.reduce((sum, x) => sum + (Number(x.gig_payout_amount) || 0), 0);
   const issues = serviceRows.filter(x => x.status === 'issue_not_resolved');
   const active = serviceRows.filter(x => !['resolved', 'closed', 'issue_not_resolved'].includes(x.status));
   const resolved = serviceRows.filter(x => ['resolved', 'closed'].includes(x.status));
@@ -745,7 +748,7 @@ export async function renderAIReportTab(container) {
     const empResolved = assigned.filter(x => ['resolved', 'closed'].includes(x.status)).length;
     const empIssues = assigned.filter(x => x.status === 'issue_not_resolved').length;
     const todayAttendance = (attendance || []).find(x => x.user_id === emp.id && String(x.date || '').slice(0, 10) === new Date().toLocaleDateString('en-CA'));
-    return { ...emp, assigned: assigned.length, resolved: empResolved, issues: empIssues, online: Boolean(todayAttendance?.clock_in && !todayAttendance?.clock_out) };
+    return { ...emp, assigned: assigned.length, resolved: empResolved, issues: empIssues, online: Boolean(todayAttendance?.clock_in && !todayAttendance?.clock_out), isGig: emp.worker_type === 'gig' };
   }).sort((a, b) => b.resolved - a.resolved || b.assigned - a.assigned);
   const cashPending = (cashCollections || []).filter(x => x.status !== 'submitted').reduce((sum, x) => sum + Number(x.amount || 0), 0);
   container.innerHTML = `
@@ -757,6 +760,8 @@ export async function renderAIReportTab(container) {
       <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${resolved.length}</div><div class="stat-label">Resolved Services</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${issues.length}</div><div class="stat-label">Issue Not Resolved</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${active.length}</div><div class="stat-label">Active Services</div></div>
+      ${gigRows.length ? `<div class="stat-card"><div class="stat-value" style="color:var(--primary)">${money(gigRevenue)}</div><div class="stat-label">Gig Pool Revenue · ${gigRows.length} job${gigRows.length !== 1 ? 's' : ''}</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--text)">${money(gigPayoutTotal)}</div><div class="stat-label">Gig Worker Payouts</div></div>` : ''}
     </div>
     <div class="card" style="margin-bottom:22px;">
       <div class="card-header"><span class="card-title">Business Notes</span></div>
@@ -770,10 +775,10 @@ export async function renderAIReportTab(container) {
       <div class="card-header"><span class="card-title">Employee Progress</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Employee</th><th>Assigned</th><th>Resolved</th><th>Issues</th><th>Status</th></tr></thead>
+          <thead><tr><th>Employee</th><th>Type</th><th>Assigned</th><th>Resolved</th><th>Issues</th><th>Status</th></tr></thead>
           <tbody>
-            ${employeeRows.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">No employees found</td></tr>' : employeeRows.map(emp => `
-              <tr><td><b>${escapeHtml(emp.full_name || 'Employee')}</b></td><td>${emp.assigned}</td><td style="color:var(--success);font-weight:800">${emp.resolved}</td><td style="color:var(--danger);font-weight:800">${emp.issues}</td><td>${emp.online ? '<span class="badge badge-resolved">Online</span>' : '<span class="badge badge-medium">Offline</span>'}</td></tr>
+            ${employeeRows.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-dim)">No employees found</td></tr>' : employeeRows.map(emp => `
+              <tr><td><b>${escapeHtml(emp.full_name || 'Employee')}</b></td><td><span class="badge ${emp.isGig ? 'badge-assigned' : 'badge-in_progress'}">${emp.isGig ? 'Gig' : 'Fixed'}</span></td><td>${emp.assigned}</td><td style="color:var(--success);font-weight:800">${emp.resolved}</td><td style="color:var(--danger);font-weight:800">${emp.issues}</td><td>${emp.online ? '<span class="badge badge-resolved">Online</span>' : '<span class="badge badge-medium">Offline</span>'}</td></tr>
             `).join('')}
           </tbody>
         </table>
