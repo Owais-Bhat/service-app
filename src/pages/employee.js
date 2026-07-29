@@ -2606,6 +2606,94 @@ export async function renderEmployeeInstallations(container) {
   });
 }
 
+// Public gig-worker pool: jobs admin released because fixed employees were
+// busy (or that auto-timed-out). First to "Claim" gets it — race-safe via a
+// dedicated atomic server endpoint, not the plain Supabase-shim update.
+export async function renderEmployeeGigPool(container) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
+  showLoader(container);
+
+  const { data: list, error } = await supabase
+    .from('inquiries')
+    .select('*')
+    .eq('pool_status', 'pool')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;"><h3 style="color:var(--danger);">Error</h3><p>${escapeHtml(error.message)}</p></div></div>`;
+    return;
+  }
+
+  const all = list || [];
+
+  const card = (x) => `
+    <div class="emp-job-card" style="padding:20px; border-radius:20px; background:var(--bg); box-shadow:var(--neu-sm); margin-bottom:20px; border:1px solid var(--border);">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; gap:10px;">
+        <div>
+          <div style="font-weight:800; font-size:1.1rem; color:var(--primary)">${escapeHtml(x.full_name || 'Customer')}</div>
+          ${x.company_name ? `<div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);margin-top:2px;text-transform:uppercase;">${escapeHtml(x.company_name)}</div>` : ''}
+        </div>
+        <span class="badge badge-open">Available</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div><div class="sr-meta-label">Service</div><div class="sr-meta-value"><b>${escapeHtml(x.service_item || '-')}</b></div></div>
+        <div><div class="sr-meta-label">Ticket</div><div class="sr-meta-value sr-mono">${escapeHtml(x.ticket_no || '-')}</div></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <div class="sr-meta-label">Location</div>
+        <div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.4;">${escapeHtml(x.location || '-')}</div>
+      </div>
+      ${x.description ? `<div style="margin-bottom:12px;"><div class="sr-meta-label">Customer description</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.4;">${escapeHtml(x.description)}</div></div>` : ''}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.location || '')}" style="text-decoration:none;">${ICONS.pin || ''}<span>Directions</span></a>
+        <button type="button" class="btn btn-primary btn-sm gig-claim-btn" data-id="${x.id}">${ICONS.check || ''}<span>Claim Job</span></button>
+      </div>
+    </div>`;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Public Jobs</h1>
+      <p>First to claim gets it — payment for these jobs is online only</p>
+    </div>
+    ${all.length === 0 ? `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-dim)">No jobs in the public pool right now — check back soon</div></div>` : all.map(card).join('')}
+  `;
+
+  container.querySelectorAll('.gig-claim-btn').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<span>Claiming…</span>';
+      try {
+        const base = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ? '/api' : 'http://localhost:5000/api';
+        const token = localStorage.getItem('auth_token') || (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${base}/inquiries/${encodeURIComponent(btn.dataset.id)}/claim`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 409) {
+          toast('Too slow — another worker already claimed this job.', 'warning');
+          renderEmployeeGigPool(container);
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast(data.error || 'Could not claim job', 'error');
+          btn.disabled = false;
+          btn.innerHTML = originalHTML;
+          return;
+        }
+        toast('Job claimed! Check My Tasks.', 'success');
+        renderEmployeeGigPool(container);
+      } catch {
+        toast('Network error — please retry', 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+      }
+    };
+  });
+}
+
 export async function renderEmployeeTasks(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
@@ -3637,8 +3725,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <label>How will the client pay?</label>
                 <div class="pay-method-toggle" id="pay-method-toggle">
                   <button type="button" class="pay-method-btn active" data-method="online">${ICONS.card}<span>Online (Razorpay)</span></button>
-                  <button type="button" class="pay-method-btn" data-method="cash">${ICONS.rupee}<span>Cash on Service</span></button>
+                  ${inquiryRow?.is_gig_job ? '' : `<button type="button" class="pay-method-btn" data-method="cash">${ICONS.rupee}<span>Cash on Service</span></button>`}
                 </div>
+                ${inquiryRow?.is_gig_job ? '<small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.78rem;">This job came from the public pool — online payment only, cash is not permitted.</small>' : ''}
               </div>
 
               <!-- Cash collection section (hidden until method=cash) -->
@@ -4697,6 +4786,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             coupon_code: bill.couponCode || null,
             gst_amount: bill.gst,
             bill_total: bill.total,
+            ...(inquiryRow?.is_gig_job ? { gig_payout_amount: Math.max(0, bill.total - bill.gst - bill.platform) } : {}),
             bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
             device_type: overlay.querySelector('#device-type')?.value.trim() || null,
             device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
@@ -4755,6 +4845,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               coupon_code: bill.couponCode || null,
               gst_amount: bill.gst,
               bill_total: bill.total,
+              ...(inquiryRow?.is_gig_job ? { gig_payout_amount: Math.max(0, bill.total - bill.gst - bill.platform) } : {}),
               bill_generated_at: new Date().toISOString().slice(0,19).replace('T',' '),
               bill_pdf_url: pdfUrl,
               device_type: billData.customer.device_type || null,
@@ -4817,7 +4908,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const cashAmountDisplay = overlay.querySelector('#cash-amount-display');
     const cashBanner = overlay.querySelector('#cash-collected-banner');
     const markCashBtn = overlay.querySelector('#mark-cash-btn');
-    let payMethod = inquiryRow?.payment_method === 'cash' ? 'cash' : 'online';
+    // Gig-worker (public-pool) jobs are online-only — force it regardless of any stale value.
+    let payMethod = (!inquiryRow?.is_gig_job && inquiryRow?.payment_method === 'cash') ? 'cash' : 'online';
 
     const renderPayMethod = () => {
       payMethodToggle.querySelectorAll('.pay-method-btn').forEach(b => {
@@ -4873,6 +4965,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             coupon_code: bill.couponCode || null,
             gst_amount: bill.gst,
             bill_total: bill.total,
+            ...(inquiryRow?.is_gig_job ? { gig_payout_amount: Math.max(0, bill.total - bill.gst - bill.platform) } : {}),
             bill_generated_at: nowIso,
             device_type: overlay.querySelector('#device-type')?.value.trim() || null,
             device_serial_no: overlay.querySelector('#device-serial')?.value.trim() || null,
@@ -4994,6 +5087,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         inqUpdates.coupon_code = bill.couponCode || null;
         inqUpdates.gst_amount = bill.gst;
         inqUpdates.bill_total = bill.total;
+        if (inquiryRow?.is_gig_job) {
+          inqUpdates.gig_payout_amount = Math.max(0, bill.total - bill.gst - bill.platform);
+        }
         inqUpdates.employee_bill_lat = billLoc.lat;
         inqUpdates.employee_bill_lng = billLoc.lng;
       }

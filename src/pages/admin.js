@@ -1041,7 +1041,7 @@ async function openInquiryDetail(id, onDone) {
       ? formatSLADeadline(serviceDeadline)
       : "-";
 
-  overlay.innerHTML = `    <div class="modal" style="max-width:560px">      <div class="modal-header">        <span class="modal-title">${ICONS.ticket}<span style="margin-left:8px">Service Request</span></span>        <button class="modal-close" id="ci">${ICONS.close}</button>      </div>      <div class="modal-body">        <div class="sr-meta">          <div class="sr-meta-row">            <div><div class="sr-meta-label">Ticket</div><div class="sr-meta-value sr-mono">${i.ticket_no || "—"}</div></div>            <div><div class="sr-meta-label">Status</div><div>${statusBadge(i.status)}</div></div>          </div>          <div class="sr-meta-row">            <div><div class="sr-meta-label">Service Created</div><div class="sr-meta-value">${formatDateTime(i.created_at)}</div></div>            <div><div class="sr-meta-label">Last Updated</div><div class="sr-meta-value">${formatDateTime(i.updated_at || i.created_at)}</div></div>          </div>          <div class="sr-meta-row">            <div><div class="sr-meta-label">Name</div><div class="sr-meta-value">${i.full_name}</div></div>            <div><div class="sr-meta-label">Phone</div><div class="sr-meta-value">${i.phone}</div></div>          </div>          <div><div class="sr-meta-label">Service item</div><div class="sr-meta-value">${i.service_item || "—"}</div></div>          ${i.description ? `<div><div class="sr-meta-label">Customer description</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(i.description)}</div></div>` : ""}          <div><div class="sr-meta-label">Location</div><div class="sr-meta-value">${i.location || "—"}</div></div>          <div class="sr-meta-row">            <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value">${i.preferred_time || "Flexible"}</div></div>            <div><div class="sr-meta-label">SLA Deadline</div><div class="sr-meta-value">${slaDisplayText}</div></div>          </div>          ${i.company_name ? `<div><div class="sr-meta-label">Company</div><div class="sr-meta-value">${i.company_name}</div></div>` : ""}          ${i.customer_lat != null && i.customer_lng != null ? `            <a href="${mapLink(i.customer_lat, i.customer_lng)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;text-decoration:none;">              ${ICONS.pin}<span>Open exact client pin</span>            </a>` : ""}          ${i.device_type || i.device_serial_no ? `            <div class="sr-meta-row">              <div><div class="sr-meta-label">Device Type</div><div class="sr-meta-value">${i.device_type || "—"}</div></div>              <div><div class="sr-meta-label">Serial No</div><div class="sr-meta-value sr-mono">${i.device_serial_no || "—"}</div></div>            </div>` : ""}          <div class="sr-meta-row">            <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value" style="color:var(--primary)">${i.preferred_time || "Flexible"}</div></div>            <div><div class="sr-meta-label">SLA Timer</div><div class="sr-meta-value">${formatTimeRemaining(calculateSLA(i.created_at))}</div></div>          </div>          ${i.extra_cost > 0 ? `            <div style="padding:12px; border-radius:12px; background:rgba(16,185,129,0.05); border:1px solid var(--primary); margin-top:10px;">              <div class="sr-meta-label">Additional Charges</div>              <div class="sr-meta-value">\u20B9${i.extra_cost} - <span style="font-size:0.8rem">${i.extra_cost_reason || "No reason"}</span></div>            </div>` : ""}          ${i.assignment_status === "declined" ? `            <div style="padding:12px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid var(--danger);margin-top:10px;">              <div class="sr-meta-label" style="color:var(--danger)">Employee Declined</div>              <div class="sr-meta-value" style="font-size:0.85rem">${i.decline_reason || "No reason provided"}</div>            </div>` : ""}          ${assignmentLocked ? `            <div style="padding:12px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);margin-top:10px;">              <div class="sr-meta-label" style="color:var(--warning)">${assignmentAwaitingResponse ? "Waiting for employee response" : "Assignment locked"}</div>              <div class="sr-meta-value" style="font-size:0.85rem">${assignmentLockText}</div>            </div>` : ""}          ${i.feedback_rating ? `            <div class="sr-fb-shown">              ${ICONS.star}              <div>                <div class="sr-meta-label">Customer feedback (${i.feedback_rating}/5)</div>                <div class="sr-meta-value">${i.feedback_comment || "No comment."}</div>              </div>            </div>` : ""}        </div>        ${hasBill ? `          <div class="bill-breakdown" style="margin-bottom:16px; background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #eef2f7;">            <div style="font-size:0.7rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">Generated Bill Detail</div>            ${billItemRows}${billExtraRow}            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px; margin-top:6px; padding-top:6px; border-top:1px dashed #e2e8f0;"><span>Platform fee</span><b style="color:#0f172a;">${money(i.platform_fee)}</b></div>            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>Transport (${Number(i.transport_km || 0).toFixed(1)} km)</span><b style="color:#0f172a;">${money(i.transport_fee)}</b></div>            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>GST (18%)</span><b style="color:#0f172a;">${money(i.gst_amount)}</b></div>            ${Number(i.discount_amount) > 0 ? `<div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px; color:#059669;"><span>${escapeHtml(i.discount_label || (i.coupon_code ? `Coupon ${i.coupon_code}` : "Discount"))}</span><b>-${money(i.discount_amount)}</b></div>` : ""}            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.95rem; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0; font-weight:800; color:#10b981;"><span>Total Payable</span><b>${money(i.bill_total)}</b></div>            <button type="button" class="btn btn-primary btn-wide" id="view-bill-btn" style="margin-top:12px; background:#10b981; border:none; box-shadow:0 4px 12px rgba(16,185,129,0.2);">${ICONS.receipt}<span>View & Download Premium Bill</span></button>          </div>` : ""}        <div class="form-group">          <label>Assign to Technician</label>          <select id="assign-to" ${assignmentLocked ? "disabled" : ""}>            <option value="">— None —</option>            ${availableEmployees
+  overlay.innerHTML = `    <div class="modal" style="max-width:560px">      <div class="modal-header">        <span class="modal-title">${ICONS.ticket}<span style="margin-left:8px">Service Request</span></span>        <button class="modal-close" id="ci">${ICONS.close}</button>      </div>      <div class="modal-body">        <div class="sr-meta">          <div class="sr-meta-row">            <div><div class="sr-meta-label">Ticket</div><div class="sr-meta-value sr-mono">${i.ticket_no || "—"}</div></div>            <div><div class="sr-meta-label">Status</div><div>${statusBadge(i.status)}</div></div>          </div>          <div class="sr-meta-row">            <div><div class="sr-meta-label">Service Created</div><div class="sr-meta-value">${formatDateTime(i.created_at)}</div></div>            <div><div class="sr-meta-label">Last Updated</div><div class="sr-meta-value">${formatDateTime(i.updated_at || i.created_at)}</div></div>          </div>          <div class="sr-meta-row">            <div><div class="sr-meta-label">Name</div><div class="sr-meta-value">${i.full_name}</div></div>            <div><div class="sr-meta-label">Phone</div><div class="sr-meta-value">${i.phone}</div></div>          </div>          <div><div class="sr-meta-label">Service item</div><div class="sr-meta-value">${i.service_item || "—"}</div></div>          ${i.description ? `<div><div class="sr-meta-label">Customer description</div><div class="sr-meta-value" style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(i.description)}</div></div>` : ""}          <div><div class="sr-meta-label">Location</div><div class="sr-meta-value">${i.location || "—"}</div></div>          <div class="sr-meta-row">            <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value">${i.preferred_time || "Flexible"}</div></div>            <div><div class="sr-meta-label">SLA Deadline</div><div class="sr-meta-value">${slaDisplayText}</div></div>          </div>          ${i.company_name ? `<div><div class="sr-meta-label">Company</div><div class="sr-meta-value">${i.company_name}</div></div>` : ""}          ${i.customer_lat != null && i.customer_lng != null ? `            <a href="${mapLink(i.customer_lat, i.customer_lng)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;text-decoration:none;">              ${ICONS.pin}<span>Open exact client pin</span>            </a>` : ""}          ${i.device_type || i.device_serial_no ? `            <div class="sr-meta-row">              <div><div class="sr-meta-label">Device Type</div><div class="sr-meta-value">${i.device_type || "—"}</div></div>              <div><div class="sr-meta-label">Serial No</div><div class="sr-meta-value sr-mono">${i.device_serial_no || "—"}</div></div>            </div>` : ""}          <div class="sr-meta-row">            <div><div class="sr-meta-label">Preferred Time</div><div class="sr-meta-value" style="color:var(--primary)">${i.preferred_time || "Flexible"}</div></div>            <div><div class="sr-meta-label">SLA Timer</div><div class="sr-meta-value">${formatTimeRemaining(calculateSLA(i.created_at))}</div></div>          </div>          ${i.extra_cost > 0 ? `            <div style="padding:12px; border-radius:12px; background:rgba(16,185,129,0.05); border:1px solid var(--primary); margin-top:10px;">              <div class="sr-meta-label">Additional Charges</div>              <div class="sr-meta-value">\u20B9${i.extra_cost} - <span style="font-size:0.8rem">${i.extra_cost_reason || "No reason"}</span></div>            </div>` : ""}          ${i.assignment_status === "declined" ? `            <div style="padding:12px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid var(--danger);margin-top:10px;">              <div class="sr-meta-label" style="color:var(--danger)">Employee Declined</div>              <div class="sr-meta-value" style="font-size:0.85rem">${i.decline_reason || "No reason provided"}</div>            </div>` : ""}          ${assignmentLocked ? `            <div style="padding:12px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);margin-top:10px;">              <div class="sr-meta-label" style="color:var(--warning)">${assignmentAwaitingResponse ? "Waiting for employee response" : "Assignment locked"}</div>              <div class="sr-meta-value" style="font-size:0.85rem">${assignmentLockText}</div>            </div>` : ""}          ${i.feedback_rating ? `            <div class="sr-fb-shown">              ${ICONS.star}              <div>                <div class="sr-meta-label">Customer feedback (${i.feedback_rating}/5)</div>                <div class="sr-meta-value">${i.feedback_comment || "No comment."}</div>              </div>            </div>` : ""}        </div>        ${hasBill ? `          <div class="bill-breakdown" style="margin-bottom:16px; background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #eef2f7;">            <div style="font-size:0.7rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">Generated Bill Detail</div>            ${billItemRows}${billExtraRow}            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px; margin-top:6px; padding-top:6px; border-top:1px dashed #e2e8f0;"><span>Platform fee</span><b style="color:#0f172a;">${money(i.platform_fee)}</b></div>            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>Transport (${Number(i.transport_km || 0).toFixed(1)} km)</span><b style="color:#0f172a;">${money(i.transport_fee)}</b></div>            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;"><span>GST (18%)</span><b style="color:#0f172a;">${money(i.gst_amount)}</b></div>            ${Number(i.discount_amount) > 0 ? `<div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px; color:#059669;"><span>${escapeHtml(i.discount_label || (i.coupon_code ? `Coupon ${i.coupon_code}` : "Discount"))}</span><b>-${money(i.discount_amount)}</b></div>` : ""}            <div class="bill-row" style="display:flex; justify-content:space-between; font-size:0.95rem; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0; font-weight:800; color:#10b981;"><span>Total Payable</span><b>${money(i.bill_total)}</b></div>            <button type="button" class="btn btn-primary btn-wide" id="view-bill-btn" style="margin-top:12px; background:#10b981; border:none; box-shadow:0 4px 12px rgba(16,185,129,0.2);">${ICONS.receipt}<span>View & Download Premium Bill</span></button>          </div>` : ""}        ${i.pool_status ? `          <div style="padding:12px;border-radius:12px;background:${i.pool_status === "claimed" ? "rgba(16,185,129,0.08)" : "rgba(59,130,246,0.08)"};border:1px solid ${i.pool_status === "claimed" ? "var(--primary)" : "rgba(59,130,246,0.35)"};margin-bottom:14px;">            <div class="sr-meta-label">${i.pool_status === "claimed" ? "Claimed From Public Pool" : "In Public Pool"}</div>            <div class="sr-meta-value" style="font-size:0.85rem">${i.pool_status === "claimed" ? `Claimed by ${escapeHtml(employees.find((e) => e.id === i.claimed_by_gig_worker_id)?.full_name || "a gig worker")}` : "Visible to gig workers — first to accept gets it"}</div>          </div>` : ["resolved", "closed", "case_closed", "issue_not_resolved", "foc"].includes(i.status) ? "" : `          <div style="margin-bottom:14px;">            <button type="button" class="btn btn-secondary btn-sm" id="release-to-pool-btn">${ICONS.refresh || ""}<span>Release to Public Pool</span></button>            <small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.78rem;">Makes this job visible to gig workers — first to accept claims it. Payment becomes online-only.</small>          </div>`}        <div class="form-group">          <label>Assign to Technician</label>          <select id="assign-to" ${assignmentLocked ? "disabled" : ""}>            <option value="">— None —</option>            ${availableEmployees
               .map((e) => {
                 const isOfflineAllowed = !e._clockedIn && e.always_assign;
                 const statusLabel = e._clockedIn
@@ -1101,6 +1101,27 @@ async function openInquiryDetail(id, onDone) {
   if (ciBtn) ciBtn.onclick = () => overlay.remove();
   const ci2Btn = overlay.querySelector("#ci2");
   if (ci2Btn) ci2Btn.onclick = () => overlay.remove();
+  const releasePoolBtn = overlay.querySelector("#release-to-pool-btn");
+  if (releasePoolBtn) {
+    releasePoolBtn.onclick = async () => {
+      if (!confirm("Release this job to the public gig-worker pool? Any gig worker will be able to claim it, and it must be paid online.")) return;
+      const restore = setButtonLoading(releasePoolBtn, "Releasing");
+      try {
+        const res = await fetch(`${API_BASE}/inquiries/${encodeURIComponent(id)}/release-to-pool`, {
+          method: "POST",
+          headers: authHeaders(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Could not release to pool");
+        toast("Released to public pool", "success");
+        overlay.remove();
+        onDone();
+      } catch (err) {
+        toast(err.message, "error");
+        restore();
+      }
+    };
+  }
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
   });
@@ -2465,6 +2486,13 @@ export async function renderUsers(container) {
               </div>
             </div>
             <div class="form-group">
+              <label>Worker Type (Staff only)</label>
+              <select id="usr-worker-type">
+                <option value="fixed" ${!isEdit || user.worker_type !== "gig" ? "selected" : ""}>Fixed Employee</option>
+                <option value="gig" ${isEdit && user.worker_type === "gig" ? "selected" : ""}>Gig Worker (public pool, competes for released jobs, online-only payment)</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label>Company / Building Name</label>
               <input id="usr-company" type="text" placeholder="Company Name" value="${isEdit ? escapeHtml(user.company || "") : ""}" />
             </div>
@@ -2551,6 +2579,7 @@ export async function renderUsers(container) {
       const can_update_profile =
         overlay.querySelector("#usr-edit-profile").checked;
       const alwaysAssign = overlay.querySelector("#usr-always-assign").checked;
+      const workerType = overlay.querySelector("#usr-worker-type").value;
 
       if (!fullName) return toast("Full name is required", "warning");
       if (!email) return toast("Email is required", "warning");
@@ -2572,6 +2601,7 @@ export async function renderUsers(container) {
         can_add_service: can_add_service ? 1 : 0,
         can_update_profile: can_update_profile ? 1 : 0,
         alwaysAssign: alwaysAssign ? 1 : 0,
+        workerType,
       };
 
       // Tab access: unchecked "limit" = full access (null). Otherwise the
@@ -2947,6 +2977,45 @@ async function showBillShareModal(row, billData) {
     overlay.querySelector("#bsm-error").textContent =
       `Failed to generate PDF: ${err.message}`;
   }
+}
+export async function renderGigPayoutsTab(container) {
+  showLoader(container);
+  const [{ data: rows }, { data: profiles }] = await Promise.all([
+    supabase.from("inquiries").select("*").eq("is_gig_job", 1).order("bill_generated_at", { ascending: false }),
+    supabase.from("profiles").select("id, full_name"),
+  ]);
+  const nameOf = new Map((profiles || []).map((p) => [p.id, p.full_name]));
+  const list = (rows || []).filter((x) => Number(x.bill_total) > 0);
+  const totalPayout = list.reduce((acc, x) => acc + (Number(x.gig_payout_amount) || 0), 0);
+  const totalUnpaid = list
+    .filter((x) => x.gig_payout_status !== "paid")
+    .reduce((acc, x) => acc + (Number(x.gig_payout_amount) || 0), 0);
+  const rowHtml = (items) =>
+    items.length === 0
+      ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No gig-worker jobs billed yet</td></tr>'
+      : items
+          .map(
+            (x) =>
+              `<tr><td><code style="font-size:0.75rem;">${x.ticket_no || (x.id || "").slice(0, 8)}</code></td><td><b>${escapeHtml(x.full_name || "—")}</b></td><td>${escapeHtml(nameOf.get(x.claimed_by_gig_worker_id) || "—")}</td><td>₹${Math.round(Number(x.bill_total) || 0).toLocaleString("en-IN")}</td><td><small style="color:var(--text-dim)">GST ₹${Math.round(Number(x.gst_amount) || 0)} + Platform ₹${Math.round(Number(x.platform_fee) || 0)}</small></td><td><b style="color:var(--primary)">₹${Math.round(Number(x.gig_payout_amount) || 0).toLocaleString("en-IN")}</b></td><td>${x.gig_payout_status === "paid" ? '<span class="badge badge-resolved">Paid</span>' : `<button class="btn btn-primary btn-sm gig-mark-paid-btn" data-id="${x.id}">Mark Paid</button>`}</td></tr>`,
+          )
+          .join("");
+  container.innerHTML = `    <div class="page-header">      <h1>Gig Worker Payouts</h1>      <p>Jobs completed by gig (public-pool) workers — company keeps GST + platform fee, the rest is the worker's payout</p>    </div>    <div class="stats-grid" style="margin-bottom:24px;">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${list.length}</div>        <div class="stat-label">Gig Jobs Billed</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning)">₹${Math.round(totalUnpaid).toLocaleString("en-IN")}</div>        <div class="stat-label">Unpaid Payouts</div>      </div>      <div class="stat-card">        <div class="stat-value" style="font-size:1.7rem;">₹${Math.round(totalPayout).toLocaleString("en-IN")}</div>        <div class="stat-label">Total Payout</div>      </div>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead><tr><th>Ticket</th><th>Customer</th><th>Gig Worker</th><th>Bill Total</th><th>Company Keeps</th><th>Payout</th><th></th></tr></thead>          <tbody>${rowHtml(list)}</tbody>        </table>      </div>    </div>  `;
+  container.querySelectorAll(".gig-mark-paid-btn").forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const { error } = await supabase
+        .from("inquiries")
+        .update({ gig_payout_status: "paid", gig_payout_paid_at: new Date().toISOString().slice(0, 19).replace("T", " ") })
+        .eq("id", btn.dataset.id);
+      if (error) {
+        toast(error.message, "error");
+        btn.disabled = false;
+        return;
+      }
+      toast("Payout marked as paid", "success");
+      renderGigPayoutsTab(container);
+    };
+  });
 }
 export async function renderDeviceTypesTab(container) {
   showLoader(container);
@@ -4578,8 +4647,9 @@ export async function renderSettingsTab(container) {
   let deviceTrackingEnabled = true;
   let reopenLimit = 2;
   let reopenButtonEnabled = true;
+  let poolTimeoutMinutes = 30;
   try {
-    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
@@ -4593,6 +4663,9 @@ export async function renderSettingsTab(container) {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/reopen`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/pool-timeout`, {
         headers: authHeaders(),
       }),
     ]);
@@ -4615,6 +4688,10 @@ export async function renderSettingsTab(container) {
       const data = await reopenRes.json();
       if (typeof data.limit === "number") reopenLimit = data.limit;
       reopenButtonEnabled = data.button_enabled !== false;
+    }
+    if (poolTimeoutRes.ok) {
+      const data = await poolTimeoutRes.json();
+      if (typeof data.minutes === "number") poolTimeoutMinutes = data.minutes;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4797,6 +4874,27 @@ export async function renderSettingsTab(container) {
 
       <div class="settings-card">
         <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.refresh}</span>
+          <div>
+            <h3>Gig Worker Pool Timeout</h3>
+            <p>If an assigned fixed employee doesn't accept within this window, the job auto-releases to the public gig-worker pool.</p>
+          </div>
+        </div>
+
+        <div class="settings-form-row" style="align-items:center; gap:16px; flex-wrap:wrap;">
+          <label style="margin:0; display:flex; align-items:center; gap:8px;">
+            <span>Auto-release after (minutes)</span>
+            <input type="number" id="pool-timeout-input" min="1" max="1440" value="${Number(poolTimeoutMinutes)}" class="settings-time-input" style="width:90px;">
+          </label>
+          <button class="btn btn-primary settings-save-btn" id="save-pool-timeout">
+            ${ICONS.check}
+            <span>Save Setting</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
           <span class="settings-card-icon settings-card-icon-danger">${ICONS.block}</span>
           <div>
             <h3>Restrictions (${restrictedProfiles.length})</h3>
@@ -4965,6 +5063,31 @@ export async function renderSettingsTab(container) {
       toast("Reopen policy saved", "success");
     } catch (err) {
       toast(err.message || "Could not save reopen policy", "error");
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#save-pool-timeout").onclick = async () => {
+    const input = container.querySelector("#pool-timeout-input");
+    let minutes = parseInt(input.value, 10);
+    if (!Number.isFinite(minutes) || minutes < 1) minutes = 1;
+    if (minutes > 1440) minutes = 1440;
+    const btn = container.querySelector("#save-pool-timeout");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/pool-timeout`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ minutes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save pool timeout");
+      poolTimeoutMinutes = data.minutes;
+      input.value = poolTimeoutMinutes;
+      toast("Pool timeout saved", "success");
+    } catch (err) {
+      toast(err.message || "Could not save pool timeout", "error");
     } finally {
       restore();
     }

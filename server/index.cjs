@@ -614,6 +614,9 @@ const appSettings = {
     reopenLimit: 2,
     // Whether the "Issue not resolved" reopen button shows on the landing page.
     reopenButtonEnabled: true,
+    // Minutes an assigned-but-not-yet-accepted inquiry waits before it auto-releases
+    // to the public gig-worker pool.
+    poolReleaseTimeoutMinutes: 30,
 };
 const REG_KEY_SETTINGS = {
     admin: 'admin_reg_key',
@@ -665,8 +668,8 @@ function isValidClockOutTime(value) {
 
 async function loadAppSettings(connection) {
     const [rows] = await connection.execute(
-        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?)',
-        ['auto_clock_out_time', 'auto_assignment_enabled', 'reopen_limit', 'reopen_button_enabled']
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?, ?)',
+        ['auto_clock_out_time', 'auto_assignment_enabled', 'reopen_limit', 'reopen_button_enabled', 'pool_release_timeout_minutes']
     );
     const autoClockOut = rows.find(row => row.setting_key === 'auto_clock_out_time')?.setting_value;
     appSettings.autoClockOutTime = parseAutoClockOutTime(autoClockOut || DEFAULT_AUTO_CLOCK_OUT_TIME).label;
@@ -685,6 +688,12 @@ async function loadAppSettings(connection) {
     const reopenBtn = rows.find(row => row.setting_key === 'reopen_button_enabled')?.setting_value;
     if (reopenBtn !== undefined) {
         appSettings.reopenButtonEnabled = reopenBtn === '1' || reopenBtn === 'true';
+    }
+
+    const poolTimeout = rows.find(row => row.setting_key === 'pool_release_timeout_minutes')?.setting_value;
+    if (poolTimeout !== undefined && poolTimeout !== null && poolTimeout !== '') {
+        const n = parseInt(poolTimeout, 10);
+        if (Number.isFinite(n) && n > 0) appSettings.poolReleaseTimeoutMinutes = n;
     }
 }
 
@@ -1081,6 +1090,7 @@ const requiredColumns = {
         { name: 'always_assign', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'allowed_tabs', definition: 'TEXT COMMENT \'JSON array of tab ids this employee may see; null = all\'' },
         { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
+        { name: 'worker_type', definition: "VARCHAR(20) DEFAULT 'fixed' COMMENT 'fixed = permanent employee, gig = public-pool competitive worker'" },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -1143,6 +1153,15 @@ const requiredColumns = {
         { name: 'sla_pause_ms', definition: 'BIGINT DEFAULT 0 COMMENT \'Total time (ms) the SLA was paused while the device was in service\'' },
         { name: 'device_service_enabled', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'sla_breach_notified', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'pool_status', definition: "VARCHAR(20) DEFAULT NULL COMMENT 'null = not in pool, pool = released & claimable, claimed = a gig worker took it'" },
+        { name: 'pool_released_at', definition: 'TIMESTAMP NULL' },
+        { name: 'pool_released_by', definition: "VARCHAR(64) DEFAULT NULL COMMENT \"'admin:<id>' or 'auto_timeout'\"" },
+        { name: 'claimed_by_gig_worker_id', definition: 'VARCHAR(36) DEFAULT NULL' },
+        { name: 'claimed_at', definition: 'TIMESTAMP NULL' },
+        { name: 'is_gig_job', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Durable flag: set once a job is ever released to the pool, never cleared'" },
+        { name: 'gig_payout_amount', definition: 'DECIMAL(10, 2) DEFAULT NULL' },
+        { name: 'gig_payout_status', definition: "VARCHAR(20) DEFAULT 'unpaid'" },
+        { name: 'gig_payout_paid_at', definition: 'TIMESTAMP NULL' },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -1444,6 +1463,18 @@ const requiredTables = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_push_user (user_id),
         INDEX idx_push_role (role)
+    )`,
+    // Audit trail for gig-worker pool releases/claims — who released it, who tried
+    // to claim it (including losers of the race), and when.
+    `CREATE TABLE IF NOT EXISTS pool_claim_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        event VARCHAR(20) NOT NULL COMMENT 'released | claimed | claim_rejected | timeout_release',
+        actor_id VARCHAR(36) DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        meta TEXT,
+        INDEX idx_pcl_inquiry (inquiry_id),
+        INDEX idx_pcl_created (created_at)
     )`,
     `CREATE TABLE IF NOT EXISTS installations (
         id VARCHAR(36) PRIMARY KEY,
@@ -1837,6 +1868,101 @@ async function autoAssignInquiry(inquiryId) {
     }
 }
 
+// Tell every invited gig worker that a new job is available in the public pool.
+async function notifyGigPool(inquiryId) {
+    let connection;
+    try {
+        connection = await getConn();
+        const [gigWorkers] = await connection.execute(
+            "SELECT id FROM profiles WHERE role = 'employee' AND worker_type = 'gig'"
+        );
+        const [inqRows] = await connection.execute('SELECT ticket_no, service_item, full_name FROM inquiries WHERE id = ? LIMIT 1', [inquiryId]);
+        const inq = inqRows[0] || {};
+        for (const w of gigWorkers) {
+            recordNotification({
+                subject: 'pool_job_available',
+                title: '🆕 New Job Available',
+                body: `${inq.full_name || 'A client'} — ${inq.service_item || 'service request'}${inq.ticket_no ? ` (${inq.ticket_no})` : ''} is available in the public pool.`,
+                audience: { userId: w.id },
+                data: { inquiry_id: inquiryId, ticket_no: inq.ticket_no },
+            }).catch(() => {});
+        }
+    } catch (err) {
+        console.error('[GigPool] notify failed:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+// Shared "release to public pool" logic used by both the manual admin action
+// and the automatic timeout sweep. Guard prevents double-release (idempotent).
+async function releaseInquiryToPool(inquiryId, releasedBy) {
+    let connection;
+    try {
+        connection = await getConn();
+        const [updateResult] = await connection.execute(
+            `UPDATE inquiries
+                SET pool_status = 'pool', is_gig_job = 1, pool_released_at = NOW(), pool_released_by = ?
+              WHERE id = ? AND (pool_status IS NULL)
+                AND status NOT IN ('resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc')`,
+            [releasedBy, inquiryId]
+        );
+        if (!updateResult.affectedRows) {
+            return { ok: false, reason: 'Already released, claimed, or the job is already closed' };
+        }
+        await connection.execute(
+            `INSERT INTO pool_claim_logs (id, inquiry_id, event, actor_id) VALUES (?, ?, 'released', ?)`,
+            [uuidv4(), inquiryId, releasedBy.startsWith('admin:') ? releasedBy.slice(6) : null]
+        );
+        const [inqRows] = await connection.execute('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [inquiryId]);
+        const inq = inqRows[0];
+        if (inq) broadcastChange('UPDATE', 'inquiries', inq);
+        return { ok: true, row: inq };
+    } catch (err) {
+        console.error('[GigPool] release failed:', err.message);
+        return { ok: false, reason: err.message };
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+// Auto-release: if a fixed employee was assigned but never accepted within the
+// configured window, push the job into the gig-worker pool instead of leaving
+// the customer waiting indefinitely.
+async function releaseStaleInquiriesToPool() {
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(
+            `SELECT id FROM inquiries
+              WHERE assignment_status = 'pending'
+                AND pool_status IS NULL
+                AND assigned_employee_id IS NOT NULL AND assigned_employee_id <> ''
+                AND status NOT IN ('resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc')
+                AND TIMESTAMPDIFF(MINUTE, updated_at, NOW()) >= ?`,
+            [appSettings.poolReleaseTimeoutMinutes]
+        );
+        connection.release();
+        connection = null;
+        for (const row of rows) {
+            const result = await releaseInquiryToPool(row.id, 'auto_timeout');
+            if (result.ok) {
+                console.log(`[GigPool] Inquiry ${row.id} auto-released to pool after timeout`);
+                notifyGigPool(row.id);
+            }
+        }
+    } catch (err) {
+        console.error('[GigPool] Stale sweep failed:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+function startPoolReleaseSweepJob() {
+    console.log('[GigPool] Pool release timeout sweep scheduled every 5 minutes');
+    setInterval(releaseStaleInquiriesToPool, 5 * 60_000).unref();
+}
+
 async function autoAssignUnassignedInquiries() {
     if (!appSettings.autoAssignmentEnabled) return;
     let connection;
@@ -2142,7 +2268,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -2161,7 +2287,7 @@ const EMPLOYEE_WRITE_FIELDS = {
         'assignment_status', 'decline_reason', 'status', 'company_name', 'device_type', 'device_serial_no',
         'payment_link', 'payment_link_id', 'payment_status', 'payment_method', 'payment_received_at',
         'cash_collected_at', 'bill_amount', 'extra_cost', 'extra_cost_reason', 'transport_km',
-        'transport_fee', 'platform_fee', 'discount_amount', 'gst_amount', 'bill_total',
+        'transport_fee', 'platform_fee', 'discount_amount', 'gst_amount', 'bill_total', 'gig_payout_amount',
         'discount_reason', 'discount_label', 'discount_preset_id', 'coupon_code',
         'bill_generated_at', 'bill_pdf_url', 'bill_no',
         'employee_bill_lat', 'employee_bill_lng',
@@ -2222,8 +2348,15 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             params.push('assigned_to', id, 'client_id', id);
             break;
         case 'inquiries':
-            whereClauses.push('?? = ?');
-            params.push('assigned_employee_id', id);
+            // Gig workers additionally see unclaimed public-pool jobs (assigned_employee_id
+            // IS NULL there, so it can never collide with the normal ownership scope below).
+            if (user.worker_type === 'gig') {
+                whereClauses.push('(?? = ? OR ?? = ?)');
+                params.push('assigned_employee_id', id, 'pool_status', 'pool');
+            } else {
+                whereClauses.push('?? = ?');
+                params.push('assigned_employee_id', id);
+            }
             break;
         case 'eod_reports':
         case 'leave_requests':
@@ -3108,10 +3241,10 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
-        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null };
+        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed' };
 
         // Block client logins — clients use the public landing page, not the dashboard.
         if (profile.role !== 'admin' && profile.role !== 'employee') {
@@ -3119,13 +3252,13 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         }
 
         const token = jwt.sign(
-            { id: user.id, email: user.email, role: profile.role },
+            { id: user.id, email: user.email, role: profile.role, worker_type: profile.worker_type || 'fixed' },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed' }
         });
     } catch (error) {
         console.error('Signin error:', error);
@@ -3167,7 +3300,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -3200,7 +3333,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -3211,7 +3344,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     company || null,
                     can_add_service ? 1 : 0,
                     can_update_profile ? 1 : 0,
-                    alwaysAssign ? 1 : 0
+                    alwaysAssign ? 1 : 0,
+                    workerType === 'gig' ? 'gig' : 'fixed'
                 ]
             );
 
@@ -3244,7 +3378,8 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         can_add_service,
         can_update_profile,
         alwaysAssign,
-        allowed_tabs
+        allowed_tabs,
+        workerType
     } = req.body;
 
     try {
@@ -3342,6 +3477,10 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (alwaysAssign !== undefined) {
                 profileUpdates.push('always_assign = ?');
                 profileParams.push(alwaysAssign ? 1 : 0);
+            }
+            if (workerType !== undefined) {
+                profileUpdates.push('worker_type = ?');
+                profileParams.push(workerType === 'gig' ? 'gig' : 'fixed');
             }
             if (allowed_tabs !== undefined) {
                 // null/empty array => full access (store NULL). Otherwise store a JSON array of tab ids.
@@ -3696,6 +3835,27 @@ app.put('/api/settings/reopen', authenticateToken, async (req, res) => {
         res.json({ limit: appSettings.reopenLimit, button_enabled: appSettings.reopenButtonEnabled });
     } catch (error) {
         console.error('Reopen settings update error:', error);
+        res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+// Gig-worker pool release timeout: minutes an assigned-but-not-yet-accepted
+// inquiry waits before it auto-releases to the public pool.
+app.get('/api/settings/pool-timeout', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    res.json({ minutes: appSettings.poolReleaseTimeoutMinutes });
+});
+
+app.put('/api/settings/pool-timeout', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    try {
+        const n = parseInt(req.body?.minutes, 10);
+        if (!Number.isFinite(n) || n < 1 || n > 1440) return res.status(400).json({ error: 'Minutes must be between 1 and 1440' });
+        await saveAppSetting('pool_release_timeout_minutes', String(n));
+        appSettings.poolReleaseTimeoutMinutes = n;
+        res.json({ minutes: appSettings.poolReleaseTimeoutMinutes });
+    } catch (error) {
+        console.error('Pool timeout settings update error:', error);
         res.status(500).json({ error: error.message || 'Could not save setting' });
     }
 });
@@ -4956,6 +5116,87 @@ app.get('/api/admin/inquiries/:id/manage-context', authenticateToken, async (req
     }
 });
 
+// Admin manually pushes one service request into the public gig-worker pool
+// (e.g. all fixed employees are busy). Idempotent — a job already in/through
+// the pool can't be released again.
+app.post('/api/inquiries/:id/release-to-pool', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const result = await releaseInquiryToPool(req.params.id, `admin:${req.user.id}`);
+    if (!result.ok) return res.status(409).json({ error: result.reason });
+    notifyGigPool(req.params.id);
+    res.json({ ok: true, inquiry: result.row });
+});
+
+// Gig worker claims a job from the public pool. Atomic — the UPDATE's WHERE
+// guard (pool_status='pool' AND assigned_employee_id IS NULL) means only the
+// first request to reach the DB can win; everyone else gets 409.
+app.post('/api/inquiries/:id/claim', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee' || req.user.worker_type !== 'gig') return res.sendStatus(403);
+    const inquiryId = req.params.id;
+    const workerId = req.user.id;
+    let connection;
+    try {
+        connection = await getConn();
+
+        // One job at a time: a gig worker can't claim another until their current
+        // assigned job reaches a terminal status.
+        const [activeRows] = await connection.execute(
+            `SELECT id FROM inquiries
+              WHERE assigned_employee_id = ?
+                AND status NOT IN ('resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc')
+              LIMIT 1`,
+            [workerId]
+        );
+        if (activeRows.length) {
+            connection.release();
+            return res.status(409).json({ error: 'Finish your current job before claiming another.' });
+        }
+
+        const [updateResult] = await connection.execute(
+            `UPDATE inquiries
+                SET assigned_employee_id = ?, pool_status = 'claimed', claimed_by_gig_worker_id = ?,
+                    claimed_at = NOW(), assignment_status = 'accepted', status = 'assigned'
+              WHERE id = ? AND pool_status = 'pool' AND assigned_employee_id IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM inquiries active
+                     WHERE active.assigned_employee_id = ?
+                       AND active.status NOT IN ('resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc')
+                )`,
+            [workerId, workerId, inquiryId, workerId]
+        );
+        if (!updateResult.affectedRows) {
+            await connection.execute(
+                `INSERT INTO pool_claim_logs (id, inquiry_id, event, actor_id) VALUES (?, ?, 'claim_rejected', ?)`,
+                [uuidv4(), inquiryId, workerId]
+            );
+            connection.release();
+            return res.status(409).json({ error: 'Already claimed by another worker' });
+        }
+        await connection.execute(
+            `INSERT INTO pool_claim_logs (id, inquiry_id, event, actor_id) VALUES (?, ?, 'claimed', ?)`,
+            [uuidv4(), inquiryId, workerId]
+        );
+        const [inqRows] = await connection.execute('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [inquiryId]);
+        const inq = inqRows[0];
+        connection.release();
+        connection = null;
+        if (inq) broadcastChange('UPDATE', 'inquiries', inq);
+        recordNotification({
+            subject: 'pool_job_claimed',
+            title: '✅ Public Job Claimed',
+            body: `${inq?.full_name || 'A client'} — ${inq?.ticket_no || ''} was claimed by a gig worker.`,
+            audience: { role: 'admin' },
+            data: { inquiry_id: inquiryId, ticket_no: inq?.ticket_no },
+        }).catch(() => {});
+        res.json({ ok: true, inquiry: inq });
+    } catch (error) {
+        console.error('Pool claim error:', error);
+        res.status(500).json({ error: error.message || 'Could not claim job' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
@@ -5184,6 +5425,16 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             );
             previousRows = rows;
         } catch { /* notification transition check remains best-effort */ }
+
+        // Gig-worker (public-pool) jobs must be paid online only — reject any
+        // attempt (employee or admin) to mark one as cash, regardless of the UI.
+        if (table === 'inquiries' && (data.payment_method === 'cash' || data.cash_collected_at)) {
+            const targetIsGigJob = previousRows.some(row => Number(row.is_gig_job) === 1);
+            if (targetIsGigJob) {
+                connection.release();
+                return res.status(403).json({ error: 'Gig-worker jobs must be paid online — cash is not permitted.' });
+            }
+        }
 
         await connection.query(query, params);
 
@@ -6439,6 +6690,7 @@ async function startServer() {
         startFinanceSummaryJob();
         startLeaderboardJob();
         startEodReminderJob();
+        startPoolReleaseSweepJob();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

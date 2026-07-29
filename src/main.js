@@ -99,6 +99,7 @@ function getNavItems(role) {
       { id: 'my-stats', icon: ICONS.star, label: 'My Stats' },
       { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
       { id: 'my-installations', icon: ICONS.plus, label: 'Installations' },
+      ...(isGigWorker ? [{ id: 'public-jobs', icon: ICONS.inbox, label: 'Public Jobs' }] : []),
       { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
       { type: 'section', label: 'Work' },
       { id: 'my-attendance', icon: ICONS.clock, label: 'Attendance Records' },
@@ -145,6 +146,7 @@ function getNavItems(role) {
     { id: 'cash', icon: ICONS.rupee, label: 'Cash Collections' },
     { id: 'collections', icon: ICONS.card, label: 'Collection Reports' },
     { id: 'salary', icon: ICONS.rupee, label: 'Salary' },
+    { id: 'gig-payouts', icon: ICONS.rupee, label: 'Gig Payouts' },
     { id: 'leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
     { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
     { id: 'feedback', icon: ICONS.star, label: 'Leaderboard' },
@@ -173,6 +175,7 @@ const PAGE_LOADERS = {
     'my-stats': () => import('./pages/stats.js').then(m => m.renderEmployeeStats),
     'all-tickets': () => import('./pages/employee.js').then(m => m.renderEmployeeTasks),
     'my-installations': () => import('./pages/employee.js').then(m => m.renderEmployeeInstallations),
+    'public-jobs': () => import('./pages/employee.js').then(m => m.renderEmployeeGigPool),
     'my-attendance': () => import('./pages/employee.js').then(m => m.renderEmployeeAttendanceRecords),
     'my-leaves': () => import('./pages/employee.js').then(m => m.renderEmployeeLeaveRequests),
     'my-eod': () => import('./pages/employee.js').then(m => m.renderEmployeeEODReports),
@@ -200,6 +203,7 @@ const PAGE_LOADERS = {
     bills: () => import('./pages/admin.js').then(m => m.renderBillsTab),
     cash: () => import('./pages/admin.js').then(m => m.renderCashCollectionsTab),
     salary: () => import('./pages/admin.js').then(m => m.renderSalaryOverview),
+    'gig-payouts': () => import('./pages/admin.js').then(m => m.renderGigPayoutsTab),
     leaves: () => import('./pages/admin.js').then(m => m.renderLeaveRequests),
     eod: () => import('./pages/admin.js').then(m => m.renderEODReports),
     pricing: () => import('./pages/admin.js').then(m => m.renderPricingTab),
@@ -377,6 +381,10 @@ function isFeedbackRoute() {
 // needed on the login / boot critical path.
 const readCanAddService = (u) => (u?.can_add_service === 1 || u?.can_add_service === true);
 
+// Gig workers get an extra "Public Jobs" tab fixed employees never see.
+let isGigWorker = false;
+const readIsGigWorker = (u) => u?.worker_type === 'gig';
+
 // Per-user tab access. null = all tabs allowed; otherwise a Set of permitted
 // tab ids (admin-controlled in the Users screen). Tabs that must never be
 // locked out (dashboard/notifications/profile) are always kept in getNavItems.
@@ -398,6 +406,7 @@ function watchMyProfile(userId) {
       if (currentRole === 'employee') {
         canAddService = readCanAddService(fresh);
         allowedTabs = readAllowedTabs(fresh);
+        isGigWorker = readIsGigWorker(fresh);
         // Re-render nav so hidden/shown tabs take effect immediately.
         navigate(activePage, { push: false });
       }
@@ -418,7 +427,7 @@ function showAuth() {
       currentUser = user;
       currentRole = role;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
-      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); }
+      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); }
       watchMyProfile(user.id);
       navigate('dashboard');
     },
@@ -501,7 +510,7 @@ async function boot() {
       }
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
-      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); }
+      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); }
       watchMyProfile(currentUser.id);
       navigate('dashboard');
     } catch (err) {
