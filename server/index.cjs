@@ -928,8 +928,8 @@ async function runMonthlyFinanceSummary() {
         connection = await getConn();
         const [setRows] = await connection.query("SELECT setting_value FROM app_settings WHERE setting_key = 'last_finance_summary_month'");
         if (setRows[0]?.setting_value === prevKey) { connection.release(); return; }
-        const summary = await computeFinanceSummary(connection, from, to);
         connection.release(); connection = null;
+        const summary = await computeFinanceSummary(from, to);
 
         let text = '';
         const apiKey = process.env.OPENROUTER_API_KEY;
@@ -4066,11 +4066,8 @@ app.post('/api/ai/finance', authenticateToken, async (req, res) => {
     if (!apiKey) return res.status(400).json({ error: 'OPENROUTER_API_KEY is not set on the server.' });
     const { from, to, question } = req.body || {};
     const model = process.env.OPENROUTER_MODEL || 'openrouter/free';
-    let connection;
     try {
-        connection = await getConn();
-        const summary = await computeFinanceSummary(connection, from, to);
-        connection.release(); connection = null;
+        const summary = await computeFinanceSummary(from, to);
 
         const system = 'You are a finance analyst for "Networking Experts", a field-service business (CCTV, networking, video door phones) in India. Currency is INR (₹). Only use the numbers in the provided JSON — never invent figures. Be concise and practical. For a summary give: 1) headline numbers, 2) 2-4 key insights or anomalies, 3) 2-3 concrete recommendations (e.g. chase aged receivables, flag employees holding cash). Use short paragraphs and bullet points.';
         const ask = (question && String(question).trim()) ? String(question).trim() : 'Give me an executive finance summary for this period.';
@@ -4097,8 +4094,6 @@ app.post('/api/ai/finance', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('[ai/finance] error:', err);
         res.status(500).json({ error: err.message || 'AI finance request failed' });
-    } finally {
-        if (connection) connection.release();
     }
 });
 
