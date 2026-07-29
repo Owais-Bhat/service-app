@@ -184,11 +184,17 @@ export async function renderEmployeeCollections(container) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) { container.innerHTML = '<p>Please sign in.</p>'; return; }
 
-  const { data } = await supabase.from('inquiries')
-    .select('*')
-    .eq('assigned_employee_id', user.id)
-    .eq('payment_status', 'paid')
-    .order('payment_received_at', { ascending: false });
+  const [{ data }, { data: gigData }] = await Promise.all([
+    supabase.from('inquiries')
+      .select('*')
+      .eq('assigned_employee_id', user.id)
+      .eq('payment_status', 'paid')
+      .order('payment_received_at', { ascending: false }),
+    // Gig jobs shown regardless of payment status — an unpaid public-pool job
+    // still matters to the worker, unlike the rest of this page which is
+    // "money actually collected."
+    supabase.from('inquiries').select('*').eq('assigned_employee_id', user.id).eq('is_gig_job', 1),
+  ]);
 
   const rows = Array.isArray(data) ? data.filter(r => num(r.bill_total) > 0) : [];
   const filters = { ...rangeFor(container.dataset.period || 'monthly') };
@@ -196,7 +202,8 @@ export async function renderEmployeeCollections(container) {
   filters.to = container.dataset.to || filters.to;
   const visible = filterRows(rows, filters);
   const totals = summarizeEmployee(visible);
-  const gigRows = visible.filter(r => Number(r.is_gig_job) === 1);
+  const gigAll = Array.isArray(gigData) ? gigData.filter(r => num(r.bill_total) > 0) : [];
+  const gigRows = filterRows(gigAll, filters);
   const gigTotal = gigRows.reduce((sum, r) => sum + (Number(r.gig_payout_amount) || 0), 0);
   const gigPaid = gigRows.filter(r => r.gig_payout_status === 'paid').reduce((sum, r) => sum + (Number(r.gig_payout_amount) || 0), 0);
   const gigUnpaid = gigTotal - gigPaid;
@@ -479,13 +486,13 @@ export async function renderAdminCollections(container) {
 
     ${gigVisible.length > 0 ? `
       <div class="card" style="margin-bottom:20px;padding:18px;">
-        <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Gig Pool Earnings</div>
+        <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Gig Pool Earnings${gigUnpaidCount ? ` <span style="color:var(--warning);text-transform:none;font-weight:600;">— ${gigUnpaidCount} unpaid, included below</span>` : ''}</div>
         <div class="coll-stats-row" style="margin-bottom:16px;">
           <div class="coll-stat-card">
             <div class="coll-stat-icon">🎯</div>
             <div class="coll-stat-body">
               <div class="coll-stat-val">${inr(gigNet)}</div>
-              <div class="coll-stat-lbl">Gig Jobs Collected · ${gigVisible.length} job${gigVisible.length !== 1 ? 's' : ''}</div>
+              <div class="coll-stat-lbl">Gig Jobs Billed · ${gigVisible.length} job${gigVisible.length !== 1 ? 's' : ''}</div>
             </div>
           </div>
           <div class="coll-stat-card">
