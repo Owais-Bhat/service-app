@@ -1025,8 +1025,12 @@ export function renderLandingPage(container, onPortalClick) {
           <div style="width:48px;height:48px;border-radius:14px;background:var(--gradient);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 16px rgba(16,185,129,0.25);">${ICONS.clock}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase; font-weight:800; letter-spacing:0.5px;">Service commitment</div>
-            <div style="font-size:0.85rem; color:var(--text-soft); margin-top:2px;">Resolved by</div>
-            <div style="font-size:1.2rem; color:var(--text); font-weight:800; margin-top:4px; letter-spacing:-0.01em;">${formatDeadlineLong(calculateSLA(r.created_at))}</div>
+            ${r.assigned_at ? `
+              <div style="font-size:0.85rem; color:var(--text-soft); margin-top:2px;">Resolved by</div>
+              <div style="font-size:1.2rem; color:var(--text); font-weight:800; margin-top:4px; letter-spacing:-0.01em;">${formatDeadlineLong(calculateSLA(r.assigned_at))}</div>
+            ` : `
+              <div style="font-size:1.05rem; color:var(--text); font-weight:700; margin-top:6px;">Confirming your technician — deadline starts once assigned</div>
+            `}
           </div>
         </div>
       ` : ''}

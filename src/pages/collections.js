@@ -196,6 +196,10 @@ export async function renderEmployeeCollections(container) {
   filters.to = container.dataset.to || filters.to;
   const visible = filterRows(rows, filters);
   const totals = summarizeEmployee(visible);
+  const gigRows = visible.filter(r => Number(r.is_gig_job) === 1);
+  const gigTotal = gigRows.reduce((sum, r) => sum + (Number(r.gig_payout_amount) || 0), 0);
+  const gigPaid = gigRows.filter(r => r.gig_payout_status === 'paid').reduce((sum, r) => sum + (Number(r.gig_payout_amount) || 0), 0);
+  const gigUnpaid = gigTotal - gigPaid;
 
   const activePeriod = container.dataset.period || 'monthly';
   container.innerHTML = `
@@ -250,6 +254,35 @@ export async function renderEmployeeCollections(container) {
         </div>
       </div>
     </div>
+
+    ${gigRows.length > 0 ? `
+      <div class="card" style="margin-bottom:24px;padding:18px;">
+        <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Your Gig Pool Earnings</div>
+        <div class="coll-stats-row">
+          <div class="coll-stat-card">
+            <div class="coll-stat-icon">🎯</div>
+            <div class="coll-stat-body">
+              <div class="coll-stat-val">${inr(gigTotal)}</div>
+              <div class="coll-stat-lbl">Earned from Public Jobs · ${gigRows.length} job${gigRows.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+          <div class="coll-stat-card">
+            <div class="coll-stat-icon">✅</div>
+            <div class="coll-stat-body">
+              <div class="coll-stat-val" style="color:var(--success)">${inr(gigPaid)}</div>
+              <div class="coll-stat-lbl">Paid Out</div>
+            </div>
+          </div>
+          <div class="coll-stat-card">
+            <div class="coll-stat-icon">⏳</div>
+            <div class="coll-stat-body">
+              <div class="coll-stat-val" style="color:var(--warning)">${inr(gigUnpaid)}</div>
+              <div class="coll-stat-lbl">Awaiting Payout</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : ''}
 
     <div class="card">${employeeTable(visible)}</div>
   `;
@@ -338,6 +371,23 @@ export async function renderAdminCollections(container) {
     return { id, name: profileById.get(id)?.full_name || 'Unassigned', ...s };
   }).sort((a, b) => b.net - a.net);
 
+  const gigVisible = visible.filter(r => Number(r.is_gig_job) === 1);
+  const gigTotalPayout = gigVisible.reduce((sum, r) => sum + (Number(r.gig_payout_amount) || 0), 0);
+  const gigNet = gigVisible.reduce((sum, r) => sum + num(r.bill_total), 0);
+  const gigCompanyKeeps = gigNet - gigTotalPayout;
+  const byGigWorker = new Map();
+  gigVisible.forEach(r => {
+    const id = r.claimed_by_gig_worker_id || r.assigned_employee_id || 'unknown';
+    if (!byGigWorker.has(id)) byGigWorker.set(id, { count: 0, payout: 0, net: 0 });
+    const g = byGigWorker.get(id);
+    g.count += 1;
+    g.payout += Number(r.gig_payout_amount) || 0;
+    g.net += num(r.bill_total);
+  });
+  const gigWorkerRows = [...byGigWorker.entries()]
+    .map(([id, s]) => ({ id, name: profileById.get(id)?.full_name || 'Gig Worker', ...s }))
+    .sort((a, b) => b.payout - a.payout);
+
   const activePeriod = container.dataset.period || 'monthly';
   container.innerHTML = `
     <div class="page-header collection-header">
@@ -420,6 +470,42 @@ export async function renderAdminCollections(container) {
         </div>
       </div>
     </div>
+
+    ${gigVisible.length > 0 ? `
+      <div class="card" style="margin-bottom:20px;padding:18px;">
+        <div style="font-size:0.7rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Gig Pool Earnings</div>
+        <div class="coll-stats-row" style="margin-bottom:16px;">
+          <div class="coll-stat-card">
+            <div class="coll-stat-icon">🎯</div>
+            <div class="coll-stat-body">
+              <div class="coll-stat-val">${inr(gigNet)}</div>
+              <div class="coll-stat-lbl">Gig Jobs Collected · ${gigVisible.length} job${gigVisible.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+          <div class="coll-stat-card">
+            <div class="coll-stat-icon">🏢</div>
+            <div class="coll-stat-body">
+              <div class="coll-stat-val">${inr(gigCompanyKeeps)}</div>
+              <div class="coll-stat-lbl">Company Keeps (GST + Platform)</div>
+            </div>
+          </div>
+          <div class="coll-stat-card">
+            <div class="coll-stat-icon">👷</div>
+            <div class="coll-stat-body">
+              <div class="coll-stat-val">${inr(gigTotalPayout)}</div>
+              <div class="coll-stat-lbl">Gig Worker Payouts</div>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Gig Worker</th><th>Jobs</th><th>Collected</th><th>Payout</th></tr></thead>
+            <tbody>${gigWorkerRows.map(g => `<tr><td><b>${escapeHtml(g.name)}</b></td><td>${g.count}</td><td>${inr(g.net)}</td><td><b style="color:var(--primary)">${inr(g.payout)}</b></td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    ` : ''}
+
     <div class="card" style="margin-bottom:20px;">
       <div class="card-header"><span class="card-title">By Employee</span></div>
       <div class="table-wrap">

@@ -279,7 +279,7 @@ export async function renderAdminStats(container) {
   // On-time rate
   const onTimeToday = resolved.filter(x => {
     if (dateKey(x.updated_at || x.created_at) !== today) return false;
-    return new Date(x.updated_at || x.created_at) <= calculateSLA(x.created_at);
+    return new Date(x.updated_at || x.created_at) <= calculateSLA(x.assigned_at || x.created_at);
   }).length;
   const onTimeRate = resolvedToday > 0 ? Math.round((onTimeToday / resolvedToday) * 100) : 0;
 
@@ -554,8 +554,8 @@ export async function renderEmployeeStats(container) {
   const onTimeToday = completedAll.filter(x => {
     if (dateKey(x.updated_at || x.created_at) !== today) return false;
     const inq = Array.isArray(x.inquiries) ? x.inquiries[0] : null;
-    const createdAt = inq?.created_at || x.created_at;
-    return new Date(x.updated_at || x.created_at) <= calculateSLA(createdAt);
+    const baseAt = inq?.assigned_at || inq?.created_at || x.assigned_at || x.created_at;
+    return new Date(x.updated_at || x.created_at) <= calculateSLA(baseAt);
   }).length;
   const onTimeRate = completedToday > 0 ? Math.round((onTimeToday / completedToday) * 100) : 0;
 

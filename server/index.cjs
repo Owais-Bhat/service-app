@@ -866,18 +866,19 @@ async function runSlaChecks() {
     try {
         connection = await getConn();
         const [rows] = await connection.query(
-            `SELECT id, ticket_no, full_name, service_item, created_at, assigned_employee_id,
+            `SELECT id, ticket_no, full_name, service_item, created_at, assigned_employee_id, assigned_at,
                     scheduled_at, sla_paused_at, sla_pause_ms
                FROM inquiries
               WHERE COALESCE(sla_breach_notified,0) = 0
                 AND status NOT IN ('resolved','closed','case_closed','issue_not_resolved','foc')
-                AND created_at IS NOT NULL
+                AND assigned_at IS NOT NULL
                 AND sla_paused_at IS NULL`
         );
         const now = Date.now();
         for (const r of rows) {
-            // Reschedule overrides the deadline; paused device time pushes it out.
-            const base = r.scheduled_at ? new Date(r.scheduled_at) : slaDeadline(r.created_at);
+            // SLA clock starts at assignment, not creation. Reschedule overrides
+            // the deadline; paused device time pushes it out.
+            const base = r.scheduled_at ? new Date(r.scheduled_at) : slaDeadline(r.assigned_at);
             const deadline = base.getTime() + (Number(r.sla_pause_ms) || 0);
             if (now < deadline - 2 * 3600000) continue; // not within the 2h warning window yet
             const overdue = now >= deadline;
@@ -1113,6 +1114,7 @@ const requiredColumns = {
         { name: 'assignment_status', definition: "VARCHAR(20) DEFAULT 'pending'" },
         { name: 'decline_reason', definition: 'TEXT' },
         { name: 'assigned_employee_id', definition: 'VARCHAR(36)' },
+        { name: 'assigned_at', definition: "TIMESTAMP NULL COMMENT 'When assigned_employee_id was last set — the SLA clock starts here, not at created_at'" },
         { name: 'ticket_id', definition: 'VARCHAR(36)' },
         { name: 'extra_cost', definition: 'DECIMAL(10, 2) DEFAULT 0' },
         { name: 'extra_cost_reason', definition: 'TEXT' },
@@ -1816,7 +1818,8 @@ async function autoAssignInquiry(inquiryId) {
             `UPDATE inquiries
                 SET assigned_employee_id = ?,
                     assignment_status = 'pending',
-                    auto_assigned = 1
+                    auto_assigned = 1,
+                    assigned_at = NOW()
               WHERE id = ?
                 AND (assigned_employee_id IS NULL OR assigned_employee_id = '')`,
             [chosen.id, inquiryId]
@@ -1854,6 +1857,15 @@ async function autoAssignInquiry(inquiryId) {
                     smsVar(inq.full_name, 'Customer', 60),
                     smsPhoneVar(inq.phone),
                     smsVar(inq.location, 'See app', 100),
+                ]);
+            }
+            if (inq.phone && inq.ticket_no) {
+                const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(inq.assigned_at || new Date()));
+                smsNotify(inq.phone, 'SMS_TID_TICKET', [
+                    smsVar(inq.full_name, 'Customer', 60),
+                    smsVar(inq.ticket_no, 'N/A', 20),
+                    smsVar(inq.service_item, 'General Service', 80),
+                    smsVar(slaDeadlineText, 'As soon as possible', 40),
                 ]);
             }
         }
@@ -5155,7 +5167,7 @@ app.post('/api/inquiries/:id/claim', authenticateToken, async (req, res) => {
         const [updateResult] = await connection.execute(
             `UPDATE inquiries
                 SET assigned_employee_id = ?, pool_status = 'claimed', claimed_by_gig_worker_id = ?,
-                    claimed_at = NOW(), assignment_status = 'accepted', status = 'assigned'
+                    claimed_at = NOW(), assignment_status = 'accepted', status = 'assigned', assigned_at = NOW()
               WHERE id = ? AND pool_status = 'pool' AND assigned_employee_id IS NULL
                 AND NOT EXISTS (
                     SELECT 1 FROM inquiries active
@@ -5188,6 +5200,15 @@ app.post('/api/inquiries/:id/claim', authenticateToken, async (req, res) => {
             audience: { role: 'admin' },
             data: { inquiry_id: inquiryId, ticket_no: inq?.ticket_no },
         }).catch(() => {});
+        if (inq?.phone && inq?.ticket_no) {
+            const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(inq.assigned_at || new Date()));
+            smsNotify(inq.phone, 'SMS_TID_TICKET', [
+                smsVar(inq.full_name, 'Customer', 60),
+                smsVar(inq.ticket_no, 'N/A', 20),
+                smsVar(inq.service_item, 'General Service', 80),
+                smsVar(slaDeadlineText, 'As soon as possible', 40),
+            ]);
+        }
         res.json({ ok: true, inquiry: inq });
     } catch (error) {
         console.error('Pool claim error:', error);
@@ -5389,9 +5410,6 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
     try {
         const connection = await getConn();
-        const keys = Object.keys(data);
-        const values = Object.values(data);
-        const setClause = keys.map(() => `?? = ?`).join(', ');
 
         const whereClauses = [];
         const whereParams = [];
@@ -5408,14 +5426,6 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             whereClauses.push('feedback_rating IS NULL');
         }
 
-        const query = `UPDATE ?? SET ${setClause} WHERE ${whereClauses.join(' AND ')}`;
-
-        const params = [table];
-        keys.forEach((k, i) => {
-            params.push(k, values[i]);
-        });
-        params.push(...whereParams);
-
         let previousRows = [];
         try {
             const selectWhere = whereClauses.join(' AND ');
@@ -5426,6 +5436,15 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             previousRows = rows;
         } catch { /* notification transition check remains best-effort */ }
 
+        // SLA clock starts at assignment, not ticket creation — stamp assigned_at
+        // the moment assigned_employee_id actually changes to a new technician.
+        if (table === 'inquiries' && data.assigned_employee_id) {
+            const wasAssignedToSomeoneElse = previousRows.some(row => String(row.assigned_employee_id || '') !== String(data.assigned_employee_id));
+            if (wasAssignedToSomeoneElse) {
+                data.assigned_at = sqlDateTime(new Date());
+            }
+        }
+
         // Gig-worker (public-pool) jobs must be paid online only — reject any
         // attempt (employee or admin) to mark one as cash, regardless of the UI.
         if (table === 'inquiries' && (data.payment_method === 'cash' || data.cash_collected_at)) {
@@ -5435,6 +5454,16 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                 return res.status(403).json({ error: 'Gig-worker jobs must be paid online — cash is not permitted.' });
             }
         }
+
+        const keys = Object.keys(data);
+        const values = Object.values(data);
+        const setClause = keys.map(() => `?? = ?`).join(', ');
+        const query = `UPDATE ?? SET ${setClause} WHERE ${whereClauses.join(' AND ')}`;
+        const params = [table];
+        keys.forEach((k, i) => {
+            params.push(k, values[i]);
+        });
+        params.push(...whereParams);
 
         await connection.query(query, params);
 
@@ -5606,6 +5635,18 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                         console.error('[SMS SMS_TID_ASSIGN_EMP] db error:', err.message, err.stack);
                     }
                 })();
+
+                // Same "your request is registered" SMS the customer got at creation,
+                // re-sent now that it's actually been assigned — the SLA clock starts here.
+                if (row.phone && row.ticket_no) {
+                    const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(row.assigned_at || new Date()));
+                    smsNotify(row.phone, 'SMS_TID_TICKET', [
+                        smsVar(row.full_name, 'Customer', 60),
+                        smsVar(row.ticket_no, 'N/A', 20),
+                        smsVar(row.service_item, 'General Service', 80),
+                        smsVar(slaDeadlineText, 'As soon as possible', 40),
+                    ]);
+                }
             }
 
             // Employee accepts assignment → SMS to client with technician contact
@@ -5925,18 +5966,10 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
                     data: { inquiry_id: inquiry.id, ticket_no: inquiry.ticket_no || null },
                 });
                 notifyServiceRequestEmail(inquiry).catch(() => {});
-                // SMS to client: {name} {ticket_no} {service_item} {sla_deadline}
-                if (inquiry.phone && inquiry.ticket_no) {
-                    const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(inquiry.created_at || new Date()));
-                    smsNotify(inquiry.phone, 'SMS_TID_TICKET', [
-                        smsVar(inquiry.full_name, 'Customer', 60),
-                        smsVar(inquiry.ticket_no, 'N/A', 20),
-                        smsVar(inquiry.service_item, 'General Service', 80),
-                        smsVar(slaDeadlineText, 'As soon as possible', 40),
-                    ]);
-                } else {
-                    console.warn(`[SMS SMS_TID_TICKET] skipped: inquiry missing phone or ticket_no (id=${inquiry.id || 'unknown'})`);
-                }
+                // No SMS to the client here anymore — the "request registered" SMS
+                // (SMS_TID_TICKET) now fires only once the request is actually
+                // assigned, since that's when the SLA deadline is real (see the
+                // assignment hooks below / autoAssignInquiry / pool claim).
                 if (!inquiry.assigned_employee_id) {
                     autoAssignInquiry(inquiry.id);
                 }
