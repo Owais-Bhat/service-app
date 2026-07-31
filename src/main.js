@@ -445,16 +445,21 @@ function showAuth() {
   );
 }
 
-// ── DAILY SESSION EXPIRY (employees) ─────────────────
-// Employee sessions end at midnight: next time the app is opened (or while it
-// stays open past midnight) the employee is signed out and must log in again,
-// which re-triggers the forced clock-in popup for the new day.
+// ── 30-DAY SESSION EXPIRY (employees + admin) ─────────
+// Sessions stay valid for 30 days from login, matching the 30-day JWT issued
+// by the server. The forced clock-in popup doesn't depend on this — it's
+// driven by whether today's attendance row has a clock_in, so a long-lived
+// session still shows it fresh every new day.
 const SESSION_DAY_KEY = 'nest-session-day';
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const todayKey = () => new Date().toLocaleDateString('en-CA');
 
 function isEmployeeSessionExpired() {
   const saved = localStorage.getItem(SESSION_DAY_KEY);
-  return !!saved && saved !== todayKey();
+  if (!saved) return false;
+  const savedMs = Date.parse(saved);
+  if (Number.isNaN(savedMs)) return false;
+  return (Date.now() - savedMs) >= SESSION_MAX_AGE_MS;
 }
 
 async function expireEmployeeSession() {

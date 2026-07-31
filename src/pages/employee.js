@@ -1060,7 +1060,8 @@ export async function renderEmployeeDashboard(container) {
 
   const today = new Date().toLocaleDateString('en-CA');
   const clockOutSetting = await loadEmployeeClockOutTime();
-  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [], eodExempt = false;
+  const isGigWorker = user.worker_type === 'gig';
+  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [], eodExempt = false, poolJobs = [];
 
   try {
     const res = await Promise.all([
@@ -1071,11 +1072,15 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('attendance').select('*').eq('user_id', user.id).order('date', { ascending: false }),
       supabase.from('notices').select('*').eq('active', 1).order('created_at', { ascending: false }),
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
-      supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at,updated_at'),
+      supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at'),
       supabase.from('profiles').select('id,full_name,role'),
       supabase.from('profiles').select('eod_exempt').eq('id', user.id).maybeSingle(),
+      isGigWorker
+        ? supabase.from('inquiries').select('*').eq('pool_status', 'pool').order('pool_released_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
     ]);
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
+    poolJobs = res[10]?.data || [];
     eodExempt = Boolean(res[9]?.data?.eod_exempt);
     feedbackRows = (res[7]?.data || []).filter(r => r.feedback_rating != null);
     allProfiles = res[8]?.data || [];
@@ -1206,6 +1211,26 @@ export async function renderEmployeeDashboard(container) {
       </div>
       ${notices.length === 0 ? `<p style="margin:10px 18px 14px;font-size:0.87rem;color:var(--text-dim);">No active notices right now.</p>` : `<div class="emp-notices-list">${notices.map((n, i) => `<div class="emp-notice-item" data-notice-idx="${i}" role="button" tabindex="0"><div class="emp-notice-ico">${ICONS.bell}</div><div style="flex:1;min-width:0;"><div class="emp-notice-title">${escapeHtml(n.title || 'Notice')}</div><div class="emp-notice-date">${formatDate(n.created_at)}</div></div><span style="color:var(--text-dim);flex-shrink:0;">${ICONS.arrowRight}</span></div>`).join('')}</div>`}
     </div>
+
+    ${isGigWorker ? `
+      <div class="card list-card" id="dash-public-jobs" style="margin-bottom:18px;cursor:pointer;" role="button" tabindex="0">
+        <div class="card-head">
+          <h3>${ICONS.inbox} Public Jobs</h3>
+          <span class="chip" style="color:${poolJobs.length ? 'var(--amber, #f5a524)' : 'var(--text-dim)'};">${poolJobs.length} open</span>
+        </div>
+        ${poolJobs.length === 0
+          ? `<p style="margin:0 18px 16px;font-size:0.87rem;color:var(--text-dim);">No jobs in the public pool right now. Tap to check anytime.</p>`
+          : `<div class="list">${poolJobs.slice(0, 3).map(j => `
+              <div class="lrow">
+                <div class="lrow-ico" style="background:rgba(245,165,36,0.16);color:var(--amber, #f5a524);">${ICONS.inbox}</div>
+                <div class="lrow-main">
+                  <b>${escapeHtml(j.service_item || 'Service request')}</b>
+                  <span class="lsub">${escapeHtml(j.full_name || 'Client')} · ${formatDateTime(j.pool_released_at || j.created_at)}</span>
+                </div>
+              </div>
+            `).join('')}${poolJobs.length > 3 ? `<p style="margin:10px 18px 0;font-size:0.82rem;color:var(--text-dim);">+${poolJobs.length - 3} more — tap to view all</p>` : ''}</div>`}
+      </div>
+    ` : ''}
 
     ${pendingInquiries.length ? `
       <div class="card list-card" style="margin-bottom:18px;border-color:rgba(245,165,36,0.4);">
@@ -1556,6 +1581,9 @@ export async function renderEmployeeDashboard(container) {
 
   // Leave Request
   bind('#btn-open-leave-modal', () => openLeaveModal(user.id, () => renderEmployeeDashboard(container)));
+
+  // Public Jobs widget → jump to the full Public Jobs tab
+  bind('#dash-public-jobs', () => { if (window.__appNav) window.__appNav('public-jobs'); });
 
   // Task update buttons
   container.querySelectorAll('.task-btn').forEach(btn => {

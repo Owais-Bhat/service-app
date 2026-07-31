@@ -1952,7 +1952,8 @@ async function releaseStaleInquiriesToPool() {
                 AND pool_status IS NULL
                 AND assigned_employee_id IS NOT NULL AND assigned_employee_id <> ''
                 AND status NOT IN ('resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc')
-                AND TIMESTAMPDIFF(MINUTE, updated_at, NOW()) >= ?`,
+                AND assigned_at IS NOT NULL
+                AND TIMESTAMPDIFF(MINUTE, assigned_at, NOW()) >= ?`,
             [appSettings.poolReleaseTimeoutMinutes]
         );
         connection.release();
@@ -3267,7 +3268,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         const token = jwt.sign(
             { id: user.id, email: user.email, role: profile.role, worker_type: profile.worker_type || 'fixed' },
             process.env.JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: '30d' }
         );
         res.json({
             token,
