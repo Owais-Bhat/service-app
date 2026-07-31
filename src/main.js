@@ -78,9 +78,13 @@ let activePage = 'dashboard';
 // Keep only tabs the admin granted this employee. Always-on tabs can never be
 // hidden, and section headers with no visible items beneath them are dropped.
 const ALWAYS_ON_TABS = new Set(['dashboard', 'notifications', 'profile']);
+// Gig workers' access to this tab is governed by worker_type (see isGigWorker),
+// not the per-user tab-limit list — it was never offered as a checkbox there,
+// so a restricted employee who becomes a gig worker must still see it.
+const WORKER_TYPE_GOVERNED_TABS = new Set(['public-jobs']);
 function filterTabs(items) {
   if (!allowedTabs) return items;
-  const kept = items.filter(it => it.type === 'section' || ALWAYS_ON_TABS.has(it.id) || allowedTabs.has(String(it.id)));
+  const kept = items.filter(it => it.type === 'section' || ALWAYS_ON_TABS.has(it.id) || WORKER_TYPE_GOVERNED_TABS.has(it.id) || allowedTabs.has(String(it.id)));
   // Remove section headers that ended up with no items after them.
   return kept.filter((it, i) => {
     if (it.type !== 'section') return true;
@@ -98,7 +102,7 @@ function getNavItems(role) {
     const items = [...common,
       { id: 'my-stats', icon: ICONS.star, label: 'My Stats' },
       { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
-      { id: 'my-installations', icon: ICONS.plus, label: 'Installations' },
+      ...(installationsEnabled ? [{ id: 'my-installations', icon: ICONS.plus, label: 'Installations' }] : []),
       ...(isGigWorker ? [{ id: 'public-jobs', icon: ICONS.inbox, label: 'Public Jobs' }] : []),
       { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
       { type: 'section', label: 'Work' },
@@ -385,6 +389,11 @@ const readCanAddService = (u) => (u?.can_add_service === 1 || u?.can_add_service
 let isGigWorker = false;
 const readIsGigWorker = (u) => u?.worker_type === 'gig';
 
+// Admin-controlled: hides the Installations tab for this employee regardless
+// of worker type. Defaults to true (visible) when the field is absent.
+let installationsEnabled = true;
+const readInstallationsEnabled = (u) => u?.installations_enabled === undefined || u?.installations_enabled === null || Number(u.installations_enabled) === 1;
+
 // Per-user tab access. null = all tabs allowed; otherwise a Set of permitted
 // tab ids (admin-controlled in the Users screen). Tabs that must never be
 // locked out (dashboard/notifications/profile) are always kept in getNavItems.
@@ -407,6 +416,7 @@ function watchMyProfile(userId) {
         canAddService = readCanAddService(fresh);
         allowedTabs = readAllowedTabs(fresh);
         isGigWorker = readIsGigWorker(fresh);
+        installationsEnabled = readInstallationsEnabled(fresh);
         // Re-render nav so hidden/shown tabs take effect immediately.
         navigate(activePage, { push: false });
       }
@@ -427,7 +437,7 @@ function showAuth() {
       currentUser = user;
       currentRole = role;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
-      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); }
+      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); installationsEnabled = readInstallationsEnabled(user); }
       watchMyProfile(user.id);
       navigate('dashboard');
     },
@@ -510,7 +520,7 @@ async function boot() {
       }
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
-      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); }
+      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); installationsEnabled = readInstallationsEnabled(currentUser); }
       watchMyProfile(currentUser.id);
       navigate('dashboard');
     } catch (err) {

@@ -2495,6 +2495,10 @@ export async function renderUsers(container) {
                 <option value="fixed" ${!isEdit || user.worker_type !== "gig" ? "selected" : ""}>Fixed Employee</option>
                 <option value="gig" ${isEdit && user.worker_type === "gig" ? "selected" : ""}>Gig Worker (public pool, competes for released jobs, online-only payment)</option>
               </select>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px;">
+                <input type="checkbox" id="usr-installations-enabled" ${!isEdit || user.installations_enabled === undefined || user.installations_enabled === null || Number(user.installations_enabled) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
+                Allow Installations tab (uncheck to hide it for this staff member — useful for Gig Workers)
+              </label>
             </div>
             <div class="form-group">
               <label>Company / Building Name</label>
@@ -2584,6 +2588,7 @@ export async function renderUsers(container) {
         overlay.querySelector("#usr-edit-profile").checked;
       const alwaysAssign = overlay.querySelector("#usr-always-assign").checked;
       const workerType = overlay.querySelector("#usr-worker-type").value;
+      const installationsEnabled = overlay.querySelector("#usr-installations-enabled").checked;
 
       if (!fullName) return toast("Full name is required", "warning");
       if (!email) return toast("Email is required", "warning");
@@ -2606,6 +2611,7 @@ export async function renderUsers(container) {
         can_update_profile: can_update_profile ? 1 : 0,
         alwaysAssign: alwaysAssign ? 1 : 0,
         workerType,
+        installationsEnabled,
       };
 
       // Tab access: unchecked "limit" = full access (null). Otherwise the

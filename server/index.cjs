@@ -1092,6 +1092,7 @@ const requiredColumns = {
         { name: 'allowed_tabs', definition: 'TEXT COMMENT \'JSON array of tab ids this employee may see; null = all\'' },
         { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
         { name: 'worker_type', definition: "VARCHAR(20) DEFAULT 'fixed' COMMENT 'fixed = permanent employee, gig = public-pool competitive worker'" },
+        { name: 'installations_enabled', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee see/receive the Installations tab'" },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -2280,7 +2281,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -3253,10 +3254,10 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type, installations_enabled FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
-        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed' };
+        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1 };
 
         // Block client logins — clients use the public landing page, not the dashboard.
         if (profile.role !== 'admin' && profile.role !== 'employee') {
@@ -3270,7 +3271,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed' }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled }
         });
     } catch (error) {
         console.error('Signin error:', error);
@@ -3312,7 +3313,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType, installationsEnabled } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -3345,7 +3346,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type, installations_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -3357,7 +3358,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     can_add_service ? 1 : 0,
                     can_update_profile ? 1 : 0,
                     alwaysAssign ? 1 : 0,
-                    workerType === 'gig' ? 'gig' : 'fixed'
+                    workerType === 'gig' ? 'gig' : 'fixed',
+                    installationsEnabled === false ? 0 : 1
                 ]
             );
 
@@ -3391,7 +3393,8 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         can_update_profile,
         alwaysAssign,
         allowed_tabs,
-        workerType
+        workerType,
+        installationsEnabled
     } = req.body;
 
     try {
@@ -3493,6 +3496,10 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (workerType !== undefined) {
                 profileUpdates.push('worker_type = ?');
                 profileParams.push(workerType === 'gig' ? 'gig' : 'fixed');
+            }
+            if (installationsEnabled !== undefined) {
+                profileUpdates.push('installations_enabled = ?');
+                profileParams.push(installationsEnabled ? 1 : 0);
             }
             if (allowed_tabs !== undefined) {
                 // null/empty array => full access (store NULL). Otherwise store a JSON array of tab ids.
