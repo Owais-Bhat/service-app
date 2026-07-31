@@ -4224,28 +4224,45 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       closeSvcResults();
     };
 
+    // Finds services against category / sub-category / leaf name. Strict
+    // AND-match first (every typed word must appear); if that yields nothing,
+    // falls back to a looser ANY-word match so near-misses still surface
+    // instead of showing "no results" for services that do exist.
+    const findSvcMatches = (q) => {
+      if (!q) return flatPricing;
+      const words = q.split(/\s+/).filter(Boolean);
+      const strict = flatPricing.filter(p => words.every(w => p._s.includes(w)));
+      if (strict.length) return strict;
+      return flatPricing.filter(p => words.some(w => p._s.includes(w)));
+    };
+
+    const renderSvcResults = (q) => {
+      const matches = findSvcMatches(q);
+      if (matches.length === 0) {
+        svcResultsBox.innerHTML = `<div class="svc-result-empty">No services match "<b>${escHtml(q)}</b>"</div>`;
+        svcResultsBox.style.display = 'block'; return;
+      }
+      const shown = matches.slice(0, 60);
+      svcResultsBox.innerHTML = shown.map((p, i) => `
+        <div class="svc-result-item" data-idx="${i}">
+          <div class="svc-result-name">${escHtml(p.main)}${p.sub ? ` <span class="svc-result-sep">›</span> ${escHtml(p.sub)}` : ''} <span class="svc-result-sep">›</span> <b>${escHtml(p.leaf)}</b></div>
+          <span class="svc-result-price">₹${p.cost.toLocaleString('en-IN')}</span>
+        </div>`).join('') + (matches.length > shown.length ? `<div class="svc-result-empty">+${matches.length - shown.length} more — keep typing to narrow down</div>` : '');
+      svcResultsBox.style.display = 'block';
+      svcResultsBox.querySelectorAll('.svc-result-item').forEach((el, i) => {
+        el.addEventListener('mousedown', (e) => { e.preventDefault(); addSvcItem(shown[i]); });
+      });
+    };
+
     if (svcSearchInput) {
       svcSearchInput.addEventListener('input', () => {
-        const q = svcSearchInput.value.trim().toLowerCase();
-        if (!q) { closeSvcResults(); return; }
-        const words = q.split(/\s+/);
-        const matches = flatPricing.filter(p => words.every(w => p._s.includes(w))).slice(0, 10);
-        if (matches.length === 0) {
-          svcResultsBox.innerHTML = `<div class="svc-result-empty">No services match "<b>${escHtml(q)}</b>"</div>`;
-          svcResultsBox.style.display = 'block'; return;
-        }
-        svcResultsBox.innerHTML = matches.map((p, i) => `
-          <div class="svc-result-item" data-idx="${i}">
-            <div class="svc-result-name">${escHtml(p.main)}${p.sub ? ` <span class="svc-result-sep">›</span> ${escHtml(p.sub)}` : ''} <span class="svc-result-sep">›</span> <b>${escHtml(p.leaf)}</b></div>
-            <span class="svc-result-price">₹${p.cost.toLocaleString('en-IN')}</span>
-          </div>`).join('');
-        svcResultsBox.style.display = 'block';
-        svcResultsBox.querySelectorAll('.svc-result-item').forEach((el, i) => {
-          el.addEventListener('mousedown', (e) => { e.preventDefault(); addSvcItem(matches[i]); });
-        });
+        renderSvcResults(svcSearchInput.value.trim().toLowerCase());
       });
       svcSearchInput.addEventListener('blur', () => setTimeout(closeSvcResults, 180));
-      svcSearchInput.addEventListener('focus', () => { if (svcSearchInput.value.trim()) svcSearchInput.dispatchEvent(new Event('input')); });
+      // Focusing an empty box now browses the full service list instead of
+      // staying blank — the employee can scroll it rather than having to
+      // already know the exact service name to search for.
+      svcSearchInput.addEventListener('focus', () => renderSvcResults(svcSearchInput.value.trim().toLowerCase()));
     }
 
     // --- Live payment status panel + Save-button gating ---
