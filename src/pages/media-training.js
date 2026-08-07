@@ -849,11 +849,18 @@ export async function renderEmployeeTrainingTab(container) {
         <p style="font-size:0.86rem;">Your trainer hasn't added any tutorials. Check back soon.</p>
       </div></div>
     ` : `
-      <div class="card tut-progress">
-        <div class="tut-ring" id="tut-ring" data-target="${pct}" style="background:conic-gradient(var(--primary) 0deg, var(--border) 0deg);"><div class="tut-ring-inner"><span id="tut-ring-num">0</span><small>%</small></div></div>
+      <div class="tut-progress">
+        <div class="tut-progress-glow"></div>
+        <div class="tut-ring" id="tut-ring" data-target="${pct}" style="background:conic-gradient(var(--primary) 0deg, rgba(255,255,255,.25) 0deg);"><div class="tut-ring-inner"><span id="tut-ring-num">0</span><small>%</small></div></div>
         <div class="tut-progress-meta">
-          <div class="tut-progress-title">Your training progress</div>
-          <div class="tut-progress-sub">${completedCount} of ${total} completed${requiredPending ? ` · <b style="color:var(--warning)">${requiredPending} required pending</b>` : ' · <b style="color:var(--success)">all required done 🎉</b>'}</div>
+          <div class="tut-progress-title">🎓 Your training progress</div>
+          <div class="tut-progress-chips">
+            <span class="tut-chip tut-chip-done">✅ ${completedCount} completed</span>
+            <span class="tut-chip">${total - completedCount} pending</span>
+            ${requiredPending
+              ? `<span class="tut-chip tut-chip-warn">⏳ ${requiredPending} required</span>`
+              : `<span class="tut-chip tut-chip-good">🎉 all required done</span>`}
+          </div>
           <div class="tut-bar"><span id="tut-bar-fill" style="width:0%"></span></div>
         </div>
       </div>
@@ -890,7 +897,7 @@ export async function renderEmployeeTrainingTab(container) {
         const t = Math.min(1, (now - start) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
         const current = Math.round(target * eased);
-        ring.style.background = `conic-gradient(var(--primary) ${current * 3.6}deg, var(--border) 0deg)`;
+        ring.style.background = `conic-gradient(#ffffff ${current * 3.6}deg, rgba(255,255,255,.25) 0deg)`;
         if (numEl) numEl.textContent = current;
         if (t < 1) requestAnimationFrame(tick);
       };
