@@ -511,7 +511,7 @@ export async function renderTrainingAdminTab(container) {
         const req = Number(item.required) !== 0;
         return `
           <div class="card tut-admin-card ${Number(item.active) === 1 ? '' : 'is-hidden'}">
-            <div class="tut-admin-thumb">
+            <div class="tut-admin-thumb tut-admin-watch" data-id="${escapeAttr(item.id)}">
               ${item.kind === 'video' ? `<video src="${escapeAttr(item.url)}#t=0.1" muted preload="metadata"></video><span class="tut-play">${ICONS.play}</span>` : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.title)}"/>`}
               <div class="tut-badges">
                 <span class="tut-type">${item.kind === 'video' ? '📹 Video' : '🖼️ Image'}</span>
@@ -533,6 +533,7 @@ export async function renderTrainingAdminTab(container) {
                 ? `<details class="tut-pending"><summary>${pendingNames.length} pending</summary><div class="tut-pending-list">${pendingNames.map(n => escapeHtml(n)).join(', ')}</div></details>`
                 : '<span class="badge badge-resolved" style="margin-top:8px;display:inline-block;">✓ All employees complete</span>'}
               <div class="tut-admin-actions">
+                <button class="btn btn-secondary btn-sm tut-admin-watch" data-id="${escapeAttr(item.id)}">${ICONS.play}<span>${item.kind === 'video' ? 'Watch' : 'View'}</span></button>
                 <button class="btn btn-secondary btn-sm training-edit" data-id="${escapeAttr(item.id)}">${ICONS.edit}<span>Edit</span></button>
                 <button class="btn btn-secondary btn-sm training-toggle" data-id="${escapeAttr(item.id)}" data-active="${Number(item.active) === 1 ? 0 : 1}">${Number(item.active) === 1 ? 'Hide' : 'Show'}</button>
                 <button class="btn btn-secondary btn-sm training-delete" data-id="${escapeAttr(item.id)}" style="color:var(--danger)">${ICONS.close}<span>Delete</span></button>
@@ -602,6 +603,12 @@ export async function renderTrainingAdminTab(container) {
       const { error } = await supabase.from('training_items').update({ active: Number(btn.dataset.active) }).eq('id', btn.dataset.id);
       if (error) toast(error.message, 'error');
       else renderTrainingAdminTab(container);
+    };
+  });
+  container.querySelectorAll('.tut-admin-watch').forEach(el => {
+    el.onclick = () => {
+      const item = itemList.find(i => String(i.id) === el.dataset.id);
+      if (item) openTutorialViewer(item);
     };
   });
   container.querySelectorAll('.training-edit').forEach(btn => {
