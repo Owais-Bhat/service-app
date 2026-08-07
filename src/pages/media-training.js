@@ -810,12 +810,12 @@ export async function renderEmployeeTrainingTab(container) {
   const pct = total ? Math.round((completedCount / total) * 100) : 0;
   const categories = [...new Set(itemList.map(i => i.category || 'General'))];
 
-  const card = (item) => {
+  const card = (item, idx) => {
     const isDone = done.has(item.id);
     const req = Number(item.required) !== 0;
     const watchPct = item.kind === 'video' ? (progressByItem.get(item.id) || 0) : 0;
     return `
-      <div class="tut-card ${isDone ? 'is-done' : ''}" data-cat="${escapeAttr(item.category || 'General')}" data-done="${isDone ? '1' : '0'}" data-req="${req ? '1' : '0'}" data-search="${escapeAttr((item.title + ' ' + (item.description || '')).toLowerCase())}">
+      <div class="tut-card ${isDone ? 'is-done' : ''}" style="animation-delay:${Math.min(idx * 0.05, 0.5)}s" data-cat="${escapeAttr(item.category || 'General')}" data-done="${isDone ? '1' : '0'}" data-req="${req ? '1' : '0'}" data-search="${escapeAttr((item.title + ' ' + (item.description || '')).toLowerCase())}">
         <div class="tut-thumb tut-watch" data-id="${escapeAttr(item.id)}">
           ${item.kind === 'video'
             ? `<video src="${escapeAttr(item.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="tut-play">${ICONS.play}</span>`
@@ -828,7 +828,7 @@ export async function renderEmployeeTrainingTab(container) {
           </div>
           <div class="tut-cat-chip">${escapeHtml(item.category || 'General')}</div>
         </div>
-        ${item.kind === 'video' ? `<div class="tut-watch-bar" data-id="${escapeAttr(item.id)}" title="${watchPct}% watched"><span style="width:${watchPct}%"></span></div>` : ''}
+        ${item.kind === 'video' ? `<div class="tut-watch-bar" data-id="${escapeAttr(item.id)}" data-target="${watchPct}" title="${watchPct}% watched"><span style="width:0%"></span></div>` : ''}
         <div class="tut-body">
           <div class="tut-title">${escapeHtml(item.title)}</div>
           <p class="tut-desc">${escapeHtml(item.description || '')}</p>
@@ -850,11 +850,11 @@ export async function renderEmployeeTrainingTab(container) {
       </div></div>
     ` : `
       <div class="card tut-progress">
-        <div class="tut-ring" style="background:conic-gradient(var(--primary) ${pct * 3.6}deg, var(--border) 0deg);"><div class="tut-ring-inner">${pct}<small>%</small></div></div>
+        <div class="tut-ring" id="tut-ring" data-target="${pct}" style="background:conic-gradient(var(--primary) 0deg, var(--border) 0deg);"><div class="tut-ring-inner"><span id="tut-ring-num">0</span><small>%</small></div></div>
         <div class="tut-progress-meta">
           <div class="tut-progress-title">Your training progress</div>
           <div class="tut-progress-sub">${completedCount} of ${total} completed${requiredPending ? ` · <b style="color:var(--warning)">${requiredPending} required pending</b>` : ' · <b style="color:var(--success)">all required done 🎉</b>'}</div>
-          <div class="tut-bar"><span style="width:${pct}%"></span></div>
+          <div class="tut-bar"><span id="tut-bar-fill" style="width:0%"></span></div>
         </div>
       </div>
 
@@ -876,6 +876,34 @@ export async function renderEmployeeTrainingTab(container) {
 
   if (total === 0) return;
 
+  // Animate the ring, the overall bar, and every per-video watch bar up to their
+  // real values on next paint - starting all of them at 0 (set above) is what
+  // makes the fill-up motion visible instead of just appearing pre-filled.
+  requestAnimationFrame(() => {
+    const ring = container.querySelector('#tut-ring');
+    if (ring) {
+      const target = Number(ring.dataset.target) || 0;
+      const numEl = container.querySelector('#tut-ring-num');
+      const start = performance.now();
+      const duration = 700;
+      const tick = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const current = Math.round(target * eased);
+        ring.style.background = `conic-gradient(var(--primary) ${current * 3.6}deg, var(--border) 0deg)`;
+        if (numEl) numEl.textContent = current;
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+    const barFill = container.querySelector('#tut-bar-fill');
+    if (barFill) barFill.style.width = `${pct}%`;
+    container.querySelectorAll('.tut-watch-bar').forEach(bar => {
+      const span = bar.querySelector('span');
+      if (span) span.style.width = `${Number(bar.dataset.target) || 0}%`;
+    });
+  });
+
   let filter = 'all', query = '';
   const applyFilters = () => {
     let shown = 0;
@@ -886,8 +914,16 @@ export async function renderEmployeeTrainingTab(container) {
       else if (filter === 'completed') ok = c.dataset.done === '1';
       else if (filter.startsWith('cat:')) ok = c.dataset.cat === filter.slice(4);
       if (ok && query) ok = c.dataset.search.includes(query);
-      c.style.display = ok ? '' : 'none';
-      if (ok) shown++;
+      if (ok) {
+        shown++;
+        if (c.style.display === 'none') {
+          c.style.display = '';
+          requestAnimationFrame(() => c.classList.remove('tut-card-hide'));
+        }
+      } else if (c.style.display !== 'none') {
+        c.classList.add('tut-card-hide');
+        setTimeout(() => { if (c.classList.contains('tut-card-hide')) c.style.display = 'none'; }, 180);
+      }
     });
     const empty = container.querySelector('#tut-empty');
     if (empty) empty.style.display = shown ? 'none' : 'block';

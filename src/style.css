@@ -7690,6 +7690,17 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .tut-search svg { width:16px; height:16px; color:var(--text-dim); }
 .tut-search input { border:none; background:transparent; outline:none; font-size:0.9rem; color:var(--text); width:100%; }
 
+@keyframes tut-rise { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+.tut-progress, .tut-toolbar { animation:tut-rise .5s cubic-bezier(.22,1,.36,1) both; }
+.tut-toolbar { animation-delay:.08s; }
+.tut-card { animation:tut-rise .5s cubic-bezier(.22,1,.36,1) both; transition:opacity .18s ease, transform .18s ease; }
+.tut-card.tut-card-hide { opacity:0; transform:scale(.95); pointer-events:none; }
+@media (prefers-reduced-motion:reduce) {
+  .tut-progress, .tut-toolbar, .tut-card, .tut-done-tick { animation:none !important; }
+  .tut-thumb img, .tut-thumb video, .tut-bar > span, .tut-watch-bar span, .tut-ring { transition:none !important; }
+}
+.tut-ring { transition:none; }
+.tut-ring-inner { font-variant-numeric:tabular-nums; }
 .tut-grid, .tut-admin-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:22px; }
 .tut-card, .tut-admin-card { border:1px solid var(--border); border-radius:20px; overflow:hidden; background:var(--surface,#fff); box-shadow:0 1px 3px rgba(16,24,40,.06); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; display:flex; flex-direction:column; }
 .tut-card:hover, .tut-admin-card:hover { transform:translateY(-4px); box-shadow:0 18px 38px rgba(16,24,40,.14); border-color:var(--primary); }
@@ -7702,7 +7713,8 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .tut-play { position:absolute; inset:0; margin:auto; width:54px; height:54px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.85); border-radius:50%; color:#fff; pointer-events:none; transition:transform .18s ease, background .18s ease; }
 .tut-card:hover .tut-play { transform:scale(1.1); background:var(--primary); }
 .tut-play svg { width:22px; height:22px; }
-.tut-done-tick { position:absolute; top:10px; right:10px; width:28px; height:28px; border-radius:50%; background:var(--success,#10b981); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; box-shadow:0 4px 10px rgba(0,0,0,.25); z-index:1; }
+.tut-done-tick { position:absolute; top:10px; right:10px; width:28px; height:28px; border-radius:50%; background:var(--success,#10b981); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; box-shadow:0 4px 10px rgba(0,0,0,.25); z-index:1; animation:tut-pop .4s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes tut-pop { 0% { transform:scale(0); opacity:0; } 70% { transform:scale(1.18); opacity:1; } 100% { transform:scale(1); } }
 .tut-badges { position:absolute; left:10px; bottom:10px; display:flex; gap:6px; flex-wrap:wrap; z-index:1; }
 .tut-cat-chip { position:absolute; top:10px; left:10px; font-size:0.68rem; font-weight:700; padding:3px 9px; border-radius:99px; background:rgba(255,255,255,.9); color:#1f2937; z-index:1; }
 .tut-type, .tut-req, .tut-opt, .tut-hidden-tag { font-size:0.68rem; font-weight:800; padding:3px 8px; border-radius:99px; backdrop-filter:blur(4px); }
@@ -7716,7 +7728,14 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .tut-title { font-weight:800; font-size:1rem; color:var(--text); }
 .tut-desc { font-size:0.85rem; color:var(--text-soft); margin:0; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .tut-actions { display:flex; gap:8px; margin-top:auto; padding-top:10px; }
-.tut-actions .btn { flex:1; }
+.tut-actions .btn { flex:1; transition:transform .15s ease, box-shadow .15s ease; }
+.tut-actions .btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 14px rgba(16,24,40,.14); }
+.tut-actions .btn:active:not(:disabled) { transform:translateY(0) scale(.97); }
+#tut-filters .sr-filter { transition:background .2s ease, color .2s ease, border-color .2s ease, transform .12s ease; }
+#tut-filters .sr-filter:active { transform:scale(.94); }
+.tut-search { transition:box-shadow .2s ease, border-color .2s ease; }
+.tut-search:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px rgba(16,185,129,.15); }
+.tut-search input { transition:none; }
 .tut-admin-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .tut-admin-progress { margin:8px 0 4px; }
 .tut-admin-progress-top { display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-soft); margin-bottom:5px; }
