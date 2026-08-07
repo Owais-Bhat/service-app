@@ -3331,9 +3331,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     await loadDeviceTrackingEnabled();
     const deviceFeatureOn = deviceTrackingEnabled;
     let deviceTicketOn = Number(inquiryRow?.device_service_enabled) === 1;
+    // Whether a "device taken" log has actually been recorded for this ticket.
+    // Once true, turning the toggle off can no longer stand in for a real
+    // return — only a logged device_return_logs row (or an explicit returned
+    // follow-up/status) unlocks billing. Refined by refreshDeviceHistory once
+    // the device history loads.
+    let deviceHasTakenLog = inquiryRow?.device_status === 'taken' || inquiryRow?.device_status === 'in_service';
     // Whether the device taken for service has been returned to the client. Used
     // to block completing the service while a device is still at the service center.
-    let deviceReturned = !(Number(inquiryRow?.device_service_enabled) === 1)
+    let deviceReturned = (!(Number(inquiryRow?.device_service_enabled) === 1) && !deviceHasTakenLog)
       || inquiryRow?.follow_up_status === 'returned'
       || inquiryRow?.device_status === 'returned';
     // Effective SLA = rescheduled time (if any) + paused device time.
@@ -3680,6 +3686,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <div id="bill-locked-hint" style="display:${isResolving ? 'none' : 'block'}; padding:14px; border-radius:12px; background:var(--bg-soft); border:1px dashed var(--border); margin-bottom:14px; font-size:0.85rem; color:var(--text-soft);">
               ℹ️ Set status to <b>Resolved</b> on the Status tab to enable billing.
             </div>
+            <div id="device-return-banner" style="display:none; padding:14px; border-radius:12px; background:rgba(245,158,11,0.08); border:1px solid var(--warning); margin-bottom:14px; font-size:0.85rem; color:var(--text);">
+              <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;">
+                <div>🔧 <b>Device still at service center.</b> Mark it returned to unlock billing.</div>
+                <button type="button" class="btn btn-primary btn-sm" id="go-to-device-return">Return the device →</button>
+              </div>
+            </div>
             <div id="pricing-section" style="display:${isResolving ? 'block' : 'none'};">
               <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
               ${(pricing || []).length === 0 ? `
@@ -3847,6 +3859,18 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     overlay.querySelectorAll('.mst-tab').forEach(tabBtn => {
       tabBtn.onclick = () => goToTab(tabBtn.dataset.tab);
     });
+    const goToDeviceReturnBtn = overlay.querySelector('#go-to-device-return');
+    if (goToDeviceReturnBtn) goToDeviceReturnBtn.onclick = () => {
+      goToTab('status');
+      const returnBtn = overlay.querySelector('#save-device-return');
+      const target = returnBtn?.closest('.form-group') || returnBtn;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (target) {
+        target.style.transition = 'box-shadow .3s ease';
+        target.style.boxShadow = '0 0 0 3px var(--warning)';
+        setTimeout(() => { target.style.boxShadow = ''; }, 1600);
+      }
+    };
 
     // Device Service is no longer its own tab — its toggle lives in the STATUS
     // tab and, when turned on, expands to show the device serial + taken/return
@@ -4279,6 +4303,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const requiresPayment = resolving && total > 0;
       const paid = paymentState.status === 'paid';
 
+      const returnBanner = overlay.querySelector('#device-return-banner');
+      if (returnBanner) returnBanner.style.display = (deviceTicketOn && !deviceReturned) ? 'block' : 'none';
+
       if (paid) {
         payStatusBox.style.borderColor = 'var(--success)';
         payStatusBox.style.background = 'rgba(16,185,129,0.08)';
@@ -4463,9 +4490,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         const followups = data?.device_follow_up_logs || [];
         if (dHistory) dHistory.innerHTML = renderDeviceTrackingTab(inqId, taken, returned, followups);
         if (fHistory) fHistory.innerHTML = renderFollowUpTab(followups);
-        // A device counts as returned once a return log exists or the latest
-        // follow-up / device status is "returned". Re-evaluate the save gate.
-        deviceReturned = !deviceTicketOn || !!returned
+        deviceHasTakenLog = !!taken;
+        // A device counts as returned once a real return log exists or the latest
+        // follow-up / device status is "returned". Turning the toggle off no longer
+        // counts as "returned" once a taken log exists — that would silently skip
+        // the return record admin relies on. Re-evaluate the save gate.
+        deviceReturned = (!deviceTicketOn && !deviceHasTakenLog) || !!returned
           || data?.inquiry?.follow_up_status === 'returned'
           || data?.inquiry?.device_status === 'returned'
           || (followups[0]?.status === 'returned');
@@ -4475,6 +4505,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       if (dToggle) {
         dToggle.onchange = async () => {
           const on = dToggle.checked;
+          // A device pickup is already logged - turning this off must not be usable
+          // as a shortcut past the return step. Send them to "Mark returned" instead.
+          if (!on && deviceHasTakenLog) {
+            dToggle.checked = true;
+            toast('A device pickup is already logged for this ticket. Use "Mark returned / sent back to client" below to close it out — turning this off won\'t skip that step.', 'warning');
+            return;
+          }
           try {
             await setTicketDeviceFlag(inqId, on);
             deviceTicketOn = on;

@@ -31,6 +31,9 @@ export async function renderDeviceTrackingTab(container) {
         <option value="ready_return">Ready to Return</option>
         <option value="returned">Device Returned</option>
       </select>
+      <label style="display:flex;align-items:center;gap:6px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;white-space:nowrap;cursor:pointer;font-size:0.85rem;">
+        <input type="checkbox" id="dt-flagged-only"/> ⚠️ Closed without return
+      </label>
     </div>
 
     <div id="dt-loading" style="text-align: center; padding: 40px;">
@@ -46,6 +49,7 @@ export async function renderDeviceTrackingTab(container) {
   const searchInput = container.querySelector('#dt-search');
   const deviceStatusSelect = container.querySelector('#dt-device-status');
   const followupStatusSelect = container.querySelector('#dt-followup-status');
+  const flaggedOnlyCheckbox = container.querySelector('#dt-flagged-only');
 
   let allData = [];
 
@@ -69,6 +73,7 @@ export async function renderDeviceTrackingTab(container) {
     const search = searchInput.value.toLowerCase();
     const deviceStatus = deviceStatusSelect.value;
     const followupStatus = followupStatusSelect.value;
+    const flaggedOnly = flaggedOnlyCheckbox.checked;
 
     const filtered = allData.filter(item => {
       const matchesSearch = !search ||
@@ -78,8 +83,9 @@ export async function renderDeviceTrackingTab(container) {
 
       const matchesDeviceStatus = !deviceStatus || item.device_status === deviceStatus;
       const matchesFollowupStatus = !followupStatus || item.follow_up_status === followupStatus;
+      const matchesFlagged = !flaggedOnly || isClosedWithoutReturn(item);
 
-      return matchesSearch && matchesDeviceStatus && matchesFollowupStatus;
+      return matchesSearch && matchesDeviceStatus && matchesFollowupStatus && matchesFlagged;
     });
 
     renderTable(contentEl, filtered, onRefresh);
@@ -88,6 +94,17 @@ export async function renderDeviceTrackingTab(container) {
   searchInput.addEventListener('input', applyFilters);
   deviceStatusSelect.addEventListener('change', applyFilters);
   followupStatusSelect.addEventListener('change', applyFilters);
+  flaggedOnlyCheckbox.addEventListener('change', applyFilters);
+}
+
+// A job is closed but the device trail never reached "returned" - the exact gap
+// left by an employee turning device-service off instead of logging a real return.
+const CLOSED_JOB_STATUSES = new Set(['resolved', 'closed', 'case_closed', 'foc', 'issue_not_resolved']);
+function isClosedWithoutReturn(item) {
+  const jobClosed = CLOSED_JOB_STATUSES.has(item.status);
+  const deviceReturned = item.device_status === 'returned' || item.follow_up_status === 'returned'
+    || (item.device_return_logs && item.device_return_logs.length > 0);
+  return jobClosed && !deviceReturned;
 }
 
 function renderTable(container, data, onRefresh) {
@@ -130,7 +147,10 @@ function renderTable(container, data, onRefresh) {
                   <small style="color: var(--text-dim);">${item.phone || ''}</small>
                 </td>
                 <td style="padding: 14px 16px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.service_item || '—'}</td>
-                <td style="padding: 14px 16px;">${renderDeviceStatusBadge(item.device_status)}</td>
+                <td style="padding: 14px 16px;">
+                  ${renderDeviceStatusBadge(item.device_status)}
+                  ${isClosedWithoutReturn(item) ? '<div style="margin-top:4px;"><span style="background:#fee2e2;color:#991b1b;padding:3px 7px;border-radius:4px;font-size:0.7rem;font-weight:700;">⚠️ Closed, no return logged</span></div>' : ''}
+                </td>
                 <td style="padding: 14px 16px;">${renderFollowupStatusBadge(item.follow_up_status)}</td>
                 <td style="padding: 14px 16px;">
                   ${item.device_taken_logs && item.device_taken_logs.length > 0

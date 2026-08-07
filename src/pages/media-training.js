@@ -29,17 +29,45 @@ function mediaPreview(item) {
   return `<img src="${url}" alt="${escapeAttr(item.caption || item.title || 'Media')}" style="width:100%;max-height:260px;object-fit:cover;border-radius:8px;display:block;"/>`;
 }
 
+function apiBase() {
+  return (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? '/api'
+    : 'http://localhost:5000/api';
+}
+
+async function apiRequest(path, opts = {}) {
+  const token = localStorage.getItem('auth_token');
+  const res = await fetch(`${apiBase()}${path}`, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// Reports how much of a tutorial video an employee has watched. Fire-and-forget
+// by design (a failed ping shouldn't interrupt playback) - errors are swallowed.
+function reportWatchProgress(itemId, secondsWatched, durationSeconds) {
+  if (!itemId || !durationSeconds) return;
+  apiRequest('/training/watch-progress', {
+    method: 'POST',
+    body: JSON.stringify({ item_id: itemId, seconds_watched: secondsWatched, duration_seconds: durationSeconds }),
+  }).catch(() => {});
+}
+
 function uploadMediaFile(file, onProgress) {
   if (!file) return Promise.reject(new Error('Choose an image or video file first.'));
   const token = localStorage.getItem('auth_token');
-  const apiBase = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-    ? '/api'
-    : 'http://localhost:5000/api';
   const form = new FormData();
   form.append('file', file);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${apiBase}/upload`);
+    xhr.open('POST', `${apiBase()}/upload`);
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.upload.onprogress = (e) => {
       if (onProgress && e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
@@ -405,12 +433,22 @@ export async function renderPopupAdsTab(container) {
   });
 }
 
+function timeAgo(iso) {
+  if (!iso) return '';
+  const diffSec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSec < 60) return 'just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
 export async function renderTrainingAdminTab(container) {
   showLoader(container);
-  const [{ data: items }, { data: completions }, { data: employees }] = await Promise.all([
+  const [{ data: items }, { data: completions }, { data: employees }, watchRows] = await Promise.all([
     supabase.from('training_items').select('*').order('position', { ascending: true }),
     supabase.from('training_completions').select('*, profiles(full_name)').order('completed_at', { ascending: false }),
     supabase.from('profiles').select('id,full_name').eq('role', 'employee'),
+    apiRequest('/training/watch-progress').catch(() => []),
   ]);
   const itemList = items || [];
   const employeeList = employees || [];
@@ -424,6 +462,12 @@ export async function renderTrainingAdminTab(container) {
   const completionPctOf = (item) => Math.round(((byItem.get(item.id) || []).length / empCount) * 100);
   const avgCompletion = itemList.length ? Math.round(itemList.reduce((s, i) => s + completionPctOf(i), 0) / itemList.length) : 0;
   const fullyDone = itemList.filter(i => (byItem.get(i.id) || []).length >= empCount && empCount > 0).length;
+  const videoItems = itemList.filter(i => i.kind === 'video');
+  const watchByItem = new Map();
+  (watchRows || []).forEach(row => {
+    if (!watchByItem.has(row.item_id)) watchByItem.set(row.item_id, []);
+    watchByItem.get(row.item_id).push(row);
+  });
 
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -497,6 +541,30 @@ export async function renderTrainingAdminTab(container) {
           </div>`;
       }).join('')}
     </div>
+
+    ${videoItems.length ? `
+    <div class="card" style="margin-top:22px;">
+      <div class="card-header"><span class="card-title"><span class="live-dot"></span><span style="margin-left:8px">Live Watch Tracking</span></span></div>
+      <div class="card-body" id="watch-tracking-body">
+        ${videoItems.map(item => {
+          const rows = (watchByItem.get(item.id) || []).slice().sort((a, b) => (b.percent || 0) - (a.percent || 0));
+          return `
+          <div class="watch-track-block" data-item="${escapeAttr(item.id)}">
+            <div class="watch-track-head"><b>${escapeHtml(item.title)}</b><span style="color:var(--text-dim);font-size:0.8rem;">${rows.length} of ${employeeList.length} started</span></div>
+            ${rows.length === 0
+              ? '<p style="color:var(--text-dim);font-size:0.82rem;margin:6px 0 0;">No one has opened this video yet.</p>'
+              : `<div class="watch-track-rows">${rows.map(r => `
+                <div class="watch-track-row">
+                  <span class="watch-track-name">${escapeHtml(r.full_name || 'Employee')}</span>
+                  <div class="watch-track-bar"><span style="width:${r.percent || 0}%"></span></div>
+                  <span class="watch-track-pct">${r.percent || 0}%</span>
+                  <span class="watch-track-time">${timeAgo(r.updated_at)}</span>
+                </div>`).join('')}</div>`}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
   `;
   container.querySelector('#training-save').onclick = async () => {
     const btn = container.querySelector('#training-save');
@@ -554,6 +622,43 @@ export async function renderTrainingAdminTab(container) {
       renderTrainingAdminTab(container);
     };
   });
+
+  // Live-refresh just the watch-tracking numbers (not a full re-render) every
+  // few seconds while this tab is still on screen, so "who's watching what"
+  // updates without the admin needing to reload.
+  if (videoItems.length) {
+    const poll = setInterval(async () => {
+      if (!document.body.contains(container) || !container.querySelector('#watch-tracking-body')) {
+        clearInterval(poll);
+        return;
+      }
+      const rows = await apiRequest('/training/watch-progress').catch(() => null);
+      if (!rows || !document.body.contains(container)) return;
+      const byItemNow = new Map();
+      rows.forEach(row => {
+        if (!byItemNow.has(row.item_id)) byItemNow.set(row.item_id, []);
+        byItemNow.get(row.item_id).push(row);
+      });
+      videoItems.forEach(item => {
+        const block = container.querySelector(`.watch-track-block[data-item="${item.id}"]`);
+        if (!block) return;
+        const itemRows = (byItemNow.get(item.id) || []).slice().sort((a, b) => (b.percent || 0) - (a.percent || 0));
+        const countEl = block.querySelector('.watch-track-head span');
+        if (countEl) countEl.textContent = `${itemRows.length} of ${employeeList.length} started`;
+        const rowsHtml = itemRows.length === 0
+          ? '<p style="color:var(--text-dim);font-size:0.82rem;margin:6px 0 0;">No one has opened this video yet.</p>'
+          : `<div class="watch-track-rows">${itemRows.map(r => `
+            <div class="watch-track-row">
+              <span class="watch-track-name">${escapeHtml(r.full_name || 'Employee')}</span>
+              <div class="watch-track-bar"><span style="width:${r.percent || 0}%"></span></div>
+              <span class="watch-track-pct">${r.percent || 0}%</span>
+              <span class="watch-track-time">${timeAgo(r.updated_at)}</span>
+            </div>`).join('')}</div>`;
+        const existingRows = block.querySelector('.watch-track-rows, p');
+        if (existingRows) existingRows.outerHTML = rowsHtml;
+      });
+    }, 6000);
+  }
 }
 
 function openTutorialEditor(item, onChange) {
@@ -634,24 +739,54 @@ function openTutorialEditor(item, onChange) {
 }
 
 // Full-screen viewer for a tutorial (image lightbox / video player).
-function openTutorialViewer(item) {
+// `onProgress(percent)` fires as playback advances, so the caller can live-update
+// the card's watch bar without re-rendering the whole grid.
+function openTutorialViewer(item, onProgress) {
+  const isVideo = item.kind === 'video';
   const overlay = document.createElement('div');
   overlay.className = 'tut-viewer';
   overlay.innerHTML = `
     <div class="tut-viewer-card">
       <button class="tut-viewer-close" aria-label="Close">×</button>
       <div class="tut-viewer-media">
-        ${item.kind === 'video'
+        ${isVideo
           ? `<video src="${escapeAttr(item.url)}" controls autoplay playsinline></video>`
           : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.title)}"/>`}
       </div>
       <div class="tut-viewer-info">
-        <div class="tut-viewer-title">${escapeHtml(item.title)}</div>
+        <div class="tut-viewer-title-row">
+          <div class="tut-viewer-title">${escapeHtml(item.title)}</div>
+          <span class="badge badge-open">${escapeHtml(item.category || 'General')}</span>
+        </div>
         ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
+
+  let lastReported = 0;
+  const video = overlay.querySelector('video');
+  if (isVideo && video) {
+    const ping = () => {
+      const seconds = video.currentTime;
+      const duration = video.duration;
+      if (!duration || Number.isNaN(duration)) return;
+      // Report at most every ~4s of playback, plus once right at the end.
+      if (seconds - lastReported < 4 && seconds < duration - 0.5) return;
+      lastReported = seconds;
+      reportWatchProgress(item.id, seconds, duration);
+      if (onProgress) onProgress(Math.min(100, Math.round((seconds / duration) * 100)));
+    };
+    video.addEventListener('timeupdate', ping);
+    video.addEventListener('pause', ping);
+  }
+
+  const close = () => {
+    if (isVideo && video && video.duration && !Number.isNaN(video.duration)) {
+      reportWatchProgress(item.id, video.currentTime, video.duration);
+      if (onProgress) onProgress(Math.min(100, Math.round((video.currentTime / video.duration) * 100)));
+    }
+    overlay.remove();
+  };
   overlay.querySelector('.tut-viewer-close').onclick = close;
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } });
@@ -660,11 +795,13 @@ function openTutorialViewer(item) {
 export async function renderEmployeeTrainingTab(container) {
   showLoader(container);
   const { data: { user } } = await supabase.auth.getUser();
-  const [{ data: items }, { data: completions }] = await Promise.all([
+  const [{ data: items }, { data: completions }, myProgress] = await Promise.all([
     supabase.from('training_items').select('*').eq('active', 1).order('position', { ascending: true }),
     supabase.from('training_completions').select('*').eq('employee_id', user.id),
+    apiRequest('/training/watch-progress/mine').catch(() => []),
   ]);
   const done = new Set((completions || []).map(x => x.item_id));
+  const progressByItem = new Map((myProgress || []).map(p => [p.item_id, Number(p.percent) || 0]));
   const itemList = items || [];
   const total = itemList.length;
   const completedCount = itemList.filter(i => done.has(i.id)).length;
@@ -676,18 +813,22 @@ export async function renderEmployeeTrainingTab(container) {
   const card = (item) => {
     const isDone = done.has(item.id);
     const req = Number(item.required) !== 0;
+    const watchPct = item.kind === 'video' ? (progressByItem.get(item.id) || 0) : 0;
     return `
       <div class="tut-card ${isDone ? 'is-done' : ''}" data-cat="${escapeAttr(item.category || 'General')}" data-done="${isDone ? '1' : '0'}" data-req="${req ? '1' : '0'}" data-search="${escapeAttr((item.title + ' ' + (item.description || '')).toLowerCase())}">
         <div class="tut-thumb tut-watch" data-id="${escapeAttr(item.id)}">
           ${item.kind === 'video'
             ? `<video src="${escapeAttr(item.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="tut-play">${ICONS.play}</span>`
             : `<img src="${escapeAttr(item.url)}" alt="${escapeAttr(item.title)}"/>`}
+          <div class="tut-thumb-gradient"></div>
           ${isDone ? '<span class="tut-done-tick">✓</span>' : ''}
           <div class="tut-badges">
             <span class="tut-type">${item.kind === 'video' ? '📹 Video' : '🖼️ Image'}</span>
             ${req ? '<span class="tut-req">Required</span>' : '<span class="tut-opt">Optional</span>'}
           </div>
+          <div class="tut-cat-chip">${escapeHtml(item.category || 'General')}</div>
         </div>
+        ${item.kind === 'video' ? `<div class="tut-watch-bar" data-id="${escapeAttr(item.id)}" title="${watchPct}% watched"><span style="width:${watchPct}%"></span></div>` : ''}
         <div class="tut-body">
           <div class="tut-title">${escapeHtml(item.title)}</div>
           <p class="tut-desc">${escapeHtml(item.description || '')}</p>
@@ -760,7 +901,13 @@ export async function renderEmployeeTrainingTab(container) {
 
   container.querySelectorAll('.tut-watch').forEach(el => el.onclick = () => {
     const item = itemList.find(i => String(i.id) === el.dataset.id);
-    if (item) openTutorialViewer(item);
+    if (!item) return;
+    openTutorialViewer(item, (percent) => {
+      const bar = container.querySelector(`.tut-watch-bar[data-id="${item.id}"] span`);
+      if (bar) bar.style.width = `${percent}%`;
+      const wrap = container.querySelector(`.tut-watch-bar[data-id="${item.id}"]`);
+      if (wrap) wrap.title = `${percent}% watched`;
+    });
   });
 
   container.querySelectorAll('.mark-training').forEach(btn => {

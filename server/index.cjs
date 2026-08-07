@@ -1293,6 +1293,18 @@ const requiredTables = [
         INDEX idx_training_employee (employee_id),
         INDEX idx_training_item (item_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS training_watch_progress (
+        id VARCHAR(36) PRIMARY KEY,
+        item_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        seconds_watched INT DEFAULT 0,
+        duration_seconds INT DEFAULT 0,
+        percent INT DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_training_watch (item_id, employee_id),
+        INDEX idx_watch_employee (employee_id),
+        INDEX idx_watch_item (item_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS notices (
         id VARCHAR(36) PRIMARY KEY,
         title VARCHAR(160) NOT NULL,
@@ -4626,6 +4638,73 @@ app.get('/api/training/course/:id', authenticateToken, async (req, res) => {
             doneLessons: done,
             completion: comp[0] || null,
         });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Employee: report video watch progress for a tutorial (media-training "training_items",
+// not the course/lesson system above). Called periodically from the player, not per frame -
+// upserts so repeated pings from the same viewing don't create duplicate rows.
+app.post('/api/training/watch-progress', authenticateToken, async (req, res) => {
+    const employeeId = req.user.id;
+    const { item_id, seconds_watched, duration_seconds } = req.body || {};
+    if (!item_id) return res.status(400).json({ error: 'item_id is required' });
+    const seconds = Math.max(0, Math.round(Number(seconds_watched) || 0));
+    const duration = Math.max(0, Math.round(Number(duration_seconds) || 0));
+    const percent = duration > 0 ? Math.min(100, Math.round((seconds / duration) * 100)) : 0;
+    let c;
+    try {
+        c = await getConn();
+        const [existing] = await c.query(
+            'SELECT id, seconds_watched FROM training_watch_progress WHERE item_id = ? AND employee_id = ?',
+            [item_id, employeeId]
+        );
+        // Progress should only move forward — an early re-open of the player
+        // (seconds reset to 0) must not erase a previously recorded high-water mark.
+        if (existing.length) {
+            const bestSeconds = Math.max(seconds, Number(existing[0].seconds_watched) || 0);
+            const bestPercent = duration > 0 ? Math.min(100, Math.round((bestSeconds / duration) * 100)) : percent;
+            await c.query(
+                'UPDATE training_watch_progress SET seconds_watched = ?, duration_seconds = ?, percent = ? WHERE id = ?',
+                [bestSeconds, duration, bestPercent, existing[0].id]
+            );
+        } else {
+            await c.query(
+                'INSERT INTO training_watch_progress (id, item_id, employee_id, seconds_watched, duration_seconds, percent) VALUES (?,?,?,?,?,?)',
+                [uuidv4(), item_id, employeeId, seconds, duration, percent]
+            );
+        }
+        broadcastChange('UPDATE', 'training_watch_progress', { item_id, employee_id: employeeId, percent, duration_seconds: duration });
+        res.json({ ok: true, percent });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Employee: my own watch progress across tutorials, to show a "you watched N%" bar on each card.
+app.get('/api/training/watch-progress/mine', authenticateToken, async (req, res) => {
+    let c;
+    try {
+        c = await getConn();
+        const [rows] = await c.query(
+            'SELECT item_id, percent, seconds_watched, duration_seconds FROM training_watch_progress WHERE employee_id = ?',
+            [req.user.id]
+        );
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// Admin: live per-employee watch progress across all tutorials, for the "who watched how much" view.
+app.get('/api/training/watch-progress', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let c;
+    try {
+        c = await getConn();
+        const [rows] = await c.query(`
+            SELECT wp.item_id, wp.employee_id, wp.seconds_watched, wp.duration_seconds, wp.percent, wp.updated_at,
+                   p.full_name
+            FROM training_watch_progress wp
+            LEFT JOIN profiles p ON p.id = wp.employee_id
+            ORDER BY wp.updated_at DESC
+        `);
+        res.json(rows);
     } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
 });
 
