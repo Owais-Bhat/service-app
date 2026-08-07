@@ -29,22 +29,56 @@ function mediaPreview(item) {
   return `<img src="${url}" alt="${escapeAttr(item.caption || item.title || 'Media')}" style="width:100%;max-height:260px;object-fit:cover;border-radius:8px;display:block;"/>`;
 }
 
-async function uploadMediaFile(file) {
-  if (!file) throw new Error('Choose an image or video file first.');
-  const form = new FormData();
-  form.append('file', file);
+function uploadMediaFile(file, onProgress) {
+  if (!file) return Promise.reject(new Error('Choose an image or video file first.'));
   const token = localStorage.getItem('auth_token');
   const apiBase = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
     ? '/api'
     : 'http://localhost:5000/api';
-  const res = await fetch(`${apiBase}/upload`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
+  const form = new FormData();
+  form.append('file', file);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${apiBase}/upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (onProgress && e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch { /* non-JSON error page */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data.url);
+      else reject(new Error(data.error || 'Upload failed'));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed — check your connection.'));
+    xhr.send(form);
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Upload failed');
-  return data.url;
+}
+
+// Small inline progress bar shown next to an upload button while a file is transferring.
+function uploadProgressHTML(id) {
+  return `<div id="${id}" class="upload-progress" style="display:none;margin-top:10px;">
+    <div style="height:8px;border-radius:6px;background:var(--border);overflow:hidden;">
+      <div class="upload-progress-fill" style="height:100%;width:0%;background:var(--primary);transition:width .15s ease;"></div>
+    </div>
+    <div class="upload-progress-label" style="font-size:0.78rem;color:var(--text-dim);margin-top:4px;">Uploading… 0%</div>
+  </div>`;
+}
+
+function setUploadProgress(root, id, pct) {
+  const box = root.querySelector(`#${id}`);
+  if (!box) return;
+  box.style.display = 'block';
+  box.querySelector('.upload-progress-fill').style.width = `${pct}%`;
+  box.querySelector('.upload-progress-label').textContent = pct >= 100 ? 'Processing…' : `Uploading… ${pct}%`;
+}
+
+function resetUploadProgress(root, id) {
+  const box = root.querySelector(`#${id}`);
+  if (!box) return;
+  box.style.display = 'none';
+  box.querySelector('.upload-progress-fill').style.width = '0%';
+  box.querySelector('.upload-progress-label').textContent = 'Uploading… 0%';
 }
 
 function fileKind(file) {
@@ -131,6 +165,8 @@ function openPopupAdEditor(ad, onChange) {
           </div>
           <div id="popup-media-upload-div">
             <input type="file" id="popup-file" accept="image/*,video/*" style="width:100%;padding:8px;border-radius:10px;border:1px dashed var(--border);background:var(--bg);font-size:0.9rem;" />
+            <div style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;">Videos: under 15 seconds, max 20 MB (MP4/WebM). Images: max 2 MB.</div>
+            ${uploadProgressHTML('popup-upload-progress')}
           </div>
           <div id="popup-media-url-div" style="display:none;">
             <input id="popup-url" type="url" placeholder="https://…/image.jpg or https://…/video.mp4"
@@ -209,11 +245,13 @@ function openPopupAdEditor(ad, onChange) {
       const btn = overlay.querySelector('#popup-save');
       btn.disabled = true;
       btn.textContent = 'Uploading...';
+      setUploadProgress(overlay, 'popup-upload-progress', 0);
       try {
-        url = await uploadMediaFile(fileInput.files[0]);
+        url = await uploadMediaFile(fileInput.files[0], (pct) => setUploadProgress(overlay, 'popup-upload-progress', pct));
       } catch (err) {
         btn.disabled = false;
         btn.textContent = editing ? 'Save' : 'Add popup';
+        resetUploadProgress(overlay, 'popup-upload-progress');
         return toast(err.message, 'error');
       }
     }
@@ -286,9 +324,10 @@ export async function renderPopupAdsTab(container) {
           <div class="form-group"><label>File</label><input id="media-file" type="file" accept="image/*,video/*"/></div>
         </div>
         <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);font-size:0.84rem;color:var(--text-soft);line-height:1.55;margin-top:6px;">
-          <b>Recommended popup sizes:</b> desktop 1200x800, mobile 900x1200, square 1080x1080. Use JPG/WebP/PNG under 2 MB for images and MP4/WebM under 20 MB for videos.
+          <b>Recommended popup sizes:</b> desktop 1200x800, mobile 900x1200, square 1080x1080. Use JPG/WebP/PNG under 2 MB for images and MP4/WebM under 20 MB for videos. Keep popup videos short — <b>under 15 seconds</b> — since they autoplay on top of the page.
         </div>
         <button class="btn btn-primary" id="media-save" style="margin-top:14px;">${ICONS.upload}<span>Upload & Publish</span></button>
+        ${uploadProgressHTML('media-upload-progress')}
       </div>
     </div>
     <div class="card">
@@ -315,10 +354,12 @@ export async function renderPopupAdsTab(container) {
   container.querySelector('#media-save').onclick = async () => {
     const btn = container.querySelector('#media-save');
     const file = container.querySelector('#media-file').files[0];
+    if (!file) return toast('Choose an image or video file', 'warning');
     btn.disabled = true;
     btn.innerHTML = '<span>Uploading...</span>';
+    setUploadProgress(container, 'media-upload-progress', 0);
     try {
-      const url = await uploadMediaFile(file);
+      const url = await uploadMediaFile(file, (pct) => setUploadProgress(container, 'media-upload-progress', pct));
       const { error: saveErr } = await supabase.from('ads').insert({
         kind: fileKind(file),
         url,
@@ -336,6 +377,7 @@ export async function renderPopupAdsTab(container) {
       toast(err.message, 'error');
       btn.disabled = false;
       btn.innerHTML = `${ICONS.upload}<span>Upload & Publish</span>`;
+      resetUploadProgress(container, 'media-upload-progress');
     }
   };
   const refresh = () => renderPopupAdsTab(container);
@@ -405,10 +447,14 @@ export async function renderTrainingAdminTab(container) {
           <div class="form-group"><label>Image / Video file</label><input id="training-file" type="file" accept="image/*,video/*"/></div>
         </div>
         <div class="form-group"><label>Description</label><textarea id="training-desc" rows="2" placeholder="What should the employee learn from this?"></textarea></div>
+        <div style="padding:12px;border-radius:8px;background:var(--bg-soft);border:1px solid var(--border);font-size:0.84rem;color:var(--text-soft);line-height:1.55;margin-bottom:14px;">
+          <b>Video guidelines:</b> keep tutorials short and focused — <b>under 3 minutes</b> works best so employees actually finish them. Max file size is <b>50 MB</b> (longer videos should be compressed or trimmed first). Formats: MP4 or WebM. Images: JPG/PNG/WebP.
+        </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
           <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;"><input id="training-required" type="checkbox" checked style="width:18px;height:18px;"/> Required for all employees</label>
           <button class="btn btn-primary" id="training-save">${ICONS.upload}<span>Upload Tutorial</span></button>
         </div>
+        ${uploadProgressHTML('training-upload-progress')}
       </div>
     </div>
 
@@ -457,10 +503,12 @@ export async function renderTrainingAdminTab(container) {
     const file = container.querySelector('#training-file').files[0];
     const title = container.querySelector('#training-title').value.trim();
     if (!title) return toast('Tutorial title is required', 'warning');
+    if (!file) return toast('Choose an image or video file', 'warning');
     btn.disabled = true;
     btn.innerHTML = '<span>Uploading...</span>';
+    setUploadProgress(container, 'training-upload-progress', 0);
     try {
-      const url = await uploadMediaFile(file);
+      const url = await uploadMediaFile(file, (pct) => setUploadProgress(container, 'training-upload-progress', pct));
       const { error } = await supabase.from('training_items').insert({
         title,
         description: container.querySelector('#training-desc').value.trim(),
@@ -478,6 +526,7 @@ export async function renderTrainingAdminTab(container) {
       toast(err.message, 'error');
       btn.disabled = false;
       btn.innerHTML = `${ICONS.upload}<span>Upload Tutorial</span>`;
+      resetUploadProgress(container, 'training-upload-progress');
     }
   };
   container.querySelectorAll('.training-toggle').forEach(btn => {
@@ -529,7 +578,9 @@ function openTutorialEditor(item, onChange) {
         <div class="form-group">
           <label>Replace media (optional)</label>
           <input id="te-file" type="file" accept="image/*,video/*" style="width:100%;padding:8px;border-radius:10px;border:1px dashed var(--border);background:var(--bg);font-size:0.9rem;"/>
+          <div style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;">Keep videos under 3 minutes, max 50 MB (MP4/WebM).</div>
           ${item.url ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;overflow:hidden;text-overflow:ellipsis;">Current: <a href="${escapeHtml(item.url)}" target="_blank" style="color:var(--primary)">${escapeHtml(item.url)}</a></div>` : ''}
+          ${uploadProgressHTML('te-upload-progress')}
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.9rem;">
           <input id="te-active" type="checkbox" ${Number(item.active) === 1 ? 'checked' : ''}/> Active (visible to employees)
@@ -562,9 +613,10 @@ function openTutorialEditor(item, onChange) {
     const btn = overlay.querySelector('#te-save');
     btn.disabled = true;
     btn.textContent = file ? 'Uploading...' : 'Saving...';
+    if (file) setUploadProgress(overlay, 'te-upload-progress', 0);
     try {
       if (file) {
-        payload.url = await uploadMediaFile(file);
+        payload.url = await uploadMediaFile(file, (pct) => setUploadProgress(overlay, 'te-upload-progress', pct));
         payload.kind = fileKind(file);
       }
       const { error } = await supabase.from('training_items').update(payload).eq('id', item.id);
@@ -576,6 +628,7 @@ function openTutorialEditor(item, onChange) {
       toast(err.message, 'error');
       btn.disabled = false;
       btn.textContent = 'Save';
+      if (file) resetUploadProgress(overlay, 'te-upload-progress');
     }
   };
 }

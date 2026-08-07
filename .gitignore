@@ -28,3 +28,31 @@ dist-ssr
 
 # Video demo folder
 video-demo/
+
+# Build output (regenerated via `npm run build`)
+dist/
+
+# Local MySQL data directory - raw DB files, never commit
+mysql_data/
+
+# Test output (regenerated per run)
+playwright-report/
+test-results/
+
+# graphify tool cache
+graphify-out/
+
+# Scratch / temp files
+scratch/
+
+# Old duplicate project copies
+design-reference/
+design-reference2/
+
+# Deployment archive snapshots and demo media
+*.zip
+*.mp4
+Screenshot*.png
+
+# OMC tool local session/state cache
+.omc/
