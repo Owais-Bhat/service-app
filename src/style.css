@@ -7683,7 +7683,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 }
 .tut-progress-glow { position:absolute; width:260px; height:260px; border-radius:50%; background:rgba(255,255,255,.12); top:-130px; right:-70px; pointer-events:none; }
 .tut-ring { width:104px; height:104px; border-radius:50%; flex:0 0 104px; display:flex; align-items:center; justify-content:center; position:relative; z-index:1; box-shadow:0 8px 20px rgba(0,0,0,.18); }
-.tut-ring-inner { width:80px; height:80px; border-radius:50%; background:#fff; display:flex; align-items:baseline; justify-content:center; font-weight:800; font-size:1.6rem; color:var(--primary); }
+.tut-ring-inner { width:80px; height:80px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.6rem; color:var(--primary); line-height:1; }
 .tut-ring-inner small { font-size:0.76rem; margin-left:2px; color:var(--text-dim); }
 .tut-progress-meta { flex:1; min-width:0; position:relative; z-index:1; }
 .tut-progress-title { font-weight:800; font-size:1.15rem; margin-bottom:12px; }
