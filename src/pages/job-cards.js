@@ -199,7 +199,7 @@ async function renderEntryForm(body, container, inquiryId, context) {
     <div class="card"><div class="card-body">
       ${!inquiryId ? `<label style="display:block;margin-bottom:8px;font-weight:600;">Inquiry ID (paste from the Pending Entry list, or use "Enter →" there instead)</label>
       <input id="jc-manual-id" style="width:100%;padding:8px;margin-bottom:16px;" placeholder="paste inquiry id"/>` : ''}
-      ${context ? `<div style="background:var(--bg-soft,#f5f5f5);padding:10px 14px;border-radius:8px;margin-bottom:16px;"><strong>${context.ticket || 'Ticket'}</strong> — ${context.customer || 'Customer'} — ${context.service || ''}</div>` : ''}
+      ${context ? `<div style="background:var(--bg-soft,#f5f5f5);padding:10px 14px;border-radius:8px;margin-bottom:16px;"><strong>${esc(context.ticket || 'Ticket')}</strong> — ${esc(context.customer || 'Customer')} — ${esc(context.service || '')}</div>` : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
         <div><label>Job Type</label><select id="jc-type" style="width:100%;padding:8px;"><option value="installation">Installation</option><option value="service">Service</option></select></div>
         <div><label>Category</label><select id="jc-category" style="width:100%;padding:8px;">${CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select></div>
