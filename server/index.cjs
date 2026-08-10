@@ -5639,11 +5639,23 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
             }
         }
 
-        // Gig-worker (public-pool) jobs must be paid online only — reject any
-        // attempt (employee or admin) to mark one as cash, regardless of the UI.
+        // Gig workers must be paid online only — reject any attempt (employee or
+        // admin) to mark cash for a ticket currently assigned to one, regardless
+        // of the UI. Gated on the assigned employee's actual worker_type, not
+        // inquiries.is_gig_job - that flag is a durable "was ever released to the
+        // pool" marker that never clears, so a Fixed employee finishing a ticket
+        // with pool history must still be able to collect cash.
         if (table === 'inquiries' && (data.payment_method === 'cash' || data.cash_collected_at)) {
-            const targetIsGigJob = previousRows.some(row => Number(row.is_gig_job) === 1);
-            if (targetIsGigJob) {
+            const assignedIds = [...new Set(previousRows.map(row => row.assigned_employee_id).filter(Boolean))];
+            let targetIsGigWorker = false;
+            if (assignedIds.length) {
+                const [profRows] = await connection.query(
+                    `SELECT worker_type FROM profiles WHERE id IN (${assignedIds.map(() => '?').join(',')})`,
+                    assignedIds
+                );
+                targetIsGigWorker = profRows.some(p => p.worker_type === 'gig');
+            }
+            if (targetIsGigWorker) {
                 connection.release();
                 return res.status(403).json({ error: 'Gig-worker jobs must be paid online — cash is not permitted.' });
             }
