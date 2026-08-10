@@ -5424,6 +5424,52 @@ app.post('/api/inquiries/:id/job-card', authenticateToken, async (req, res) => {
     }
 });
 
+const JOB_CARD_ELIGIBLE_STATUSES = ['resolved', 'closed', 'case_closed', 'foc', 'issue_not_resolved'];
+
+// Admin queues for the Job Card workflow: jobs awaiting a job card ("pending"),
+// and jobs with a saved job card awaiting the 3-day verification call ("awaiting-verification").
+app.get('/api/job-cards', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const status = req.query.status;
+    if (!['pending', 'awaiting-verification'].includes(status)) {
+        return res.status(400).json({ error: 'status must be "pending" or "awaiting-verification"' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        if (status === 'pending') {
+            const [rows] = await connection.query(
+                `SELECT i.id, i.ticket_no, i.full_name, i.service_item, i.status, i.created_at,
+                        pa.full_name AS assigned_name, ps.full_name AS secondary_name
+                   FROM inquiries i
+                   LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
+                   LEFT JOIN profiles ps ON ps.id = i.secondary_employee_id
+                  WHERE i.job_card_filled_at IS NULL
+                    AND i.status IN (?)
+                  ORDER BY i.created_at DESC
+                  LIMIT 200`,
+                [JOB_CARD_ELIGIBLE_STATUSES]
+            );
+            return res.json(rows);
+        }
+        const [rows] = await connection.query(
+            `SELECT i.id, i.ticket_no, i.full_name, i.phone, i.verification_due_at
+               FROM inquiries i
+              WHERE i.job_card_filled_at IS NOT NULL
+                AND i.verification_call_status IS NULL
+              ORDER BY i.verification_due_at ASC
+              LIMIT 200`
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[job-cards] queue fetch failed:', err);
+        res.status(500).json({ error: 'Could not load job cards' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
