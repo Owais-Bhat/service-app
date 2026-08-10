@@ -4133,7 +4133,7 @@ async function computeFinanceSummary(from, to) {
 
         const [[monthAward]] = await pool.query(
             `SELECT p.full_name, ta.amount
-               FROM technician_awards ta JOIN profiles p ON p.id = ta.employee_id
+               FROM technician_awards ta LEFT JOIN profiles p ON p.id = ta.employee_id
               WHERE ta.month = ?`,
             [nowMonth]
         );
@@ -4156,7 +4156,7 @@ async function computeFinanceSummary(from, to) {
                 logged: Number(jobCardRows[0]?.logged) || 0,
                 awaitingVerification: Number(jobCardRows[0]?.awaitingVerification) || 0,
                 verified: Number(jobCardRows[0]?.verified) || 0,
-                award: monthAward ? { name: monthAward.full_name, amount: Number(monthAward.amount) } : null,
+                award: monthAward ? { name: monthAward.full_name || 'Former employee', amount: Number(monthAward.amount) } : null,
             },
             byMethod, aging, previous, trend,
             byTechnician: [...byTech.values()].sort((a, b) => b.billed - a.billed),
