@@ -6,6 +6,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const { computeLeaderboard } = require('./job-card-scoring.cjs');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -5553,6 +5554,95 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
     } catch (err) {
         console.error('[job-card] verification call save failed:', err);
         res.status(500).json({ error: 'Could not save verification call' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const month = String(req.query.month || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ error: 'month must be formatted YYYY-MM' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT i.assigned_employee_id, pa.full_name AS assigned_employee_name,
+                    i.secondary_employee_id, ps.full_name AS secondary_employee_name,
+                    i.feedback_rating, i.expected_time_minutes,
+                    TIMESTAMPDIFF(MINUTE, i.job_start_time, i.job_end_time) AS actual_minutes
+               FROM inquiries i
+               LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
+               LEFT JOIN profiles ps ON ps.id = i.secondary_employee_id
+              WHERE i.verification_call_status IN ('confirmed_ok', 'issue_found')
+                AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?`,
+            [month]
+        );
+        const board = computeLeaderboard(rows);
+
+        const [[existingAward]] = await connection.query(
+            'SELECT employee_id, amount FROM technician_awards WHERE month = ? LIMIT 1',
+            [month]
+        );
+
+        res.json({ month, leaderboard: board, awarded: existingAward || null });
+    } catch (err) {
+        console.error('[leaderboard] job-card leaderboard fetch failed:', err);
+        res.status(500).json({ error: 'Could not load leaderboard' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/admin/leaderboard/:month/award', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { month } = req.params;
+    const { employee_id } = req.body || {};
+    if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be formatted YYYY-MM' });
+    if (!employee_id) return res.status(400).json({ error: 'employee_id is required' });
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT i.assigned_employee_id, pa.full_name AS assigned_employee_name,
+                    i.secondary_employee_id, ps.full_name AS secondary_employee_name,
+                    i.feedback_rating, i.expected_time_minutes,
+                    TIMESTAMPDIFF(MINUTE, i.job_start_time, i.job_end_time) AS actual_minutes
+               FROM inquiries i
+               LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
+               LEFT JOIN profiles ps ON ps.id = i.secondary_employee_id
+              WHERE i.verification_call_status IN ('confirmed_ok', 'issue_found')
+                AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?`,
+            [month]
+        );
+        const board = computeLeaderboard(rows);
+        const winner = board.find(r => r.employeeId === employee_id);
+        if (!winner) return res.status(400).json({ error: 'This technician has no verified jobs for that month' });
+
+        await connection.query(
+            `INSERT INTO technician_awards (id, employee_id, month, amount, avg_rating, avg_time_efficiency, awarded_by)
+             VALUES (?, ?, ?, 2000, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE employee_id = VALUES(employee_id), avg_rating = VALUES(avg_rating),
+                avg_time_efficiency = VALUES(avg_time_efficiency), awarded_by = VALUES(awarded_by), awarded_at = NOW()`,
+            [uuidv4(), employee_id, month, winner.avgRating, winner.avgTimeEfficiency, req.user.id]
+        );
+
+        recordNotification({
+            subject: 'technician_award',
+            title: '🏆 Technician of the Month!',
+            body: `Congratulations ${winner.name}! You're this month's top technician — ₹2000 awarded.`,
+            audience: { userId: employee_id },
+            data: { month, amount: 2000, voice: 'Congratulations! You are this month’s top technician.' },
+        }).catch(() => {});
+
+        res.json({ ok: true, winner });
+    } catch (err) {
+        console.error('[leaderboard] award failed:', err);
+        res.status(500).json({ error: 'Could not record award' });
     } finally {
         if (connection) connection.release();
     }
