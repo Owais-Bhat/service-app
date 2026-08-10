@@ -12,6 +12,30 @@ const getHeaders = () => {
   return headers;
 };
 
+// Downscale + recompress a device photo client-side before upload. On-site
+// signal is often weak, so shrinking a 4-8MB phone photo to a couple hundred
+// KB is the difference between an instant save and a stalled spinner. Falls
+// back to the original file untouched if it isn't an image or compression
+// fails for any reason (never blocks the save on a compression error).
+async function compressImage(file, maxDim = 1440, quality = 0.72) {
+  if (!file || !file.type?.startsWith('image/') || file.type === 'image/svg+xml') return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (!blob || blob.size >= file.size) return file; // compression didn't help - keep original
+    return new File([blob], (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
 // Load device taken log for an inquiry
 export async function loadDeviceTakenLog(inquiryId) {
   try {
@@ -59,7 +83,7 @@ export async function saveDeviceTaken(inquiryId, employeeId, imageFile, descript
     // Upload image if provided via Node.js backend upload endpoint
     if (imageFile) {
       const formData = new FormData();
-      formData.append('file', imageFile);
+      formData.append('file', await compressImage(imageFile));
 
       const uploadRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',
@@ -101,7 +125,7 @@ export async function saveDeviceReturn(inquiryId, imageFile, condition, notes) {
     // Upload image if provided via Node.js backend upload endpoint
     if (imageFile) {
       const formData = new FormData();
-      formData.append('file', imageFile);
+      formData.append('file', await compressImage(imageFile));
 
       const uploadRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',

@@ -3596,6 +3596,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <datalist id="emp-device-types">
                 ${deviceTypeList.map(d => `<option value="${(d.name || '').replace(/"/g,'&quot;')}"></option>`).join('')}
               </datalist>
+              ${!isResolvedReadOnly ? `<div class="dt-chip-row">
+                ${['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'].map(t => `<button type="button" class="dt-chip" data-target="device-type" data-mode="replace" data-fill="${t}">${t}</button>`).join('')}
+              </div>` : ''}
               ${deviceTypeList.length === 0 ? '<small style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">Tip: ask admin to add device types so this becomes a quick-pick list.</small>' : ''}
             </div>
             <div class="form-group">
@@ -3622,11 +3625,14 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <div id="device-service-body" style="display:${deviceTicketOn ? 'block' : 'none'};">
               <div class="form-group">
                 <label>Device Photo (when taken) <span style="color:var(--danger)">*</span></label>
-                <input type="file" id="device-taken-image" accept="image/*">
+                <input type="file" id="device-taken-image" accept="image/*" capture="environment">
               </div>
               <div class="form-group">
                 <label>Device Description / Condition on pickup</label>
                 <textarea id="device-taken-desc" rows="3" placeholder="e.g. CCTV DVR, power issue, scratches on top panel"></textarea>
+                <div class="dt-chip-row">
+                  ${['No visible damage', 'Not powering on', 'Scratches / wear', 'Physical damage', 'Water damage'].map(t => `<button type="button" class="dt-chip" data-target="device-taken-desc" data-mode="append" data-fill="${t}">${t}</button>`).join('')}
+                </div>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="save-device-taken">Save device taken</button>
 
@@ -3634,7 +3640,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
               <div class="form-group">
                 <label>Return photo (when handing back to client) <span style="color:var(--danger)">*</span></label>
-                <input type="file" id="device-return-image" accept="image/*">
+                <input type="file" id="device-return-image" accept="image/*" capture="environment">
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div class="form-group">
@@ -3650,6 +3656,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                   <label>Return notes</label>
                   <input type="text" id="device-return-notes" placeholder="e.g. replaced adapter">
                 </div>
+              </div>
+              <div class="dt-chip-row">
+                ${['No issue found', 'Repaired & tested', 'Replaced part', 'Cleaned & reconfigured'].map(t => `<button type="button" class="dt-chip" data-target="device-return-notes" data-mode="append" data-fill="${t}">${t}</button>`).join('')}
               </div>
               <button type="button" class="btn btn-primary btn-sm" id="save-device-return">Mark returned / sent back to client</button>
 
@@ -3670,6 +3679,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <div class="form-group">
                   <label>Progress note</label>
                   <textarea id="device-followup-notes" rows="2" placeholder="Latest update on this device..."></textarea>
+                  <div class="dt-chip-row">
+                    ${['Waiting for part', 'In repair', 'Diagnosing issue', 'Ready for pickup'].map(t => `<button type="button" class="dt-chip" data-target="device-followup-notes" data-mode="append" data-fill="${t}">${t}</button>`).join('')}
+                  </div>
                 </div>
                 <button type="button" class="btn btn-secondary btn-sm" id="save-device-followup">Add follow-up update</button>
                 <div id="followup-history" style="margin-top:14px;"></div>
@@ -3863,6 +3875,25 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
     overlay.querySelectorAll('.mst-tab').forEach(tabBtn => {
       tabBtn.onclick = () => goToTab(tabBtn.dataset.tab);
+    });
+    // Quick-fill chips (device type / pickup condition / return notes / follow-up
+    // notes) - "replace" swaps the field's value outright (device type), "append"
+    // adds onto whatever's already typed so multiple chips can stack.
+    overlay.querySelectorAll('.dt-chip').forEach(chip => {
+      chip.onclick = () => {
+        const field = overlay.querySelector(`#${chip.dataset.target}`);
+        if (!field) return;
+        const text = chip.dataset.fill || '';
+        if (chip.dataset.mode === 'append') {
+          const cur = field.value.trim();
+          field.value = cur ? `${cur}, ${text}` : text;
+        } else {
+          field.value = text;
+        }
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        chip.classList.add('dt-chip-used');
+        setTimeout(() => chip.classList.remove('dt-chip-used'), 250);
+      };
     });
     const goToDeviceReturnBtn = overlay.querySelector('#go-to-device-return');
     if (goToDeviceReturnBtn) goToDeviceReturnBtn.onclick = () => {
