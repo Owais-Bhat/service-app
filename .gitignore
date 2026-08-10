@@ -56,3 +56,6 @@ Screenshot*.png
 
 # OMC tool local session/state cache
 .omc/
+
+# Superpowers brainstorming-companion session files
+.superpowers/
