@@ -3760,14 +3760,19 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 </div>
               </div>
 
-              <!-- Payment Method choice -->
+              <!-- Payment Method choice.
+                   Cash is restricted for gig workers, not for every ticket that ever
+                   touched the pool - is_gig_job is a durable "was released once" flag
+                   that never clears, so gating on it here would also hide Cash for a
+                   Fixed employee who ends up completing a job with pool history.
+                   Gate on the assigned employee's current worker_type instead. -->
               <div class="form-group" style="margin-bottom:14px;">
                 <label>How will the client pay?</label>
                 <div class="pay-method-toggle" id="pay-method-toggle">
                   <button type="button" class="pay-method-btn active" data-method="online">${ICONS.card}<span>Online (Razorpay)</span></button>
-                  ${inquiryRow?.is_gig_job ? '' : `<button type="button" class="pay-method-btn" data-method="cash">${ICONS.rupee}<span>Cash on Service</span></button>`}
+                  ${empProfile?.worker_type === 'gig' ? '' : `<button type="button" class="pay-method-btn" data-method="cash">${ICONS.rupee}<span>Cash on Service</span></button>`}
                 </div>
-                ${inquiryRow?.is_gig_job ? '<small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.78rem;">This job came from the public pool — online payment only, cash is not permitted.</small>' : ''}
+                ${empProfile?.worker_type === 'gig' ? '<small style="display:block;margin-top:6px;color:var(--text-dim);font-size:0.78rem;">Gig workers are online payment only - cash is not permitted.</small>' : ''}
               </div>
 
               <!-- Cash collection section (hidden until method=cash) -->
@@ -4990,8 +4995,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const cashAmountDisplay = overlay.querySelector('#cash-amount-display');
     const cashBanner = overlay.querySelector('#cash-collected-banner');
     const markCashBtn = overlay.querySelector('#mark-cash-btn');
-    // Gig-worker (public-pool) jobs are online-only — force it regardless of any stale value.
-    let payMethod = (!inquiryRow?.is_gig_job && inquiryRow?.payment_method === 'cash') ? 'cash' : 'online';
+    // Gig workers are online-only — force it regardless of any stale value.
+    let payMethod = (empProfile?.worker_type !== 'gig' && inquiryRow?.payment_method === 'cash') ? 'cash' : 'online';
 
     const renderPayMethod = () => {
       payMethodToggle.querySelectorAll('.pay-method-btn').forEach(b => {
