@@ -5352,6 +5352,66 @@ app.post('/api/inquiries/:id/claim', authenticateToken, async (req, res) => {
     }
 });
 
+// Admin creates/updates a job card for an inquiry — records work done, timing,
+// items used, and starts the 3-day verification clock.
+app.post('/api/inquiries/:id/job-card', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    const {
+        job_card_type, category, secondary_employee_id,
+        job_start_time, job_end_time, expected_time_minutes,
+        work_done_note, rework_required, items,
+    } = req.body || {};
+
+    if (!['service', 'installation'].includes(job_card_type)) {
+        return res.status(400).json({ error: 'job_card_type must be "service" or "installation"' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [existing] = await connection.query('SELECT id, assigned_employee_id FROM inquiries WHERE id = ? LIMIT 1', [id]);
+        if (!existing.length) return res.status(404).json({ error: 'Job not found' });
+
+        if (secondary_employee_id && secondary_employee_id === existing[0].assigned_employee_id) {
+            return res.status(400).json({ error: 'Secondary technician must be different from the assigned technician' });
+        }
+
+        await connection.query(
+            `UPDATE inquiries SET
+                job_card_type = ?, category = COALESCE(?, category), secondary_employee_id = ?,
+                job_start_time = ?, job_end_time = ?, expected_time_minutes = ?,
+                work_done_note = ?, rework_required = ?,
+                job_card_filled_by = ?, job_card_filled_at = NOW(),
+                verification_due_at = DATE_ADD(NOW(), INTERVAL 3 DAY),
+                verification_reminder_sent = 0
+             WHERE id = ?`,
+            [
+                job_card_type, category || null, secondary_employee_id || null,
+                job_start_time || null, job_end_time || null, expected_time_minutes || null,
+                work_done_note || null, rework_required ? 1 : 0,
+                req.user.id, id,
+            ]
+        );
+
+        await connection.query('DELETE FROM job_card_items WHERE inquiry_id = ?', [id]);
+        const itemList = Array.isArray(items) ? items.filter(it => it && it.item_name) : [];
+        for (const item of itemList) {
+            await connection.query(
+                'INSERT INTO job_card_items (id, inquiry_id, item_name, quantity, notes) VALUES (?, ?, ?, ?, ?)',
+                [uuidv4(), id, String(item.item_name).slice(0, 255), item.quantity ? String(item.quantity).slice(0, 50) : null, item.notes || null]
+            );
+        }
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[job-card] save failed:', err);
+        res.status(500).json({ error: 'Could not save job card' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
