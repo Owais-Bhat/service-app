@@ -1165,6 +1165,20 @@ const requiredColumns = {
         { name: 'gig_payout_amount', definition: 'DECIMAL(10, 2) DEFAULT NULL' },
         { name: 'gig_payout_status', definition: "VARCHAR(20) DEFAULT 'unpaid'" },
         { name: 'gig_payout_paid_at', definition: 'TIMESTAMP NULL' },
+        { name: 'job_card_type', definition: "VARCHAR(20) DEFAULT NULL COMMENT \"'service' or 'installation'\"" },
+        { name: 'secondary_employee_id', definition: 'VARCHAR(36) DEFAULT NULL' },
+        { name: 'job_start_time', definition: 'TIMESTAMP NULL' },
+        { name: 'job_end_time', definition: 'TIMESTAMP NULL' },
+        { name: 'expected_time_minutes', definition: 'INT DEFAULT NULL' },
+        { name: 'work_done_note', definition: 'TEXT' },
+        { name: 'rework_required', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'job_card_filled_by', definition: 'VARCHAR(36) DEFAULT NULL' },
+        { name: 'job_card_filled_at', definition: 'TIMESTAMP NULL' },
+        { name: 'verification_due_at', definition: 'TIMESTAMP NULL' },
+        { name: 'verification_call_status', definition: "VARCHAR(20) DEFAULT NULL COMMENT \"'confirmed_ok' | 'issue_found' | 'unreachable'\"" },
+        { name: 'verification_call_note', definition: 'TEXT' },
+        { name: 'verification_call_at', definition: 'TIMESTAMP NULL' },
+        { name: 'verification_reminder_sent', definition: 'TINYINT(1) DEFAULT 0' },
     ],
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
@@ -1508,6 +1522,28 @@ const requiredTables = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_inst_status (status),
         INDEX idx_inst_phone (phone)
+    )`,
+    `CREATE TABLE IF NOT EXISTS job_card_items (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        item_name VARCHAR(255) NOT NULL,
+        quantity VARCHAR(50),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_job_card_items_inquiry (inquiry_id),
+        FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS technician_awards (
+        id VARCHAR(36) PRIMARY KEY,
+        employee_id VARCHAR(36) NOT NULL,
+        month VARCHAR(7) NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL DEFAULT 2000,
+        avg_rating DECIMAL(3, 2),
+        avg_time_efficiency DECIMAL(5, 2),
+        awarded_by VARCHAR(36),
+        awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_month (month),
+        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE CASCADE
     )`,
 ];
 
