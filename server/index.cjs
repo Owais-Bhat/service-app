@@ -5559,6 +5559,26 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
     }
 });
 
+// Shared by GET /api/admin/leaderboard and POST /api/admin/leaderboard/:month/award
+// so both routes always score the exact same set of verified jobs for a month —
+// the award endpoint must never diverge from what the displayed leaderboard shows,
+// since this data drives a real ₹2000/month payout decision.
+async function fetchVerifiedJobsForMonth(connection, month) {
+    const [rows] = await connection.query(
+        `SELECT i.assigned_employee_id, pa.full_name AS assigned_employee_name,
+                i.secondary_employee_id, ps.full_name AS secondary_employee_name,
+                i.feedback_rating, i.expected_time_minutes,
+                TIMESTAMPDIFF(MINUTE, i.job_start_time, i.job_end_time) AS actual_minutes
+           FROM inquiries i
+           LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
+           LEFT JOIN profiles ps ON ps.id = i.secondary_employee_id
+          WHERE i.verification_call_status IN ('confirmed_ok', 'issue_found')
+            AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?`,
+        [month]
+    );
+    return rows;
+}
+
 app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const month = String(req.query.month || '').trim();
@@ -5569,18 +5589,7 @@ app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await getConn();
-        const [rows] = await connection.query(
-            `SELECT i.assigned_employee_id, pa.full_name AS assigned_employee_name,
-                    i.secondary_employee_id, ps.full_name AS secondary_employee_name,
-                    i.feedback_rating, i.expected_time_minutes,
-                    TIMESTAMPDIFF(MINUTE, i.job_start_time, i.job_end_time) AS actual_minutes
-               FROM inquiries i
-               LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
-               LEFT JOIN profiles ps ON ps.id = i.secondary_employee_id
-              WHERE i.verification_call_status IN ('confirmed_ok', 'issue_found')
-                AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?`,
-            [month]
-        );
+        const rows = await fetchVerifiedJobsForMonth(connection, month);
         const board = computeLeaderboard(rows);
 
         const [[existingAward]] = await connection.query(
@@ -5607,18 +5616,7 @@ app.post('/api/admin/leaderboard/:month/award', authenticateToken, async (req, r
     let connection;
     try {
         connection = await getConn();
-        const [rows] = await connection.query(
-            `SELECT i.assigned_employee_id, pa.full_name AS assigned_employee_name,
-                    i.secondary_employee_id, ps.full_name AS secondary_employee_name,
-                    i.feedback_rating, i.expected_time_minutes,
-                    TIMESTAMPDIFF(MINUTE, i.job_start_time, i.job_end_time) AS actual_minutes
-               FROM inquiries i
-               LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
-               LEFT JOIN profiles ps ON ps.id = i.secondary_employee_id
-              WHERE i.verification_call_status IN ('confirmed_ok', 'issue_found')
-                AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?`,
-            [month]
-        );
+        const rows = await fetchVerifiedJobsForMonth(connection, month);
         const board = computeLeaderboard(rows);
         const winner = board.find(r => r.employeeId === employee_id);
         if (!winner) return res.status(400).json({ error: 'This technician has no verified jobs for that month' });
