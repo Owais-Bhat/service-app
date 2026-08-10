@@ -4006,8 +4006,10 @@ async function computeFinanceSummary(from, to) {
         const fmtDate = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
         const trendStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-        // Run the three independent queries in parallel — each borrows its own pool connection.
-        const [[rows], [catRows], [trendRows]] = await Promise.all([
+        const nowMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        // Run the four independent queries in parallel — each borrows its own pool connection.
+        const [[rows], [catRows], [trendRows], [jobCardRows]] = await Promise.all([
             pool.query(
                 `SELECT i.id, i.company_name, i.bill_total, i.bill_amount, i.gst_amount,
                         i.discount_amount, i.platform_fee, i.transport_fee, i.payment_status,
@@ -4041,6 +4043,14 @@ async function computeFinanceSummary(from, to) {
                     AND COALESCE(i.bill_generated_at, i.created_at) >= ?
                   GROUP BY month ORDER BY month`,
                 [`${fmtDate(trendStart)} 00:00:00`]
+            ),
+            pool.query(
+                `SELECT
+                    SUM(CASE WHEN job_card_filled_at IS NOT NULL AND DATE_FORMAT(job_card_filled_at, '%Y-%m') = ? THEN 1 ELSE 0 END) AS logged,
+                    SUM(CASE WHEN job_card_filled_at IS NOT NULL AND verification_call_status IS NULL THEN 1 ELSE 0 END) AS awaitingVerification,
+                    SUM(CASE WHEN verification_call_status IN ('confirmed_ok','issue_found') AND DATE_FORMAT(job_card_filled_at, '%Y-%m') = ? THEN 1 ELSE 0 END) AS verified
+                   FROM inquiries`,
+                [nowMonth, nowMonth]
             ),
         ]);
         const trend = trendRows.map(r => ({ month: r.month, billed: Number(r.billed) || 0, received: Number(r.received) || 0, bills: Number(r.bills) || 0 }));
@@ -4121,6 +4131,13 @@ async function computeFinanceSummary(from, to) {
             };
         }
 
+        const [[monthAward]] = await pool.query(
+            `SELECT p.full_name, ta.amount
+               FROM technician_awards ta JOIN profiles p ON p.id = ta.employee_id
+              WHERE ta.month = ?`,
+            [nowMonth]
+        );
+
         return {
             range: { from: from || null, to: to || null },
             totals: {
@@ -4134,6 +4151,12 @@ async function computeFinanceSummary(from, to) {
                 payout: gigPayout,
                 companyKeeps: gigBilled - gigPayout,
                 unpaidPayout: gigUnpaidPayout,
+            },
+            jobCards: {
+                logged: Number(jobCardRows[0]?.logged) || 0,
+                awaitingVerification: Number(jobCardRows[0]?.awaitingVerification) || 0,
+                verified: Number(jobCardRows[0]?.verified) || 0,
+                award: monthAward ? { name: monthAward.full_name, amount: Number(monthAward.amount) } : null,
             },
             byMethod, aging, previous, trend,
             byTechnician: [...byTech.values()].sort((a, b) => b.billed - a.billed),

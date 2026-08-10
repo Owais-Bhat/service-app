@@ -396,6 +396,19 @@ export async function renderFinanceReportTab(container) {
         </div>
       </div>` : ''}
 
+      ${d.jobCards ? `
+      <div class="card fin-in" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title">Job Card Activity — this month</span></div>
+        <div class="card-body">
+          <div class="fin-kpis" style="margin-bottom:0;">
+            ${kpi('Jobs Logged', d.jobCards.logged, 'var(--primary)', null, 'job cards entered this month')}
+            ${kpi('Awaiting Verification', d.jobCards.awaitingVerification, 'var(--warning)', null, '3-day call not yet logged')}
+            ${kpi('Verified', d.jobCards.verified, 'var(--success)', null, 'verification call completed')}
+            ${kpi('Monthly Award', d.jobCards.award ? `₹${d.jobCards.award.amount} — ${esc(d.jobCards.award.name)}` : 'Not yet awarded', 'var(--text)', null, 'Technician of the Month')}
+          </div>
+        </div>
+      </div>` : ''}
+
       <div class="fin-grid-2">
         <div class="card fin-in fin-advisor"><div class="card-header"><span class="card-title">📈 Growth Advisor — what to do next</span></div>
           <div class="card-body">${insights.map(x => `
