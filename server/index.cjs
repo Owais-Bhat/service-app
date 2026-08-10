@@ -909,6 +909,40 @@ async function runSlaChecks() {
     }
 }
 
+// Reminds admin to make the 3-day post-job verification call. One
+// notification per job (verification_reminder_sent guard), same pattern as
+// runSlaChecks.
+async function runVerificationCallReminders() {
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, ticket_no, full_name, phone
+               FROM inquiries
+              WHERE job_card_filled_at IS NOT NULL
+                AND verification_call_status IS NULL
+                AND COALESCE(verification_reminder_sent, 0) = 0
+                AND verification_due_at IS NOT NULL
+                AND verification_due_at <= NOW()`
+        );
+        for (const r of rows) {
+            await connection.query('UPDATE inquiries SET verification_reminder_sent = 1 WHERE id = ?', [r.id]);
+            recordNotification({
+                subject: 'verification_call_due',
+                title: '📞 Verification call due',
+                body: `Call ${r.full_name || 'the customer'} (${r.phone || 'no phone on file'}) for ticket ${r.ticket_no || ''} — 3-day check-in.`,
+                audience: { role: 'admin' },
+                data: { inquiry_id: r.id, ticket_no: r.ticket_no },
+            }).catch(() => {});
+        }
+        if (rows.length) console.log(`[job-card] ${rows.length} verification call reminder(s) sent`);
+    } catch (err) {
+        console.error('[job-card] verification reminder job failed:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
 function startSlaJob() {
     console.log('[sla] SLA breach checks scheduled every 15 minutes');
     runSlaChecks();
@@ -1073,6 +1107,11 @@ async function runEodReminders() {
 function startEodReminderJob() {
     console.log('[eod] EOD reminder job active');
     setInterval(runEodReminders, 60_000).unref();
+}
+
+function startVerificationReminderJob() {
+    console.log('[job-card] verification call reminder job active');
+    setInterval(runVerificationCallReminders, 60_000).unref();
 }
 
 const requiredColumns = {
@@ -7037,6 +7076,7 @@ async function startServer() {
         startLeaderboardJob();
         startEodReminderJob();
         startPoolReleaseSweepJob();
+        startVerificationReminderJob();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
