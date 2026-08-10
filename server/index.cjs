@@ -5481,8 +5481,9 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
     if (!['confirmed_ok', 'issue_found', 'unreachable'].includes(status)) {
         return res.status(400).json({ error: 'status must be confirmed_ok, issue_found, or unreachable' });
     }
+    let r = null;
     if (status !== 'unreachable') {
-        const r = Number(rating);
+        r = Number(rating);
         if (!Number.isInteger(r) || r < 1 || r > 5) {
             return res.status(400).json({ error: 'rating must be an integer from 1 to 5' });
         }
@@ -5491,6 +5492,9 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
     let connection;
     try {
         connection = await getConn();
+        const [existing] = await connection.query('SELECT id FROM inquiries WHERE id = ? LIMIT 1', [id]);
+        if (!existing.length) return res.status(404).json({ error: 'Job not found' });
+
         await connection.query(
             `UPDATE inquiries SET
                 verification_call_status = ?,
@@ -5499,7 +5503,7 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
                 feedback_rating = CASE WHEN ? = 'unreachable' THEN feedback_rating ELSE ? END,
                 rework_required = CASE WHEN ? = 'issue_found' THEN 1 ELSE rework_required END
              WHERE id = ?`,
-            [status, note || null, status, rating || null, status, id]
+            [status, note || null, status, r || null, status, id]
         );
 
         const [freshRows] = await connection.query('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [id]);
