@@ -1535,7 +1535,7 @@ const requiredTables = [
     )`,
     `CREATE TABLE IF NOT EXISTS technician_awards (
         id VARCHAR(36) PRIMARY KEY,
-        employee_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36),
         month VARCHAR(7) NOT NULL,
         amount DECIMAL(10, 2) NOT NULL DEFAULT 2000,
         avg_rating DECIMAL(3, 2),
@@ -1543,7 +1543,7 @@ const requiredTables = [
         awarded_by VARCHAR(36),
         awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_month (month),
-        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE CASCADE
+        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE SET NULL
     )`,
 ];
 
