@@ -68,10 +68,10 @@ async function renderView(container) {
   container.querySelectorAll('.jc-nav').forEach(b => b.classList.toggle('btn-primary', b.dataset.view === currentView));
   body.innerHTML = '<p style="padding:20px;color:var(--text-dim);">Loading…</p>';
   try {
-    if (currentView === 'pending') return renderPending(body, container);
-    if (currentView === 'verify') return renderVerify(body, container);
-    if (currentView === 'entry') return renderEntryForm(body, container, null);
-    if (currentView === 'board') return renderLeaderboard(body);
+    if (currentView === 'pending') return await renderPending(body, container);
+    if (currentView === 'verify') return await renderVerify(body, container);
+    if (currentView === 'entry') return await renderEntryForm(body, container, null);
+    if (currentView === 'board') return await renderLeaderboard(body);
   } catch (err) {
     body.innerHTML = `<p style="padding:20px;color:var(--danger);">${esc(err.message)}</p>`;
   }
@@ -96,14 +96,18 @@ async function renderPending(body, container) {
                 <td>${esc(r.service_item || '—')}</td>
                 <td>${esc(r.assigned_name || '—')}${r.secondary_name ? ', ' + esc(r.secondary_name) : ''}</td>
                 <td>${new Date(r.created_at).toLocaleDateString('en-IN')}</td>
-                <td><button class="btn btn-primary btn-sm jc-enter" data-id="${r.id}">Enter →</button></td>
+                <td><button class="btn btn-primary btn-sm jc-enter" data-id="${esc(r.id)}" data-ticket="${esc(r.ticket_no || '')}" data-customer="${esc(r.full_name || '')}" data-service="${esc(r.service_item || '')}">Enter →</button></td>
               </tr>`).join('')}
           </tbody>
         </table>
       </div>
     </div>`;
   body.querySelectorAll('.jc-enter').forEach(btn => {
-    btn.addEventListener('click', () => renderEntryForm(body, container, btn.dataset.id));
+    btn.addEventListener('click', () => renderEntryForm(body, container, btn.dataset.id, {
+      ticket: btn.dataset.ticket,
+      customer: btn.dataset.customer,
+      service: btn.dataset.service,
+    }));
   });
 }
 
@@ -116,7 +120,8 @@ async function renderVerify(body, container) {
   const dueLabel = (iso) => {
     const due = new Date(iso), now = new Date();
     const days = Math.ceil((due - now) / 86400000);
-    if (days <= 0) return `<span style="color:var(--danger);font-weight:700;">Due now</span>`;
+    if (days < 0) return `<span style="color:var(--danger);font-weight:700;">Overdue</span>`;
+    if (days === 0) return `<span style="color:var(--danger);font-weight:700;">Due today</span>`;
     return `Due in ${days} day${days === 1 ? '' : 's'}`;
   };
   body.innerHTML = `
@@ -131,7 +136,7 @@ async function renderVerify(body, container) {
                 <td>${esc(r.full_name || 'Client')}</td>
                 <td>${esc(r.phone || '—')}</td>
                 <td>${dueLabel(r.verification_due_at)}</td>
-                <td><button class="btn btn-secondary btn-sm jc-log-call" data-id="${r.id}" data-name="${esc(r.full_name || '')}" data-phone="${esc(r.phone || '')}">Log call →</button></td>
+                <td><button class="btn btn-secondary btn-sm jc-log-call" data-id="${esc(r.id)}" data-name="${esc(r.full_name || '')}" data-phone="${esc(r.phone || '')}">Log call →</button></td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -189,11 +194,12 @@ function openVerificationModal(inquiryId, name, phone, onDone) {
   };
 }
 
-async function renderEntryForm(body, container, inquiryId) {
+async function renderEntryForm(body, container, inquiryId, context) {
   body.innerHTML = `
     <div class="card"><div class="card-body">
       ${!inquiryId ? `<label style="display:block;margin-bottom:8px;font-weight:600;">Inquiry ID (paste from the Pending Entry list, or use "Enter →" there instead)</label>
       <input id="jc-manual-id" style="width:100%;padding:8px;margin-bottom:16px;" placeholder="paste inquiry id"/>` : ''}
+      ${context ? `<div style="background:var(--bg-soft,#f5f5f5);padding:10px 14px;border-radius:8px;margin-bottom:16px;"><strong>${context.ticket || 'Ticket'}</strong> — ${context.customer || 'Customer'} — ${context.service || ''}</div>` : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
         <div><label>Job Type</label><select id="jc-type" style="width:100%;padding:8px;"><option value="installation">Installation</option><option value="service">Service</option></select></div>
         <div><label>Category</label><select id="jc-category" style="width:100%;padding:8px;">${CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select></div>
@@ -257,14 +263,15 @@ async function renderEntryForm(body, container, inquiryId) {
   };
 }
 
-async function renderLeaderboard(body) {
+async function renderLeaderboard(body, month) {
   const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const data = await apiGet(`/admin/leaderboard?month=${month}`);
+  const targetMonth = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const data = await apiGet(`/admin/leaderboard?month=${targetMonth}`);
   const rows = data.leaderboard;
   body.innerHTML = `
     <div class="card">
-      <div class="card-header"><span class="card-title">Leaderboard — ${month}</span></div>
+      <div class="card-header"><span class="card-title">Leaderboard — ${targetMonth}</span></div>
+      <div style="margin-bottom:12px;"><input type="month" id="jc-board-month" value="${targetMonth}" style="padding:6px;"/></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>#</th><th>Technician</th><th>Avg Rating</th><th>Avg Time Efficiency</th><th>Jobs Verified</th><th></th></tr></thead>
@@ -278,19 +285,22 @@ async function renderLeaderboard(body) {
                 <td>${r.jobsCount}</td>
                 <td>${data.awarded?.employee_id === r.employeeId
                   ? `<span style="color:var(--success);font-weight:700;">Awarded ₹${data.awarded.amount}</span>`
-                  : `<button class="btn btn-primary btn-sm jc-award" data-id="${r.employeeId}" ${data.awarded ? 'disabled' : ''}>Award ₹2000</button>`}</td>
+                  : `<button class="btn btn-primary btn-sm jc-award" data-id="${esc(r.employeeId)}" ${data.awarded ? 'disabled' : ''}>Award ₹2000</button>`}</td>
               </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-dim);">No verified jobs yet this month</td></tr>`}
           </tbody>
         </table>
       </div>
     </div>`;
+  body.querySelector('#jc-board-month').addEventListener('change', (e) => {
+    renderLeaderboard(body, e.target.value);
+  });
   body.querySelectorAll('.jc-award').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Award ₹2000 to this technician for ' + month + '?')) return;
+      if (!confirm('Award ₹2000 to this technician for ' + targetMonth + '?')) return;
       try {
-        await apiPost(`/admin/leaderboard/${month}/award`, { employee_id: btn.dataset.id });
+        await apiPost(`/admin/leaderboard/${targetMonth}/award`, { employee_id: btn.dataset.id });
         toast('Award recorded', 'success');
-        renderLeaderboard(body);
+        await renderLeaderboard(body, targetMonth);
       } catch (err) {
         toast(err.message, 'error');
       }
