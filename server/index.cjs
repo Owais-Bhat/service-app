@@ -5470,6 +5470,51 @@ app.get('/api/job-cards', authenticateToken, async (req, res) => {
     }
 });
 
+// Admin logs the outcome of the 3-day post-job verification call. Overwrites
+// feedback_rating with the admin-verified rating (source of truth for the
+// technician leaderboard), unless the customer was unreachable.
+app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    const { status, rating, note } = req.body || {};
+
+    if (!['confirmed_ok', 'issue_found', 'unreachable'].includes(status)) {
+        return res.status(400).json({ error: 'status must be confirmed_ok, issue_found, or unreachable' });
+    }
+    if (status !== 'unreachable') {
+        const r = Number(rating);
+        if (!Number.isInteger(r) || r < 1 || r > 5) {
+            return res.status(400).json({ error: 'rating must be an integer from 1 to 5' });
+        }
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        await connection.query(
+            `UPDATE inquiries SET
+                verification_call_status = ?,
+                verification_call_note = ?,
+                verification_call_at = NOW(),
+                feedback_rating = CASE WHEN ? = 'unreachable' THEN feedback_rating ELSE ? END,
+                rework_required = CASE WHEN ? = 'issue_found' THEN 1 ELSE rework_required END
+             WHERE id = ?`,
+            [status, note || null, status, rating || null, status, id]
+        );
+
+        const [freshRows] = await connection.query('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [id]);
+        const freshRow = freshRows[0];
+        if (freshRow) broadcastChange('UPDATE', 'inquiries', freshRow);
+
+        res.json({ ok: true, inquiry: freshRow });
+    } catch (err) {
+        console.error('[job-card] verification call save failed:', err);
+        res.status(500).json({ error: 'Could not save verification call' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
