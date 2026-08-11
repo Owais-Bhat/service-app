@@ -4659,8 +4659,11 @@ export async function renderSettingsTab(container) {
   let reopenLimit = 2;
   let reopenButtonEnabled = true;
   let poolTimeoutMinutes = 30;
+  let geofenceLat = null;
+  let geofenceLng = null;
+  let geofenceRadiusM = 150;
   try {
-    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes, geofenceRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
@@ -4677,6 +4680,9 @@ export async function renderSettingsTab(container) {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/pool-timeout`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/attendance-geofence`, {
         headers: authHeaders(),
       }),
     ]);
@@ -4703,6 +4709,12 @@ export async function renderSettingsTab(container) {
     if (poolTimeoutRes.ok) {
       const data = await poolTimeoutRes.json();
       if (typeof data.minutes === "number") poolTimeoutMinutes = data.minutes;
+    }
+    if (geofenceRes.ok) {
+      const data = await geofenceRes.json();
+      geofenceLat = data.lat;
+      geofenceLng = data.lng;
+      geofenceRadiusM = data.radiusM || 150;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4798,6 +4810,42 @@ export async function renderSettingsTab(container) {
 
         <p class="settings-helper">
           Employees clocked in after this time will be auto-clocked out. Current: <b id="current-clockout-time">${autoClockOutTime}</b>
+        </p>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.pin}</span>
+          <div>
+            <h3>Office Clock-In Location</h3>
+            <p>Fixed employees must be within this radius (and take a selfie) to clock in.</p>
+          </div>
+        </div>
+
+        <div class="settings-alert settings-alert-danger">
+          <span>${ICONS.alert}</span>
+          <small>Until this is set, fixed employees cannot clock in at all — the check fails safe.</small>
+        </div>
+
+        <div class="settings-form-row">
+          <button class="btn btn-secondary" id="capture-office-location" type="button">${ICONS.crosshair}<span>Set office location here</span></button>
+        </div>
+
+        <div class="settings-form-row">
+          <label class="sr-only" for="geofence-lat">Latitude</label>
+          <input type="text" id="geofence-lat" placeholder="Latitude" value="${geofenceLat ?? ''}" class="settings-time-input" style="width:140px;">
+          <label class="sr-only" for="geofence-lng">Longitude</label>
+          <input type="text" id="geofence-lng" placeholder="Longitude" value="${geofenceLng ?? ''}" class="settings-time-input" style="width:140px;">
+          <label class="sr-only" for="geofence-radius">Radius (meters)</label>
+          <input type="number" id="geofence-radius" placeholder="Radius (m)" value="${geofenceRadiusM}" min="10" max="5000" class="settings-time-input" style="width:110px;">
+          <button class="btn btn-primary settings-save-btn" id="save-geofence">
+            ${ICONS.check}
+            <span>Save</span>
+          </button>
+        </div>
+
+        <p class="settings-helper" id="geofence-current-helper">
+          Current: <b id="current-geofence">${geofenceLat != null && geofenceLng != null ? `${geofenceLat}, ${geofenceLng} (±${geofenceRadiusM}m)` : 'Not configured yet'}</b>
         </p>
       </div>
 
@@ -4987,6 +5035,59 @@ export async function renderSettingsTab(container) {
       toast(`Auto clock-out time saved: ${autoClockOutTime}`, "success");
     } catch (err) {
       toast(err.message || "Could not save clock-out time", "error");
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#capture-office-location").onclick = () => {
+    if (!navigator.geolocation) {
+      toast("Geolocation is not supported in this browser", "error");
+      return;
+    }
+    const btn = container.querySelector("#capture-office-location");
+    const restore = setButtonLoading(btn, "Locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        container.querySelector("#geofence-lat").value = pos.coords.latitude.toFixed(7);
+        container.querySelector("#geofence-lng").value = pos.coords.longitude.toFixed(7);
+        toast("Location captured — review and click Save", "success");
+        restore();
+      },
+      (err) => {
+        toast(err.message || "Could not get your location", "error");
+        restore();
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  container.querySelector("#save-geofence").onclick = async () => {
+    const lat = Number(container.querySelector("#geofence-lat").value);
+    const lng = Number(container.querySelector("#geofence-lng").value);
+    const radiusM = parseInt(container.querySelector("#geofence-radius").value, 10);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      toast("Enter a valid latitude and longitude (or use \"Set office location here\")", "warning");
+      return;
+    }
+    const btn = container.querySelector("#save-geofence");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/attendance-geofence`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ lat, lng, radiusM }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save office location");
+      geofenceLat = data.lat;
+      geofenceLng = data.lng;
+      geofenceRadiusM = data.radiusM;
+      const current = container.querySelector("#current-geofence");
+      if (current) current.textContent = `${geofenceLat}, ${geofenceLng} (±${geofenceRadiusM}m)`;
+      toast("Office location saved", "success");
+    } catch (err) {
+      toast(err.message || "Could not save office location", "error");
     } finally {
       restore();
     }
