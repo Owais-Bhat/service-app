@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { computeLeaderboard } = require('./job-card-scoring.cjs');
+const { haversineDistanceMeters } = require('./geo-distance.cjs');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -571,6 +572,77 @@ app.post('/api/upload', authenticateToken, uploadSingle('file'), async (req, res
     } catch (err) {
         console.error('[upload] DB store error:', err);
         res.status(500).json({ error: 'Could not store file' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('photo'), async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    if (req.user.worker_type === 'gig') {
+        return res.status(400).json({ error: 'Gig workers use the standard clock-in, not this endpoint.' });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
+
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: 'Location is required to clock in' });
+    }
+
+    if (appSettings.attendanceGeofenceLat == null || appSettings.attendanceGeofenceLng == null) {
+        return res.status(400).json({ error: 'Office location not configured yet — contact admin.' });
+    }
+
+    const distance = haversineDistanceMeters(lat, lng, appSettings.attendanceGeofenceLat, appSettings.attendanceGeofenceLng);
+    const radiusM = appSettings.attendanceGeofenceRadiusM || 150;
+    if (distance > radiusM) {
+        return res.status(400).json({
+            error: `You're ${Math.round(distance)}m from the office — must be within ${radiusM}m to clock in.`,
+        });
+    }
+
+    const today = new Date().toLocaleDateString('en-CA');
+    let connection;
+    try {
+        connection = await getConn();
+
+        const [existing] = await connection.query(
+            'SELECT id FROM attendance WHERE user_id = ? AND date = ? LIMIT 1',
+            [req.user.id, today]
+        );
+        if (existing.length) {
+            return res.status(400).json({ error: 'Already clocked in today' });
+        }
+
+        const ext = path.extname(req.file.originalname || '') || '.jpg';
+        const mime = req.file.mimetype || 'image/jpeg';
+        const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+        await connection.query(
+            'INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)',
+            [fileId, mime, req.file.buffer]
+        );
+        const selfieUrl = `/uploads/${fileId}`;
+
+        let locationStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+            const geoData = await geoRes.json();
+            if (geoData.display_name) locationStr = geoData.display_name;
+        } catch { /* keep coordinate fallback */ }
+
+        const id = uuidv4();
+        await connection.query(
+            `INSERT INTO attendance (id, user_id, clock_in, date, location, latitude, longitude, selfie_url, distance_from_office_m, status)
+             VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, 'present')`,
+            [id, req.user.id, today, locationStr, lat, lng, selfieUrl, distance]
+        );
+
+        const [[row]] = await connection.query('SELECT * FROM attendance WHERE id = ? LIMIT 1', [id]);
+        res.json(row);
+    } catch (err) {
+        console.error('[attendance] clock-in-photo failed:', err);
+        res.status(500).json({ error: 'Could not clock in' });
     } finally {
         if (connection) connection.release();
     }
