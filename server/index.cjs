@@ -618,6 +618,12 @@ const appSettings = {
     // Minutes an assigned-but-not-yet-accepted inquiry waits before it auto-releases
     // to the public gig-worker pool.
     poolReleaseTimeoutMinutes: 30,
+    // Office clock-in geofence — null lat/lng means "not configured yet", which
+    // makes /api/attendance/clock-in-photo fail safe (reject rather than allow
+    // unconstrained clock-ins).
+    attendanceGeofenceLat: null,
+    attendanceGeofenceLng: null,
+    attendanceGeofenceRadiusM: 150,
 };
 const REG_KEY_SETTINGS = {
     admin: 'admin_reg_key',
@@ -669,8 +675,9 @@ function isValidClockOutTime(value) {
 
 async function loadAppSettings(connection) {
     const [rows] = await connection.execute(
-        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?, ?)',
-        ['auto_clock_out_time', 'auto_assignment_enabled', 'reopen_limit', 'reopen_button_enabled', 'pool_release_timeout_minutes']
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?, ?, ?, ?, ?)',
+        ['auto_clock_out_time', 'auto_assignment_enabled', 'reopen_limit', 'reopen_button_enabled', 'pool_release_timeout_minutes',
+         'attendance_geofence_lat', 'attendance_geofence_lng', 'attendance_geofence_radius_m']
     );
     const autoClockOut = rows.find(row => row.setting_key === 'auto_clock_out_time')?.setting_value;
     appSettings.autoClockOutTime = parseAutoClockOutTime(autoClockOut || DEFAULT_AUTO_CLOCK_OUT_TIME).label;
@@ -695,6 +702,24 @@ async function loadAppSettings(connection) {
     if (poolTimeout !== undefined && poolTimeout !== null && poolTimeout !== '') {
         const n = parseInt(poolTimeout, 10);
         if (Number.isFinite(n) && n > 0) appSettings.poolReleaseTimeoutMinutes = n;
+    }
+
+    const geoLat = rows.find(row => row.setting_key === 'attendance_geofence_lat')?.setting_value;
+    if (geoLat !== undefined && geoLat !== null && geoLat !== '') {
+        const n = parseFloat(geoLat);
+        if (Number.isFinite(n)) appSettings.attendanceGeofenceLat = n;
+    }
+
+    const geoLng = rows.find(row => row.setting_key === 'attendance_geofence_lng')?.setting_value;
+    if (geoLng !== undefined && geoLng !== null && geoLng !== '') {
+        const n = parseFloat(geoLng);
+        if (Number.isFinite(n)) appSettings.attendanceGeofenceLng = n;
+    }
+
+    const geoRadius = rows.find(row => row.setting_key === 'attendance_geofence_radius_m')?.setting_value;
+    if (geoRadius !== undefined && geoRadius !== null && geoRadius !== '') {
+        const n = parseInt(geoRadius, 10);
+        if (Number.isFinite(n) && n > 0) appSettings.attendanceGeofenceRadiusM = n;
     }
 }
 
@@ -3967,6 +3992,37 @@ app.put('/api/settings/pool-timeout', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Pool timeout settings update error:', error);
         res.status(500).json({ error: error.message || 'Could not save setting' });
+    }
+});
+
+app.get('/api/settings/attendance-geofence', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    res.json({
+        lat: appSettings.attendanceGeofenceLat,
+        lng: appSettings.attendanceGeofenceLng,
+        radiusM: appSettings.attendanceGeofenceRadiusM,
+    });
+});
+
+app.put('/api/settings/attendance-geofence', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    const radiusM = parseInt(req.body?.radiusM, 10);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return res.status(400).json({ error: 'Invalid latitude' });
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) return res.status(400).json({ error: 'Invalid longitude' });
+    if (!Number.isFinite(radiusM) || radiusM < 10 || radiusM > 5000) return res.status(400).json({ error: 'Radius must be between 10 and 5000 meters' });
+    try {
+        await saveAppSetting('attendance_geofence_lat', String(lat));
+        await saveAppSetting('attendance_geofence_lng', String(lng));
+        await saveAppSetting('attendance_geofence_radius_m', String(radiusM));
+        appSettings.attendanceGeofenceLat = lat;
+        appSettings.attendanceGeofenceLng = lng;
+        appSettings.attendanceGeofenceRadiusM = radiusM;
+        res.json({ lat, lng, radiusM });
+    } catch (error) {
+        console.error('Attendance geofence settings update error:', error);
+        res.status(500).json({ error: 'Could not save office location' });
     }
 });
 
