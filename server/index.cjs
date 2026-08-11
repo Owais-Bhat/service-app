@@ -1223,6 +1223,8 @@ const requiredColumns = {
     attendance: [
         { name: 'latitude', definition: 'DECIMAL(10, 7)' },
         { name: 'longitude', definition: 'DECIMAL(10, 7)' },
+        { name: 'selfie_url', definition: 'TEXT' },
+        { name: 'distance_from_office_m', definition: 'DECIMAL(8, 2)' },
     ],
     tickets: [
         { name: 'assigned_to', definition: 'VARCHAR(36)' },

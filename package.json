@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test tests/pdf-rendering.test.mjs tests/fast2sms.test.mjs tests/feedback-routing.test.mjs tests/landing-performance.test.mjs tests/ai-assistant-provider.test.mjs tests/manage-task-context.test.mjs tests/cache-expiry.test.mjs tests/job-card-scoring.test.mjs",
+    "test": "node --test tests/pdf-rendering.test.mjs tests/fast2sms.test.mjs tests/feedback-routing.test.mjs tests/landing-performance.test.mjs tests/ai-assistant-provider.test.mjs tests/manage-task-context.test.mjs tests/cache-expiry.test.mjs tests/job-card-scoring.test.mjs tests/geo-distance.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
