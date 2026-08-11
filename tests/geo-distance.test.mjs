@@ -30,3 +30,11 @@ test('distance is symmetric regardless of point order', () => {
   const b = haversineDistanceMeters(28.6139, 77.2090, 19.076, 72.8777);
   assert.equal(a, b);
 });
+
+test('accounts for latitude when scaling longitude distance', () => {
+  // At 60°N, 10° of longitude is much shorter than at the equator — this
+  // catches an implementation that forgets the cos(lat) scaling factor
+  // (which would compute ~1112km here instead of the correct ~556km).
+  const d = haversineDistanceMeters(60, 0, 60, 10);
+  assert.ok(d > 500000 && d < 620000, `expected ~556km, got ${d}`);
+});
