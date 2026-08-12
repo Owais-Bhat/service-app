@@ -2184,6 +2184,34 @@ export async function renderUsers(container) {
   `
       : '<span style="color:var(--text-dim)">-</span>';
 
+  // Photo/geofence exempt only makes sense for fixed employees — gig workers
+  // never use the photo/geofence clock-in system at all.
+  const photoExemptCell = (u) =>
+    u.role === "employee" && u.worker_type !== "gig"
+      ? `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="switch-outer photo-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.photo_clockin_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
+        <div class="switch-inner" style="position:absolute;top:2px;left:${u.photo_clockin_exempt ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+      </div>
+      <span class="photo-exempt-status-text" style="font-size:0.8rem;font-weight:700;color:${u.photo_clockin_exempt ? "var(--primary)" : "var(--text-dim)"};">${u.photo_clockin_exempt ? "ON" : "OFF"}</span>
+      <input type="checkbox" class="photo-exempt-chk" data-uid="${u.id}" ${u.photo_clockin_exempt ? "checked" : ""} style="display:none;" />
+    </div>
+  `
+      : '<span style="color:var(--text-dim)">-</span>';
+
+  const geofenceExemptCell = (u) =>
+    u.role === "employee" && u.worker_type !== "gig"
+      ? `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="switch-outer geofence-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.geofence_clockin_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
+        <div class="switch-inner" style="position:absolute;top:2px;left:${u.geofence_clockin_exempt ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+      </div>
+      <span class="geofence-exempt-status-text" style="font-size:0.8rem;font-weight:700;color:${u.geofence_clockin_exempt ? "var(--primary)" : "var(--text-dim)"};">${u.geofence_clockin_exempt ? "ON" : "OFF"}</span>
+      <input type="checkbox" class="geofence-exempt-chk" data-uid="${u.id}" ${u.geofence_clockin_exempt ? "checked" : ""} style="display:none;" />
+    </div>
+  `
+      : '<span style="color:var(--text-dim)">-</span>';
+
   // Per-employee tab ids (must match getNavItems('employee') in main.js).
   const EMPLOYEE_TAB_IDS = ["all-tickets","my-installations","my-attendance","my-leaves","my-eod","my-cash","my-collections","my-salary","leaderboard","employee-training","my-training-courses","device-followup","estimator","service-pricing"];
   const parseAllowedTabs = (u) => {
@@ -2237,6 +2265,8 @@ export async function renderUsers(container) {
               <th>Profile Access</th>
               <th>Always Assign</th>
               <th>EOD Exempt</th>
+              <th>Photo Clock-In Exempt</th>
+              <th>Location Clock-In Exempt</th>
               <th>Attendance Tab</th>
               <th>Leave Tab</th>
               <th>Collections Tab</th>
@@ -2263,6 +2293,8 @@ export async function renderUsers(container) {
                 <td>${profileCell(u)}</td>
                 <td>${alwaysAssignCell(u)}</td>
                 <td>${eodExemptCell(u)}</td>
+                <td>${photoExemptCell(u)}</td>
+                <td>${geofenceExemptCell(u)}</td>
                 <td>${attendanceCell(u)}</td>
                 <td>${leavesCell(u)}</td>
                 <td>${collectionsCell(u)}</td>
@@ -2277,7 +2309,7 @@ export async function renderUsers(container) {
             `,
                     )
                     .join("")
-                : '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
+                : '<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
             }
           </tbody>
         </table>
@@ -2298,8 +2330,14 @@ export async function renderUsers(container) {
           return;
         }
         toast(`${label} updated`, "success");
-        if (column === "always_assign" || column === "eod_exempt") {
-          const prefix = column === "always_assign" ? "always-assign" : "eod-exempt";
+        const SWITCH_PREFIXES = {
+          always_assign: "always-assign",
+          eod_exempt: "eod-exempt",
+          photo_clockin_exempt: "photo-exempt",
+          geofence_clockin_exempt: "geofence-exempt",
+        };
+        if (SWITCH_PREFIXES[column]) {
+          const prefix = SWITCH_PREFIXES[column];
           const outer = chk.parentElement.querySelector(`.${prefix}-switch-outer`);
           const inner = chk.parentElement.querySelector(".switch-inner");
           const text = chk.parentElement.querySelector(`.${prefix}-status-text`);
@@ -2329,6 +2367,16 @@ export async function renderUsers(container) {
     "eod_exempt",
     "No-restriction EOD exemption",
   );
+  bindAccessToggle(
+    ".photo-exempt-chk",
+    "photo_clockin_exempt",
+    "Photo clock-in exemption",
+  );
+  bindAccessToggle(
+    ".geofence-exempt-chk",
+    "geofence_clockin_exempt",
+    "Location clock-in exemption",
+  );
 
   container.querySelectorAll(".always-assign-switch-outer").forEach((div) => {
     div.onclick = () => {
@@ -2343,6 +2391,26 @@ export async function renderUsers(container) {
   container.querySelectorAll(".eod-exempt-switch-outer").forEach((div) => {
     div.onclick = () => {
       const chk = div.parentElement.querySelector(".eod-exempt-chk");
+      if (chk) {
+        chk.checked = !chk.checked;
+        chk.dispatchEvent(new Event("change"));
+      }
+    };
+  });
+
+  container.querySelectorAll(".photo-exempt-switch-outer").forEach((div) => {
+    div.onclick = () => {
+      const chk = div.parentElement.querySelector(".photo-exempt-chk");
+      if (chk) {
+        chk.checked = !chk.checked;
+        chk.dispatchEvent(new Event("change"));
+      }
+    };
+  });
+
+  container.querySelectorAll(".geofence-exempt-switch-outer").forEach((div) => {
+    div.onclick = () => {
+      const chk = div.parentElement.querySelector(".geofence-exempt-chk");
       if (chk) {
         chk.checked = !chk.checked;
         chk.dispatchEvent(new Event("change"));
@@ -4683,8 +4751,10 @@ export async function renderSettingsTab(container) {
   let geofenceLat = null;
   let geofenceLng = null;
   let geofenceRadiusM = 150;
+  let photoClockInRequired = true;
+  let geofenceClockInRequired = true;
   try {
-    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes, geofenceRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes, geofenceRes, clockinReqRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
@@ -4704,6 +4774,9 @@ export async function renderSettingsTab(container) {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/attendance-geofence`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/clockin-requirements`, {
         headers: authHeaders(),
       }),
     ]);
@@ -4736,6 +4809,11 @@ export async function renderSettingsTab(container) {
       geofenceLat = data.lat;
       geofenceLng = data.lng;
       geofenceRadiusM = data.radiusM || 150;
+    }
+    if (clockinReqRes.ok) {
+      const data = await clockinReqRes.json();
+      photoClockInRequired = data.photoRequired !== false;
+      geofenceClockInRequired = data.geofenceRequired !== false;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4868,6 +4946,38 @@ export async function renderSettingsTab(container) {
         <p class="settings-helper" id="geofence-current-helper">
           Current: <b id="current-geofence">${geofenceLat != null && geofenceLng != null ? `${geofenceLat}, ${geofenceLng} (±${geofenceRadiusM}m)` : 'Not configured yet'}</b>
         </p>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.crosshair}</span>
+          <div>
+            <h3>Fixed-Employee Clock-In Requirements</h3>
+            <p>Turn photo verification and the precise-location check on or off independently. Per-employee exceptions are set in User Management.</p>
+          </div>
+        </div>
+
+        <div class="settings-form-row" style="align-items: center; gap: 16px;">
+          <label style="margin: 0; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="photo-clockin-toggle" ${photoClockInRequired ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+            <span>${photoClockInRequired ? 'Photo Verification Required' : 'Photo Verification Off'}</span>
+          </label>
+          <button class="btn btn-primary settings-save-btn" id="save-photo-clockin-toggle">
+            ${ICONS.check}
+            <span>Save</span>
+          </button>
+        </div>
+
+        <div class="settings-form-row" style="align-items: center; gap: 16px;">
+          <label style="margin: 0; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="geofence-clockin-toggle" ${geofenceClockInRequired ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+            <span>${geofenceClockInRequired ? 'Precise Location Required' : 'Precise Location Off'}</span>
+          </label>
+          <button class="btn btn-primary settings-save-btn" id="save-geofence-clockin-toggle">
+            ${ICONS.check}
+            <span>Save</span>
+          </button>
+        </div>
       </div>
 
       <div class="settings-card">
@@ -5139,6 +5249,58 @@ export async function renderSettingsTab(container) {
     } catch (err) {
       toast(err.message || "Could not save popup setting", "error");
       toggle.checked = popupEnabled;
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#save-photo-clockin-toggle").onclick = async () => {
+    const toggle = container.querySelector("#photo-clockin-toggle");
+    const enabled = toggle.checked;
+    const btn = container.querySelector("#save-photo-clockin-toggle");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/clockin-requirements`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ photoRequired: enabled, geofenceRequired: geofenceClockInRequired }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save photo verification setting");
+      photoClockInRequired = data.photoRequired;
+      toggle.checked = photoClockInRequired;
+      const span = toggle.parentElement?.querySelector("span");
+      if (span) span.textContent = photoClockInRequired ? "Photo Verification Required" : "Photo Verification Off";
+      toast(`Photo verification ${photoClockInRequired ? "enabled" : "disabled"}`, "success");
+    } catch (err) {
+      toast(err.message || "Could not save photo verification setting", "error");
+      toggle.checked = photoClockInRequired;
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#save-geofence-clockin-toggle").onclick = async () => {
+    const toggle = container.querySelector("#geofence-clockin-toggle");
+    const enabled = toggle.checked;
+    const btn = container.querySelector("#save-geofence-clockin-toggle");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/clockin-requirements`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ photoRequired: photoClockInRequired, geofenceRequired: enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save precise location setting");
+      geofenceClockInRequired = data.geofenceRequired;
+      toggle.checked = geofenceClockInRequired;
+      const span = toggle.parentElement?.querySelector("span");
+      if (span) span.textContent = geofenceClockInRequired ? "Precise Location Required" : "Precise Location Off";
+      toast(`Precise location check ${geofenceClockInRequired ? "enabled" : "disabled"}`, "success");
+    } catch (err) {
+      toast(err.message || "Could not save precise location setting", "error");
+      toggle.checked = geofenceClockInRequired;
     } finally {
       restore();
     }
