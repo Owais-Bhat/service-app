@@ -20,6 +20,11 @@ export default defineConfig({
       // SMS feedback link or a bill PDF get the cached app shell (landing page).
       workbox: {
         cleanupOutdatedCaches: true,
+        // The face-api.js chunk (~1.3MB) is dynamically imported only when a
+        // fixed employee opens the photo clock-in flow — excluding it from
+        // the eager precache keeps gig workers/admins from downloading it on
+        // every install. The browser's own HTTP cache covers it on repeat use.
+        globIgnores: ['**/face-api*.js'],
         // Activate a freshly deployed worker immediately and take control of
         // already-open pages, so installed apps stop using a stale worker that
         // hijacks public links (e.g. the SMS feedback link) into the app shell.
