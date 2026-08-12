@@ -908,6 +908,21 @@ async function loadEmployeeClockOutTime() {
   return parseClockOutTime();
 }
 
+// Global on/off switches for the fixed-employee clock-in requirements —
+// public endpoint (no auth) so this can be read before deciding whether to
+// open the camera. Combined per-employee with photo_clockin_exempt /
+// geofence_clockin_exempt (fetched separately) to get the final requirement.
+async function loadClockInRequirements() {
+  const apiBase = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ? '/api' : 'http://localhost:5000/api';
+  try {
+    const res = await fetch(`${apiBase}/settings/clockin-requirements`);
+    if (res.ok) return await res.json();
+  } catch (err) {
+    console.warn('[employee] could not load clock-in requirements', err);
+  }
+  return { photoRequired: true, geofenceRequired: true };
+}
+
 function isPastAutoClockOut(now = new Date()) {
   const { hour, minute } = parseClockOutTime();
   const cutoff = new Date(now);
@@ -1093,7 +1108,8 @@ export async function renderEmployeeDashboard(container) {
   const today = new Date().toLocaleDateString('en-CA');
   const clockOutSetting = await loadEmployeeClockOutTime();
   const isGigWorker = user.worker_type === 'gig';
-  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [], eodExempt = false, poolJobs = [];
+  const clockInRequirements = isGigWorker ? null : await loadClockInRequirements();
+  let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [], eodExempt = false, poolJobs = [], needsPhotoClockIn = false, needsGeofenceClockIn = false;
 
   try {
     const res = await Promise.all([
@@ -1106,7 +1122,7 @@ export async function renderEmployeeDashboard(container) {
       supabase.from('eod_reports').select('*').eq('employee_id', user.id).order('date', { ascending: false }),
       supabase.from('inquiries').select('feedback_rating,employee_rating,feedback_employee_id,assigned_employee_id,feedback_at'),
       supabase.from('profiles').select('id,full_name,role'),
-      supabase.from('profiles').select('eod_exempt').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('eod_exempt,photo_clockin_exempt,geofence_clockin_exempt').eq('id', user.id).maybeSingle(),
       isGigWorker
         ? supabase.from('inquiries').select('*').eq('pool_status', 'pool').order('pool_released_at', { ascending: false })
         : Promise.resolve({ data: [] }),
@@ -1114,6 +1130,8 @@ export async function renderEmployeeDashboard(container) {
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     poolJobs = res[10]?.data || [];
     eodExempt = Boolean(res[9]?.data?.eod_exempt);
+    needsPhotoClockIn = !isGigWorker && !!clockInRequirements?.photoRequired && !res[9]?.data?.photo_clockin_exempt;
+    needsGeofenceClockIn = !isGigWorker && !!clockInRequirements?.geofenceRequired && !res[9]?.data?.geofence_clockin_exempt;
     feedbackRows = (res[7]?.data || []).filter(r => r.feedback_rating != null);
     allProfiles = res[8]?.data || [];
     attendanceHistory = res[4].data || [];
@@ -1486,49 +1504,61 @@ export async function renderEmployeeDashboard(container) {
     else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
   };
 
-  // Fixed employees: selfie + hard geofence check via the dedicated endpoint.
-  const photoClockIn = async () => {
+  // Fixed employees: photo/face verification and/or the geofence check via
+  // the dedicated endpoint, each only when currently required for this
+  // employee (needsPhotoClockIn / needsGeofenceClockIn — admin-controlled,
+  // globally and per-employee). The endpoint itself independently re-checks
+  // both server-side, so this only decides what UI steps to run.
+  const smartClockIn = async () => {
     const btn = container.querySelector('#btn-clock-toggle');
     btn.disabled = true; btn.innerHTML = `${ICONS.crosshair}<span>Getting location…</span>`;
-    let coords;
+    let coords = null;
     try {
       const pos = await getHighAccuracyPosition();
       coords = pos.coords;
     } catch (err) {
-      toast('Could not get your location. Enable location access and try again.', 'error');
-      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
-      return;
+      if (needsGeofenceClockIn) {
+        toast('Could not get your location. Enable location access and try again.', 'error');
+        btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+        return;
+      }
+      // Location isn't required right now — proceed without it.
     }
 
-    btn.innerHTML = `${ICONS.crosshair}<span>Opening camera…</span>`;
-    const file = await capturePhoto();
-    if (!file) {
-      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
-      return;
-    }
+    let file = null;
+    let faceDescriptor = null;
+    if (needsPhotoClockIn) {
+      btn.innerHTML = `${ICONS.crosshair}<span>Opening camera…</span>`;
+      file = await capturePhoto();
+      if (!file) {
+        btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+        return;
+      }
 
-    btn.innerHTML = `${ICONS.crosshair}<span>Verifying face…</span>`;
-    let faceDescriptor;
-    try {
-      faceDescriptor = await extractFaceDescriptor(file);
-    } catch (err) {
-      toast('Could not load face verification. Check your connection and try again.', 'error');
-      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
-      return;
-    }
-    if (!faceDescriptor) {
-      toast('No face detected — retake the photo facing the camera in good light.', 'error');
-      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
-      return;
+      btn.innerHTML = `${ICONS.crosshair}<span>Verifying face…</span>`;
+      try {
+        faceDescriptor = await extractFaceDescriptor(file);
+      } catch (err) {
+        toast('Could not load face verification. Check your connection and try again.', 'error');
+        btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+        return;
+      }
+      if (!faceDescriptor) {
+        toast('No face detected — retake the photo facing the camera in good light.', 'error');
+        btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+        return;
+      }
     }
 
     btn.innerHTML = `${ICONS.crosshair}<span>Clocking in…</span>`;
     const formData = new FormData();
-    formData.append('photo', file);
-    formData.append('lat', String(coords.latitude));
-    formData.append('lng', String(coords.longitude));
-    formData.append('accuracy', String(coords.accuracy || ''));
-    formData.append('faceDescriptor', JSON.stringify(faceDescriptor));
+    if (file) formData.append('photo', file);
+    if (coords) {
+      formData.append('lat', String(coords.latitude));
+      formData.append('lng', String(coords.longitude));
+      formData.append('accuracy', String(coords.accuracy || ''));
+    }
+    if (faceDescriptor) formData.append('faceDescriptor', JSON.stringify(faceDescriptor));
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -1575,7 +1605,7 @@ export async function renderEmployeeDashboard(container) {
     if (isGigWorker) {
       await plainClockIn();
     } else {
-      await photoClockIn();
+      await smartClockIn();
     }
   });
 
