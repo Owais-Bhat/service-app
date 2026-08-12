@@ -764,6 +764,11 @@ const appSettings = {
     attendanceGeofenceLat: null,
     attendanceGeofenceLng: null,
     attendanceGeofenceRadiusM: 150,
+    // Master switches for the fixed-employee clock-in requirements — default
+    // true so existing behavior is unchanged until an admin explicitly turns
+    // one off. Per-employee overrides live on profiles (*_clockin_exempt).
+    photoClockInEnabled: true,
+    geofenceClockInEnabled: true,
 };
 const REG_KEY_SETTINGS = {
     admin: 'admin_reg_key',
@@ -815,9 +820,10 @@ function isValidClockOutTime(value) {
 
 async function loadAppSettings(connection) {
     const [rows] = await connection.execute(
-        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?, ?, ?, ?, ?)',
+        'SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         ['auto_clock_out_time', 'auto_assignment_enabled', 'reopen_limit', 'reopen_button_enabled', 'pool_release_timeout_minutes',
-         'attendance_geofence_lat', 'attendance_geofence_lng', 'attendance_geofence_radius_m']
+         'attendance_geofence_lat', 'attendance_geofence_lng', 'attendance_geofence_radius_m',
+         'photo_clockin_enabled', 'geofence_clockin_enabled']
     );
     const autoClockOut = rows.find(row => row.setting_key === 'auto_clock_out_time')?.setting_value;
     appSettings.autoClockOutTime = parseAutoClockOutTime(autoClockOut || DEFAULT_AUTO_CLOCK_OUT_TIME).label;
@@ -860,6 +866,16 @@ async function loadAppSettings(connection) {
     if (geoRadius !== undefined && geoRadius !== null && geoRadius !== '') {
         const n = parseInt(geoRadius, 10);
         if (Number.isFinite(n) && n > 0) appSettings.attendanceGeofenceRadiusM = n;
+    }
+
+    const photoEnabled = rows.find(row => row.setting_key === 'photo_clockin_enabled')?.setting_value;
+    if (photoEnabled !== undefined) {
+        appSettings.photoClockInEnabled = photoEnabled === '1' || photoEnabled === 'true';
+    }
+
+    const geofenceEnabled = rows.find(row => row.setting_key === 'geofence_clockin_enabled')?.setting_value;
+    if (geofenceEnabled !== undefined) {
+        appSettings.geofenceClockInEnabled = geofenceEnabled === '1' || geofenceEnabled === 'true';
     }
 }
 
@@ -1300,6 +1316,8 @@ const requiredColumns = {
         { name: 'installations_enabled', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee see/receive the Installations tab'" },
         { name: 'face_descriptor', definition: "TEXT COMMENT 'JSON array of 128 floats — reference face captured on the first photo clock-in'" },
         { name: 'face_registered_at', definition: 'DATETIME DEFAULT NULL' },
+        { name: 'photo_clockin_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee skips selfie/face verification at clock-in even when the global setting requires it'" },
+        { name: 'geofence_clockin_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee skips the office-radius check at clock-in even when the global setting requires it'" },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -4166,6 +4184,32 @@ app.put('/api/settings/attendance-geofence', authenticateToken, async (req, res)
     } catch (error) {
         console.error('Attendance geofence settings update error:', error);
         res.status(500).json({ error: 'Could not save office location' });
+    }
+});
+
+// Public (no auth) so the employee clock-in flow can decide whether to open
+// the camera before submitting — mirrors /api/settings/device-tracking and
+// /api/settings/popup, which are also plain feature-flag reads.
+app.get('/api/settings/clockin-requirements', async (_, res) => {
+    res.json({
+        photoRequired: appSettings.photoClockInEnabled,
+        geofenceRequired: appSettings.geofenceClockInEnabled,
+    });
+});
+
+app.put('/api/settings/clockin-requirements', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const photoRequired = !!req.body?.photoRequired;
+    const geofenceRequired = !!req.body?.geofenceRequired;
+    try {
+        await saveAppSetting('photo_clockin_enabled', photoRequired ? '1' : '0');
+        await saveAppSetting('geofence_clockin_enabled', geofenceRequired ? '1' : '0');
+        appSettings.photoClockInEnabled = photoRequired;
+        appSettings.geofenceClockInEnabled = geofenceRequired;
+        res.json({ photoRequired, geofenceRequired });
+    } catch (error) {
+        console.error('Clock-in requirements settings update error:', error);
+        res.status(500).json({ error: 'Could not save clock-in requirements' });
     }
 });
 
