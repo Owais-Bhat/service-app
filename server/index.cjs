@@ -600,6 +600,7 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return res.status(400).json({ error: 'Location is required to clock in' });
     }
+    const accuracyM = Number(req.body?.accuracy);
 
     if (appSettings.attendanceGeofenceLat == null || appSettings.attendanceGeofenceLng == null) {
         return res.status(400).json({ error: 'Office location not configured yet — contact admin.' });
@@ -607,9 +608,21 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
 
     const distance = haversineDistanceMeters(lat, lng, appSettings.attendanceGeofenceLat, appSettings.attendanceGeofenceLng);
     const radiusM = appSettings.attendanceGeofenceRadiusM || 150;
-    if (distance > radiusM) {
+    // Phone GPS is never exact — `accuracy` is the radius within which the
+    // device's true position likely falls, and a degraded fix (indoors, weak
+    // signal, network-only fallback) can easily report 500m+ of it. Give the
+    // benefit of that uncertainty instead of comparing the raw reading
+    // directly against the radius, capped so a wildly degraded fix can't
+    // neutralize the geofence outright.
+    const MAX_ACCURACY_TOLERANCE_M = 500;
+    const tolerance = Number.isFinite(accuracyM) && accuracyM > 0 ? Math.min(accuracyM, MAX_ACCURACY_TOLERANCE_M) : 0;
+    const effectiveDistance = Math.max(0, distance - tolerance);
+    if (effectiveDistance > radiusM) {
+        const accuracyNote = tolerance > 0
+            ? ` (GPS accuracy ±${Math.round(accuracyM)}m — try moving outdoors or near a window for a better signal)`
+            : '';
         return res.status(400).json({
-            error: `You're ${Math.round(distance)}m from the office — must be within ${radiusM}m to clock in.`,
+            error: `You're ~${Math.round(distance)}m from the office${accuracyNote} — must be within ${radiusM}m to clock in.`,
         });
     }
 
