@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { computeLeaderboard } = require('./job-card-scoring.cjs');
 const { haversineDistanceMeters } = require('./geo-distance.cjs');
+const { FACE_MATCH_THRESHOLD, isValidFaceDescriptor, euclideanDistance } = require('./face-match.cjs');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -584,6 +585,16 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
     }
     if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
 
+    let faceDescriptor;
+    try {
+        faceDescriptor = JSON.parse(req.body?.faceDescriptor || 'null');
+    } catch {
+        faceDescriptor = null;
+    }
+    if (!isValidFaceDescriptor(faceDescriptor)) {
+        return res.status(400).json({ error: 'Face not detected clearly — retake the photo facing the camera in good light.' });
+    }
+
     const lat = Number(req.body?.lat);
     const lng = Number(req.body?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -615,6 +626,26 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
             return res.status(400).json({ error: 'Already clocked in today' });
         }
 
+        const [[profile]] = await connection.query(
+            'SELECT face_descriptor FROM profiles WHERE id = ? LIMIT 1',
+            [req.user.id]
+        );
+        let faceMatchDistance = null;
+        if (profile?.face_descriptor) {
+            const reference = JSON.parse(profile.face_descriptor);
+            faceMatchDistance = euclideanDistance(reference, faceDescriptor);
+            if (faceMatchDistance > FACE_MATCH_THRESHOLD) {
+                return res.status(400).json({
+                    error: `Face did not match your registered profile (distance ${faceMatchDistance.toFixed(2)}). If this is really you, contact admin to reset your face ID.`,
+                });
+            }
+        } else {
+            await connection.query(
+                'UPDATE profiles SET face_descriptor = ?, face_registered_at = NOW() WHERE id = ?',
+                [JSON.stringify(faceDescriptor), req.user.id]
+            );
+        }
+
         const ext = path.extname(req.file.originalname || '') || '.jpg';
         const mime = req.file.mimetype || 'image/jpeg';
         const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
@@ -633,9 +664,9 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
 
         const id = uuidv4();
         await connection.query(
-            `INSERT INTO attendance (id, user_id, clock_in, date, location, latitude, longitude, selfie_url, distance_from_office_m, status)
-             VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, 'present')`,
-            [id, req.user.id, today, locationStr, lat, lng, selfieUrl, distance]
+            `INSERT INTO attendance (id, user_id, clock_in, date, location, latitude, longitude, selfie_url, distance_from_office_m, face_match_distance, status)
+             VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, 'present')`,
+            [id, req.user.id, today, locationStr, lat, lng, selfieUrl, distance, faceMatchDistance]
         );
 
         const [[row]] = await connection.query('SELECT * FROM attendance WHERE id = ? LIMIT 1', [id]);
@@ -643,6 +674,30 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
     } catch (err) {
         console.error('[attendance] clock-in-photo failed:', err);
         res.status(500).json({ error: 'Could not clock in' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Clears an employee's registered reference face so their next photo
+// clock-in re-registers it. For legitimate lockouts: a bad first-registration
+// photo, or a real appearance change (beard, glasses) pushing every
+// subsequent match past the threshold.
+app.post('/api/attendance/face-reset', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const userId = req.body?.userId;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    let connection;
+    try {
+        connection = await getConn();
+        await connection.query(
+            'UPDATE profiles SET face_descriptor = NULL, face_registered_at = NULL WHERE id = ?',
+            [userId]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[attendance] face-reset failed:', err);
+        res.status(500).json({ error: 'Could not reset face ID' });
     } finally {
         if (connection) connection.release();
     }
