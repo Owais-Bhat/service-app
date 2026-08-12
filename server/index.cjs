@@ -583,48 +583,6 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
     if (req.user.worker_type === 'gig') {
         return res.status(400).json({ error: 'Gig workers use the standard clock-in, not this endpoint.' });
     }
-    if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
-
-    let faceDescriptor;
-    try {
-        faceDescriptor = JSON.parse(req.body?.faceDescriptor || 'null');
-    } catch {
-        faceDescriptor = null;
-    }
-    if (!isValidFaceDescriptor(faceDescriptor)) {
-        return res.status(400).json({ error: 'Face not detected clearly — retake the photo facing the camera in good light.' });
-    }
-
-    const lat = Number(req.body?.lat);
-    const lng = Number(req.body?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return res.status(400).json({ error: 'Location is required to clock in' });
-    }
-    const accuracyM = Number(req.body?.accuracy);
-
-    if (appSettings.attendanceGeofenceLat == null || appSettings.attendanceGeofenceLng == null) {
-        return res.status(400).json({ error: 'Office location not configured yet — contact admin.' });
-    }
-
-    const distance = haversineDistanceMeters(lat, lng, appSettings.attendanceGeofenceLat, appSettings.attendanceGeofenceLng);
-    const radiusM = appSettings.attendanceGeofenceRadiusM || 150;
-    // Phone GPS is never exact — `accuracy` is the radius within which the
-    // device's true position likely falls, and a degraded fix (indoors, weak
-    // signal, network-only fallback) can easily report 500m+ of it. Give the
-    // benefit of that uncertainty instead of comparing the raw reading
-    // directly against the radius, capped so a wildly degraded fix can't
-    // neutralize the geofence outright.
-    const MAX_ACCURACY_TOLERANCE_M = 500;
-    const tolerance = Number.isFinite(accuracyM) && accuracyM > 0 ? Math.min(accuracyM, MAX_ACCURACY_TOLERANCE_M) : 0;
-    const effectiveDistance = Math.max(0, distance - tolerance);
-    if (effectiveDistance > radiusM) {
-        const accuracyNote = tolerance > 0
-            ? ` (GPS accuracy ±${Math.round(accuracyM)}m — try moving outdoors or near a window for a better signal)`
-            : '';
-        return res.status(400).json({
-            error: `You're ~${Math.round(distance)}m from the office${accuracyNote} — must be within ${radiusM}m to clock in.`,
-        });
-    }
 
     const today = new Date().toLocaleDateString('en-CA');
     let connection;
@@ -640,46 +598,110 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
         }
 
         const [[profile]] = await connection.query(
-            'SELECT face_descriptor FROM profiles WHERE id = ? LIMIT 1',
+            'SELECT face_descriptor, photo_clockin_exempt, geofence_clockin_exempt FROM profiles WHERE id = ? LIMIT 1',
             [req.user.id]
         );
+        // Each requirement is on only when the global switch is on AND this
+        // employee isn't individually exempted from it (admin-controlled).
+        const photoRequired = appSettings.photoClockInEnabled && !profile?.photo_clockin_exempt;
+        const geofenceRequired = appSettings.geofenceClockInEnabled && !profile?.geofence_clockin_exempt;
+
+        // --- Photo + face verification (only when required) --------------
+        let selfieUrl = null;
         let faceMatchDistance = null;
-        if (profile?.face_descriptor) {
-            const reference = JSON.parse(profile.face_descriptor);
-            faceMatchDistance = euclideanDistance(reference, faceDescriptor);
-            if (faceMatchDistance > FACE_MATCH_THRESHOLD) {
-                return res.status(400).json({
-                    error: `Face did not match your registered profile (distance ${faceMatchDistance.toFixed(2)}). If this is really you, contact admin to reset your face ID.`,
-                });
+        if (photoRequired) {
+            if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
+
+            let faceDescriptor;
+            try {
+                faceDescriptor = JSON.parse(req.body?.faceDescriptor || 'null');
+            } catch {
+                faceDescriptor = null;
             }
-        } else {
+            if (!isValidFaceDescriptor(faceDescriptor)) {
+                return res.status(400).json({ error: 'Face not detected clearly — retake the photo facing the camera in good light.' });
+            }
+
+            if (profile?.face_descriptor) {
+                const reference = JSON.parse(profile.face_descriptor);
+                faceMatchDistance = euclideanDistance(reference, faceDescriptor);
+                if (faceMatchDistance > FACE_MATCH_THRESHOLD) {
+                    return res.status(400).json({
+                        error: `Face did not match your registered profile (distance ${faceMatchDistance.toFixed(2)}). If this is really you, contact admin to reset your face ID.`,
+                    });
+                }
+            } else {
+                await connection.query(
+                    'UPDATE profiles SET face_descriptor = ?, face_registered_at = NOW() WHERE id = ?',
+                    [JSON.stringify(faceDescriptor), req.user.id]
+                );
+            }
+
+            const ext = path.extname(req.file.originalname || '') || '.jpg';
+            const mime = req.file.mimetype || 'image/jpeg';
+            const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
             await connection.query(
-                'UPDATE profiles SET face_descriptor = ?, face_registered_at = NOW() WHERE id = ?',
-                [JSON.stringify(faceDescriptor), req.user.id]
+                'INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)',
+                [fileId, mime, req.file.buffer]
             );
+            selfieUrl = `/uploads/${fileId}`;
         }
 
-        const ext = path.extname(req.file.originalname || '') || '.jpg';
-        const mime = req.file.mimetype || 'image/jpeg';
-        const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
-        await connection.query(
-            'INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)',
-            [fileId, mime, req.file.buffer]
-        );
-        const selfieUrl = `/uploads/${fileId}`;
+        // --- Geofence (only enforced when required) ------------------------
+        const lat = Number(req.body?.lat);
+        const lng = Number(req.body?.lng);
+        const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+        const accuracyM = Number(req.body?.accuracy);
+        const officeConfigured = appSettings.attendanceGeofenceLat != null && appSettings.attendanceGeofenceLng != null;
 
-        let locationStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-        try {
-            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
-            const geoData = await geoRes.json();
-            if (geoData.display_name) locationStr = geoData.display_name;
-        } catch { /* keep coordinate fallback */ }
+        if (geofenceRequired) {
+            if (!hasCoords) return res.status(400).json({ error: 'Location is required to clock in' });
+            if (!officeConfigured) return res.status(400).json({ error: 'Office location not configured yet — contact admin.' });
+        }
+
+        // Computed opportunistically (for storage/admin visibility) whenever
+        // possible, but only ever enforced below when geofenceRequired.
+        let distance = null;
+        if (hasCoords && officeConfigured) {
+            distance = haversineDistanceMeters(lat, lng, appSettings.attendanceGeofenceLat, appSettings.attendanceGeofenceLng);
+        }
+
+        if (geofenceRequired && distance != null) {
+            const radiusM = appSettings.attendanceGeofenceRadiusM || 150;
+            // Phone GPS is never exact — `accuracy` is the radius within which
+            // the device's true position likely falls, and a degraded fix
+            // (indoors, weak signal, network-only fallback) can easily report
+            // 500m+ of it. Give the benefit of that uncertainty instead of
+            // comparing the raw reading directly against the radius, capped
+            // so a wildly degraded fix can't neutralize the geofence outright.
+            const MAX_ACCURACY_TOLERANCE_M = 500;
+            const tolerance = Number.isFinite(accuracyM) && accuracyM > 0 ? Math.min(accuracyM, MAX_ACCURACY_TOLERANCE_M) : 0;
+            const effectiveDistance = Math.max(0, distance - tolerance);
+            if (effectiveDistance > radiusM) {
+                const accuracyNote = tolerance > 0
+                    ? ` (GPS accuracy ±${Math.round(accuracyM)}m — try moving outdoors or near a window for a better signal)`
+                    : '';
+                return res.status(400).json({
+                    error: `You're ~${Math.round(distance)}m from the office${accuracyNote} — must be within ${radiusM}m to clock in.`,
+                });
+            }
+        }
+
+        let locationStr = 'Unknown';
+        if (hasCoords) {
+            locationStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            try {
+                const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+                const geoData = await geoRes.json();
+                if (geoData.display_name) locationStr = geoData.display_name;
+            } catch { /* keep coordinate fallback */ }
+        }
 
         const id = uuidv4();
         await connection.query(
             `INSERT INTO attendance (id, user_id, clock_in, date, location, latitude, longitude, selfie_url, distance_from_office_m, face_match_distance, status)
              VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, 'present')`,
-            [id, req.user.id, today, locationStr, lat, lng, selfieUrl, distance, faceMatchDistance]
+            [id, req.user.id, today, locationStr, hasCoords ? lat : null, hasCoords ? lng : null, selfieUrl, distance, faceMatchDistance]
         );
 
         const [[row]] = await connection.query('SELECT * FROM attendance WHERE id = ? LIMIT 1', [id]);
