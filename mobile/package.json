@@ -10,13 +10,13 @@
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@shopify/react-native-skia": "^2.11.0",
-    "expo": "~57.0.12",
-    "expo-gl": "^57.0.2",
-    "expo-linear-gradient": "^57.0.1",
-    "expo-secure-store": "^57.0.1",
-    "expo-status-bar": "~57.0.1",
+    "expo": "~56.0.19",
+    "expo-gl": "~56.0.5",
+    "expo-linear-gradient": "~56.0.4",
+    "expo-secure-store": "~56.0.4",
+    "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
-    "react-native": "0.86.2",
+    "react-native": "0.85.3",
     "react-native-reanimated": "^4.5.3",
     "react-native-safe-area-context": "^5.8.1",
     "react-native-screens": "^4.27.0",
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.2.2",
-    "babel-preset-expo": "^57.0.6",
+    "babel-preset-expo": "^56.0.15",
     "typescript": "~6.0.3"
   },
   "scripts": {
