@@ -1053,6 +1053,38 @@ function downloadTemplateCSV() {
   URL.revokeObjectURL(url);
 }
 
+// Face verification for fixed-employee clock-in. @vladmandic/face-api is
+// dynamically imported so gig workers and every other page never pay for its
+// bundle; models are fetched from /models (bundled locally, not a CDN) once
+// and cached in module scope for the rest of the session.
+let faceApiModelsPromise = null;
+async function loadFaceApiModels() {
+  if (!faceApiModelsPromise) {
+    faceApiModelsPromise = (async () => {
+      const faceapi = await import('@vladmandic/face-api');
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri('/models'),
+        faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+      ]);
+      return faceapi;
+    })();
+  }
+  return faceApiModelsPromise;
+}
+
+// Runs face detection on the captured selfie File, returning a 128-length
+// descriptor array, or null if no face was clearly detected.
+async function extractFaceDescriptor(file) {
+  const faceapi = await loadFaceApiModels();
+  const img = await faceapi.bufferToImage(file);
+  const result = await faceapi
+    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks(true)
+    .withFaceDescriptor();
+  return result ? Array.from(result.descriptor) : null;
+}
+
 export async function renderEmployeeDashboard(container) {
   showLoader(container);
   const { data: { user } } = await supabase.auth.getUser();
@@ -1475,12 +1507,28 @@ export async function renderEmployeeDashboard(container) {
       return;
     }
 
+    btn.innerHTML = `${ICONS.crosshair}<span>Verifying face…</span>`;
+    let faceDescriptor;
+    try {
+      faceDescriptor = await extractFaceDescriptor(file);
+    } catch (err) {
+      toast('Could not load face verification. Check your connection and try again.', 'error');
+      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+      return;
+    }
+    if (!faceDescriptor) {
+      toast('No face detected — retake the photo facing the camera in good light.', 'error');
+      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+      return;
+    }
+
     btn.innerHTML = `${ICONS.crosshair}<span>Clocking in…</span>`;
     const formData = new FormData();
     formData.append('photo', file);
     formData.append('lat', String(coords.latitude));
     formData.append('lng', String(coords.longitude));
     formData.append('accuracy', String(coords.accuracy || ''));
+    formData.append('faceDescriptor', JSON.stringify(faceDescriptor));
 
     try {
       const token = localStorage.getItem('auth_token');
