@@ -1230,6 +1230,8 @@ const requiredColumns = {
         { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
         { name: 'worker_type', definition: "VARCHAR(20) DEFAULT 'fixed' COMMENT 'fixed = permanent employee, gig = public-pool competitive worker'" },
         { name: 'installations_enabled', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee see/receive the Installations tab'" },
+        { name: 'face_descriptor', definition: "TEXT COMMENT 'JSON array of 128 floats — reference face captured on the first photo clock-in'" },
+        { name: 'face_registered_at', definition: 'DATETIME DEFAULT NULL' },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },
@@ -1322,6 +1324,7 @@ const requiredColumns = {
         { name: 'longitude', definition: 'DECIMAL(10, 7)' },
         { name: 'selfie_url', definition: 'TEXT' },
         { name: 'distance_from_office_m', definition: 'DECIMAL(8, 2)' },
+        { name: 'face_match_distance', definition: "DECIMAL(6, 4) DEFAULT NULL COMMENT 'Euclidean distance to the reference face; null on the registering clock-in'" },
     ],
     tickets: [
         { name: 'assigned_to', definition: 'VARCHAR(36)' },
