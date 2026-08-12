@@ -1299,15 +1299,15 @@ export async function renderAttendance(container) {
     : "—";
   const rowHtml = (items) =>
     items.length === 0
-      ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>'
+      ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">No records found</td></tr>'
       : items
           .map((x) => {
             const hw = hoursWorked(x.clock_in, x.clock_out);
             const hasCoords = x.latitude != null && x.longitude != null;
-            return `<tr>          <td>${formatDate(x.date)}</td>          <td><b>${x.profiles?.full_name || "—"}</b></td>          <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : hasMissedEod(x) ? '<span class="badge badge-danger">Missing EOD</span>' : '<span class="badge badge-open">Active</span>'}</td>          <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>          <td style="display:flex;align-items:center;gap:6px;"><small>${x.location || "—"}</small>${hasCoords ? `<button type="button" class="btn-icon att-view-map" data-lat="${x.latitude}" data-lng="${x.longitude}" data-name="${escapeHtml(x.profiles?.full_name || "Employee")}" title="View on map" style="border:none;background:transparent;cursor:pointer;color:var(--primary);display:inline-flex;padding:2px;">${ICONS.pin}</button>` : ""}</td>        </tr>`;
+            return `<tr>          <td>${formatDate(x.date)}</td>          <td><b>${x.profiles?.full_name || "—"}</b></td>          <td><span class="badge badge-open">${formatTime(x.clock_in)}</span></td>          <td>${x.clock_out ? `<span class="badge badge-resolved">${formatTime(x.clock_out)}</span>` : hasMissedEod(x) ? '<span class="badge badge-danger">Missing EOD</span>' : '<span class="badge badge-open">Active</span>'}</td>          <td>${hw ? `<span style="font-weight:600;color:var(--primary)">${hw}</span>` : '<span style="color:var(--text-dim)">—</span>'}</td>          <td style="display:flex;align-items:center;gap:6px;"><small>${x.location || "—"}</small>${hasCoords ? `<button type="button" class="btn-icon att-view-map" data-lat="${x.latitude}" data-lng="${x.longitude}" data-name="${escapeHtml(x.profiles?.full_name || "Employee")}" title="View on map" style="border:none;background:transparent;cursor:pointer;color:var(--primary);display:inline-flex;padding:2px;">${ICONS.pin}</button>` : ""}</td>          <td>${x.selfie_url ? `<a href="${x.selfie_url}" target="_blank" rel="noopener"><img src="${x.selfie_url}" alt="Clock-in selfie" style="width:32px;height:32px;border-radius:6px;object-fit:cover;border:1px solid var(--border);"/></a>` : '<span style="color:var(--text-dim)">—</span>'}</td>        </tr>`;
           })
           .join("");
-  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Attendance Logs</h1>        <p>Track employee check-ins and locations</p>      </div>      <button class="btn btn-secondary" id="att-export">${ICONS.clipboard}<span>Export CSV</span></button>    </div>    <div class="stats-grid" style="margin-bottom:24px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${todayLogs.length}</div>        <div class="stat-label">Today's Attendance</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>        <div class="stat-label">Currently Active</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${forgottenLogs.length ? "var(--danger)" : "var(--success)"}">${forgottenLogs.length}</div>        <div class="stat-label">Forgot EOD</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${restrictedEmployees.length ? "var(--danger)" : "var(--success)"}">${restrictedEmployees.length}</div>        <div class="stat-label">Restricted Users</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>        <div class="stat-label">Avg Hours Today</div>      </div>    </div>    ${restrictedEmployees.length ? `      <div class="card" style="margin-bottom:24px;border:1px solid rgba(239,68,68,0.35);">        <div class="card-header">          <span class="card-title sr-icon-title">${ICONS.alert}<span>Clock-in Restrictions</span></span>        </div>        <div class="card-body">          <div class="table-wrap">            <table>              <thead><tr><th>Employee</th><th>Missed EODs</th><th>Latest Missed</th><th>Action</th></tr></thead>              <tbody>                ${restrictedEmployees.map((x) => `                  <tr>                    <td><b>${escapeHtml(x.name)}</b></td>                    <td><span class="badge badge-danger">${x.rows.length}</span></td>                    <td><small>${formatDateTime(x.rows[0]?.clock_in)}</small></td>                    <td><button class="btn btn-primary btn-sm resolve-attendance-restriction" data-user-id="${escapeHtml(x.userId)}">Resolve restriction</button></td>                  </tr>                `).join("")}              </tbody>            </table>          </div>        </div>      </div>    ` : ""}    <div class="df-wrap" style="margin-bottom:24px;">      <button class="btn btn-secondary df-toggle" id="att-filter-btn">${ICONS.filter}<span>Filters</span><span class="df-badge" id="att-badge" style="display:none">0</span></button>      <div class="df-panel" id="att-panel" style="display:none">        <div class="df-field"><span class="df-label">Employee</span><input type="text" id="att-search" placeholder="Search by name…"/></div>        <div class="df-field"><span class="df-label">Date</span><input type="date" id="att-date"/></div>        <div class="df-footer"><button class="btn btn-ghost btn-sm" id="att-clear">Clear</button><button class="btn btn-primary btn-sm" id="att-ok">Apply</button></div>      </div>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th></tr></thead>          <tbody id="attendance-log-rows">${rowHtml(list)}</tbody>        </table>      </div>    </div>  `;
+  container.innerHTML = `    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">      <div>        <h1>Attendance Logs</h1>        <p>Track employee check-ins and locations</p>      </div>      <button class="btn btn-secondary" id="att-export">${ICONS.clipboard}<span>Export CSV</span></button>    </div>    <div class="stats-grid" style="margin-bottom:24px">      <div class="stat-card">        <div class="stat-value" style="color:var(--primary)">${todayLogs.length}</div>        <div class="stat-label">Today's Attendance</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--success)">${activeLogs.length}</div>        <div class="stat-label">Currently Active</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${forgottenLogs.length ? "var(--danger)" : "var(--success)"}">${forgottenLogs.length}</div>        <div class="stat-label">Forgot EOD</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:${restrictedEmployees.length ? "var(--danger)" : "var(--success)"}">${restrictedEmployees.length}</div>        <div class="stat-label">Restricted Users</div>      </div>      <div class="stat-card">        <div class="stat-value" style="color:var(--warning);font-size:1.6rem">${avgHours}</div>        <div class="stat-label">Avg Hours Today</div>      </div>    </div>    ${restrictedEmployees.length ? `      <div class="card" style="margin-bottom:24px;border:1px solid rgba(239,68,68,0.35);">        <div class="card-header">          <span class="card-title sr-icon-title">${ICONS.alert}<span>Clock-in Restrictions</span></span>        </div>        <div class="card-body">          <div class="table-wrap">            <table>              <thead><tr><th>Employee</th><th>Missed EODs</th><th>Latest Missed</th><th>Action</th></tr></thead>              <tbody>                ${restrictedEmployees.map((x) => `                  <tr>                    <td><b>${escapeHtml(x.name)}</b></td>                    <td><span class="badge badge-danger">${x.rows.length}</span></td>                    <td><small>${formatDateTime(x.rows[0]?.clock_in)}</small></td>                    <td><button class="btn btn-primary btn-sm resolve-attendance-restriction" data-user-id="${escapeHtml(x.userId)}">Resolve restriction</button></td>                  </tr>                `).join("")}              </tbody>            </table>          </div>        </div>      </div>    ` : ""}    <div class="df-wrap" style="margin-bottom:24px;">      <button class="btn btn-secondary df-toggle" id="att-filter-btn">${ICONS.filter}<span>Filters</span><span class="df-badge" id="att-badge" style="display:none">0</span></button>      <div class="df-panel" id="att-panel" style="display:none">        <div class="df-field"><span class="df-label">Employee</span><input type="text" id="att-search" placeholder="Search by name…"/></div>        <div class="df-field"><span class="df-label">Date</span><input type="date" id="att-date"/></div>        <div class="df-footer"><button class="btn btn-ghost btn-sm" id="att-clear">Clear</button><button class="btn btn-primary btn-sm" id="att-ok">Apply</button></div>      </div>    </div>    <div class="card">      <div class="table-wrap">        <table>          <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th><th>Photo</th></tr></thead>          <tbody id="attendance-log-rows">${rowHtml(list)}</tbody>        </table>      </div>    </div>  `;
   const attSearch = container.querySelector("#att-search");
   const attDate = container.querySelector("#att-date");
   const attBadge = container.querySelector("#att-badge");
@@ -4659,8 +4659,11 @@ export async function renderSettingsTab(container) {
   let reopenLimit = 2;
   let reopenButtonEnabled = true;
   let poolTimeoutMinutes = 30;
+  let geofenceLat = null;
+  let geofenceLng = null;
+  let geofenceRadiusM = 150;
   try {
-    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes] = await Promise.all([
+    const [attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes, geofenceRes] = await Promise.all([
       fetch(`${settingsApiBase}/settings/attendance`, {
         headers: authHeaders(),
       }),
@@ -4677,6 +4680,9 @@ export async function renderSettingsTab(container) {
         headers: authHeaders(),
       }),
       fetch(`${settingsApiBase}/settings/pool-timeout`, {
+        headers: authHeaders(),
+      }),
+      fetch(`${settingsApiBase}/settings/attendance-geofence`, {
         headers: authHeaders(),
       }),
     ]);
@@ -4703,6 +4709,12 @@ export async function renderSettingsTab(container) {
     if (poolTimeoutRes.ok) {
       const data = await poolTimeoutRes.json();
       if (typeof data.minutes === "number") poolTimeoutMinutes = data.minutes;
+    }
+    if (geofenceRes.ok) {
+      const data = await geofenceRes.json();
+      geofenceLat = data.lat;
+      geofenceLng = data.lng;
+      geofenceRadiusM = data.radiusM || 150;
     }
   } catch (err) {
     console.warn("[settings] could not load settings", err);
@@ -4798,6 +4810,42 @@ export async function renderSettingsTab(container) {
 
         <p class="settings-helper">
           Employees clocked in after this time will be auto-clocked out. Current: <b id="current-clockout-time">${autoClockOutTime}</b>
+        </p>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.pin}</span>
+          <div>
+            <h3>Office Clock-In Location</h3>
+            <p>Fixed employees must be within this radius (and take a selfie) to clock in.</p>
+          </div>
+        </div>
+
+        <div class="settings-alert settings-alert-danger">
+          <span>${ICONS.alert}</span>
+          <small>Until this is set, fixed employees cannot clock in at all — the check fails safe.</small>
+        </div>
+
+        <div class="settings-form-row">
+          <button class="btn btn-secondary" id="capture-office-location" type="button">${ICONS.crosshair}<span>Set office location here</span></button>
+        </div>
+
+        <div class="settings-form-row">
+          <label class="sr-only" for="geofence-lat">Latitude</label>
+          <input type="text" id="geofence-lat" placeholder="Latitude" value="${geofenceLat ?? ''}" class="settings-time-input" style="width:140px;">
+          <label class="sr-only" for="geofence-lng">Longitude</label>
+          <input type="text" id="geofence-lng" placeholder="Longitude" value="${geofenceLng ?? ''}" class="settings-time-input" style="width:140px;">
+          <label class="sr-only" for="geofence-radius">Radius (meters)</label>
+          <input type="number" id="geofence-radius" placeholder="Radius (m)" value="${geofenceRadiusM}" min="10" max="5000" class="settings-time-input" style="width:110px;">
+          <button class="btn btn-primary settings-save-btn" id="save-geofence">
+            ${ICONS.check}
+            <span>Save</span>
+          </button>
+        </div>
+
+        <p class="settings-helper" id="geofence-current-helper">
+          Current: <b id="current-geofence">${geofenceLat != null && geofenceLng != null ? `${geofenceLat}, ${geofenceLng} (±${geofenceRadiusM}m)` : 'Not configured yet'}</b>
         </p>
       </div>
 
@@ -4987,6 +5035,59 @@ export async function renderSettingsTab(container) {
       toast(`Auto clock-out time saved: ${autoClockOutTime}`, "success");
     } catch (err) {
       toast(err.message || "Could not save clock-out time", "error");
+    } finally {
+      restore();
+    }
+  };
+
+  container.querySelector("#capture-office-location").onclick = () => {
+    if (!navigator.geolocation) {
+      toast("Geolocation is not supported in this browser", "error");
+      return;
+    }
+    const btn = container.querySelector("#capture-office-location");
+    const restore = setButtonLoading(btn, "Locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        container.querySelector("#geofence-lat").value = pos.coords.latitude.toFixed(7);
+        container.querySelector("#geofence-lng").value = pos.coords.longitude.toFixed(7);
+        toast("Location captured — review and click Save", "success");
+        restore();
+      },
+      (err) => {
+        toast(err.message || "Could not get your location", "error");
+        restore();
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  container.querySelector("#save-geofence").onclick = async () => {
+    const lat = Number(container.querySelector("#geofence-lat").value);
+    const lng = Number(container.querySelector("#geofence-lng").value);
+    const radiusM = parseInt(container.querySelector("#geofence-radius").value, 10);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      toast("Enter a valid latitude and longitude (or use \"Set office location here\")", "warning");
+      return;
+    }
+    const btn = container.querySelector("#save-geofence");
+    const restore = setButtonLoading(btn, "Saving");
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/attendance-geofence`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ lat, lng, radiusM }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save office location");
+      geofenceLat = data.lat;
+      geofenceLng = data.lng;
+      geofenceRadiusM = data.radiusM;
+      const current = container.querySelector("#current-geofence");
+      if (current) current.textContent = `${geofenceLat}, ${geofenceLng} (±${geofenceRadiusM}m)`;
+      toast("Office location saved", "success");
+    } catch (err) {
+      toast(err.message || "Could not save office location", "error");
     } finally {
       restore();
     }

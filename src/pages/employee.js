@@ -1400,25 +1400,38 @@ export async function renderEmployeeDashboard(container) {
     if (el) el.onclick = cb;
   };
 
-  // Single Clock In / Clock Out toggle
-  bind('#btn-clock-toggle', async () => {
-    if (canClockOut) {
-      if (!eodReport) { openEodClockOutModal(); return; }
-      await doClockOut();
-      return;
-    }
-    if (strictEodBlock) {
-      toast('Clock-in is restricted because you have 4 or more missed EOD reports. Contact admin.', 'error');
-      return;
-    }
-    if (isBeforeClockInWindow()) {
-      toast('Clock-in is not allowed before 8:00 AM.', 'error');
-      return;
-    }
-    if (isPastAutoClockOut()) {
-      toast(`Clock-in is closed after ${parseClockOutTime().label}. Please contact admin.`, 'error');
-      return;
-    }
+  // Opens the device's front camera via a native file input and resolves with
+  // the captured File, or null if the user backed out without taking a photo.
+  // Uses the same native-camera pattern already used for device-service photos
+  // elsewhere in this file, just capture="user" (front camera) for a selfie.
+  const capturePhoto = () => new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'user';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    let resolved = false;
+    input.addEventListener('change', () => {
+      resolved = true;
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      document.body.removeChild(input);
+      resolve(file);
+    });
+    window.addEventListener('focus', function onFocus() {
+      window.removeEventListener('focus', onFocus);
+      setTimeout(() => {
+        if (!resolved && document.body.contains(input)) {
+          document.body.removeChild(input);
+          resolve(null);
+        }
+      }, 500);
+    }, { once: true });
+    input.click();
+  });
+
+  // Gig workers: unchanged plain clock-in, no photo/geofence requirement.
+  const plainClockIn = async () => {
     const btn = container.querySelector('#btn-clock-toggle');
     btn.disabled = true; btn.innerHTML = `${ICONS.crosshair}<span>Getting location…</span>`;
     let locationStr = 'Unknown';
@@ -1439,6 +1452,83 @@ export async function renderEmployeeDashboard(container) {
     });
     if (error) { toast(error.message, 'error'); btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`; }
     else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
+  };
+
+  // Fixed employees: selfie + hard geofence check via the dedicated endpoint.
+  const photoClockIn = async () => {
+    const btn = container.querySelector('#btn-clock-toggle');
+    btn.disabled = true; btn.innerHTML = `${ICONS.crosshair}<span>Getting location…</span>`;
+    let coords;
+    try {
+      const pos = await getHighAccuracyPosition();
+      coords = pos.coords;
+    } catch (err) {
+      toast('Could not get your location. Enable location access and try again.', 'error');
+      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+      return;
+    }
+
+    btn.innerHTML = `${ICONS.crosshair}<span>Opening camera…</span>`;
+    const file = await capturePhoto();
+    if (!file) {
+      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+      return;
+    }
+
+    btn.innerHTML = `${ICONS.crosshair}<span>Clocking in…</span>`;
+    const formData = new FormData();
+    formData.append('photo', file);
+    formData.append('lat', String(coords.latitude));
+    formData.append('lng', String(coords.longitude));
+    formData.append('accuracy', String(coords.accuracy || ''));
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const apiBase = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+        ? '/api' : 'http://localhost:5000/api';
+      const res = await fetch(`${apiBase}/attendance/clock-in-photo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error || 'Could not clock in', 'error');
+        btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+        return;
+      }
+      toast('Clocked in!', 'success');
+      renderEmployeeDashboard(container);
+    } catch (err) {
+      toast('Network error — could not clock in', 'error');
+      btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`;
+    }
+  };
+
+  // Single Clock In / Clock Out toggle
+  bind('#btn-clock-toggle', async () => {
+    if (canClockOut) {
+      if (!eodReport) { openEodClockOutModal(); return; }
+      await doClockOut();
+      return;
+    }
+    if (strictEodBlock) {
+      toast('Clock-in is restricted because you have 4 or more missed EOD reports. Contact admin.', 'error');
+      return;
+    }
+    if (isBeforeClockInWindow()) {
+      toast('Clock-in is not allowed before 8:00 AM.', 'error');
+      return;
+    }
+    if (isPastAutoClockOut()) {
+      toast(`Clock-in is closed after ${parseClockOutTime().label}. Please contact admin.`, 'error');
+      return;
+    }
+    if (isGigWorker) {
+      await plainClockIn();
+    } else {
+      await photoClockIn();
+    }
   });
 
   // Clock Out — EOD report popup appears first; clock-out happens after submit.

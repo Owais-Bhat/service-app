@@ -31,7 +31,7 @@
 - Create: `tests/geo-distance.test.mjs`
 - Modify: `package.json` (the `test` script)
 
-- [ ] **Step 1: Add the new `attendance` columns**
+- [x] **Step 1: Add the new `attendance` columns**
 
 In `server/index.cjs`, find:
 
@@ -53,7 +53,7 @@ Replace with:
     ],
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/geo-distance.test.mjs`:
 
@@ -92,12 +92,12 @@ test('distance is symmetric regardless of point order', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `node --test tests/geo-distance.test.mjs`
 Expected: FAIL — `Cannot find module '../server/geo-distance.cjs'`
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 Create `server/geo-distance.cjs`:
 
@@ -128,21 +128,21 @@ function haversineDistanceMeters(lat1, lng1, lat2, lng2) {
 module.exports = { haversineDistanceMeters };
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `node --test tests/geo-distance.test.mjs`
 Expected: PASS — 5 tests, 0 failures
 
-- [ ] **Step 6: Register the new test file**
+- [x] **Step 6: Register the new test file**
 
 In `package.json`, the `test` script lists each test file explicitly (this repo doesn't glob). Append `tests/geo-distance.test.mjs` to the end of the existing space-separated list in the `"test"` script.
 
-- [ ] **Step 7: Run the full suite to confirm nothing broke**
+- [x] **Step 7: Run the full suite to confirm nothing broke**
 
 Run: `npm test`
 Expected: all pass except the one pre-existing, already-accepted unrelated failure in `tests/feedback-routing.test.mjs` (predates this and every other recent feature — do not attempt to fix it).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add server/index.cjs server/geo-distance.cjs tests/geo-distance.test.mjs package.json
@@ -156,7 +156,7 @@ git commit -m "feat: add attendance selfie/distance schema and pure distance cal
 **Files:**
 - Modify: `server/index.cjs` — the `appSettings` object, `loadAppSettings()`, and two new routes.
 
-- [ ] **Step 1: Add default values to `appSettings`**
+- [x] **Step 1: Add default values to `appSettings`**
 
 Find:
 
@@ -196,7 +196,7 @@ const appSettings = {
 };
 ```
 
-- [ ] **Step 2: Load the 3 new settings at startup**
+- [x] **Step 2: Load the 3 new settings at startup**
 
 Find:
 
@@ -242,7 +242,7 @@ Then, right before the closing `}` of `loadAppSettings` (after the existing `poo
     }
 ```
 
-- [ ] **Step 3: Add the two new routes**
+- [x] **Step 3: Add the two new routes**
 
 Add these near the other `/api/settings/*` routes (e.g. search for `app.get('/api/settings/pool-timeout'` and add directly after that route's closing `});`):
 
@@ -279,7 +279,7 @@ app.put('/api/settings/attendance-geofence', authenticateToken, async (req, res)
 });
 ```
 
-- [ ] **Step 4: Manual verification**
+- [x] **Step 4: Manual verification**
 
 Run: `node --check server/index.cjs` — expect clean.
 Run: `npm start`, then in another terminal:
@@ -288,7 +288,7 @@ curl -H "Authorization: Bearer <admin-token>" http://localhost:5000/api/settings
 ```
 Expected: `{"lat":null,"lng":null,"radiusM":150}` (or a real DB-connection error if local MySQL is unreachable in your environment — in that case, confirm instead via `curl http://localhost:5000/api/settings/attendance-geofence` with no token, which should return `401`, proving the route is registered and reached before any DB call).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/index.cjs
@@ -302,7 +302,7 @@ git commit -m "feat: add admin settings endpoints for the attendance geofence"
 **Files:**
 - Modify: `server/index.cjs` — add the `require`, then the new route (near the existing `/api/upload` endpoint, since it reuses the same upload middleware and `uploaded_files` pattern).
 
-- [ ] **Step 1: Add the `require`**
+- [x] **Step 1: Add the `require`**
 
 Near the top of `server/index.cjs`, alongside the other `require(...)` statements (e.g. next to `const { computeLeaderboard } = require('./job-card-scoring.cjs');`), add:
 
@@ -310,7 +310,7 @@ Near the top of `server/index.cjs`, alongside the other `require(...)` statement
 const { haversineDistanceMeters } = require('./geo-distance.cjs');
 ```
 
-- [ ] **Step 2: Add the endpoint**
+- [x] **Step 2: Add the endpoint**
 
 Add near `app.post('/api/upload', ...)`:
 
@@ -387,7 +387,7 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
 });
 ```
 
-- [ ] **Step 3: Manual verification**
+- [x] **Step 3: Manual verification**
 
 Run: `node --check server/index.cjs` — expect clean.
 Run: `npm start`, then:
@@ -396,7 +396,7 @@ curl -X POST http://localhost:5000/api/attendance/clock-in-photo
 ```
 Expected: `401` (no token) — proves the route is registered and reached before the DB/multer logic runs. If you have a real employee token and a working local DB, test the full flow: a request with `lat`/`lng` far from the configured office should get a 400 with the distance message; a request within range with a real image file attached (`-F photo=@test.jpg -F lat=... -F lng=...`) should return the created attendance row as JSON.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/index.cjs
@@ -410,7 +410,7 @@ git commit -m "feat: add geofenced selfie clock-in endpoint"
 **Files:**
 - Modify: `src/pages/employee.js` — the `#btn-clock-toggle` handler inside `renderEmployeeDashboard` (search for `// Single Clock In / Clock Out toggle`, don't trust line numbers — earlier tasks in other features have shifted this file).
 
-- [ ] **Step 1: Replace the clock-in handler**
+- [x] **Step 1: Replace the clock-in handler**
 
 Find this block (currently the entire body from the `// Single Clock In / Clock Out toggle` comment through the end of the `bind('#btn-clock-toggle', ...)` call, i.e. everything up to but NOT including the `// Clock Out — EOD report popup...` comment that follows it):
 
@@ -594,13 +594,13 @@ Replace it with:
 
 Note: `isGigWorker` is already declared earlier in `renderEmployeeDashboard` (`const isGigWorker = user.worker_type === 'gig';`) and is in scope here — do not redeclare it.
 
-- [ ] **Step 2: Verify the build**
+- [x] **Step 2: Verify the build**
 
 Run: `node --check src/pages/employee.js` — this will report a syntax note about ESM `import`/`export` (expected, not a real error) but will catch a genuinely broken edit. The real check is:
 Run: `npm run build`
 Expected: succeeds with no errors, and the `employee` chunk in the build output changes size (confirms the edit was picked up).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/pages/employee.js
@@ -614,7 +614,7 @@ git commit -m "feat: require selfie + geofence check for fixed-employee clock-in
 **Files:**
 - Modify: `src/pages/admin.js` — `renderSettingsTab` (search for `Auto Clock-Out Time`, don't trust line numbers).
 
-- [ ] **Step 1: Fetch the geofence settings alongside the others**
+- [x] **Step 1: Fetch the geofence settings alongside the others**
 
 Find the `let autoClockOutTime = "18:00";` declaration near the top of `renderSettingsTab`, and the `Promise.all([...])` block that fetches `attendanceRes, keysRes, popupRes, deviceRes, reopenRes, poolTimeoutRes`. Add a matching declaration and fetch:
 
@@ -657,7 +657,7 @@ Then, near the other `if (xRes.ok) { ... }` blocks that follow (e.g. right after
     }
 ```
 
-- [ ] **Step 2: Add the settings card**
+- [x] **Step 2: Add the settings card**
 
 Find this block (the end of the Auto Clock-Out Time card):
 
@@ -713,7 +713,7 @@ Add a new `.settings-card` directly after it (before the next card in the file, 
       </div>
 ```
 
-- [ ] **Step 3: Wire up the handlers**
+- [x] **Step 3: Wire up the handlers**
 
 Find `container.querySelector("#save-clockout-time").onclick = async () => { ... };` and add the following directly after its closing `};`:
 
@@ -773,12 +773,12 @@ Find `container.querySelector("#save-clockout-time").onclick = async () => { ...
   };
 ```
 
-- [ ] **Step 4: Verify the build**
+- [x] **Step 4: Verify the build**
 
 Run: `npm run build`
 Expected: succeeds with no errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pages/admin.js
@@ -792,7 +792,7 @@ git commit -m "feat: add admin settings UI for the office clock-in geofence"
 **Files:**
 - Modify: `src/pages/admin.js` — `renderAttendance` (search for `attendance-log-rows`, don't trust line numbers).
 
-- [ ] **Step 1: Add the Photo column to the table header and empty state**
+- [x] **Step 1: Add the Photo column to the table header and empty state**
 
 Find:
 
@@ -814,7 +814,7 @@ Change to:
 <thead><tr><th>Date</th><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Location</th><th>Photo</th></tr></thead>
 ```
 
-- [ ] **Step 2: Add the thumbnail cell to each row**
+- [x] **Step 2: Add the thumbnail cell to each row**
 
 Find the row template (a single-line template literal starting `return \`<tr>` inside the `.map((x) => { ... })` in `rowHtml`). It currently ends with the Location `<td>` and closes with `</tr>\``. Right before the final `</tr>\`;`, add a new `<td>` for the photo:
 
@@ -836,12 +836,12 @@ to:
 </td>          <td>${x.selfie_url ? `<a href="${x.selfie_url}" target="_blank" rel="noopener"><img src="${x.selfie_url}" alt="Clock-in selfie" style="width:32px;height:32px;border-radius:6px;object-fit:cover;border:1px solid var(--border);"/></a>` : '<span style="color:var(--text-dim)">—</span>'}</td>        </tr>`;
 ```
 
-- [ ] **Step 3: Verify the build**
+- [x] **Step 3: Verify the build**
 
 Run: `npm run build`
 Expected: succeeds with no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/pages/admin.js
@@ -854,7 +854,7 @@ git commit -m "feat: show clock-in selfie thumbnail in the admin attendance log"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Cross-file consistency audit**
+- [x] **Step 1: Cross-file consistency audit**
 
 Read across every file this feature touched and confirm they agree on data shapes (this is the check that catches "frontend expects field X, endpoint returns field Y" bugs that neither `node --check` nor `npm run build` catch, since JS doesn't type-check object shapes):
 
@@ -864,17 +864,17 @@ Read across every file this feature touched and confirm they agree on data shape
 - `src/pages/admin.js`'s attendance row template reads `x.selfie_url` — confirm the `attendance` table actually has this column (Task 1) and the clock-in-photo endpoint actually writes it (Task 3).
 - Confirm `appSettings.attendanceGeofenceLat`/`Lng`/`RadiusM` are spelled identically everywhere they're referenced (the object definition, `loadAppSettings`, both settings routes, and the clock-in-photo endpoint).
 
-- [ ] **Step 2: Run the full test suite**
+- [x] **Step 2: Run the full test suite**
 
 Run: `npm test`
 Expected: all pass except the one pre-existing, already-accepted unrelated failure in `tests/feedback-routing.test.mjs`.
 
-- [ ] **Step 3: Run a full production build**
+- [x] **Step 3: Run a full production build**
 
 Run: `npm run build`
 Expected: succeeds with no errors.
 
-- [ ] **Step 4: Honest verification-limits note**
+- [x] **Step 4: Honest verification-limits note**
 
 This feature's actual runtime behavior (geolocation permission prompts, real camera capture on a phone, the geofence math against real GPS noise, the multipart upload actually reaching the DB) has not been exercised against a live database or a real device in this environment, for the same reason noted in prior features built in this session (local MySQL access has been unreliable throughout). Record this plainly in the final report rather than implying full verification.
 
