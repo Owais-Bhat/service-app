@@ -11,6 +11,7 @@
     "@react-three/fiber": "^9.7.0",
     "@shopify/react-native-skia": "^2.11.0",
     "expo": "~56.0.19",
+    "expo-blur": "~56.0.4",
     "expo-gl": "~56.0.5",
     "expo-linear-gradient": "~56.0.4",
     "expo-secure-store": "~56.0.4",
