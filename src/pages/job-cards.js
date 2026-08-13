@@ -274,7 +274,7 @@ async function renderLeaderboard(body, month) {
       <div style="margin-bottom:12px;"><input type="month" id="jc-board-month" value="${targetMonth}" style="padding:6px;"/></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Technician</th><th>Avg Rating</th><th>Avg Time Efficiency</th><th>Jobs Verified</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Technician</th><th>Avg Rating</th><th>Avg Time Efficiency</th><th>Jobs Verified</th><th>Bonus Points</th><th>Total Score</th><th></th></tr></thead>
           <tbody>
             ${rows.length ? rows.map((r, i) => `
               <tr>
@@ -283,10 +283,12 @@ async function renderLeaderboard(body, month) {
                 <td>${r.avgRating != null ? r.avgRating.toFixed(1) : '—'}</td>
                 <td>${r.avgTimeEfficiency != null ? Math.round(r.avgTimeEfficiency * 100) + '%' : '—'}</td>
                 <td>${r.jobsCount}</td>
+                <td>${r.bonusPoints ? `<span style="color:var(--primary);font-weight:700;">+${r.bonusPoints}</span>` : '—'}</td>
+                <td><strong>${r.totalScore}</strong></td>
                 <td>${data.awarded?.employee_id === r.employeeId
                   ? `<span style="color:var(--success);font-weight:700;">Awarded ₹${data.awarded.amount}</span>`
                   : `<button class="btn btn-primary btn-sm jc-award" data-id="${esc(r.employeeId)}" ${data.awarded ? 'disabled' : ''}>Award ₹2000</button>`}</td>
-              </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-dim);">No verified jobs yet this month</td></tr>`}
+              </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-dim);">No verified jobs yet this month</td></tr>`}
           </tbody>
         </table>
       </div>

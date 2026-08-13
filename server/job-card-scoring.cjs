@@ -24,10 +24,17 @@ const round2 = (n) => Math.round(n * 100) / 100;
  * Only verified jobs (verification_call_status IN confirmed_ok/issue_found)
  * should be passed in — filtering happens at the SQL layer, not here.
  *
- * Returns an array sorted by combinedScore descending:
- *   { employeeId, name, avgRating, avgTimeEfficiency, jobsCount, combinedScore }
+ * bonusByEmployee (optional): { [employeeId]: { name, points } } — approved
+ * review_submissions points for the same month (Google/Job Card/SMS review
+ * bonuses), summed by the caller. Seeding entries from this map too (not
+ * just from `jobs`) means an employee with bonus points but no verified job
+ * that month still shows up, instead of silently losing their points.
+ *
+ * Returns an array sorted by totalScore descending:
+ *   { employeeId, name, avgRating, avgTimeEfficiency, jobsCount,
+ *     combinedScore, bonusPoints, totalScore }
  */
-function computeLeaderboard(jobs) {
+function computeLeaderboard(jobs, bonusByEmployee = {}) {
   const byEmployee = new Map();
 
   const credit = (id, name, rating, efficiency) => {
@@ -50,6 +57,12 @@ function computeLeaderboard(jobs) {
     }
   }
 
+  for (const [id, info] of Object.entries(bonusByEmployee)) {
+    if (!byEmployee.has(id)) {
+      byEmployee.set(id, { employeeId: id, name: info?.name || 'Unknown', ratings: [], efficiencies: [], jobsCount: 0 });
+    }
+  }
+
   const avg = (arr) => (arr.length ? arr.reduce((s, n) => s + n, 0) / arr.length : null);
 
   const rows = Array.from(byEmployee.values()).map((e) => {
@@ -59,6 +72,7 @@ function computeLeaderboard(jobs) {
     if (avgRating != null) components.push((avgRating / 5) * 100);
     if (avgTimeEfficiency != null) components.push(avgTimeEfficiency * 100);
     const combinedScore = components.length ? round2(avg(components)) : 0;
+    const bonusPoints = Number(bonusByEmployee[e.employeeId]?.points) || 0;
     return {
       employeeId: e.employeeId,
       name: e.name,
@@ -66,10 +80,12 @@ function computeLeaderboard(jobs) {
       avgTimeEfficiency: avgTimeEfficiency != null ? round2(avgTimeEfficiency) : null,
       jobsCount: e.jobsCount,
       combinedScore,
+      bonusPoints,
+      totalScore: round2(combinedScore + bonusPoints),
     };
   });
 
-  rows.sort((a, b) => b.combinedScore - a.combinedScore);
+  rows.sort((a, b) => b.totalScore - a.totalScore);
   return rows;
 }
 

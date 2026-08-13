@@ -64,3 +64,39 @@ test('leaderboard skips jobs with no rating for the rating average but still cou
   assert.equal(board[0].avgRating, null);
   assert.equal(board[0].avgTimeEfficiency, 1);
 });
+
+test('leaderboard defaults bonusPoints to 0 and totalScore to combinedScore when no bonus is passed', () => {
+  const jobs = [
+    { assigned_employee_id: 'emp-1', assigned_employee_name: 'Amit', secondary_employee_id: null, secondary_employee_name: null, feedback_rating: 5, expected_time_minutes: 240, actual_minutes: 240 },
+  ];
+  const board = computeLeaderboard(jobs);
+  assert.equal(board[0].bonusPoints, 0);
+  assert.equal(board[0].totalScore, board[0].combinedScore);
+});
+
+test('leaderboard adds bonus points on top of combinedScore and re-sorts by totalScore', () => {
+  const jobs = [
+    { assigned_employee_id: 'emp-1', assigned_employee_name: 'Amit', secondary_employee_id: null, secondary_employee_name: null, feedback_rating: 5, expected_time_minutes: 240, actual_minutes: 240 },
+    { assigned_employee_id: 'emp-2', assigned_employee_name: 'Sunil', secondary_employee_id: null, secondary_employee_name: null, feedback_rating: 4, expected_time_minutes: 240, actual_minutes: 240 },
+  ];
+  // Amit leads on combinedScore (rating 5 vs 4), but Sunil's 40 bonus points flip the ranking.
+  const board = computeLeaderboard(jobs, { 'emp-2': { name: 'Sunil', points: 40 } });
+  assert.equal(board[0].employeeId, 'emp-2');
+  assert.equal(board[0].bonusPoints, 40);
+  assert.equal(board[0].totalScore, round2ForTest(board[0].combinedScore + 40));
+});
+
+test('leaderboard includes an employee with bonus points but no verified job that month', () => {
+  const jobs = [];
+  const board = computeLeaderboard(jobs, { 'emp-3': { name: 'Vikram', points: 30 } });
+  assert.equal(board.length, 1);
+  assert.equal(board[0].employeeId, 'emp-3');
+  assert.equal(board[0].jobsCount, 0);
+  assert.equal(board[0].combinedScore, 0);
+  assert.equal(board[0].bonusPoints, 30);
+  assert.equal(board[0].totalScore, 30);
+});
+
+function round2ForTest(n) {
+  return Math.round(n * 100) / 100;
+}
