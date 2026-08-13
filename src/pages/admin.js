@@ -2521,6 +2521,7 @@ export async function renderUsers(container) {
       { id: "my-collections", label: "Collections" },
       { id: "my-salary", label: "Salary" },
       { id: "leaderboard", label: "Leaderboard" },
+      { id: "my-reviews", label: "Bonus Reviews" },
       { id: "employee-training", label: "Tutorials" },
       { id: "my-training-courses", label: "Training" },
       { id: "device-followup", label: "Device Follow-up" },
