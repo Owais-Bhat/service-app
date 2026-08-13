@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AuroraBackground from '../components/AuroraBackground';
+import GlassCard from '../components/GlassCard';
 import NetworkScene3D from '../components/NetworkScene3D';
 import GlowButton from '../components/GlowButton';
 import { useAuth } from '../context/AuthContext';
@@ -39,6 +41,7 @@ export default function LoginScreen({ onGoSubmit, onGoTrack }: Props) {
 
   return (
     <View style={styles.root}>
+      <AuroraBackground />
       <View style={styles.sceneWrap}>
         <NetworkScene3D />
       </View>
@@ -50,23 +53,25 @@ export default function LoginScreen({ onGoSubmit, onGoTrack }: Props) {
         <Text style={styles.brand}>Networking Experts</Text>
         <Text style={styles.tagline}>Staff sign-in</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor={colors.textDim}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={colors.textDim}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+        <GlassCard>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor={colors.textDim}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <TextInput
+            style={[styles.input, { marginBottom: 0 }]}
+            placeholder="Password"
+            placeholderTextColor={colors.textDim}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+        </GlassCard>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -93,9 +98,6 @@ const styles = StyleSheet.create({
   brand: { ...typography.title, textAlign: 'center' },
   tagline: { ...typography.caption, textAlign: 'center', marginBottom: spacing(5) },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: spacing(4),
     paddingVertical: spacing(3),
