@@ -33,12 +33,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
+  const fullUrl = `${API_BASE_URL}${path}`;
+  console.log(`[API Request] URL: ${fullUrl}, Method: ${options.method || 'GET'}`);
+  console.log(`[API Config] EXPO_PUBLIC_API_BASE_URL is:`, process.env.EXPO_PUBLIC_API_BASE_URL);
+
+  try {
+    const res = await fetch(fullUrl, { ...options, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.log(`[API Error] Status: ${res.status}`, data);
+      throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
+    }
+    return data as T;
+  } catch (err) {
+    console.log(`[API Fetch Error] Failed to reach ${fullUrl}. Error:`, err);
+    throw err;
   }
-  return data as T;
 }
 
 export const api = {
