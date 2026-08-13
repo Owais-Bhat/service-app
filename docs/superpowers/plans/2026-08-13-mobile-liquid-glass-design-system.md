@@ -165,7 +165,7 @@ export default function AuroraBackground() {
   const { width, height } = useWindowDimensions();
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Canvas style={{ width, height }}>
         <Rect x={0} y={0} width={width} height={height} color={colors.bg} />
         <Rect x={0} y={0} width={width} height={height}>
@@ -221,7 +221,7 @@ interface Props {
 export default function GlassCard({ children, style }: Props) {
   return (
     <View style={[styles.wrapper, style]}>
-      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={styles.tint} pointerEvents="none" />
       <View style={styles.content}>{children}</View>
     </View>
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.glassFill,
   },
   content: {
@@ -285,7 +285,7 @@ interface Props {
 export default function GlassSurface({ children, style, borderRadius = radius.lg }: Props) {
   return (
     <View style={[styles.wrapper, { borderRadius }, style]}>
-      <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
+      <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={[styles.tint, { borderRadius }]} pointerEvents="none" />
       {children}
     </View>
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.glassFill,
   },
 });
@@ -364,7 +364,7 @@ export default function AccentOrb({ size = 28 }: Props) {
 
   return (
     <Animated.View style={[{ width: size, height: size }, wobbleStyle]}>
-      <Canvas style={StyleSheet.absoluteFillObject}>
+      <Canvas style={StyleSheet.absoluteFill}>
         <Circle cx={r} cy={r} r={r}>
           <SweepGradient c={vec(r, r)} colors={[colors.primary, colors.accentViolet, colors.accentCyan, colors.primary]} />
         </Circle>
@@ -437,7 +437,7 @@ export default function AnimatedStatCard({ label, value, accentColor = colors.pr
 
   return (
     <Animated.View style={[styles.card, animatedStyle]}>
-      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={styles.tint} pointerEvents="none" />
       <View style={styles.orbSlot}>
         <AccentOrb size={26} />
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.glassFill,
   },
   orbSlot: {
@@ -749,9 +749,9 @@ export default function MoreSheet({ visible, sections, onClose }: Props) {
   }));
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents={visible ? 'auto' : 'none'}>
+    <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       <Animated.View style={[styles.scrim, scrimStyle]}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
       <Animated.View style={[styles.sheetWrap, sheetStyle]} {...panResponder.panHandlers}>
         <GlassSurface style={styles.sheet} borderRadius={radius.lg}>
@@ -770,7 +770,7 @@ export default function MoreSheet({ visible, sections, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000' },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: '#000' },
   sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sheet: { padding: spacing(5), paddingBottom: spacing(10) },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.glassBorder, marginBottom: spacing(3) },
