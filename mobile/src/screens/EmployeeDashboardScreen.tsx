@@ -2,10 +2,29 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedStatCard from '../components/AnimatedStatCard';
+import AuroraBackground from '../components/AuroraBackground';
+import GlassTabBar from '../components/GlassTabBar';
+import MoreSheet from '../components/MoreSheet';
 import GlowButton from '../components/GlowButton';
 import { useAuth } from '../context/AuthContext';
 import { colors, spacing, typography } from '../theme';
 import { fetchMyTickets, fetchTodayAttendance, AttendanceRow, TicketRow } from '../api/employee';
+
+const TABS = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'more', label: 'More' },
+];
+
+// The web app's employee-relevant sections not yet ported to mobile — see
+// design spec §5/§8. Each becomes a real route in a later phase.
+const MORE_SECTIONS = [
+  { label: 'Job Cards' },
+  { label: 'Device Tracking' },
+  { label: 'Training' },
+  { label: 'Media Training' },
+  { label: 'Notifications' },
+  { label: 'Profile' },
+];
 
 export default function EmployeeDashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -14,6 +33,7 @@ export default function EmployeeDashboardScreen() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [moreVisible, setMoreVisible] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -41,40 +61,49 @@ export default function EmployeeDashboardScreen() {
   const clockedIn = !!attendance?.clock_in && !attendance?.clock_out;
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(10), paddingHorizontal: spacing(4) }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
-      <Text style={typography.title}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
-      <Text style={typography.caption}>{user?.worker_type === 'gig' ? 'Gig worker' : 'Fixed employee'}</Text>
+    <View style={styles.root}>
+      <AuroraBackground />
+      <ScrollView
+        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        <Text style={typography.title}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
+        <Text style={typography.caption}>{user?.worker_type === 'gig' ? 'Gig worker' : 'Fixed employee'}</Text>
 
-      {error ? <Text style={{ color: colors.danger, marginTop: spacing(3) }}>{error}</Text> : null}
+        {error ? <Text style={{ color: colors.danger, marginTop: spacing(3) }}>{error}</Text> : null}
 
-      <View style={styles.row}>
-        <AnimatedStatCard
-          label={clockedIn ? 'Clocked In' : 'Not Clocked In'}
-          value={clockedIn ? '●' : '○'}
-          accentColor={clockedIn ? colors.success : colors.textDim}
-          delayMs={0}
-        />
-        <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={colors.warning} delayMs={100} />
-      </View>
+        <View style={styles.row}>
+          <AnimatedStatCard
+            label={clockedIn ? 'Clocked In' : 'Not Clocked In'}
+            value={clockedIn ? '●' : '○'}
+            accentColor={clockedIn ? colors.success : colors.textDim}
+            delayMs={0}
+          />
+          <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={colors.warning} delayMs={100} />
+        </View>
 
-      <Text style={[typography.heading, { marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tickets</Text>
-      {tickets.length === 0 ? (
-        <Text style={typography.caption}>No tickets assigned right now.</Text>
-      ) : (
-        tickets.slice(0, 8).map((t) => (
-          <View key={t.id} style={styles.ticketRow}>
-            <Text style={typography.body}>#{t.id.slice(0, 8)}</Text>
-            <Text style={[typography.caption, { textTransform: 'capitalize' }]}>{t.status}</Text>
-          </View>
-        ))
-      )}
+        <Text style={[typography.heading, { marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tickets</Text>
+        {tickets.length === 0 ? (
+          <Text style={typography.caption}>No tickets assigned right now.</Text>
+        ) : (
+          tickets.slice(0, 8).map((t) => (
+            <View key={t.id} style={styles.ticketRow}>
+              <Text style={typography.body}>#{t.id.slice(0, 8)}</Text>
+              <Text style={[typography.caption, { textTransform: 'capitalize' }]}>{t.status}</Text>
+            </View>
+          ))
+        )}
 
-      <GlowButton label="Sign Out" onPress={logout} />
-    </ScrollView>
+        <GlowButton label="Sign Out" onPress={logout} />
+      </ScrollView>
+
+      <GlassTabBar
+        items={TABS}
+        activeKey={moreVisible ? 'more' : 'dashboard'}
+        onSelect={(key) => setMoreVisible(key === 'more')}
+      />
+      <MoreSheet visible={moreVisible} sections={MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
+    </View>
   );
 }
 
