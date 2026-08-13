@@ -1,13 +1,10 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
+import AccentOrb from './AccentOrb';
 import { colors, radius, spacing, typography } from '../theme';
+import { springs } from '../theme/motion';
 
 interface Props {
   label: string;
@@ -16,14 +13,16 @@ interface Props {
   delayMs?: number;
 }
 
+// Same public API as before this pass (label/value/accentColor/delayMs) —
+// dashboard call sites don't change. Internals move from a flat surface +
+// fixed-duration timing curve to GlassCard-style glass + a spring entrance,
+// per the design system's motion rules (critically-damped default, no
+// fixed-duration animation on anything that mounts/moves).
 export default function AnimatedStatCard({ label, value, accentColor = colors.primary, delayMs = 0 }: Props) {
   const progress = useSharedValue(0);
 
   useEffect(() => {
-    progress.value = withDelay(
-      delayMs,
-      withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }),
-    );
+    progress.value = withDelay(delayMs, withSpring(1, springs.move));
   }, [delayMs, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -35,8 +34,12 @@ export default function AnimatedStatCard({ label, value, accentColor = colors.pr
   }));
 
   return (
-    <Animated.View style={[styles.card, animatedStyle, { borderColor: accentColor + '55' }]}>
-      <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+    <Animated.View style={[styles.card, animatedStyle]}>
+      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={styles.tint} pointerEvents="none" />
+      <View style={styles.orbSlot}>
+        <AccentOrb size={26} />
+      </View>
       <Text style={[typography.title, { color: accentColor, fontSize: 26 }]}>{value}</Text>
       <Text style={typography.caption}>{label}</Text>
     </Animated.View>
@@ -46,18 +49,21 @@ export default function AnimatedStatCard({ label, value, accentColor = colors.pr
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
+    borderColor: colors.glassBorder,
+    borderTopColor: colors.glassHighlight,
     padding: spacing(4),
     minWidth: 140,
     overflow: 'hidden',
   },
-  accentBar: {
+  tint: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.glassFill,
+  },
+  orbSlot: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
+    top: spacing(2),
+    right: spacing(2),
   },
 });
