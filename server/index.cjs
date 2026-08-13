@@ -3022,8 +3022,26 @@ app.post('/api/feedback/submit', rateLimit({ windowMs: 60_000, max: 10, key: 'fe
             return res.status(409).json({ error: 'Feedback already submitted' });
         }
         const [freshRows] = await connection.execute('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [row.id]);
-        connection.release();
         const fresh = freshRows[0] || { id: row.id, feedback_rating: rating };
+
+        // Service-type jobs earn their leaderboard review bonus from this
+        // SMS feedback link directly (no employee submission needed) —
+        // installation-type jobs use the Job Card review claim instead.
+        // policy_agreed is 1 here since this is a system-generated row, not
+        // a user-submitted claim requiring consent.
+        if (fresh.job_card_type === 'service' && fresh.assigned_employee_id) {
+            try {
+                await connection.query(
+                    `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, star_rating, policy_agreed, status)
+                     VALUES (?, ?, ?, 'sms', ?, 1, 'pending')`,
+                    [uuidv4(), row.id, fresh.assigned_employee_id, rating]
+                );
+            } catch (err) {
+                console.error('[feedback/submit] could not auto-create sms review submission:', err);
+            }
+        }
+
+        connection.release();
         broadcastChange('UPDATE', 'inquiries', fresh);
         broadcastNotify({
             subject: 'feedback_received',
@@ -5873,6 +5891,201 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
     }
 });
 
+// Points awarded per review type. Google is conditional (set at admin
+// verification time based on the star rating admin reads off the
+// screenshot); job_card and sms are flat on approval.
+const REVIEW_TYPE_POINTS = { google: 30, job_card: 10, sms: 10 };
+
+// Jobs this employee can file a Google/Job Card review claim for — must be
+// a job they actually worked (assigned or secondary) and have a filled job
+// card. The employee-manageable types depend on job_card_type: service
+// jobs only take a Google claim (SMS review is automatic — see
+// /api/feedback/submit); installation jobs take Google or Job Card.
+app.get('/api/review-submissions/eligible-jobs', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, ticket_no, full_name, job_card_type, job_card_filled_at
+               FROM inquiries
+              WHERE (assigned_employee_id = ? OR secondary_employee_id = ?)
+                AND job_card_filled_at IS NOT NULL
+                AND job_card_type IN ('service', 'installation')
+              ORDER BY job_card_filled_at DESC
+              LIMIT 100`,
+            [req.user.id, req.user.id]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[review-submissions] eligible-jobs failed:', err);
+        res.status(500).json({ error: 'Could not load your jobs' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/review-submissions/mine', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT rs.*, i.ticket_no, i.full_name AS customer_name
+               FROM review_submissions rs
+               JOIN inquiries i ON i.id = rs.inquiry_id
+              WHERE rs.employee_id = ?
+              ORDER BY rs.created_at DESC
+              LIMIT 100`,
+            [req.user.id]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[review-submissions] mine failed:', err);
+        res.status(500).json({ error: 'Could not load your review submissions' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    const inquiryId = req.body?.inquiry_id;
+    const reviewType = req.body?.review_type;
+    const policyAgreed = req.body?.policy_agreed === 'true' || req.body?.policy_agreed === '1';
+    if (!inquiryId) return res.status(400).json({ error: 'inquiry_id is required' });
+    if (!['google', 'job_card'].includes(reviewType)) {
+        return res.status(400).json({ error: 'review_type must be google or job_card' });
+    }
+    if (!policyAgreed) return res.status(400).json({ error: 'You must agree to the policy before submitting' });
+    if (!req.file) return res.status(400).json({ error: 'A photo is required' });
+
+    let connection;
+    try {
+        connection = await getConn();
+
+        const [[job]] = await connection.query(
+            `SELECT id, job_card_type FROM inquiries
+              WHERE id = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?) AND job_card_filled_at IS NOT NULL
+              LIMIT 1`,
+            [inquiryId, req.user.id, req.user.id]
+        );
+        if (!job) return res.status(404).json({ error: 'Job not found, not yours, or the job card is not filled yet' });
+
+        if (reviewType === 'job_card' && job.job_card_type !== 'installation') {
+            return res.status(400).json({ error: 'Job Card review claims are only for installation jobs' });
+        }
+        if (reviewType === 'google' && !['service', 'installation'].includes(job.job_card_type)) {
+            return res.status(400).json({ error: 'This job type is not eligible for a review claim' });
+        }
+
+        const [dupes] = await connection.query(
+            `SELECT id FROM review_submissions
+              WHERE inquiry_id = ? AND review_type = ? AND status IN ('pending', 'approved')
+              LIMIT 1`,
+            [inquiryId, reviewType]
+        );
+        if (dupes.length) return res.status(400).json({ error: 'A submission for this job and review type already exists' });
+
+        const ext = path.extname(req.file.originalname || '') || '.jpg';
+        const mime = req.file.mimetype || 'image/jpeg';
+        const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+        await connection.query(
+            'INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)',
+            [fileId, mime, req.file.buffer]
+        );
+        const photoUrl = `/uploads/${fileId}`;
+
+        const id = uuidv4();
+        await connection.query(
+            `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, photo_url, policy_agreed, status)
+             VALUES (?, ?, ?, ?, ?, 1, 'pending')`,
+            [id, inquiryId, req.user.id, reviewType, photoUrl]
+        );
+
+        const [[row]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
+        res.json(row);
+    } catch (err) {
+        console.error('[review-submissions] create failed:', err);
+        res.status(500).json({ error: 'Could not submit review' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/review-submissions', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT rs.*, i.ticket_no, i.full_name AS customer_name, i.job_card_type,
+                    p.full_name AS employee_name
+               FROM review_submissions rs
+               JOIN inquiries i ON i.id = rs.inquiry_id
+               LEFT JOIN profiles p ON p.id = rs.employee_id
+              WHERE rs.status = ?
+              ORDER BY rs.created_at DESC
+              LIMIT 200`,
+            [status]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[review-submissions] list failed:', err);
+        res.status(500).json({ error: 'Could not load review submissions' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/review-submissions/:id/verify', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    const status = req.body?.status;
+    const starRating = req.body?.star_rating != null ? Number(req.body.star_rating) : null;
+    const adminNote = req.body?.admin_note || null;
+    if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: 'status must be approved or rejected' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [[submission]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
+        if (!submission) return res.status(404).json({ error: 'Review submission not found' });
+        if (submission.status !== 'pending') return res.status(400).json({ error: 'This submission was already reviewed' });
+
+        let points = 0;
+        if (status === 'approved') {
+            if (submission.review_type === 'google') {
+                if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
+                    return res.status(400).json({ error: 'star_rating (1-5) is required to approve a Google review' });
+                }
+                points = starRating === 5 ? REVIEW_TYPE_POINTS.google : 0;
+            } else {
+                points = REVIEW_TYPE_POINTS[submission.review_type] || 0;
+            }
+        }
+
+        await connection.query(
+            `UPDATE review_submissions
+                SET status = ?, points = ?, star_rating = COALESCE(?, star_rating),
+                    admin_note = ?, reviewed_by = ?, reviewed_at = NOW()
+              WHERE id = ?`,
+            [status, points, starRating, adminNote, req.user.id, id]
+        );
+
+        const [[row]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
+        res.json(row);
+    } catch (err) {
+        console.error('[review-submissions] verify failed:', err);
+        res.status(500).json({ error: 'Could not save review verification' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Shared by GET /api/admin/leaderboard and POST /api/admin/leaderboard/:month/award
 // so both routes always score the exact same set of verified jobs for a month —
 // the award endpoint must never diverge from what the displayed leaderboard shows,
@@ -5893,6 +6106,29 @@ async function fetchVerifiedJobsForMonth(connection, month) {
     return rows;
 }
 
+// Same reasoning as fetchVerifiedJobsForMonth: shared by both leaderboard
+// routes so the award endpoint's bonus totals can never drift from what's
+// displayed. Scoped to the JOB's month (job_card_filled_at), not whenever
+// admin happened to verify the review, so a late review doesn't shift an
+// employee's points into a different month than the job itself.
+async function fetchApprovedBonusPointsForMonth(connection, month) {
+    const [rows] = await connection.query(
+        `SELECT rs.employee_id, p.full_name AS name, SUM(rs.points) AS points
+           FROM review_submissions rs
+           JOIN inquiries i ON i.id = rs.inquiry_id
+           LEFT JOIN profiles p ON p.id = rs.employee_id
+          WHERE rs.status = 'approved'
+            AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?
+          GROUP BY rs.employee_id, p.full_name`,
+        [month]
+    );
+    const byEmployee = {};
+    for (const row of rows) {
+        byEmployee[row.employee_id] = { name: row.name, points: Number(row.points) || 0 };
+    }
+    return byEmployee;
+}
+
 app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const month = String(req.query.month || '').trim();
@@ -5904,7 +6140,8 @@ app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     try {
         connection = await getConn();
         const rows = await fetchVerifiedJobsForMonth(connection, month);
-        const board = computeLeaderboard(rows);
+        const bonusByEmployee = await fetchApprovedBonusPointsForMonth(connection, month);
+        const board = computeLeaderboard(rows, bonusByEmployee);
 
         const [[existingAward]] = await connection.query(
             'SELECT employee_id, amount FROM technician_awards WHERE month = ? LIMIT 1',
@@ -5931,7 +6168,8 @@ app.post('/api/admin/leaderboard/:month/award', authenticateToken, async (req, r
     try {
         connection = await getConn();
         const rows = await fetchVerifiedJobsForMonth(connection, month);
-        const board = computeLeaderboard(rows);
+        const bonusByEmployee = await fetchApprovedBonusPointsForMonth(connection, month);
+        const board = computeLeaderboard(rows, bonusByEmployee);
         const winner = board.find(r => r.employeeId === employee_id);
         if (!winner) return res.status(400).json({ error: 'This technician has no verified jobs for that month' });
 
