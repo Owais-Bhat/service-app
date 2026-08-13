@@ -30,6 +30,7 @@ export default function LoginScreen({ onGoSubmit, onGoTrack }: Props) {
     try {
       await login(email.trim(), password);
     } catch (err) {
+      console.log('Login error:', err);
       setError(err instanceof ApiError ? err.message : 'Could not sign in — check your connection');
     } finally {
       setLoading(false);
