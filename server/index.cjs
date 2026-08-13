@@ -1795,6 +1795,30 @@ const requiredTables = [
         UNIQUE KEY uniq_month (month),
         FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE SET NULL
     )`,
+    // Bonus-points review claims that feed the leaderboard's totalScore.
+    // 'google' and 'job_card' are employee-submitted (photo + policy
+    // checkbox); 'sms' is auto-created when a customer's feedback-link
+    // reply comes in for a service-type job — see /api/feedback/submit.
+    `CREATE TABLE IF NOT EXISTS review_submissions (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        review_type VARCHAR(20) NOT NULL COMMENT "'google' | 'job_card' | 'sms'",
+        photo_url TEXT,
+        star_rating INT,
+        policy_agreed TINYINT(1) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT "'pending' | 'approved' | 'rejected'",
+        points INT,
+        admin_note TEXT,
+        reviewed_by VARCHAR(36),
+        reviewed_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_review_submissions_inquiry (inquiry_id),
+        INDEX idx_review_submissions_employee (employee_id),
+        INDEX idx_review_submissions_status (status),
+        FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE CASCADE
+    )`,
 ];
 
 const videoDoorPhoneServices = [
