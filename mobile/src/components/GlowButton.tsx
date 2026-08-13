@@ -35,14 +35,18 @@ export default function GlowButton({ label, onPress, disabled, loading }: Props)
   }));
 
   return (
-    <Pressable onPress={onPress} disabled={disabled || loading} style={styles.wrapper}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => [styles.wrapper, pressed && styles.pressed]}
+    >
       <Animated.View style={[styles.canvasWrap, glowStyle]}>
         <Canvas style={StyleSheet.absoluteFill}>
           <RoundedRect x={0} y={0} width={320} height={HEIGHT} r={radius.md}>
             <LinearGradient
               start={vec(0, 0)}
               end={vec(320, HEIGHT)}
-              colors={[colors.primary, colors.primaryDim]}
+              colors={[colors.primary, colors.accentViolet]}
             />
           </RoundedRect>
         </Canvas>
@@ -60,13 +64,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: spacing(2),
   },
+  pressed: { transform: [{ scale: 0.97 }] },
   canvasWrap: {
     ...StyleSheet.absoluteFill,
     borderRadius: radius.md,
     overflow: 'hidden',
   },
   label: {
-    color: '#04150c',
+    color: '#ffffff',
     fontWeight: '700',
   },
 });
