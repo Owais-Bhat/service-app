@@ -12,6 +12,16 @@ export const colors = {
   success: '#2bbf73',
   warning: '#FBBF24',
   danger: '#F87171',
+
+  // Aurora Deep — the "liquid glass" design system pilot. See
+  // docs/superpowers/specs/2026-08-13-mobile-liquid-glass-design-system-design.md
+  auroraViolet: '#2a1f4d',
+  auroraNavy: '#0a1030',
+  accentViolet: '#6a5cff',
+  accentCyan: '#22d3ee',
+  glassFill: 'rgba(30,25,55,0.4)',
+  glassBorder: 'rgba(255,255,255,0.12)',
+  glassHighlight: 'rgba(255,255,255,0.16)',
 };
 
 export const spacing = (n: number) => n * 4;
@@ -23,9 +33,11 @@ export const radius = {
   full: 999,
 };
 
+// Tracking/leading are size-specific per Apple's optical-type guidance —
+// large text gets tightened tracking and leading, body stays near neutral.
 export const typography = {
-  title: { fontSize: 28, fontWeight: '700' as const, color: colors.text },
-  heading: { fontSize: 20, fontWeight: '700' as const, color: colors.text },
-  body: { fontSize: 15, fontWeight: '400' as const, color: colors.text },
-  caption: { fontSize: 13, fontWeight: '500' as const, color: colors.textDim },
+  title: { fontSize: 28, fontWeight: '700' as const, color: colors.text, letterSpacing: -0.4, lineHeight: 32 },
+  heading: { fontSize: 20, fontWeight: '700' as const, color: colors.text, letterSpacing: -0.2, lineHeight: 24 },
+  body: { fontSize: 15, fontWeight: '400' as const, color: colors.text, letterSpacing: 0, lineHeight: 22 },
+  caption: { fontSize: 13, fontWeight: '500' as const, color: colors.textDim, letterSpacing: 0.1, lineHeight: 18 },
 };
