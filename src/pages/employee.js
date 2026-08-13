@@ -4510,7 +4510,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const returnBanner = overlay.querySelector('#device-return-banner');
       if (returnBanner) returnBanner.style.display = (deviceTicketOn && !deviceReturned) ? 'block' : 'none';
 
-      if (paid) {
+      if (statusSel.value === 'foc') {
+        payStatusBox.style.borderColor = 'var(--primary)';
+        payStatusBox.style.background = 'rgba(16,185,129,0.06)';
+        payStatusIcon.innerHTML = ICONS.check;
+        payStatusIcon.style.color = 'var(--primary)';
+        payStatusTitle.textContent = 'FOC — Free of Cost';
+        payStatusTitle.style.color = 'var(--primary)';
+        payStatusSub.textContent = 'No bill will be generated for this ticket — you can submit directly.';
+      } else if (paid) {
         payStatusBox.style.borderColor = 'var(--success)';
         payStatusBox.style.background = 'rgba(16,185,129,0.08)';
         payStatusIcon.innerHTML = ICONS.check;
