@@ -2213,7 +2213,7 @@ export async function renderUsers(container) {
       : '<span style="color:var(--text-dim)">-</span>';
 
   // Per-employee tab ids (must match getNavItems('employee') in main.js).
-  const EMPLOYEE_TAB_IDS = ["all-tickets","my-installations","my-attendance","my-leaves","my-eod","my-cash","my-collections","my-salary","leaderboard","employee-training","my-training-courses","device-followup","estimator","service-pricing"];
+  const EMPLOYEE_TAB_IDS = ["all-tickets","my-installations","my-attendance","my-leaves","my-eod","my-cash","my-collections","my-salary","leaderboard","my-reviews","employee-training","my-training-courses","device-followup","estimator","service-pricing"];
   const parseAllowedTabs = (u) => {
     try {
       if (u.allowed_tabs) {
