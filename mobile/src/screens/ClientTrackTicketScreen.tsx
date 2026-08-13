@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AuroraBackground from '../components/AuroraBackground';
+import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
 import { colors, radius, spacing, typography } from '../theme';
 import { trackInquiry, Inquiry } from '../api/inquiries';
@@ -45,65 +47,61 @@ export default function ClientTrackTicketScreen({ onBack }: Props) {
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-      <Text style={styles.link} onPress={onBack}>← Back</Text>
-      <Text style={typography.title}>Track Your Request</Text>
+    <View style={styles.root}>
+      <AuroraBackground />
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
+        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <Text style={typography.title}>Track Your Request</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Ticket number (e.g. NE-260812-1234)"
-        placeholderTextColor={colors.textDim}
-        autoCapitalize="characters"
-        value={ticketNo}
-        onChangeText={setTicketNo}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Phone number"
-        placeholderTextColor={colors.textDim}
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
-      />
+        <GlassCard style={styles.formCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Ticket number (e.g. NE-260812-1234)"
+            placeholderTextColor={colors.textDim}
+            autoCapitalize="characters"
+            value={ticketNo}
+            onChangeText={setTicketNo}
+          />
+          <TextInput
+            style={[styles.input, { marginBottom: 0 }]}
+            placeholder="Phone number"
+            placeholderTextColor={colors.textDim}
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+          />
+        </GlassCard>
 
-      {error ? <Text style={{ color: colors.danger, marginBottom: spacing(2) }}>{error}</Text> : null}
+        {error ? <Text style={{ color: colors.danger, marginTop: spacing(3) }}>{error}</Text> : null}
 
-      <GlowButton label="Check Status" onPress={handleTrack} loading={loading} />
+        <GlowButton label="Check Status" onPress={handleTrack} loading={loading} />
 
-      {results?.map((r) => (
-        <View key={r.id} style={styles.resultCard}>
-          <Text style={typography.heading}>{r.ticket_no}</Text>
-          <Text style={[typography.body, { marginTop: spacing(1) }]}>{r.service_item}</Text>
-          <Text style={[typography.caption, { marginTop: spacing(2) }]}>Status</Text>
-          <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 16 }}>
-            {STATUS_LABEL[r.status] || r.status}
-          </Text>
-        </View>
-      ))}
-    </ScrollView>
+        {results?.map((r) => (
+          <GlassCard key={r.id} style={styles.resultCard}>
+            <Text style={typography.heading}>{r.ticket_no}</Text>
+            <Text style={[typography.body, { marginTop: spacing(1) }]}>{r.service_item}</Text>
+            <Text style={[typography.caption, { marginTop: spacing(2) }]}>Status</Text>
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 16 }}>
+              {STATUS_LABEL[r.status] || r.status}
+            </Text>
+          </GlassCard>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  formCard: { marginTop: spacing(4) },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: spacing(4),
     paddingVertical: spacing(3),
     color: colors.text,
-    marginTop: spacing(3),
+    marginBottom: spacing(3),
     fontSize: 15,
   },
   link: { ...typography.caption, color: colors.primary, marginBottom: spacing(3) },
-  resultCard: {
-    marginTop: spacing(5),
-    padding: spacing(4),
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+  resultCard: { marginTop: spacing(5) },
 });
