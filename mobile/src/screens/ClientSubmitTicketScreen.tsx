@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AuroraBackground from '../components/AuroraBackground';
+import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
 import { colors, radius, spacing, typography } from '../theme';
 import { submitInquiry, Inquiry } from '../api/inquiries';
@@ -45,62 +47,69 @@ export default function ClientSubmitTicketScreen({ onBack }: Props) {
 
   if (result) {
     return (
-      <View style={[styles.root, styles.centered, { paddingTop: insets.top }]}>
-        <Text style={typography.title}>Request Submitted</Text>
-        <Text style={[typography.body, { marginTop: spacing(3), textAlign: 'center' }]}>
-          Your ticket number is
-        </Text>
-        <Text style={styles.ticketNo}>{result.ticket_no}</Text>
-        <Text style={[typography.caption, { textAlign: 'center', marginTop: spacing(2) }]}>
-          Save this number — you can track your request status with it any time.
-        </Text>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+      <View style={styles.root}>
+        <AuroraBackground />
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <GlassCard style={styles.resultCard}>
+            <Text style={typography.title}>Request Submitted</Text>
+            <Text style={[typography.body, { marginTop: spacing(3), textAlign: 'center' }]}>
+              Your ticket number is
+            </Text>
+            <Text style={styles.ticketNo}>{result.ticket_no}</Text>
+            <Text style={[typography.caption, { textAlign: 'center', marginTop: spacing(2) }]}>
+              Save this number — you can track your request status with it any time.
+            </Text>
+          </GlassCard>
+          <Text style={styles.link} onPress={onBack}>← Back</Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.root}
-    >
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
-        <Text style={typography.title}>Submit a Service Request</Text>
+    <View style={styles.root}>
+      <AuroraBackground />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
+          <Text style={styles.link} onPress={onBack}>← Back</Text>
+          <Text style={typography.title}>Submit a Service Request</Text>
 
-        <TextInput style={styles.input} placeholder="Your name" placeholderTextColor={colors.textDim} value={name} onChangeText={setName} />
-        <TextInput style={styles.input} placeholder="Phone number" placeholderTextColor={colors.textDim} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-        <TextInput style={styles.input} placeholder="Location / address" placeholderTextColor={colors.textDim} value={location} onChangeText={setLocation} />
-        <TextInput style={styles.input} placeholder="What's the issue?" placeholderTextColor={colors.textDim} value={issue} onChangeText={setIssue} />
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Additional details (optional)"
-          placeholderTextColor={colors.textDim}
-          value={description}
-          onChangeText={setDescription}
-          multiline
-        />
+          <GlassCard style={styles.formCard}>
+            <TextInput style={styles.input} placeholder="Your name" placeholderTextColor={colors.textDim} value={name} onChangeText={setName} />
+            <TextInput style={styles.input} placeholder="Phone number" placeholderTextColor={colors.textDim} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+            <TextInput style={styles.input} placeholder="Location / address" placeholderTextColor={colors.textDim} value={location} onChangeText={setLocation} />
+            <TextInput style={styles.input} placeholder="What's the issue?" placeholderTextColor={colors.textDim} value={issue} onChangeText={setIssue} />
+            <TextInput
+              style={[styles.input, styles.textArea, { marginBottom: 0 }]}
+              placeholder="Additional details (optional)"
+              placeholderTextColor={colors.textDim}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+            />
+          </GlassCard>
 
-        {error ? <Text style={{ color: colors.danger, marginBottom: spacing(2) }}>{error}</Text> : null}
+          {error ? <Text style={{ color: colors.danger, marginTop: spacing(3) }}>{error}</Text> : null}
 
-        <GlowButton label="Submit Request" onPress={handleSubmit} loading={loading} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <GlowButton label="Submit Request" onPress={handleSubmit} loading={loading} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing(6) },
+  flex: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing(6) },
+  formCard: { marginTop: spacing(4) },
+  resultCard: { alignItems: 'center', paddingVertical: spacing(6) },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: spacing(4),
     paddingVertical: spacing(3),
     color: colors.text,
-    marginTop: spacing(3),
+    marginBottom: spacing(3),
     fontSize: 15,
   },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
