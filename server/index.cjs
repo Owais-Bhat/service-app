@@ -5543,6 +5543,29 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
             ? agg(fbRows.filter(r => monthOf(r.feedback_at || r.created_at) === monthKey))
             : allTime;
 
+        // Bonus Reviews points (approved Google/Job Card/SMS claims) so an
+        // employee can see the same bonus total admin sees on the Job Cards
+        // leaderboard, without having to leave their own Leaderboard tab.
+        let bonusConn;
+        try {
+            bonusConn = await getConn();
+            const [allTimeBonusRows] = await bonusConn.query(
+                `SELECT employee_id, SUM(points) AS points FROM review_submissions
+                  WHERE status = 'approved' GROUP BY employee_id`
+            );
+            const allTimeBonus = {};
+            for (const row of allTimeBonusRows) allTimeBonus[row.employee_id] = Number(row.points) || 0;
+            const monthlyBonus = monthKey ? await fetchApprovedBonusPointsForMonth(bonusConn, monthKey) : null;
+            allTime.forEach(e => { e.bonusPoints = allTimeBonus[e.id] || 0; });
+            monthly.forEach(e => { e.bonusPoints = monthKey ? (monthlyBonus[e.id]?.points || 0) : (allTimeBonus[e.id] || 0); });
+        } catch (err) {
+            console.error('[leaderboard] bonus points lookup failed:', err.message);
+            allTime.forEach(e => { e.bonusPoints = 0; });
+            monthly.forEach(e => { e.bonusPoints = 0; });
+        } finally {
+            if (bonusConn) bonusConn.release();
+        }
+
         res.json({ monthly, allTime });
     } catch (error) {
         if (connection) connection.release();

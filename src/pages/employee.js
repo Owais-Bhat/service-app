@@ -2256,6 +2256,11 @@ export async function renderEmployeeLeaderboard(container) {
           <div class="lb-my-stat-val">${myMonthly?.fiveStars ?? 0}</div>
           <div class="lb-my-stat-label">5-Stars</div>
         </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val" style="color:var(--primary);">+${myMonthly?.bonusPoints ?? 0}</div>
+          <div class="lb-my-stat-label">Bonus Points</div>
+        </div>
       </div>
     </div>
 
@@ -2287,6 +2292,11 @@ export async function renderEmployeeLeaderboard(container) {
         <div class="lb-my-stat">
           <div class="lb-my-stat-val">${myAllTime?.fiveStars ?? 0}</div>
           <div class="lb-my-stat-label">5-Stars</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val" style="color:var(--primary);">+${myAllTime?.bonusPoints ?? 0}</div>
+          <div class="lb-my-stat-label">Bonus Points</div>
         </div>
       </div>
     </div>
