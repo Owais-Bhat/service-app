@@ -1459,6 +1459,9 @@ const requiredColumns = {
         { name: 'description', definition: 'TEXT' },
         { name: 'active', definition: 'TINYINT(1) DEFAULT 1' },
     ],
+    review_submissions: [
+        { name: 'claimed_customer_name', definition: "VARCHAR(150) DEFAULT NULL COMMENT 'Customer name the employee typed by hand — admin compares it against the real ticket name as a lightweight fraud check'" },
+    ],
 };
 
 const requiredTables = [
@@ -5896,30 +5899,33 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
 // screenshot); job_card and sms are flat on approval.
 const REVIEW_TYPE_POINTS = { google: 30, job_card: 10, sms: 10 };
 
-// Jobs this employee can file a Google/Job Card review claim for — must be
-// a job they actually worked (assigned or secondary) and have a filled job
-// card. The employee-manageable types depend on job_card_type: service
-// jobs only take a Google claim (SMS review is automatic — see
+// The employee types in a ticket number by hand (no dropdown of "eligible"
+// jobs — that list kept coming up empty for real employees). This endpoint
+// just confirms the ticket exists and was worked by them, and returns its
+// job_card_type so the client can offer the right Review Type options:
+// service jobs only take a Google claim (SMS review is automatic — see
 // /api/feedback/submit); installation jobs take Google or Job Card.
-app.get('/api/review-submissions/eligible-jobs', authenticateToken, async (req, res) => {
+app.get('/api/review-submissions/ticket-lookup', authenticateToken, async (req, res) => {
     if (req.user.role !== 'employee') return res.sendStatus(403);
+    const ticketNo = String(req.query.ticket_no || '').trim().toUpperCase();
+    if (!ticketNo) return res.status(400).json({ error: 'ticket_no is required' });
     let connection;
     try {
         connection = await getConn();
-        const [rows] = await connection.query(
-            `SELECT id, ticket_no, full_name, job_card_type, job_card_filled_at
-               FROM inquiries
-              WHERE (assigned_employee_id = ? OR secondary_employee_id = ?)
-                AND job_card_filled_at IS NOT NULL
-                AND job_card_type IN ('service', 'installation')
-              ORDER BY job_card_filled_at DESC
-              LIMIT 100`,
-            [req.user.id, req.user.id]
+        const [[job]] = await connection.query(
+            `SELECT id, ticket_no, job_card_type FROM inquiries
+              WHERE ticket_no = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?)
+              LIMIT 1`,
+            [ticketNo, req.user.id, req.user.id]
         );
-        res.json(rows);
+        if (!job) return res.status(404).json({ error: 'No ticket found with that number assigned to you' });
+        if (!['service', 'installation'].includes(job.job_card_type)) {
+            return res.status(400).json({ error: 'This job\'s type is not set yet — ask admin to fill the job card first' });
+        }
+        res.json({ ticket_no: job.ticket_no, job_card_type: job.job_card_type });
     } catch (err) {
-        console.error('[review-submissions] eligible-jobs failed:', err);
-        res.status(500).json({ error: 'Could not load your jobs' });
+        console.error('[review-submissions] ticket-lookup failed:', err);
+        res.status(500).json({ error: 'Could not look up that ticket' });
     } finally {
         if (connection) connection.release();
     }
@@ -5950,10 +5956,12 @@ app.get('/api/review-submissions/mine', authenticateToken, async (req, res) => {
 
 app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), async (req, res) => {
     if (req.user.role !== 'employee') return res.sendStatus(403);
-    const inquiryId = req.body?.inquiry_id;
+    const ticketNo = String(req.body?.ticket_no || '').trim().toUpperCase();
+    const claimedCustomerName = String(req.body?.customer_name || '').trim();
     const reviewType = req.body?.review_type;
     const policyAgreed = req.body?.policy_agreed === 'true' || req.body?.policy_agreed === '1';
-    if (!inquiryId) return res.status(400).json({ error: 'inquiry_id is required' });
+    if (!ticketNo) return res.status(400).json({ error: 'ticket_no is required' });
+    if (!claimedCustomerName) return res.status(400).json({ error: 'customer_name is required' });
     if (!['google', 'job_card'].includes(reviewType)) {
         return res.status(400).json({ error: 'review_type must be google or job_card' });
     }
@@ -5964,13 +5972,17 @@ app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), as
     try {
         connection = await getConn();
 
+        // Re-resolve the ticket server-side — never trust a client-supplied
+        // inquiry id/ownership, even though the client already ran the same
+        // lookup before enabling the form.
         const [[job]] = await connection.query(
             `SELECT id, job_card_type FROM inquiries
-              WHERE id = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?) AND job_card_filled_at IS NOT NULL
+              WHERE ticket_no = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?)
               LIMIT 1`,
-            [inquiryId, req.user.id, req.user.id]
+            [ticketNo, req.user.id, req.user.id]
         );
-        if (!job) return res.status(404).json({ error: 'Job not found, not yours, or the job card is not filled yet' });
+        if (!job) return res.status(404).json({ error: 'No ticket found with that number assigned to you' });
+        const inquiryId = job.id;
 
         if (reviewType === 'job_card' && job.job_card_type !== 'installation') {
             return res.status(400).json({ error: 'Job Card review claims are only for installation jobs' });
@@ -5998,9 +6010,9 @@ app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), as
 
         const id = uuidv4();
         await connection.query(
-            `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, photo_url, policy_agreed, status)
-             VALUES (?, ?, ?, ?, ?, 1, 'pending')`,
-            [id, inquiryId, req.user.id, reviewType, photoUrl]
+            `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, photo_url, claimed_customer_name, policy_agreed, status)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 'pending')`,
+            [id, inquiryId, req.user.id, reviewType, photoUrl, claimedCustomerName]
         );
 
         const [[row]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
@@ -6030,6 +6042,9 @@ app.get('/api/review-submissions', authenticateToken, async (req, res) => {
               LIMIT 200`,
             [status]
         );
+        // rs.* already carries claimed_customer_name (what the employee typed
+        // in by hand) alongside i.full_name AS customer_name (the real name on
+        // the ticket) — admin compares the two as a lightweight fraud check.
         res.json(rows);
     } catch (err) {
         console.error('[review-submissions] list failed:', err);
