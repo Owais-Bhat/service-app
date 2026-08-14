@@ -6131,17 +6131,17 @@ async function fetchVerifiedJobsForMonth(connection, month) {
 
 // Same reasoning as fetchVerifiedJobsForMonth: shared by both leaderboard
 // routes so the award endpoint's bonus totals can never drift from what's
-// displayed. Scoped to the JOB's month (job_card_filled_at), not whenever
-// admin happened to verify the review, so a late review doesn't shift an
-// employee's points into a different month than the job itself.
+// displayed. Scoped to the month admin approved the claim (reviewed_at), not
+// the job's job_card_filled_at — that field is frequently never set (job
+// cards get transcribed on a separate, often-skipped timeline), which left
+// approved points stuck off the leaderboard forever.
 async function fetchApprovedBonusPointsForMonth(connection, month) {
     const [rows] = await connection.query(
         `SELECT rs.employee_id, p.full_name AS name, SUM(rs.points) AS points
            FROM review_submissions rs
-           JOIN inquiries i ON i.id = rs.inquiry_id
            LEFT JOIN profiles p ON p.id = rs.employee_id
           WHERE rs.status = 'approved'
-            AND DATE_FORMAT(i.job_card_filled_at, '%Y-%m') = ?
+            AND DATE_FORMAT(rs.reviewed_at, '%Y-%m') = ?
           GROUP BY rs.employee_id, p.full_name`,
         [month]
     );
