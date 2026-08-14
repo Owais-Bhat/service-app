@@ -5509,6 +5509,23 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
             );
         }
 
+        // Approved Google Review claims carry a real customer star rating
+        // too (set by admin off the screenshot) — fold them into the same
+        // review-count/avg-rating/5-stars stats as SMS feedback. Job Card
+        // claims have no star rating so they're left out here; SMS claims
+        // are skipped since they're already counted via inquiries.feedback_rating
+        // above and would otherwise be double-counted.
+        const [googleReviewRows] = await connection.execute(
+            `SELECT employee_id, star_rating, reviewed_at FROM review_submissions
+              WHERE status = 'approved' AND review_type = 'google' AND star_rating IS NOT NULL`
+        );
+        fbRows = fbRows.concat(googleReviewRows.map(r => ({
+            feedback_employee_id: r.employee_id,
+            feedback_rating: r.star_rating,
+            feedback_at: r.reviewed_at,
+            created_at: r.reviewed_at,
+        })));
+
         connection.release();
         connection = null;
 
