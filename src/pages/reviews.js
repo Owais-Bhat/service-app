@@ -35,18 +35,17 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 const REVIEW_TYPE_LABEL = { google: 'Google Review', job_card: 'Job Card Review', sms: 'SMS Feedback Review' };
 const REVIEW_TYPE_POINTS_LABEL = { google: 'up to 30 pts (5★ only)', job_card: '10 pts', sms: '10 pts' };
 
-// SMS-type submissions are auto-created (no employee claim), so there's
-// nothing to compare — just show the ticket's real customer name. For
-// employee-submitted claims, flag it in red when what they typed doesn't
-// match the real name on the ticket — a lightweight fraud/typo check.
+// Installation claims have no linked ticket at all — just show what the
+// employee typed (name + address), nothing to cross-check against. Service
+// claims are picked from the employee's own ticket list, so the name is
+// already the real one. SMS claims are auto-created off a real ticket.
 const customerCell = (r) => {
-  const real = r.customer_name || '—';
-  if (r.review_type === 'sms' || !r.claimed_customer_name) return esc(real);
-  const mismatch = r.claimed_customer_name.trim().toLowerCase() !== String(r.customer_name || '').trim().toLowerCase();
-  const claimedHtml = `<span style="${mismatch ? 'color:var(--danger);font-weight:700;' : ''}">${esc(r.claimed_customer_name)}</span>`;
-  return mismatch
-    ? `${claimedHtml}<br><span style="font-size:0.75rem;color:var(--text-dim);">ticket says: ${esc(real)}</span>`
-    : claimedHtml;
+  if (!r.ticket_no) {
+    return r.claimed_customer_name
+      ? `${esc(r.claimed_customer_name)}${r.claimed_address ? `<br><span style="font-size:0.75rem;color:var(--text-dim);">${esc(r.claimed_address)}</span>` : ''}`
+      : '—';
+  }
+  return esc(r.customer_name || '—');
 };
 
 const statusBadge = (status) => {
@@ -78,36 +77,18 @@ export async function renderEmployeeReviewsTab(container) {
   }
 }
 
-function reviewTypeOptionsFor(jobCardType) {
-  if (jobCardType === 'installation') return ['google', 'job_card'];
-  return ['google']; // service — SMS review is automatic, not submitted here
-}
-
 function renderEmployeeBody(body, mine, container) {
   body.innerHTML = `
     <div class="card" style="margin-bottom:20px;">
       <div class="card-header"><span class="card-title">New Claim</span></div>
       <div class="card-body">
-        <label style="display:block;margin-bottom:8px;font-weight:600;">Ticket Number</label>
-        <input id="rv-ticket" type="text" placeholder="NE-260812-8403" style="width:100%;padding:8px;margin-bottom:4px;text-transform:uppercase;"/>
-        <p id="rv-ticket-status" style="min-height:18px;font-size:0.82rem;margin:0 0 16px;"></p>
-        <label style="display:block;margin-bottom:8px;font-weight:600;">Customer Name</label>
-        <input id="rv-customer" type="text" placeholder="Type the customer's name" style="width:100%;padding:8px;margin-bottom:16px;"/>
         <label style="display:block;margin-bottom:8px;font-weight:600;">Job Type</label>
-        <select id="rv-jobtype" style="width:100%;padding:8px;margin-bottom:16px;" disabled>
-          <option value="">Enter a valid ticket number first</option>
+        <select id="rv-jobtype" style="width:100%;padding:8px;margin-bottom:16px;">
+          <option value="">Select…</option>
+          <option value="service">Service</option>
+          <option value="installation">Installation</option>
         </select>
-        <label style="display:block;margin-bottom:8px;font-weight:600;">Review Type</label>
-        <select id="rv-type" style="width:100%;padding:8px;margin-bottom:16px;" disabled>
-          <option value="">Choose a job type first</option>
-        </select>
-        <label style="display:block;margin-bottom:8px;font-weight:600;">Screenshot / Proof Photo</label>
-        <input id="rv-photo" type="file" accept="image/*" style="margin-bottom:16px;"/>
-        <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;cursor:pointer;">
-          <input type="checkbox" id="rv-policy" style="margin-top:3px;"/>
-          <span>I confirm this proof is genuine and was submitted by the actual customer for this job. Submitting false or fabricated reviews may result in disciplinary action.</span>
-        </label>
-        <button class="btn btn-primary" id="rv-submit" disabled>Submit Claim</button>
+        <div id="rv-form-body"><p style="color:var(--text-dim);">Choose a job type to continue.</p></div>
       </div>
     </div>
     <div class="card">
@@ -118,7 +99,7 @@ function renderEmployeeBody(body, mine, container) {
           <tbody>
             ${mine.length ? mine.map(r => `
               <tr>
-                <td>${esc(r.ticket_no || '—')}</td>
+                <td>${esc(r.ticket_no || r.claimed_address || '—')}</td>
                 <td>${REVIEW_TYPE_LABEL[r.review_type] || esc(r.review_type)}</td>
                 <td>${statusBadge(r.status)}</td>
                 <td>${r.points != null ? r.points : '—'}</td>
@@ -130,72 +111,54 @@ function renderEmployeeBody(body, mine, container) {
     </div>
   `;
 
-  const ticketInput = body.querySelector('#rv-ticket');
-  const ticketStatus = body.querySelector('#rv-ticket-status');
   const jobTypeSelect = body.querySelector('#rv-jobtype');
-  const typeSelect = body.querySelector('#rv-type');
-  const submitBtn = body.querySelector('#rv-submit');
-  let ticketVerified = false;
+  const formBody = body.querySelector('#rv-form-body');
 
-  const refreshReviewTypeOptions = () => {
-    const jobType = jobTypeSelect.value;
-    if (!jobType) {
-      typeSelect.disabled = true;
-      typeSelect.innerHTML = '<option value="">Choose a job type first</option>';
-      submitBtn.disabled = true;
-      return;
-    }
-    const options = reviewTypeOptionsFor(jobType);
-    typeSelect.innerHTML = options.map(t => `<option value="${t}">${REVIEW_TYPE_LABEL[t]} (${REVIEW_TYPE_POINTS_LABEL[t]})</option>`).join('');
-    typeSelect.disabled = false;
-    submitBtn.disabled = false;
-  };
-  jobTypeSelect.addEventListener('change', refreshReviewTypeOptions);
-
-  const setLocked = (msg, color) => {
-    ticketVerified = false;
-    jobTypeSelect.disabled = true;
-    jobTypeSelect.innerHTML = '<option value="">Enter a valid ticket number first</option>';
-    refreshReviewTypeOptions();
-    ticketStatus.textContent = msg;
-    ticketStatus.style.color = color;
-  };
-
-  let debounceTimer;
-  let lookupSeq = 0;
-  ticketInput.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    const value = ticketInput.value.trim();
-    if (!value) { setLocked('', ''); return; }
-    ticketStatus.textContent = 'Checking…';
-    ticketStatus.style.color = 'var(--text-dim)';
-    debounceTimer = setTimeout(async () => {
-      const seq = ++lookupSeq;
-      try {
-        await apiGet(`/review-submissions/ticket-lookup?ticket_no=${encodeURIComponent(value)}`);
-        if (seq !== lookupSeq) return; // a newer keystroke has already started a fresher lookup
-        ticketVerified = true;
-        jobTypeSelect.innerHTML = '<option value="">Select…</option><option value="service">Service</option><option value="installation">Installation</option>';
-        jobTypeSelect.disabled = false;
-        ticketStatus.textContent = '✓ Ticket found — pick the job type below';
-        ticketStatus.style.color = 'var(--success)';
-      } catch (err) {
-        if (seq !== lookupSeq) return;
-        setLocked(err.message, 'var(--danger)');
-      }
-    }, 500);
+  jobTypeSelect.addEventListener('change', () => {
+    if (jobTypeSelect.value === 'service') renderServiceForm(formBody, container);
+    else if (jobTypeSelect.value === 'installation') renderInstallationForm(formBody, container);
+    else formBody.innerHTML = '<p style="color:var(--text-dim);">Choose a job type to continue.</p>';
   });
+}
 
+// Service: pick one of the employee's own completed tickets from a dropdown
+// (no free-text entry — that kept coming up empty/typo-prone) and attach a
+// Google Review screenshot. Only Google Review applies to service jobs; SMS
+// feedback covers the rest automatically.
+async function renderServiceForm(formBody, container) {
+  formBody.innerHTML = '<p style="color:var(--text-dim);">Loading your completed jobs…</p>';
+  let jobs;
+  try {
+    jobs = await apiGet('/review-submissions/resolved-jobs');
+  } catch (err) {
+    formBody.innerHTML = `<p style="color:var(--danger);">${esc(err.message)}</p>`;
+    return;
+  }
+
+  if (!jobs.length) {
+    formBody.innerHTML = '<p style="color:var(--text-dim);">No completed jobs to claim yet.</p>';
+    return;
+  }
+
+  formBody.innerHTML = `
+    <label style="display:block;margin-bottom:8px;font-weight:600;">Completed Job</label>
+    <select id="rv-job" style="width:100%;padding:8px;margin-bottom:16px;">
+      ${jobs.map(j => `<option value="${esc(j.id)}">${esc(j.ticket_no || j.id.slice(0, 8))} — ${esc(j.full_name || 'Customer')}</option>`).join('')}
+    </select>
+    <label style="display:block;margin-bottom:8px;font-weight:600;">Google Review Screenshot</label>
+    <input id="rv-photo" type="file" accept="image/*" style="margin-bottom:16px;"/>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;cursor:pointer;">
+      <input type="checkbox" id="rv-policy" style="margin-top:3px;"/>
+      <span>I confirm this proof is genuine and was submitted by the actual customer for this job. Submitting false or fabricated reviews may result in disciplinary action.</span>
+    </label>
+    <button class="btn btn-primary" id="rv-submit">Submit Claim (up to 30 pts)</button>
+  `;
+
+  const submitBtn = formBody.querySelector('#rv-submit');
   submitBtn.addEventListener('click', async () => {
-    const ticketNo = ticketInput.value.trim();
-    const customerName = body.querySelector('#rv-customer').value.trim();
-    const jobType = jobTypeSelect.value;
-    const reviewType = typeSelect.value;
-    const photoInput = body.querySelector('#rv-photo');
-    const policyChecked = body.querySelector('#rv-policy').checked;
-    if (!ticketVerified) return toast('Enter a valid ticket number first', 'error');
-    if (!customerName) return toast("Enter the customer's name", 'error');
-    if (!jobType) return toast('Choose a job type', 'error');
+    const inquiryId = formBody.querySelector('#rv-job').value;
+    const photoInput = formBody.querySelector('#rv-photo');
+    const policyChecked = formBody.querySelector('#rv-policy').checked;
     if (!photoInput.files[0]) return toast('Please attach a photo', 'error');
     if (!policyChecked) return toast('Please agree to the policy checkbox', 'error');
 
@@ -204,12 +167,67 @@ function renderEmployeeBody(body, mine, container) {
     try {
       const formData = new FormData();
       formData.append('photo', photoInput.files[0]);
-      formData.append('ticket_no', ticketNo);
-      formData.append('customer_name', customerName);
-      formData.append('job_type', jobType);
-      formData.append('review_type', reviewType);
+      formData.append('inquiry_id', inquiryId);
       formData.append('policy_agreed', 'true');
-      const res = await fetch(`${API}/review-submissions`, {
+      const res = await fetch(`${API}/review-submissions/service`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not submit');
+      toast('Claim submitted — admin will verify it', 'success');
+      renderEmployeeReviewsTab(container);
+    } catch (err) {
+      toast(err.message, 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Claim (up to 30 pts)';
+    }
+  });
+}
+
+// Installation: no ticket link — the employee types the customer's name and
+// address by hand, and can attach a Google Review photo, a Job Card photo,
+// or both together in one submission.
+function renderInstallationForm(formBody, container) {
+  formBody.innerHTML = `
+    <label style="display:block;margin-bottom:8px;font-weight:600;">Customer Name</label>
+    <input id="rv-customer" type="text" placeholder="Customer's name" style="width:100%;padding:8px;margin-bottom:16px;"/>
+    <label style="display:block;margin-bottom:8px;font-weight:600;">Address</label>
+    <input id="rv-address" type="text" placeholder="Installation address" style="width:100%;padding:8px;margin-bottom:16px;"/>
+    <label style="display:block;margin-bottom:8px;font-weight:600;">Google Review Screenshot (up to 30 pts)</label>
+    <input id="rv-google-photo" type="file" accept="image/*" style="margin-bottom:16px;"/>
+    <label style="display:block;margin-bottom:8px;font-weight:600;">Job Card Review Screenshot (10 pts)</label>
+    <input id="rv-jobcard-photo" type="file" accept="image/*" style="margin-bottom:16px;"/>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;cursor:pointer;">
+      <input type="checkbox" id="rv-policy" style="margin-top:3px;"/>
+      <span>I confirm this proof is genuine and was submitted by the actual customer for this job. Submitting false or fabricated reviews may result in disciplinary action.</span>
+    </label>
+    <button class="btn btn-primary" id="rv-submit">Submit Claim</button>
+  `;
+
+  const submitBtn = formBody.querySelector('#rv-submit');
+  submitBtn.addEventListener('click', async () => {
+    const customerName = formBody.querySelector('#rv-customer').value.trim();
+    const address = formBody.querySelector('#rv-address').value.trim();
+    const googlePhoto = formBody.querySelector('#rv-google-photo').files[0];
+    const jobCardPhoto = formBody.querySelector('#rv-jobcard-photo').files[0];
+    const policyChecked = formBody.querySelector('#rv-policy').checked;
+    if (!customerName) return toast("Enter the customer's name", 'error');
+    if (!address) return toast('Enter the address', 'error');
+    if (!googlePhoto && !jobCardPhoto) return toast('Attach at least one photo', 'error');
+    if (!policyChecked) return toast('Please agree to the policy checkbox', 'error');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+    try {
+      const formData = new FormData();
+      formData.append('customer_name', customerName);
+      formData.append('address', address);
+      if (googlePhoto) formData.append('google_photo', googlePhoto);
+      if (jobCardPhoto) formData.append('job_card_photo', jobCardPhoto);
+      formData.append('policy_agreed', 'true');
+      const res = await fetch(`${API}/review-submissions/installation`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` },
         body: formData,
