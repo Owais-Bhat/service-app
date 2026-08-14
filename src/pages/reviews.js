@@ -93,9 +93,13 @@ function renderEmployeeBody(body, mine, container) {
         <p id="rv-ticket-status" style="min-height:18px;font-size:0.82rem;margin:0 0 16px;"></p>
         <label style="display:block;margin-bottom:8px;font-weight:600;">Customer Name</label>
         <input id="rv-customer" type="text" placeholder="Type the customer's name" style="width:100%;padding:8px;margin-bottom:16px;"/>
+        <label style="display:block;margin-bottom:8px;font-weight:600;">Job Type</label>
+        <select id="rv-jobtype" style="width:100%;padding:8px;margin-bottom:16px;" disabled>
+          <option value="">Enter a valid ticket number first</option>
+        </select>
         <label style="display:block;margin-bottom:8px;font-weight:600;">Review Type</label>
         <select id="rv-type" style="width:100%;padding:8px;margin-bottom:16px;" disabled>
-          <option value="">Enter a valid ticket number first</option>
+          <option value="">Choose a job type first</option>
         </select>
         <label style="display:block;margin-bottom:8px;font-weight:600;">Screenshot / Proof Photo</label>
         <input id="rv-photo" type="file" accept="image/*" style="margin-bottom:16px;"/>
@@ -128,21 +132,37 @@ function renderEmployeeBody(body, mine, container) {
 
   const ticketInput = body.querySelector('#rv-ticket');
   const ticketStatus = body.querySelector('#rv-ticket-status');
+  const jobTypeSelect = body.querySelector('#rv-jobtype');
   const typeSelect = body.querySelector('#rv-type');
   const submitBtn = body.querySelector('#rv-submit');
-  let verifiedJobCardType = null;
-  let lookupSeq = 0;
+  let ticketVerified = false;
+
+  const refreshReviewTypeOptions = () => {
+    const jobType = jobTypeSelect.value;
+    if (!jobType) {
+      typeSelect.disabled = true;
+      typeSelect.innerHTML = '<option value="">Choose a job type first</option>';
+      submitBtn.disabled = true;
+      return;
+    }
+    const options = reviewTypeOptionsFor(jobType);
+    typeSelect.innerHTML = options.map(t => `<option value="${t}">${REVIEW_TYPE_LABEL[t]} (${REVIEW_TYPE_POINTS_LABEL[t]})</option>`).join('');
+    typeSelect.disabled = false;
+    submitBtn.disabled = false;
+  };
+  jobTypeSelect.addEventListener('change', refreshReviewTypeOptions);
 
   const setLocked = (msg, color) => {
-    verifiedJobCardType = null;
-    typeSelect.disabled = true;
-    typeSelect.innerHTML = '<option value="">Enter a valid ticket number first</option>';
-    submitBtn.disabled = true;
+    ticketVerified = false;
+    jobTypeSelect.disabled = true;
+    jobTypeSelect.innerHTML = '<option value="">Enter a valid ticket number first</option>';
+    refreshReviewTypeOptions();
     ticketStatus.textContent = msg;
     ticketStatus.style.color = color;
   };
 
   let debounceTimer;
+  let lookupSeq = 0;
   ticketInput.addEventListener('input', () => {
     clearTimeout(debounceTimer);
     const value = ticketInput.value.trim();
@@ -152,14 +172,12 @@ function renderEmployeeBody(body, mine, container) {
     debounceTimer = setTimeout(async () => {
       const seq = ++lookupSeq;
       try {
-        const job = await apiGet(`/review-submissions/ticket-lookup?ticket_no=${encodeURIComponent(value)}`);
+        await apiGet(`/review-submissions/ticket-lookup?ticket_no=${encodeURIComponent(value)}`);
         if (seq !== lookupSeq) return; // a newer keystroke has already started a fresher lookup
-        verifiedJobCardType = job.job_card_type;
-        const options = reviewTypeOptionsFor(verifiedJobCardType);
-        typeSelect.innerHTML = options.map(t => `<option value="${t}">${REVIEW_TYPE_LABEL[t]} (${REVIEW_TYPE_POINTS_LABEL[t]})</option>`).join('');
-        typeSelect.disabled = false;
-        submitBtn.disabled = false;
-        ticketStatus.textContent = `✓ Found — ${verifiedJobCardType} job`;
+        ticketVerified = true;
+        jobTypeSelect.innerHTML = '<option value="">Select…</option><option value="service">Service</option><option value="installation">Installation</option>';
+        jobTypeSelect.disabled = false;
+        ticketStatus.textContent = '✓ Ticket found — pick the job type below';
         ticketStatus.style.color = 'var(--success)';
       } catch (err) {
         if (seq !== lookupSeq) return;
@@ -171,11 +189,13 @@ function renderEmployeeBody(body, mine, container) {
   submitBtn.addEventListener('click', async () => {
     const ticketNo = ticketInput.value.trim();
     const customerName = body.querySelector('#rv-customer').value.trim();
+    const jobType = jobTypeSelect.value;
     const reviewType = typeSelect.value;
     const photoInput = body.querySelector('#rv-photo');
     const policyChecked = body.querySelector('#rv-policy').checked;
-    if (!verifiedJobCardType) return toast('Enter a valid ticket number first', 'error');
+    if (!ticketVerified) return toast('Enter a valid ticket number first', 'error');
     if (!customerName) return toast("Enter the customer's name", 'error');
+    if (!jobType) return toast('Choose a job type', 'error');
     if (!photoInput.files[0]) return toast('Please attach a photo', 'error');
     if (!policyChecked) return toast('Please agree to the policy checkbox', 'error');
 
@@ -186,6 +206,7 @@ function renderEmployeeBody(body, mine, container) {
       formData.append('photo', photoInput.files[0]);
       formData.append('ticket_no', ticketNo);
       formData.append('customer_name', customerName);
+      formData.append('job_type', jobType);
       formData.append('review_type', reviewType);
       formData.append('policy_agreed', 'true');
       const res = await fetch(`${API}/review-submissions`, {

@@ -1336,6 +1336,7 @@ const requiredColumns = {
         { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
         { name: 'worker_type', definition: "VARCHAR(20) DEFAULT 'fixed' COMMENT 'fixed = permanent employee, gig = public-pool competitive worker'" },
         { name: 'installations_enabled', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee see/receive the Installations tab'" },
+        { name: 'allow_foc', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee mark a reopened ticket FOC (free of cost, no bill)'" },
         { name: 'face_descriptor', definition: "TEXT COMMENT 'JSON array of 128 floats — reference face captured on the first photo clock-in'" },
         { name: 'face_registered_at', definition: 'DATETIME DEFAULT NULL' },
         { name: 'photo_clockin_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee skips selfie/face verification at clock-in even when the global setting requires it'" },
@@ -2607,7 +2608,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled', 'allow_foc']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -3598,10 +3599,10 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type, installations_enabled FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type, installations_enabled, allow_foc FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
-        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1 };
+        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1, allow_foc: 1 };
 
         // Block client logins — clients use the public landing page, not the dashboard.
         if (profile.role !== 'admin' && profile.role !== 'employee') {
@@ -3615,7 +3616,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled, allow_foc: profile.allow_foc === undefined ? 1 : profile.allow_foc }
         });
     } catch (error) {
         console.error('Signin error:', error);
@@ -3657,7 +3658,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType, installationsEnabled } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType, installationsEnabled, allowFoc } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -3690,7 +3691,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type, installations_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -3703,7 +3704,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     can_update_profile ? 1 : 0,
                     alwaysAssign ? 1 : 0,
                     workerType === 'gig' ? 'gig' : 'fixed',
-                    installationsEnabled === false ? 0 : 1
+                    installationsEnabled === false ? 0 : 1,
+                    allowFoc === false ? 0 : 1
                 ]
             );
 
@@ -3738,7 +3740,8 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         alwaysAssign,
         allowed_tabs,
         workerType,
-        installationsEnabled
+        installationsEnabled,
+        allowFoc
     } = req.body;
 
     try {
@@ -3844,6 +3847,10 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (installationsEnabled !== undefined) {
                 profileUpdates.push('installations_enabled = ?');
                 profileParams.push(installationsEnabled ? 1 : 0);
+            }
+            if (allowFoc !== undefined) {
+                profileUpdates.push('allow_foc = ?');
+                profileParams.push(allowFoc ? 1 : 0);
             }
             if (allowed_tabs !== undefined) {
                 // null/empty array => full access (store NULL). Otherwise store a JSON array of tab ids.
@@ -5901,10 +5908,11 @@ const REVIEW_TYPE_POINTS = { google: 30, job_card: 10, sms: 10 };
 
 // The employee types in a ticket number by hand (no dropdown of "eligible"
 // jobs — that list kept coming up empty for real employees). This endpoint
-// just confirms the ticket exists and was worked by them, and returns its
-// job_card_type so the client can offer the right Review Type options:
-// service jobs only take a Google claim (SMS review is automatic — see
-// /api/feedback/submit); installation jobs take Google or Job Card.
+// only confirms the ticket exists and was worked by them — it deliberately
+// does NOT require job_card_type to already be set, since installation jobs
+// especially often haven't had their job card filled yet when the claim is
+// made. The employee picks Service/Installation themselves on the client;
+// that choice (not the DB's job_card_type) drives the Review Type options.
 app.get('/api/review-submissions/ticket-lookup', authenticateToken, async (req, res) => {
     if (req.user.role !== 'employee') return res.sendStatus(403);
     const ticketNo = String(req.query.ticket_no || '').trim().toUpperCase();
@@ -5913,16 +5921,13 @@ app.get('/api/review-submissions/ticket-lookup', authenticateToken, async (req, 
     try {
         connection = await getConn();
         const [[job]] = await connection.query(
-            `SELECT id, ticket_no, job_card_type FROM inquiries
+            `SELECT id, ticket_no FROM inquiries
               WHERE ticket_no = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?)
               LIMIT 1`,
             [ticketNo, req.user.id, req.user.id]
         );
         if (!job) return res.status(404).json({ error: 'No ticket found with that number assigned to you' });
-        if (!['service', 'installation'].includes(job.job_card_type)) {
-            return res.status(400).json({ error: 'This job\'s type is not set yet — ask admin to fill the job card first' });
-        }
-        res.json({ ticket_no: job.ticket_no, job_card_type: job.job_card_type });
+        res.json({ ticket_no: job.ticket_no });
     } catch (err) {
         console.error('[review-submissions] ticket-lookup failed:', err);
         res.status(500).json({ error: 'Could not look up that ticket' });
@@ -5958,10 +5963,14 @@ app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), as
     if (req.user.role !== 'employee') return res.sendStatus(403);
     const ticketNo = String(req.body?.ticket_no || '').trim().toUpperCase();
     const claimedCustomerName = String(req.body?.customer_name || '').trim();
+    const jobType = req.body?.job_type;
     const reviewType = req.body?.review_type;
     const policyAgreed = req.body?.policy_agreed === 'true' || req.body?.policy_agreed === '1';
     if (!ticketNo) return res.status(400).json({ error: 'ticket_no is required' });
     if (!claimedCustomerName) return res.status(400).json({ error: 'customer_name is required' });
+    if (!['service', 'installation'].includes(jobType)) {
+        return res.status(400).json({ error: 'job_type must be service or installation' });
+    }
     if (!['google', 'job_card'].includes(reviewType)) {
         return res.status(400).json({ error: 'review_type must be google or job_card' });
     }
@@ -5974,9 +5983,11 @@ app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), as
 
         // Re-resolve the ticket server-side — never trust a client-supplied
         // inquiry id/ownership, even though the client already ran the same
-        // lookup before enabling the form.
+        // lookup before enabling the form. job_type is the employee's own
+        // manual claim (Service or Installation), not read off the ticket —
+        // the ticket's job_card_type is frequently still unset at claim time.
         const [[job]] = await connection.query(
-            `SELECT id, job_card_type FROM inquiries
+            `SELECT id FROM inquiries
               WHERE ticket_no = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?)
               LIMIT 1`,
             [ticketNo, req.user.id, req.user.id]
@@ -5984,11 +5995,8 @@ app.post('/api/review-submissions', authenticateToken, uploadSingle('photo'), as
         if (!job) return res.status(404).json({ error: 'No ticket found with that number assigned to you' });
         const inquiryId = job.id;
 
-        if (reviewType === 'job_card' && job.job_card_type !== 'installation') {
+        if (reviewType === 'job_card' && jobType !== 'installation') {
             return res.status(400).json({ error: 'Job Card review claims are only for installation jobs' });
-        }
-        if (reviewType === 'google' && !['service', 'installation'].includes(job.job_card_type)) {
-            return res.status(400).json({ error: 'This job type is not eligible for a review claim' });
         }
 
         const [dupes] = await connection.query(

@@ -3495,6 +3495,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const normalizedCurrentStatus = displayStatus(currentStatus);
     const isResolvedReadOnly = isLocked(normalizedCurrentStatus);
     const isResolving = normalizedCurrentStatus === 'resolved';
+    // Admin-controlled: can this employee mark a reopened ticket FOC at all.
+    const focAllowed = !empProfile || empProfile.allow_foc === undefined || empProfile.allow_foc === null || Number(empProfile.allow_foc) === 1;
+    const isReopened = Number(inquiryRow?.reopened) === 1;
     // Device tracking feature flag (master) + per-ticket flag.
     await loadDeviceTrackingEnabled();
     const deviceFeatureOn = deviceTrackingEnabled;
@@ -3694,16 +3697,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           <!-- TAB 1: STATUS -->
           <div class="mst-pane active" data-pane="status">
-            ${Number(inquiryRow?.reopened) === 1 ? `
+            ${isReopened ? `
               <div style="padding:12px 14px;border-radius:12px;background:rgba(245,158,11,0.12);border:1px solid var(--warning);margin-bottom:14px;font-size:0.85rem;line-height:1.5;">
-                🔁 <b>Reopened ticket — issue not resolved.</b> The customer already paid for this service, so complete the rework as <b>FOC (Free of Cost)</b> — no new bill will be generated.
+                🔁 <b>Reopened ticket — issue not resolved.</b> The customer already paid for this service, so complete the rework as <b>FOC (Free of Cost)</b>${focAllowed ? ' — no new bill will be generated.' : '. Ask admin — you don\'t have FOC permission on your account, so this ticket will need to be resolved normally.'}
               </div>` : ''}
             <div class="form-group">
               <label>New Status</label>
               <select id="new-status" ${isResolvedReadOnly ? 'disabled' : ''}>
-                ${Number(inquiryRow?.reopened) === 1 ? `
+                ${isReopened ? `
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
-                  <option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>
+                  ${focAllowed ? `<option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>` : ''}
                 ` : `
                   <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
@@ -3863,6 +3866,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           <!-- TAB 3: BILL -->
           <div class="mst-pane" data-pane="bill">
+            ${isReopened && focAllowed ? `
+            <label style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:12px;background:rgba(245,158,11,0.08);border:1px solid var(--warning);margin-bottom:14px;cursor:pointer;font-weight:600;">
+              <input type="checkbox" id="foc-no-bill" ${normalizedCurrentStatus==='foc' ? 'checked' : ''} style="width:16px;height:16px;margin:0;cursor:pointer;"/>
+              No Bill — FOC (Free of Cost)
+            </label>` : ''}
             <div id="bill-locked-hint" style="display:${isResolving ? 'none' : 'block'}; padding:14px; border-radius:12px; background:var(--bg-soft); border:1px dashed var(--border); margin-bottom:14px; font-size:0.85rem; color:var(--text-soft);">
               ℹ️ Set status to <b>Resolved</b> on the Status tab to enable billing.
             </div>
@@ -4664,6 +4672,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       // FOC: no bill generated, but the client's bill number is mandatory.
       const focGroup = overlay.querySelector('#foc-billno-group');
       if (focGroup) focGroup.style.display = statusSel.value === 'foc' ? 'block' : 'none';
+      // Keep the Bill tab's "No Bill — FOC" checkbox in sync when the Status
+      // tab's dropdown is the one that changed.
+      const focCheckbox = overlay.querySelector('#foc-no-bill');
+      if (focCheckbox) focCheckbox.checked = statusSel.value === 'foc';
       // Reschedule: show the date/time picker.
       const reschedGroup = overlay.querySelector('#reschedule-group');
       if (reschedGroup) reschedGroup.style.display = statusSel.value === 'reschedule' ? 'block' : 'none';
@@ -4677,6 +4689,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         : 'Work Details / Progress Update <span style="color:var(--danger)">*</span>';
       renderPayStatus();
     };
+    // Bill tab's "No Bill — FOC" checkbox is just another way to set the same
+    // status value the Status tab's dropdown drives — reuse its onchange so
+    // both entry points stay in sync and behave identically.
+    overlay.querySelector('#foc-no-bill')?.addEventListener('change', (e) => {
+      statusSel.value = e.target.checked ? 'foc' : 'resolved';
+      statusSel.onchange();
+    });
     // Re-evaluate the save gate as the FOC bill number is typed.
     overlay.querySelector('#foc-bill-no')?.addEventListener('input', () => renderPayStatus());
     // Re-evaluate the save gate as the reschedule date/time is picked.

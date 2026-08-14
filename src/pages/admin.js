@@ -2589,6 +2589,10 @@ export async function renderUsers(container) {
                 <input type="checkbox" id="usr-installations-enabled" ${!isEdit || user.installations_enabled === undefined || user.installations_enabled === null || Number(user.installations_enabled) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
                 Allow Installations tab (uncheck to hide it for this staff member — useful for Gig Workers)
               </label>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px;">
+                <input type="checkbox" id="usr-allow-foc" ${!isEdit || user.allow_foc === undefined || user.allow_foc === null || Number(user.allow_foc) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
+                Allow FOC (uncheck to hide the free-of-cost / no-bill option for this staff member on reopened tickets)
+              </label>
             </div>
             <div class="form-group">
               <label>Company / Building Name</label>
@@ -2679,6 +2683,7 @@ export async function renderUsers(container) {
       const alwaysAssign = overlay.querySelector("#usr-always-assign").checked;
       const workerType = overlay.querySelector("#usr-worker-type").value;
       const installationsEnabled = overlay.querySelector("#usr-installations-enabled").checked;
+      const allowFoc = overlay.querySelector("#usr-allow-foc").checked;
 
       if (!fullName) return toast("Full name is required", "warning");
       if (!email) return toast("Email is required", "warning");
@@ -2702,6 +2707,7 @@ export async function renderUsers(container) {
         alwaysAssign: alwaysAssign ? 1 : 0,
         workerType,
         installationsEnabled,
+        allowFoc,
       };
 
       // Tab access: unchecked "limit" = full access (null). Otherwise the
