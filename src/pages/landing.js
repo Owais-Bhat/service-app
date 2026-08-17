@@ -745,7 +745,7 @@ export function renderLandingPage(container, onPortalClick) {
         <input id="srf-location" type="text"
                placeholder="${state.locationMode === 'gps' ? 'Tap "Detect" to auto-fill…' : 'Type your address…'}"
                class="srf-input" value="${state.locationValue}" ${state.locationMode === 'gps' ? 'readonly' : ''}/>
-        ${state.locationMode === 'gps' ? `<button type="button" class="srf-input-action" id="srf-detect">${ICONS.crosshair}</button>` : ''}
+        ${state.locationMode === 'gps' ? `<button type="button" class="srf-input-action srf-detect-btn" id="srf-detect" title="Detect my location"><span class="srf-detect-ping"></span>${ICONS.crosshair}</button>` : ''}
       </div>
 
       ${state.coords ? `
@@ -964,7 +964,9 @@ export function renderLandingPage(container, onPortalClick) {
       <button class="srf-btn srf-btn-primary" id="srf-track-go" ${state.trackLoading ? 'disabled' : ''}>
         ${state.trackLoading ? '<span class="srf-spin"></span>' : ''}<span>${state.trackTicketNo ? 'Get this ticket' : 'Show my tickets'}</span> ${ICONS.arrowRight}
       </button>
-      <button class="srf-btn-link" id="srf-track-to-complaint" style="margin-top:10px;">${ICONS.shield} Something wrong with a past service? File a complaint</button>
+      <button class="srf-btn srf-btn-secondary srf-btn-sm" id="srf-track-to-complaint">
+        <span class="srf-btn-sm-icon">${ICONS.shield}</span><span>File a complaint</span>
+      </button>
     `;
   }
 
@@ -1338,7 +1340,7 @@ export function renderLandingPage(container, onPortalClick) {
           renderCardOnly();
         } catch {
           toast('Could not detect location - switch to Manual', 'error');
-          detectBtn.innerHTML = ICONS.crosshair;
+          detectBtn.innerHTML = `<span class="srf-detect-ping"></span>${ICONS.crosshair}`;
         }
         return;
         navigator.geolocation.getCurrentPosition(
