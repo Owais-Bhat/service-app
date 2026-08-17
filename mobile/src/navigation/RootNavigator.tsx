@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { brand } from '../theme/tokens';
+import LandingScreen from '../screens/LandingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ClientSubmitTicketScreen from '../screens/ClientSubmitTicketScreen';
 import ClientTrackTicketScreen from '../screens/ClientTrackTicketScreen';
@@ -12,6 +13,7 @@ import EmployeeDashboardScreen from '../screens/EmployeeDashboardScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 
 type GuestStackParams = {
+  Landing: undefined;
   Login: undefined;
   SubmitTicket: undefined;
   TrackTicket: undefined;
@@ -19,13 +21,18 @@ type GuestStackParams = {
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
 
-function LoginRoute({ navigation }: any) {
+function LandingRoute({ navigation }: any) {
   return (
-    <LoginScreen
+    <LandingScreen
+      onStaffLogin={() => navigation.navigate('Login')}
       onGoSubmit={() => navigation.navigate('SubmitTicket')}
       onGoTrack={() => navigation.navigate('TrackTicket')}
     />
   );
+}
+
+function LoginRoute({ navigation }: any) {
+  return <LoginScreen onBack={() => navigation.goBack()} />;
 }
 
 function SubmitTicketRoute({ navigation }: any) {
@@ -36,14 +43,16 @@ function TrackTicketRoute({ navigation }: any) {
   return <ClientTrackTicketScreen onBack={() => navigation.goBack()} />;
 }
 
-// Guest side (unauthenticated) gets a real stack — sign-in, submit a
-// request, track a request — with native slide transitions between them.
-// Once signed in, role picks exactly one dashboard, so no stack is needed
-// there yet; add one per role as each grows past a single screen.
+// Guest side (unauthenticated) gets a real stack — land on the public
+// Landing screen, then staff sign-in, submit a request, or track a
+// request, with native slide transitions between them. Once signed in,
+// role picks exactly one dashboard, so no stack is needed there yet; add
+// one per role as each grows past a single screen.
 function GuestNavigator() {
   return (
     <GuestStack.Navigator screenOptions={{ headerShown: false }}>
-      <GuestStack.Screen name="Login" component={LoginRoute} />
+      <GuestStack.Screen name="Landing" component={LandingRoute} />
+      <GuestStack.Screen name="Login" component={LoginRoute} options={{ animation: 'slide_from_right' }} />
       <GuestStack.Screen name="SubmitTicket" component={SubmitTicketRoute} options={{ animation: 'slide_from_right' }} />
       <GuestStack.Screen name="TrackTicket" component={TrackTicketRoute} options={{ animation: 'slide_from_right' }} />
     </GuestStack.Navigator>
