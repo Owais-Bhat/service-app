@@ -8,7 +8,8 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, radius, spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
+import { brand } from '../theme/tokens';
 
 interface Props {
   label: string;
@@ -46,7 +47,7 @@ export default function GlowButton({ label, onPress, disabled, loading }: Props)
             <LinearGradient
               start={vec(0, 0)}
               end={vec(320, HEIGHT)}
-              colors={[colors.primary, colors.accentViolet]}
+              colors={[brand.primary, brand.primaryGradientEnd]}
             />
           </RoundedRect>
         </Canvas>
