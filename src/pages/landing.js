@@ -381,9 +381,6 @@ export function renderLandingPage(container, onPortalClick) {
                 <button class="srf-mode-tab ${state.mode === 'track' ? 'active' : ''}" data-mode="track" role="tab">
                   ${ICONS.search}<span>Track Request</span>
                 </button>
-                <button class="srf-mode-tab ${state.mode === 'complaint' ? 'active' : ''}" data-mode="complaint" role="tab">
-                  ${ICONS.shield}<span>Complaint</span>
-                </button>
                 <button class="srf-mode-tab ${state.mode === 'install' ? 'active' : ''}" data-mode="install" role="tab">
                   ${ICONS.box}<span>Installation</span>
                 </button>
@@ -896,6 +893,7 @@ export function renderLandingPage(container, onPortalClick) {
       `;
     }
     return `
+      <button class="srf-back" id="srf-complaint-back">${ICONS.arrowLeft}<span>Back to Track Request</span></button>
       <h2 class="srf-card-title">File a complaint</h2>
       <p class="srf-card-sub">Tell us what went wrong with a previous service. We verify the ticket against your mobile number before forwarding it to the team.</p>
 
@@ -966,6 +964,7 @@ export function renderLandingPage(container, onPortalClick) {
       <button class="srf-btn srf-btn-primary" id="srf-track-go" ${state.trackLoading ? 'disabled' : ''}>
         ${state.trackLoading ? '<span class="srf-spin"></span>' : ''}<span>${state.trackTicketNo ? 'Get this ticket' : 'Show my tickets'}</span> ${ICONS.arrowRight}
       </button>
+      <button class="srf-btn-link" id="srf-track-to-complaint" style="margin-top:10px;">${ICONS.shield} Something wrong with a past service? File a complaint</button>
     `;
   }
 
@@ -1521,7 +1520,7 @@ export function renderLandingPage(container, onPortalClick) {
         state.reopenLoading = false;
         if (error) {
           const msg = /No ticket found/i.test(error.message || '')
-            ? 'We could not match this ticket. Please use the Complaint tab.'
+            ? 'We could not match this ticket. Use "File a complaint" from the Track Request tab instead.'
             : (error.message || 'Could not reopen the ticket');
           toast(msg, 'error');
           render();
@@ -1662,6 +1661,13 @@ export function renderLandingPage(container, onPortalClick) {
     phEl.addEventListener('input', e => {
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
       state.trackPhone = e.target.value;
+    });
+
+    bind('#srf-track-to-complaint', () => {
+      state.mode = 'complaint';
+      state.complaintPhone = state.trackPhone;
+      state.complaintTicketNo = state.trackTicketNo;
+      render();
     });
 
     bind('#srf-track-go', async () => {
@@ -1828,6 +1834,11 @@ export function renderLandingPage(container, onPortalClick) {
       });
       return;
     }
+
+    bind('#srf-complaint-back', () => {
+      state.mode = 'track';
+      render();
+    });
 
     const tnoEl = container.querySelector('#srf-cmp-tno');
     const phEl = container.querySelector('#srf-cmp-phone');
