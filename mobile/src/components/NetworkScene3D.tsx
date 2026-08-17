@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber/native';
 import type { Group } from 'three';
-import { colors } from '../theme';
+import { brand } from '../theme/tokens';
 
 const NODE_COUNT = 42;
 const SPHERE_RADIUS = 2.2;
@@ -56,7 +56,7 @@ function RotatingNetwork() {
       {points.map((p, i) => (
         <mesh key={i} position={p}>
           <sphereGeometry args={[0.045, 8, 8]} />
-          <meshBasicMaterial color={colors.primary} />
+          <meshBasicMaterial color={brand.primary} />
         </mesh>
       ))}
       <lineSegments>
@@ -68,7 +68,7 @@ function RotatingNetwork() {
             itemSize={3}
           />
         </bufferGeometry>
-        <lineBasicMaterial color={colors.primaryDim} transparent opacity={0.55} />
+        <lineBasicMaterial color={brand.primaryDim} transparent opacity={0.55} />
       </lineSegments>
     </group>
   );
