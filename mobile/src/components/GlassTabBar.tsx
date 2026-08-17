@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import GlassSurface from './GlassSurface';
-import { colors, radius, spacing, typography } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
+import { radius, spacing, typography } from '../theme';
+import { brand } from '../theme/tokens';
 
 export interface TabItem {
   key: string;
@@ -14,12 +15,27 @@ interface Props {
   onSelect: (key: string) => void;
 }
 
-// Floating glass bottom tab bar. Generic and config-driven — it doesn't
-// know about "Dashboard" or "More" specifically — so later phases can add
-// tabs per role without touching this component.
+// NEST's tab bar is opaque (background: var(--bg), no border, no blur) with
+// a neumorphic drop shadow — a different material from the glass surfaces.
+// RN can't do the dual light+dark shadow or a true inset shadow on one
+// View, so this approximates: one outer drop shadow, and a solid two-tone
+// fill instead of an inset shadow for the active icon (design spec §5.3).
 export default function GlassTabBar({ items, activeKey, onSelect }: Props) {
+  const { theme } = useTheme();
   return (
-    <GlassSurface style={styles.wrapper} borderRadius={radius.full}>
+    <View
+      style={[
+        styles.wrapper,
+        {
+          backgroundColor: theme.bg,
+          shadowColor: theme.neuDark,
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 1,
+          shadowRadius: 24,
+          elevation: 10,
+        },
+      ]}
+    >
       <View style={styles.row}>
         {items.map((item) => {
           const active = item.key === activeKey;
@@ -30,32 +46,38 @@ export default function GlassTabBar({ items, activeKey, onSelect }: Props) {
               style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
               hitSlop={8}
             >
-              <View style={[styles.dot, active && styles.dotActive]} />
-              <Text style={[typography.caption, active && styles.labelActive]}>{item.label}</Text>
+              <View style={[styles.iconWrap, active && { backgroundColor: theme.neuDark }]}>
+                <View style={[styles.dot, { borderColor: active ? brand.primary : theme.text3 }]} />
+              </View>
+              <Text style={[styles.label, { color: active ? brand.primary : theme.text3 }]}>{item.label}</Text>
+              <View style={[styles.indicator, active && { backgroundColor: brand.primary }]} />
             </Pressable>
           );
         })}
       </View>
-    </GlassSurface>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    left: spacing(4),
-    right: spacing(4),
-    bottom: spacing(4),
+    left: spacing(3),
+    right: spacing(3),
+    bottom: spacing(3.5),
+    borderRadius: radius.xl,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingVertical: spacing(3),
+    paddingHorizontal: spacing(1.5),
   },
-  tab: { alignItems: 'center', gap: 4 },
-  tabPressed: { opacity: 0.6, transform: [{ scale: 0.97 }] },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.3)' },
-  dotActive: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.8, shadowRadius: 6 },
-  labelActive: { color: colors.text, fontWeight: '700' },
+  tab: { alignItems: 'center', gap: 6, flex: 1 },
+  tabPressed: { opacity: 0.7 },
+  iconWrap: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
+  label: { ...typography.caption, fontSize: 11 },
+  indicator: { width: 16, height: 3, borderRadius: 2, marginTop: 2, backgroundColor: 'transparent' },
 });
