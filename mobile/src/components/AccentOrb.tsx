@@ -1,21 +1,19 @@
 import React, { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
-import { Canvas, Circle, SweepGradient, RadialGradient, vec } from '@shopify/react-native-skia';
+import { Canvas, Circle, RadialGradient, SweepGradient, vec } from '@shopify/react-native-skia';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { colors } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Props {
   size?: number;
 }
 
-// The "3D accent" decoration for dashboard cards (design spec §4). This is
-// deliberately Skia (a shader-drawn sweep-gradient ring + specular
-// highlight, idly tilted via Reanimated) rather than a real three.js
-// Canvas per card — mounting a separate WebGL context per visible card
-// would hurt performance and risks crashes on lower-end Android once a
-// screen has several cards on it at once. NetworkScene3D remains the one
-// genuine three.js scene in the app, on the login screen only.
+// Not used by any screen under the NEST design — NEST's KPI/stat cards use
+// a plain icon chip, not a floating 3D orb (see AnimatedStatCard). Kept as
+// a working Skia component (the same self-blur/gradient technique NEST's
+// own conic-gradient course-progress rings use) for a future screen.
 export default function AccentOrb({ size = 28 }: Props) {
+  const { theme } = useTheme();
   const tilt = useSharedValue(0);
 
   useEffect(() => {
@@ -36,9 +34,9 @@ export default function AccentOrb({ size = 28 }: Props) {
     <Animated.View style={[{ width: size, height: size }, wobbleStyle]}>
       <Canvas style={StyleSheet.absoluteFill}>
         <Circle cx={r} cy={r} r={r}>
-          <SweepGradient c={vec(r, r)} colors={[colors.primary, colors.accentViolet, colors.accentCyan, colors.primary]} />
+          <SweepGradient c={vec(r, r)} colors={['#15a05a', '#7c5cfc', '#0ea5a5', '#15a05a']} />
         </Circle>
-        <Circle cx={r} cy={r} r={r * 0.62} color={colors.auroraNavy} />
+        <Circle cx={r} cy={r} r={r * 0.62} color={theme.bg} />
         <Circle cx={r * 0.7} cy={r * 0.65} r={r * 0.22}>
           <RadialGradient c={vec(r * 0.7, r * 0.65)} r={r * 0.22} colors={['rgba(255,255,255,0.85)', 'transparent']} />
         </Circle>
