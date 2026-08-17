@@ -12,11 +12,14 @@ import { brand } from '../theme/tokens';
 import { ApiError } from '../api/client';
 
 interface Props {
-  onGoSubmit: () => void;
-  onGoTrack: () => void;
+  onBack: () => void;
 }
 
-export default function LoginScreen({ onGoSubmit, onGoTrack }: Props) {
+// No longer the guest stack's root — Landing is (design spec §5), reached
+// via its "Staff Login" button. The old "Not staff? Submit a request /
+// Track a request" shortcut links are gone: Landing offers those at the
+// top level now, and NEST's own staff-login screen doesn't have them.
+export default function LoginScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { login } = useAuth();
@@ -53,7 +56,8 @@ export default function LoginScreen({ onGoSubmit, onGoTrack }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={[styles.formWrap, { paddingBottom: insets.bottom + spacing(6) }]}
       >
-        <Text style={[styles.brand, { color: theme.text }]}>Networking Experts</Text>
+        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <Text style={[styles.brand, { color: theme.text }]}>NEST</Text>
         <Text style={[styles.tagline, { color: theme.text3 }]}>Staff sign-in</Text>
 
         <GlassCard>
@@ -79,13 +83,6 @@ export default function LoginScreen({ onGoSubmit, onGoTrack }: Props) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <GlowButton label="Sign In" onPress={handleLogin} loading={loading} />
-
-        <Text style={styles.guestLink} onPress={onGoSubmit}>
-          Not staff? Submit a service request →
-        </Text>
-        <Text style={styles.guestLink} onPress={onGoTrack}>
-          Track an existing request →
-        </Text>
       </KeyboardAvoidingView>
     </View>
   );
@@ -95,9 +92,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   sceneWrap: { flex: 1.1 },
   formWrap: { paddingHorizontal: spacing(6), paddingTop: spacing(4) },
+  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   brand: { ...typography.title, textAlign: 'center' },
   tagline: { ...typography.caption, textAlign: 'center', marginBottom: spacing(5) },
   input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(2), textAlign: 'center' },
-  guestLink: { ...typography.caption, color: brand.primary, textAlign: 'center', marginTop: spacing(4) },
 });
