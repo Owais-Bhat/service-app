@@ -3449,8 +3449,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
   return (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
     const { data: discountPresets } = await supabase.from('discount_presets').select('*').eq('active', 1).order('created_at', { ascending: false });
-    const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
-    const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];
     const { data: companies } = await supabase.from('companies').select('*').order('name');
     const companyList = Array.isArray(companies) ? companies : [];
     const discountPresetList = Array.isArray(discountPresets) ? discountPresets : [];
@@ -3597,7 +3595,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         <div class="modal-body" style="padding-top:14px;">
           <div class="mst-tabs" role="tablist">
             <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
-            <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device</span></button>
             <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
@@ -3755,26 +3752,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 ${ICONS.whatsapp}<span>Share Feedback Link via WhatsApp</span>
               </button>
             </div>
-          </div>
-
-          <!-- TAB 2: DEVICE INFO -->
-          <div class="mst-pane" data-pane="device">
-            <div class="form-group">
-              <label>Device Type</label>
-              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick...' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
-              <datalist id="emp-device-types">
-                ${deviceTypeList.map(d => `<option value="${(d.name || '').replace(/"/g,'&quot;')}"></option>`).join('')}
-              </datalist>
-              ${!isResolvedReadOnly ? `<div class="dt-chip-row">
-                ${['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'].map(t => `<button type="button" class="dt-chip" data-target="device-type" data-mode="replace" data-fill="${t}">${t}</button>`).join('')}
-              </div>` : ''}
-              ${deviceTypeList.length === 0 ? '<small style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">Tip: ask admin to add device types so this becomes a quick-pick list.</small>' : ''}
-            </div>
-            <div class="form-group">
-              <label>Device Serial No</label>
-              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
-            </div>
-            <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes - and they appear on the bill template.</small>
           </div>
 
           ${deviceFeatureOn ? `
@@ -4039,7 +4016,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     }
 
     // Tab switcher - also drives the footer button label (Next → on intermediate tabs, Save on the last).
-    const TAB_ORDER = ['status', 'device', 'bill'];
+    const TAB_ORDER = ['status', 'bill'];
     const getActiveTab = () => overlay.querySelector('.mst-tab.active')?.dataset.tab || TAB_ORDER[0];
     const isLastTab = () => getActiveTab() === TAB_ORDER[TAB_ORDER.length - 1];
     const goToTab = (target) => {
@@ -4092,10 +4069,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       servicePane.classList.remove('mst-pane');
       servicePane.removeAttribute('data-pane');
       servicePane.style.display = 'block';
-      // Pull the serial number into the expanded device section (with the photos).
-      const serialGroup = overlay.querySelector('#device-serial')?.closest('.form-group');
-      const body = servicePane.querySelector('#device-service-body');
-      if (serialGroup && body) body.insertBefore(serialGroup, body.firstChild);
       const hr = document.createElement('hr');
       hr.style.cssText = 'border:none;border-top:1px solid var(--border);margin:18px 0 14px;';
       statusPane.appendChild(hr);
@@ -4587,12 +4560,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           saveBtn.style.cursor = 'pointer';
           saveBtn.title = '';
         }
-      } else if (!isStatusTabValid || !isDeviceTabValid) {
+      } else if (!isStatusTabValid) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Save Changes';
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
-        saveBtn.title = 'Please fill out all mandatory fields in previous tabs (Status and Device Info).';
+        saveBtn.title = 'Please fill out all mandatory fields on the Status tab.';
       } else if (deviceTicketOn && !deviceReturned) {
         // Can't complete the service while the customer's device is still at the
         // service center. The employee must mark it returned first.
@@ -4978,11 +4951,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         #emp-gen-link,
         #emp-pay-check
       `).forEach(el => {
-        el.disabled = true;
-        el.style.opacity = '0.6';
-        el.style.cursor = 'not-allowed';
-      });
-      overlay.querySelectorAll('.mst-pane[data-pane="device"] input, .mst-pane[data-pane="device"] select').forEach(el => {
         el.disabled = true;
         el.style.opacity = '0.6';
         el.style.cursor = 'not-allowed';
