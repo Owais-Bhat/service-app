@@ -1,39 +1,36 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { colors, radius, spacing } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
+import { radius, spacing } from '../theme';
 
 interface Props {
   children: React.ReactNode;
   style?: ViewStyle;
+  /** NEST applies the drop shadow selectively (e.g. task rows), not to every card. */
+  shadow?: boolean;
 }
 
-// The standard card / form / list-row container for the glass design
-// system — real native backdrop blur (expo-blur), not a faked
-// translucent box, per the design spec's "real blur, not faked" call.
-export default function GlassCard({ children, style }: Props) {
+// Maps to NEST's `--surface` material: a blurred hero-style container.
+export default function GlassCard({ children, style, shadow = false }: Props) {
+  const { theme, mode } = useTheme();
   return (
-    <View style={[styles.wrapper, style]}>
-      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.tint} pointerEvents="none" />
+    <View style={[styles.wrapper, { borderColor: theme.border }, shadow && styles.shadow, style]}>
+      <BlurView intensity={mode === 'dark' ? 40 : 55} tint={mode} style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surface }]} pointerEvents="none" />
       <View style={styles.content}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderTopColor: colors.glassHighlight,
-    overflow: 'hidden',
+  wrapper: { borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden' },
+  shadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.5,
+    shadowRadius: 34,
+    elevation: 8,
   },
-  tint: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.glassFill,
-  },
-  content: {
-    padding: spacing(4),
-  },
+  content: { padding: spacing(4) },
 });
