@@ -1,9 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
-import { colors } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
+import { brand } from '../theme/tokens';
 import LoginScreen from '../screens/LoginScreen';
 import ClientSubmitTicketScreen from '../screens/ClientSubmitTicketScreen';
 import ClientTrackTicketScreen from '../screens/ClientTrackTicketScreen';
@@ -17,11 +18,6 @@ type GuestStackParams = {
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
-
-const navTheme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.bg, primary: colors.primary, card: colors.surface },
-};
 
 function LoginRoute({ navigation }: any) {
   return (
@@ -56,11 +52,22 @@ function GuestNavigator() {
 
 export default function RootNavigator() {
   const { user, loading } = useAuth();
+  const { theme, mode } = useTheme();
+
+  const navTheme = {
+    ...(mode === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(mode === 'dark' ? DarkTheme.colors : DefaultTheme.colors),
+      background: theme.bg,
+      primary: brand.primary,
+      card: theme.surface,
+    },
+  };
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.primary} size="large" />
+      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={brand.primary} size="large" />
       </View>
     );
   }
