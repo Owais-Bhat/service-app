@@ -3760,18 +3760,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           <!-- TAB 2: DEVICE INFO -->
           <div class="mst-pane" data-pane="device">
             <div class="form-group">
-              <label>Company Name <span style="color:var(--danger)">*</span></label>
-              <select id="resolve-company" style="margin-bottom:8px;" ${isResolvedReadOnly ? 'disabled' : ''}>
-                <option value="">Select Company...</option>
-                ${companyList.map(c => {
-                  const isSel = (inquiryRow?.company_name || 'networking experts').toLowerCase() === c.name.toLowerCase();
-                  return `<option value="${c.name.replace(/"/g,'&quot;')}" ${isSel ? 'selected' : ''}>${c.name}</option>`;
-                }).join('')}
-                <option value="Other">Other (Type manually)</option>
-              </select>
-              <input type="text" id="resolve-company-custom" placeholder="Type custom company name (Mandatory)" style="display:none;" ${isResolvedReadOnly ? 'disabled' : ''}/>
-            </div>
-            <div class="form-group">
               <label>Device Type</label>
               <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick...' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
               <datalist id="emp-device-types">
@@ -4136,15 +4124,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const GST_RATE = 0.18;
     const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
-    const getSelectedCompany = () => {
-      const selectEl = overlay.querySelector('#resolve-company');
-      const customEl = overlay.querySelector('#resolve-company-custom');
-      if (!selectEl) return '';
-      if (selectEl.value === 'Other') {
-        return customEl?.value.trim() || '';
-      }
-      return selectEl.value;
-    };
+    // Company is always "networking experts" now — there's no per-ticket
+    // company picker for the employee to fill in anymore.
+    const getSelectedCompany = () => inquiryRow?.company_name || 'networking experts';
 
     const getPlatformFee = () => {
       const companyName = getSelectedCompany();
@@ -4386,40 +4368,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     if (progressDetailInput) {
       progressDetailInput.oninput = () => { renderPayStatus(); };
     }
-    const companySelect = overlay.querySelector('#resolve-company');
-    const companyCustom = overlay.querySelector('#resolve-company-custom');
-
-    const toggleCustomCompany = () => {
-      if (companySelect.value === 'Other') {
-        companyCustom.style.display = 'block';
-      } else {
-        companyCustom.style.display = 'none';
-        companyCustom.value = '';
-      }
-      calcTotal();
-      renderPayStatus();
-    };
-
-    if (companySelect) {
-      companySelect.onchange = toggleCustomCompany;
-      
-      // Initialize state: if the current company name is not in the list, set to 'Other' and prefill custom field
-      const initialCompany = inquiryRow?.company_name || 'networking experts';
-      const isInList = companyList.some(c => c.name.toLowerCase() === initialCompany.toLowerCase());
-      if (isInList) {
-        companySelect.value = companyList.find(c => c.name.toLowerCase() === initialCompany.toLowerCase())?.name || initialCompany;
-        companyCustom.style.display = 'none';
-        companyCustom.value = '';
-      } else {
-        companySelect.value = 'Other';
-        companyCustom.style.display = 'block';
-        companyCustom.value = initialCompany;
-      }
-    }
-    if (companyCustom) {
-      companyCustom.oninput = () => { calcTotal(); renderPayStatus(); };
-    }
-
     // ── Keyword search picker ────────────────────────────────────────────
     const svcSelectedBox = overlay.querySelector('#svc-selected');
     const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -4567,10 +4515,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
 
       const progressDetail = overlay.querySelector('#progress-detail')?.value.trim() || '';
-      const companyName = getSelectedCompany();
-      
       const isStatusTabValid = progressDetail.length > 0;
-      const isDeviceTabValid = companyName.length > 0;
 
       if (isResolvedReadOnly) {
         saveBtn.disabled = true;
@@ -4627,9 +4572,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         if (currentTab === 'status') {
           tabValid = isStatusTabValid;
           missingFieldMsg = 'Please fill out the Work Details / Progress Update first.';
-        } else if (currentTab === 'device') {
-          tabValid = isDeviceTabValid;
-          missingFieldMsg = 'Please fill out the Company Name first.';
         }
         
         if (!tabValid) {
@@ -5352,7 +5294,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         if (deviceTicketOn && !deviceReturned) { toast('Mark the device as returned before closing this service', 'warning'); return; }
       }
       if (resolving) {
-        if (!companyName) { toast('Please provide the company name', 'warning'); return; }
         if (!validateDiscount()) return;
       }
 
