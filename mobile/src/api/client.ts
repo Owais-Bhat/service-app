@@ -73,3 +73,9 @@ export async function dataGet<T>(table: string, params: Record<string, string | 
 export async function dataPost<T>(table: string, body: unknown): Promise<T> {
   return request<T>(`/data/${table}`, { method: 'POST', body: JSON.stringify(body) });
 }
+
+export async function dataPatch<T>(table: string, eq: string | string[], body: unknown): Promise<T> {
+  const sp = new URLSearchParams();
+  (Array.isArray(eq) ? eq : [eq]).forEach((v) => sp.append('eq', v));
+  return request<T>(`/data/${table}?${sp.toString()}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
