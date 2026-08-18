@@ -14,6 +14,8 @@ export interface TicketRow {
   id: string;
   assigned_to: string;
   status: string;
+  title: string;
+  category: string;
   created_at: string;
 }
 
@@ -29,7 +31,7 @@ export async function fetchTodayAttendance(userId: string): Promise<AttendanceRo
 
 export async function fetchMyTickets(userId: string): Promise<TicketRow[]> {
   return dataGet<TicketRow[]>('tickets', {
-    select: '*',
+    select: 'id,assigned_to,status,title,category,created_at',
     eq: [`assigned_to:${userId}`],
     order: 'created_at:desc',
   });
