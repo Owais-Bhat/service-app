@@ -10,21 +10,26 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 import { brand, categoryColors, semantic, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE } from '../theme/tokens';
-import { fetchMyTickets, fetchTodayAttendance, AttendanceRow, TicketRow } from '../api/employee';
+import { fetchTodayAttendance, AttendanceRow } from '../api/attendance';
+import { fetchMyTickets, TicketRow } from '../api/employee';
 
 interface Props {
   onOpenTask: (ticketId: string) => void;
+  onGoAttendance: () => void;
 }
 
-const TABS = [
+// Shared by EmployeeDashboardScreen and AttendanceScreen so the tab bar is
+// identical (not duplicated) across the employee's top-level screens.
+export const EMPLOYEE_TABS = [
   { key: 'dashboard', label: 'Dashboard' },
+  { key: 'attendance', label: 'Attendance' },
   { key: 'more', label: 'More' },
 ];
 
 // The web app's employee-relevant sections not yet ported to mobile — see
 // design spec §5/§8 (phase 1) and phase 3a's spec §8 (Job Cards is a
 // separate, richer feature from this phase's simple status tracking).
-const MORE_SECTIONS = [
+export const EMPLOYEE_MORE_SECTIONS = [
   { label: 'Job Cards' },
   { label: 'Device Tracking' },
   { label: 'Training' },
@@ -40,7 +45,7 @@ const FILTERS: { key: string; label: string }[] = [
   { key: 'resolved', label: 'Resolved' },
 ];
 
-export default function EmployeeDashboardScreen({ onOpenTask }: Props) {
+export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
@@ -147,11 +152,15 @@ export default function EmployeeDashboardScreen({ onOpenTask }: Props) {
       </ScrollView>
 
       <GlassTabBar
-        items={TABS}
+        items={EMPLOYEE_TABS}
         activeKey={moreVisible ? 'more' : 'dashboard'}
-        onSelect={(key) => setMoreVisible(key === 'more')}
+        onSelect={(key) => {
+          if (key === 'more') setMoreVisible(true);
+          else if (key === 'attendance') onGoAttendance();
+          else setMoreVisible(false);
+        }}
       />
-      <MoreSheet visible={moreVisible} sections={MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
+      <MoreSheet visible={moreVisible} sections={EMPLOYEE_MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
     </View>
   );
 }
