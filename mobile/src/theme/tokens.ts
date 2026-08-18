@@ -66,17 +66,52 @@ export const semantic = {
   info: '#2e9bff',
 };
 
-export const categoryColors = {
-  CCTV: { color: '#15a05a', bg: 'rgba(21,160,90,0.16)' },
-  Networking: { color: '#0ea5a5', bg: 'rgba(14,165,165,0.16)' },
-  Biometric: { color: '#7c5cfc', bg: 'rgba(124,92,252,0.16)' },
-  VDP: { color: '#6366f1', bg: 'rgba(99,102,241,0.16)' },
-  GateAutomation: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)' },
-} as const;
+export interface CategoryStyle {
+  color: string;
+  bg: string;
+  initials: string;
+}
 
-export const statusColors = {
-  open: { color: '#2e9bff', bg: 'rgba(46,155,255,0.14)' },
-  assigned: { color: '#7c5cfc', bg: 'rgba(124,92,252,0.14)' },
-  progress: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)' },
-  resolved: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)' },
-} as const;
+// Real category values from src/pages/job-cards.js's CATEGORIES constant —
+// wider than the NEST mockup's 5. String keys (not identifiers) since
+// several contain spaces/slashes. 5 keep NEST's original colors; the 3
+// NEST doesn't cover (Locks, Fire Alarm, Other) use unused hues already
+// in the app's palette rather than new colors.
+export const categoryColors: Record<string, CategoryStyle> = {
+  CCTV: { color: '#15a05a', bg: 'rgba(21,160,90,0.16)', initials: 'CC' },
+  Networking: { color: '#0ea5a5', bg: 'rgba(14,165,165,0.16)', initials: 'NW' },
+  'Video Door Phone': { color: '#6366f1', bg: 'rgba(99,102,241,0.16)', initials: 'VD' },
+  Locks: { color: '#2e9bff', bg: 'rgba(46,155,255,0.14)', initials: 'LK' },
+  'Gate Automation': { color: '#e08a14', bg: 'rgba(224,138,20,0.16)', initials: 'GA' },
+  'Access Control / Biometric': { color: '#7c5cfc', bg: 'rgba(124,92,252,0.16)', initials: 'BM' },
+  'Fire Alarm': { color: '#f0556d', bg: 'rgba(240,85,109,0.14)', initials: 'FA' },
+  Other: { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', initials: 'OT' },
+};
+
+export const DEFAULT_CATEGORY_STYLE: CategoryStyle = { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', initials: '—' };
+
+export interface StatusStyle {
+  color: string;
+  bg: string;
+  label: string;
+}
+
+// Real status values used across the app — wider than NEST's 4-state
+// mockup (which also used the wrong key: "progress" instead of the real
+// "in_progress"). TECH_STATUS_ORDER is the subset a technician
+// self-advances through; the rest are admin/finance workflow states.
+export const statusColors: Record<string, StatusStyle> = {
+  open: { color: '#2e9bff', bg: 'rgba(46,155,255,0.14)', label: 'Open' },
+  assigned: { color: '#7c5cfc', bg: 'rgba(124,92,252,0.14)', label: 'Assigned' },
+  in_progress: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)', label: 'In Progress' },
+  resolved: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)', label: 'Resolved' },
+  case_closed: { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', label: 'Closed' },
+  closed: { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', label: 'Closed' },
+  foc: { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', label: 'FOC' },
+  issue_not_resolved: { color: '#f0556d', bg: 'rgba(240,85,109,0.14)', label: 'Issue Not Resolved' },
+  paid: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)', label: 'Paid' },
+};
+
+export const DEFAULT_STATUS_STYLE: StatusStyle = { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', label: 'Unknown' };
+
+export const TECH_STATUS_ORDER = ['open', 'assigned', 'in_progress', 'resolved'] as const;
