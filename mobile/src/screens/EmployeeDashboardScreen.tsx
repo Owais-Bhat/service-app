@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import MeshBackground from '../components/MeshBackground';
@@ -9,8 +9,12 @@ import GlowButton from '../components/GlowButton';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
-import { semantic } from '../theme/tokens';
+import { brand, categoryColors, semantic, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { fetchMyTickets, fetchTodayAttendance, AttendanceRow, TicketRow } from '../api/employee';
+
+interface Props {
+  onOpenTask: (ticketId: string) => void;
+}
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -18,7 +22,8 @@ const TABS = [
 ];
 
 // The web app's employee-relevant sections not yet ported to mobile — see
-// design spec §5/§8. Each becomes a real route in a later phase.
+// design spec §5/§8 (phase 1) and phase 3a's spec §8 (Job Cards is a
+// separate, richer feature from this phase's simple status tracking).
 const MORE_SECTIONS = [
   { label: 'Job Cards' },
   { label: 'Device Tracking' },
@@ -28,7 +33,14 @@ const MORE_SECTIONS = [
   { label: 'Profile' },
 ];
 
-export default function EmployeeDashboardScreen() {
+const FILTERS: { key: string; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'open', label: 'Open' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'resolved', label: 'Resolved' },
+];
+
+export default function EmployeeDashboardScreen({ onOpenTask }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
@@ -37,6 +49,7 @@ export default function EmployeeDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
+  const [filter, setFilter] = useState('all');
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -62,6 +75,7 @@ export default function EmployeeDashboardScreen() {
 
   const openTickets = tickets.filter((t) => t.status !== 'resolved' && t.status !== 'case_closed').length;
   const clockedIn = !!attendance?.clock_in && !attendance?.clock_out;
+  const filteredTickets = filter === 'all' ? tickets : tickets.filter((t) => t.status === filter);
 
   return (
     <View style={styles.root}>
@@ -85,16 +99,48 @@ export default function EmployeeDashboardScreen() {
           <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={semantic.warning} delayMs={100} />
         </View>
 
-        <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tickets</Text>
-        {tickets.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3 }]}>No tickets assigned right now.</Text>
+        <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tasks</Text>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: spacing(2) }}>
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setFilter(f.key)}
+                style={[styles.filterChip, { borderColor: theme.line, backgroundColor: active ? brand.primary : theme.panel2 }]}
+              >
+                <Text style={[styles.filterChipText, { color: active ? '#ffffff' : theme.text2 }]}>{f.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {filteredTickets.length === 0 ? (
+          <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>No tasks in this filter.</Text>
         ) : (
-          tickets.slice(0, 8).map((t) => (
-            <View key={t.id} style={[styles.ticketRow, { borderBottomColor: theme.line }]}>
-              <Text style={[styles.body, { color: theme.text }]}>#{t.id.slice(0, 8)}</Text>
-              <Text style={[styles.caption, { color: theme.text3, textTransform: 'capitalize' }]}>{t.status}</Text>
-            </View>
-          ))
+          filteredTickets.map((t) => {
+            const categoryStyle = categoryColors[t.category] || DEFAULT_CATEGORY_STYLE;
+            const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
+            return (
+              <Pressable
+                key={t.id}
+                onPress={() => onOpenTask(t.id)}
+                style={({ pressed }) => [styles.taskRow, { borderColor: theme.line, backgroundColor: theme.panel2 }, pressed && styles.pressed]}
+              >
+                <View style={[styles.taskIcon, { backgroundColor: categoryStyle.bg }]}>
+                  <Text style={[styles.taskIconText, { color: categoryStyle.color }]}>{categoryStyle.initials}</Text>
+                </View>
+                <View style={styles.taskInfo}>
+                  <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{t.title}</Text>
+                  <Text style={[styles.caption, { color: theme.text3 }]}>#{t.id.slice(0, 8).toUpperCase()}</Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                </View>
+              </Pressable>
+            );
+          })
         )}
 
         <GlowButton label="Sign Out" onPress={logout} />
@@ -115,12 +161,16 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing(3), marginTop: spacing(5) },
   title: { ...typography.title },
   heading: { ...typography.heading },
-  body: { ...typography.body },
   caption: { ...typography.caption },
-  ticketRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing(2),
-    borderBottomWidth: 1,
-  },
+  filterRow: { marginBottom: spacing(3) },
+  filterChip: { paddingHorizontal: spacing(3.5), paddingVertical: spacing(2), borderRadius: 12, borderWidth: 1 },
+  filterChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  taskRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5), borderRadius: 18, borderWidth: 1, marginBottom: spacing(2.5) },
+  pressed: { opacity: 0.7 },
+  taskIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  taskIconText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
+  taskInfo: { flex: 1, minWidth: 0 },
+  taskTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
+  statusBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: 8 },
+  statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
 });
