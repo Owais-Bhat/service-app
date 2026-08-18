@@ -14,6 +14,11 @@ import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import LeaveFormScreen from '../screens/LeaveFormScreen';
+import JobToolsScreen from '../screens/JobToolsScreen';
+import EstimatorScreen from '../screens/EstimatorScreen';
+import DeviceFollowUpScreen from '../screens/DeviceFollowUpScreen';
+import DeviceDetailScreen from '../screens/DeviceDetailScreen';
+import EodReportScreen from '../screens/EodReportScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -27,6 +32,11 @@ type EmployeeStackParams = {
   TaskDetail: { ticketId: string };
   Attendance: undefined;
   LeaveForm: undefined;
+  JobTools: undefined;
+  Estimator: undefined;
+  DeviceFollowUp: undefined;
+  DeviceDetail: { inquiryId: string };
+  EodReport: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -73,6 +83,7 @@ function EmployeeDashboardRoute({ navigation }: any) {
     <EmployeeDashboardScreen
       onOpenTask={(ticketId) => navigation.navigate('TaskDetail', { ticketId })}
       onGoAttendance={() => navigation.navigate('Attendance')}
+      onGoJobTools={() => navigation.navigate('JobTools')}
     />
   );
 }
@@ -85,6 +96,7 @@ function AttendanceRoute({ navigation }: any) {
   return (
     <AttendanceScreen
       onGoDashboard={() => navigation.navigate('Dashboard')}
+      onGoJobTools={() => navigation.navigate('JobTools')}
       onOpenLeaveForm={() => navigation.navigate('LeaveForm')}
     />
   );
@@ -94,18 +106,55 @@ function LeaveFormRoute({ navigation }: any) {
   return <LeaveFormScreen onBack={() => navigation.goBack()} />;
 }
 
-// Dashboard and Attendance are siblings switched with no transition
-// (an instant-swap approximation of tab behavior, since GlassTabBar isn't
-// a real React Navigation tab navigator — design spec §4). TaskDetail and
-// LeaveForm are genuine drill-down pushes with a slide transition and no
-// tab bar, matching the pattern TaskDetail already established.
+function JobToolsRoute({ navigation }: any) {
+  return (
+    <JobToolsScreen
+      onGoDashboard={() => navigation.navigate('Dashboard')}
+      onGoAttendance={() => navigation.navigate('Attendance')}
+      onOpenEstimator={() => navigation.navigate('Estimator')}
+      onOpenDeviceFollowUp={() => navigation.navigate('DeviceFollowUp')}
+      onOpenEodReport={() => navigation.navigate('EodReport')}
+    />
+  );
+}
+
+function EstimatorRoute({ navigation }: any) {
+  return <EstimatorScreen onBack={() => navigation.goBack()} />;
+}
+
+function DeviceFollowUpRoute({ navigation }: any) {
+  return (
+    <DeviceFollowUpScreen
+      onBack={() => navigation.goBack()}
+      onOpenDevice={(inquiryId) => navigation.navigate('DeviceDetail', { inquiryId })}
+    />
+  );
+}
+
+function DeviceDetailRoute({ navigation, route }: any) {
+  return <DeviceDetailScreen inquiryId={route.params.inquiryId} onBack={() => navigation.goBack()} />;
+}
+
+function EodReportRoute({ navigation }: any) {
+  return <EodReportScreen onBack={() => navigation.goBack()} />;
+}
+
+// Dashboard, Attendance, and JobTools are siblings switched with no
+// transition (an instant-swap approximation of tab behavior — design
+// spec §4, same pattern phase 3b established). Every other screen is a
+// genuine drill-down push with a slide transition and no tab bar.
 function EmployeeNavigator() {
   return (
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
       <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="Attendance" component={AttendanceRoute} options={{ animation: 'none' }} />
+      <EmployeeStack.Screen name="JobTools" component={JobToolsRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="TaskDetail" component={TaskDetailRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="LeaveForm" component={LeaveFormRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Estimator" component={EstimatorRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="DeviceFollowUp" component={DeviceFollowUpRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="DeviceDetail" component={DeviceDetailRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="EodReport" component={EodReportRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
   );
 }
