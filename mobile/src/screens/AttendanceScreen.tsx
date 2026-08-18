@@ -25,6 +25,7 @@ import {
 
 interface Props {
   onGoDashboard: () => void;
+  onGoJobTools: () => void;
   onOpenLeaveForm: () => void;
 }
 
@@ -40,7 +41,7 @@ function hoursBetween(start: string | null, end: string | null): number {
   return ms > 0 ? ms / 3600000 : 0;
 }
 
-export default function AttendanceScreen({ onGoDashboard, onOpenLeaveForm }: Props) {
+export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onOpenLeaveForm }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -234,6 +235,7 @@ export default function AttendanceScreen({ onGoDashboard, onOpenLeaveForm }: Pro
         onSelect={(key) => {
           if (key === 'more') setMoreVisible(true);
           else if (key === 'dashboard') onGoDashboard();
+          else if (key === 'jobtools') onGoJobTools();
           else setMoreVisible(false);
         }}
       />
