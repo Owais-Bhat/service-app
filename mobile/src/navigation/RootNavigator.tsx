@@ -11,6 +11,7 @@ import ClientSubmitTicketScreen from '../screens/ClientSubmitTicketScreen';
 import ClientTrackTicketScreen from '../screens/ClientTrackTicketScreen';
 import EmployeeDashboardScreen from '../screens/EmployeeDashboardScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import TaskDetailScreen from '../screens/TaskDetailScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -19,7 +20,13 @@ type GuestStackParams = {
   TrackTicket: undefined;
 };
 
+type EmployeeStackParams = {
+  Dashboard: undefined;
+  TaskDetail: { ticketId: string };
+};
+
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
+const EmployeeStack = createNativeStackNavigator<EmployeeStackParams>();
 
 function LandingRoute({ navigation }: any) {
   return (
@@ -45,9 +52,7 @@ function TrackTicketRoute({ navigation }: any) {
 
 // Guest side (unauthenticated) gets a real stack — land on the public
 // Landing screen, then staff sign-in, submit a request, or track a
-// request, with native slide transitions between them. Once signed in,
-// role picks exactly one dashboard, so no stack is needed there yet; add
-// one per role as each grows past a single screen.
+// request, with native slide transitions between them.
 function GuestNavigator() {
   return (
     <GuestStack.Navigator screenOptions={{ headerShown: false }}>
@@ -56,6 +61,26 @@ function GuestNavigator() {
       <GuestStack.Screen name="SubmitTicket" component={SubmitTicketRoute} options={{ animation: 'slide_from_right' }} />
       <GuestStack.Screen name="TrackTicket" component={TrackTicketRoute} options={{ animation: 'slide_from_right' }} />
     </GuestStack.Navigator>
+  );
+}
+
+function EmployeeDashboardRoute({ navigation }: any) {
+  return <EmployeeDashboardScreen onOpenTask={(ticketId) => navigation.navigate('TaskDetail', { ticketId })} />;
+}
+
+function TaskDetailRoute({ navigation, route }: any) {
+  return <TaskDetailScreen ticketId={route.params.ticketId} onBack={() => navigation.goBack()} />;
+}
+
+// The employee role finally grows past a single screen — Dashboard (Tasks
+// list) → Task Detail, with a native slide transition. Admin stays a
+// single screen for now; it gets its own stack in the Phase 4 admin work.
+function EmployeeNavigator() {
+  return (
+    <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
+      <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} />
+      <EmployeeStack.Screen name="TaskDetail" component={TaskDetailRoute} options={{ animation: 'slide_from_right' }} />
+    </EmployeeStack.Navigator>
   );
 }
 
@@ -83,7 +108,7 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminDashboardScreen /> : <EmployeeDashboardScreen />}
+      {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminDashboardScreen /> : <EmployeeNavigator />}
     </NavigationContainer>
   );
 }
