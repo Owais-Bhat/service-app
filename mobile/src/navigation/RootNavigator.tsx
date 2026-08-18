@@ -12,6 +12,8 @@ import ClientTrackTicketScreen from '../screens/ClientTrackTicketScreen';
 import EmployeeDashboardScreen from '../screens/EmployeeDashboardScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
+import AttendanceScreen from '../screens/AttendanceScreen';
+import LeaveFormScreen from '../screens/LeaveFormScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -23,6 +25,8 @@ type GuestStackParams = {
 type EmployeeStackParams = {
   Dashboard: undefined;
   TaskDetail: { ticketId: string };
+  Attendance: undefined;
+  LeaveForm: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -65,21 +69,43 @@ function GuestNavigator() {
 }
 
 function EmployeeDashboardRoute({ navigation }: any) {
-  return <EmployeeDashboardScreen onOpenTask={(ticketId) => navigation.navigate('TaskDetail', { ticketId })} />;
+  return (
+    <EmployeeDashboardScreen
+      onOpenTask={(ticketId) => navigation.navigate('TaskDetail', { ticketId })}
+      onGoAttendance={() => navigation.navigate('Attendance')}
+    />
+  );
 }
 
 function TaskDetailRoute({ navigation, route }: any) {
   return <TaskDetailScreen ticketId={route.params.ticketId} onBack={() => navigation.goBack()} />;
 }
 
-// The employee role finally grows past a single screen — Dashboard (Tasks
-// list) → Task Detail, with a native slide transition. Admin stays a
-// single screen for now; it gets its own stack in the Phase 4 admin work.
+function AttendanceRoute({ navigation }: any) {
+  return (
+    <AttendanceScreen
+      onGoDashboard={() => navigation.navigate('Dashboard')}
+      onOpenLeaveForm={() => navigation.navigate('LeaveForm')}
+    />
+  );
+}
+
+function LeaveFormRoute({ navigation }: any) {
+  return <LeaveFormScreen onBack={() => navigation.goBack()} />;
+}
+
+// Dashboard and Attendance are siblings switched with no transition
+// (an instant-swap approximation of tab behavior, since GlassTabBar isn't
+// a real React Navigation tab navigator — design spec §4). TaskDetail and
+// LeaveForm are genuine drill-down pushes with a slide transition and no
+// tab bar, matching the pattern TaskDetail already established.
 function EmployeeNavigator() {
   return (
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
-      <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} />
+      <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} options={{ animation: 'none' }} />
+      <EmployeeStack.Screen name="Attendance" component={AttendanceRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="TaskDetail" component={TaskDetailRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="LeaveForm" component={LeaveFormRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
   );
 }
