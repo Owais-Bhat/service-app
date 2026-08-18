@@ -6,7 +6,7 @@ import Panel from '../components/Panel';
 import GlowButton from '../components/GlowButton';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, categoryColors } from '../theme/tokens';
+import { brand, categoryColors, DEFAULT_CATEGORY_STYLE } from '../theme/tokens';
 
 interface Props {
   onStaffLogin: () => void;
@@ -14,12 +14,12 @@ interface Props {
   onGoTrack: () => void;
 }
 
-const SERVICES: { label: string; initials: string; cat: keyof typeof categoryColors }[] = [
-  { label: 'CCTV', initials: 'CC', cat: 'CCTV' },
-  { label: 'Networking', initials: 'NW', cat: 'Networking' },
-  { label: 'Biometric & Access', initials: 'BM', cat: 'Biometric' },
-  { label: 'Gate Automation', initials: 'GA', cat: 'GateAutomation' },
-  { label: 'VDP Installation', initials: 'VD', cat: 'VDP' },
+const SERVICES: { label: string; cat: string }[] = [
+  { label: 'CCTV', cat: 'CCTV' },
+  { label: 'Networking', cat: 'Networking' },
+  { label: 'Biometric & Access', cat: 'Access Control / Biometric' },
+  { label: 'Gate Automation', cat: 'Gate Automation' },
+  { label: 'VDP Installation', cat: 'Video Door Phone' },
 ];
 
 const STATS = [
@@ -95,11 +95,11 @@ export default function LandingScreen({ onStaffLogin, onGoSubmit, onGoTrack }: P
         <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Our Services</Text>
         <View style={styles.grid}>
           {SERVICES.map((s) => {
-            const c = categoryColors[s.cat];
+            const c = categoryColors[s.cat] || DEFAULT_CATEGORY_STYLE;
             return (
               <Panel key={s.label} style={styles.serviceRow}>
                 <View style={[styles.serviceIcon, { backgroundColor: c.bg }]}>
-                  <Text style={[styles.serviceIconText, { color: c.color }]}>{s.initials}</Text>
+                  <Text style={[styles.serviceIconText, { color: c.color }]}>{c.initials}</Text>
                 </View>
                 <Text style={[styles.serviceLabel, { color: theme.text }]}>{s.label}</Text>
               </Panel>
