@@ -79,3 +79,15 @@ export async function dataPatch<T>(table: string, eq: string | string[], body: u
   (Array.isArray(eq) ? eq : [eq]).forEach((v) => sp.append('eq', v));
   return request<T>(`/data/${table}?${sp.toString()}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
+
+export async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const fullUrl = `${API_BASE_URL}${path}`;
+  const res = await fetch(fullUrl, { method: 'POST', headers, body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
+  return data as T;
+}
