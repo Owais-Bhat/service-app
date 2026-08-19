@@ -6250,6 +6250,32 @@ async function fetchApprovedBonusPointsForMonth(connection, month) {
     return byEmployee;
 }
 
+// Employee-facing leaderboard — same computation as the admin endpoint
+// below (including approved bonus points, so a technician's standing here
+// never drifts from what admins see), without the admin gate or
+// award-lookup (design spec §2).
+app.get('/api/leaderboard', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    const month = String(req.query.month || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ error: 'month must be formatted YYYY-MM' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const rows = await fetchVerifiedJobsForMonth(connection, month);
+        const bonusByEmployee = await fetchApprovedBonusPointsForMonth(connection, month);
+        const board = computeLeaderboard(rows, bonusByEmployee);
+        res.json({ month, leaderboard: board });
+    } catch (err) {
+        console.error('[leaderboard] employee leaderboard fetch failed:', err);
+        res.status(500).json({ error: 'Could not load leaderboard' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const month = String(req.query.month || '').trim();
