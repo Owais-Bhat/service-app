@@ -12,6 +12,7 @@ export interface AuthUser {
   allowed_tabs: string | null;
   worker_type: WorkerType;
   installations_enabled: boolean | number;
+  salary: string | number;
 }
 
 interface SigninResponse {
