@@ -5,8 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
-import MoreSheet from '../components/MoreSheet';
-import { EMPLOYEE_TABS, EMPLOYEE_MORE_SECTIONS } from './EmployeeDashboardScreen';
+import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
@@ -27,6 +26,7 @@ interface Props {
   onGoDashboard: () => void;
   onGoJobTools: () => void;
   onGoEarnings: () => void;
+  onGoProfile: () => void;
   onOpenLeaveForm: () => void;
 }
 
@@ -42,7 +42,7 @@ function hoursBetween(start: string | null, end: string | null): number {
   return ms > 0 ? ms / 3600000 : 0;
 }
 
-export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarnings, onOpenLeaveForm }: Props) {
+export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarnings, onGoProfile, onOpenLeaveForm }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -53,7 +53,6 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   const [refreshing, setRefreshing] = useState(false);
   const [clocking, setClocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [moreVisible, setMoreVisible] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -232,16 +231,14 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
 
       <GlassTabBar
         items={EMPLOYEE_TABS}
-        activeKey={moreVisible ? 'more' : 'attendance'}
+        activeKey="attendance"
         onSelect={(key) => {
-          if (key === 'more') setMoreVisible(true);
-          else if (key === 'dashboard') onGoDashboard();
+          if (key === 'dashboard') onGoDashboard();
           else if (key === 'jobtools') onGoJobTools();
           else if (key === 'earnings') onGoEarnings();
-          else setMoreVisible(false);
+          else if (key === 'profile') onGoProfile();
         }}
       />
-      <MoreSheet visible={moreVisible} sections={EMPLOYEE_MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
     </View>
   );
 }
