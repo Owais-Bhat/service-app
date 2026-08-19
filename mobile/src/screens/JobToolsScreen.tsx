@@ -12,6 +12,7 @@ import { spacing, typography } from '../theme';
 interface Props {
   onGoDashboard: () => void;
   onGoAttendance: () => void;
+  onGoEarnings: () => void;
   onOpenEstimator: () => void;
   onOpenDeviceFollowUp: () => void;
   onOpenEodReport: () => void;
@@ -23,7 +24,14 @@ const TOOLS = [
   { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1' },
 ];
 
-export default function JobToolsScreen({ onGoDashboard, onGoAttendance, onOpenEstimator, onOpenDeviceFollowUp, onOpenEodReport }: Props) {
+export default function JobToolsScreen({
+  onGoDashboard,
+  onGoAttendance,
+  onGoEarnings,
+  onOpenEstimator,
+  onOpenDeviceFollowUp,
+  onOpenEodReport,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [moreVisible, setMoreVisible] = useState(false);
@@ -64,6 +72,7 @@ export default function JobToolsScreen({ onGoDashboard, onGoAttendance, onOpenEs
           if (key === 'more') setMoreVisible(true);
           else if (key === 'dashboard') onGoDashboard();
           else if (key === 'attendance') onGoAttendance();
+          else if (key === 'earnings') onGoEarnings();
           else setMoreVisible(false);
         }}
       />
