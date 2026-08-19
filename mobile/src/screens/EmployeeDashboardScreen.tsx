@@ -17,6 +17,7 @@ interface Props {
   onOpenTask: (ticketId: string) => void;
   onGoAttendance: () => void;
   onGoJobTools: () => void;
+  onGoEarnings: () => void;
 }
 
 // Shared by EmployeeDashboardScreen and AttendanceScreen so the tab bar is
@@ -25,6 +26,7 @@ export const EMPLOYEE_TABS = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'attendance', label: 'Attendance' },
   { key: 'jobtools', label: 'Job Tools' },
+  { key: 'earnings', label: 'Earnings' },
   { key: 'more', label: 'More' },
 ];
 
@@ -47,7 +49,7 @@ const FILTERS: { key: string; label: string }[] = [
   { key: 'resolved', label: 'Resolved' },
 ];
 
-export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, onGoJobTools }: Props) {
+export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, onGoJobTools, onGoEarnings }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
@@ -160,6 +162,7 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
           if (key === 'more') setMoreVisible(true);
           else if (key === 'attendance') onGoAttendance();
           else if (key === 'jobtools') onGoJobTools();
+          else if (key === 'earnings') onGoEarnings();
           else setMoreVisible(false);
         }}
       />
