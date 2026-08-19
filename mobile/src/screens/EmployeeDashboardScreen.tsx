@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import MeshBackground from '../components/MeshBackground';
 import GlassTabBar from '../components/GlassTabBar';
-import MoreSheet from '../components/MoreSheet';
 import GlowButton from '../components/GlowButton';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -18,28 +17,19 @@ interface Props {
   onGoAttendance: () => void;
   onGoJobTools: () => void;
   onGoEarnings: () => void;
+  onGoProfile: () => void;
 }
 
-// Shared by EmployeeDashboardScreen and AttendanceScreen so the tab bar is
-// identical (not duplicated) across the employee's top-level screens.
+// Shared by every employee top-level screen so the tab bar is identical
+// (not duplicated) across all of them. Matches NEST's real 5-tab design —
+// see docs/superpowers/specs/2026-08-19-nest-profile.md §3. "More" is
+// gone: Profile is a real tab now, not a placeholder holding area.
 export const EMPLOYEE_TABS = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'attendance', label: 'Attendance' },
   { key: 'jobtools', label: 'Job Tools' },
   { key: 'earnings', label: 'Earnings' },
-  { key: 'more', label: 'More' },
-];
-
-// The web app's employee-relevant sections not yet ported to mobile — see
-// design spec §5/§8 (phase 1) and phase 3a's spec §8 (Job Cards is a
-// separate, richer feature from this phase's simple status tracking).
-export const EMPLOYEE_MORE_SECTIONS = [
-  { label: 'Job Cards' },
-  { label: 'Device Tracking' },
-  { label: 'Training' },
-  { label: 'Media Training' },
-  { label: 'Notifications' },
-  { label: 'Profile' },
+  { key: 'profile', label: 'Profile' },
 ];
 
 const FILTERS: { key: string; label: string }[] = [
@@ -49,7 +39,7 @@ const FILTERS: { key: string; label: string }[] = [
   { key: 'resolved', label: 'Resolved' },
 ];
 
-export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, onGoJobTools, onGoEarnings }: Props) {
+export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, onGoJobTools, onGoEarnings, onGoProfile }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
@@ -57,7 +47,6 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [moreVisible, setMoreVisible] = useState(false);
   const [filter, setFilter] = useState('all');
 
   const load = useCallback(async () => {
@@ -157,16 +146,14 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
 
       <GlassTabBar
         items={EMPLOYEE_TABS}
-        activeKey={moreVisible ? 'more' : 'dashboard'}
+        activeKey="dashboard"
         onSelect={(key) => {
-          if (key === 'more') setMoreVisible(true);
-          else if (key === 'attendance') onGoAttendance();
+          if (key === 'attendance') onGoAttendance();
           else if (key === 'jobtools') onGoJobTools();
           else if (key === 'earnings') onGoEarnings();
-          else setMoreVisible(false);
+          else if (key === 'profile') onGoProfile();
         }}
       />
-      <MoreSheet visible={moreVisible} sections={EMPLOYEE_MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
     </View>
   );
 }
