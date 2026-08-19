@@ -19,6 +19,7 @@ import EstimatorScreen from '../screens/EstimatorScreen';
 import DeviceFollowUpScreen from '../screens/DeviceFollowUpScreen';
 import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 import EodReportScreen from '../screens/EodReportScreen';
+import EarningsScreen from '../screens/EarningsScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -37,6 +38,7 @@ type EmployeeStackParams = {
   DeviceFollowUp: undefined;
   DeviceDetail: { inquiryId: string };
   EodReport: undefined;
+  Earnings: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -84,6 +86,7 @@ function EmployeeDashboardRoute({ navigation }: any) {
       onOpenTask={(ticketId) => navigation.navigate('TaskDetail', { ticketId })}
       onGoAttendance={() => navigation.navigate('Attendance')}
       onGoJobTools={() => navigation.navigate('JobTools')}
+      onGoEarnings={() => navigation.navigate('Earnings')}
     />
   );
 }
@@ -97,6 +100,7 @@ function AttendanceRoute({ navigation }: any) {
     <AttendanceScreen
       onGoDashboard={() => navigation.navigate('Dashboard')}
       onGoJobTools={() => navigation.navigate('JobTools')}
+      onGoEarnings={() => navigation.navigate('Earnings')}
       onOpenLeaveForm={() => navigation.navigate('LeaveForm')}
     />
   );
@@ -111,6 +115,7 @@ function JobToolsRoute({ navigation }: any) {
     <JobToolsScreen
       onGoDashboard={() => navigation.navigate('Dashboard')}
       onGoAttendance={() => navigation.navigate('Attendance')}
+      onGoEarnings={() => navigation.navigate('Earnings')}
       onOpenEstimator={() => navigation.navigate('Estimator')}
       onOpenDeviceFollowUp={() => navigation.navigate('DeviceFollowUp')}
       onOpenEodReport={() => navigation.navigate('EodReport')}
@@ -139,6 +144,16 @@ function EodReportRoute({ navigation }: any) {
   return <EodReportScreen onBack={() => navigation.goBack()} />;
 }
 
+function EarningsRoute({ navigation }: any) {
+  return (
+    <EarningsScreen
+      onGoDashboard={() => navigation.navigate('Dashboard')}
+      onGoAttendance={() => navigation.navigate('Attendance')}
+      onGoJobTools={() => navigation.navigate('JobTools')}
+    />
+  );
+}
+
 // Dashboard, Attendance, and JobTools are siblings switched with no
 // transition (an instant-swap approximation of tab behavior — design
 // spec §4, same pattern phase 3b established). Every other screen is a
@@ -149,6 +164,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="Attendance" component={AttendanceRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="JobTools" component={JobToolsRoute} options={{ animation: 'none' }} />
+      <EmployeeStack.Screen name="Earnings" component={EarningsRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="TaskDetail" component={TaskDetailRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="LeaveForm" component={LeaveFormRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Estimator" component={EstimatorRoute} options={{ animation: 'slide_from_right' }} />
