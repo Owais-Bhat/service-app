@@ -20,6 +20,13 @@ import DeviceFollowUpScreen from '../screens/DeviceFollowUpScreen';
 import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 import EodReportScreen from '../screens/EodReportScreen';
 import EarningsScreen from '../screens/EarningsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import LeaderboardScreen from '../screens/LeaderboardScreen';
+import TrainingCoursesScreen from '../screens/TrainingCoursesScreen';
+import CoursePlayerScreen from '../screens/CoursePlayerScreen';
+import TutorialsScreen from '../screens/TutorialsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -39,6 +46,13 @@ type EmployeeStackParams = {
   DeviceDetail: { inquiryId: string };
   EodReport: undefined;
   Earnings: undefined;
+  Profile: undefined;
+  Leaderboard: undefined;
+  TrainingCourses: undefined;
+  CoursePlayer: { courseId: string };
+  Tutorials: undefined;
+  Notifications: undefined;
+  Settings: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -87,6 +101,7 @@ function EmployeeDashboardRoute({ navigation }: any) {
       onGoAttendance={() => navigation.navigate('Attendance')}
       onGoJobTools={() => navigation.navigate('JobTools')}
       onGoEarnings={() => navigation.navigate('Earnings')}
+      onGoProfile={() => navigation.navigate('Profile')}
     />
   );
 }
@@ -101,6 +116,7 @@ function AttendanceRoute({ navigation }: any) {
       onGoDashboard={() => navigation.navigate('Dashboard')}
       onGoJobTools={() => navigation.navigate('JobTools')}
       onGoEarnings={() => navigation.navigate('Earnings')}
+      onGoProfile={() => navigation.navigate('Profile')}
       onOpenLeaveForm={() => navigation.navigate('LeaveForm')}
     />
   );
@@ -116,6 +132,7 @@ function JobToolsRoute({ navigation }: any) {
       onGoDashboard={() => navigation.navigate('Dashboard')}
       onGoAttendance={() => navigation.navigate('Attendance')}
       onGoEarnings={() => navigation.navigate('Earnings')}
+      onGoProfile={() => navigation.navigate('Profile')}
       onOpenEstimator={() => navigation.navigate('Estimator')}
       onOpenDeviceFollowUp={() => navigation.navigate('DeviceFollowUp')}
       onOpenEodReport={() => navigation.navigate('EodReport')}
@@ -150,14 +167,61 @@ function EarningsRoute({ navigation }: any) {
       onGoDashboard={() => navigation.navigate('Dashboard')}
       onGoAttendance={() => navigation.navigate('Attendance')}
       onGoJobTools={() => navigation.navigate('JobTools')}
+      onGoProfile={() => navigation.navigate('Profile')}
     />
   );
 }
 
-// Dashboard, Attendance, and JobTools are siblings switched with no
-// transition (an instant-swap approximation of tab behavior — design
-// spec §4, same pattern phase 3b established). Every other screen is a
-// genuine drill-down push with a slide transition and no tab bar.
+function ProfileRoute({ navigation }: any) {
+  return (
+    <ProfileScreen
+      onGoDashboard={() => navigation.navigate('Dashboard')}
+      onGoAttendance={() => navigation.navigate('Attendance')}
+      onGoJobTools={() => navigation.navigate('JobTools')}
+      onGoEarnings={() => navigation.navigate('Earnings')}
+      onOpenLeaderboard={() => navigation.navigate('Leaderboard')}
+      onOpenTraining={() => navigation.navigate('TrainingCourses')}
+      onOpenTutorials={() => navigation.navigate('Tutorials')}
+      onOpenNotifications={() => navigation.navigate('Notifications')}
+      onOpenSettings={() => navigation.navigate('Settings')}
+    />
+  );
+}
+
+function LeaderboardRoute({ navigation }: any) {
+  return <LeaderboardScreen onBack={() => navigation.goBack()} />;
+}
+
+function TrainingCoursesRoute({ navigation }: any) {
+  return (
+    <TrainingCoursesScreen
+      onBack={() => navigation.goBack()}
+      onOpenCourse={(courseId) => navigation.navigate('CoursePlayer', { courseId })}
+    />
+  );
+}
+
+function CoursePlayerRoute({ navigation, route }: any) {
+  return <CoursePlayerScreen courseId={route.params.courseId} onBack={() => navigation.goBack()} />;
+}
+
+function TutorialsRoute({ navigation }: any) {
+  return <TutorialsScreen onBack={() => navigation.goBack()} />;
+}
+
+function NotificationsRoute({ navigation }: any) {
+  return <NotificationsScreen onBack={() => navigation.goBack()} />;
+}
+
+function SettingsRoute({ navigation }: any) {
+  return <SettingsScreen onBack={() => navigation.goBack()} />;
+}
+
+// Dashboard, Attendance, JobTools, Earnings, and Profile are siblings
+// switched with no transition (an instant-swap approximation of tab
+// behavior — design spec §3, same pattern established since phase 3b).
+// Every other screen is a genuine drill-down push with a slide
+// transition and no tab bar.
 function EmployeeNavigator() {
   return (
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
@@ -165,12 +229,19 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Attendance" component={AttendanceRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="JobTools" component={JobToolsRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="Earnings" component={EarningsRoute} options={{ animation: 'none' }} />
+      <EmployeeStack.Screen name="Profile" component={ProfileRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="TaskDetail" component={TaskDetailRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="LeaveForm" component={LeaveFormRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Estimator" component={EstimatorRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="DeviceFollowUp" component={DeviceFollowUpRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="DeviceDetail" component={DeviceDetailRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="EodReport" component={EodReportRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="CoursePlayer" component={CoursePlayerRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Tutorials" component={TutorialsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Notifications" component={NotificationsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Settings" component={SettingsRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
   );
 }
