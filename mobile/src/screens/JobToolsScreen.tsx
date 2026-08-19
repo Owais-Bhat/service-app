@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
-import MoreSheet from '../components/MoreSheet';
-import { EMPLOYEE_TABS, EMPLOYEE_MORE_SECTIONS } from './EmployeeDashboardScreen';
+import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 
@@ -13,6 +12,7 @@ interface Props {
   onGoDashboard: () => void;
   onGoAttendance: () => void;
   onGoEarnings: () => void;
+  onGoProfile: () => void;
   onOpenEstimator: () => void;
   onOpenDeviceFollowUp: () => void;
   onOpenEodReport: () => void;
@@ -28,13 +28,13 @@ export default function JobToolsScreen({
   onGoDashboard,
   onGoAttendance,
   onGoEarnings,
+  onGoProfile,
   onOpenEstimator,
   onOpenDeviceFollowUp,
   onOpenEodReport,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const [moreVisible, setMoreVisible] = useState(false);
 
   const openTool = (key: string) => {
     if (key === 'estimator') onOpenEstimator();
@@ -63,20 +63,28 @@ export default function JobToolsScreen({
             </Panel>
           </Pressable>
         ))}
+
+        <Panel style={{ ...styles.toolRow, ...styles.comingSoonRow }}>
+          <View style={[styles.toolIcon, { backgroundColor: theme.panel2 }]}>
+            <View style={[styles.toolDot, { backgroundColor: theme.text3 }]} />
+          </View>
+          <View style={styles.toolInfo}>
+            <Text style={[styles.toolLabel, { color: theme.text3 }]}>Job Cards</Text>
+            <Text style={[styles.caption, { color: theme.text3 }]}>Coming soon</Text>
+          </View>
+        </Panel>
       </ScrollView>
 
       <GlassTabBar
         items={EMPLOYEE_TABS}
-        activeKey={moreVisible ? 'more' : 'jobtools'}
+        activeKey="jobtools"
         onSelect={(key) => {
-          if (key === 'more') setMoreVisible(true);
-          else if (key === 'dashboard') onGoDashboard();
+          if (key === 'dashboard') onGoDashboard();
           else if (key === 'attendance') onGoAttendance();
           else if (key === 'earnings') onGoEarnings();
-          else setMoreVisible(false);
+          else if (key === 'profile') onGoProfile();
         }}
       />
-      <MoreSheet visible={moreVisible} sections={EMPLOYEE_MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
     </View>
   );
 }
@@ -87,6 +95,7 @@ const styles = StyleSheet.create({
   caption: { ...typography.caption },
   pressed: { opacity: 0.7 },
   toolRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
+  comingSoonRow: { opacity: 0.6 },
   toolIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   toolDot: { width: 10, height: 10, borderRadius: 5 },
   toolInfo: { flex: 1, minWidth: 0 },
