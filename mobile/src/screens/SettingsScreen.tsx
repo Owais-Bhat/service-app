@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -19,7 +20,7 @@ export default function SettingsScreen({ onBack }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
 
         <Panel style={styles.row}>
@@ -43,7 +44,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title, marginBottom: spacing(4) },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rowInfo: { flex: 1, minWidth: 0, paddingRight: spacing(3) },
   rowLabel: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },

@@ -3,6 +3,7 @@ import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
@@ -48,7 +49,7 @@ export default function TutorialsScreen({ onBack }: Props) {
         contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Tutorials</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -81,7 +82,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title, marginBottom: spacing(4) },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
   pressed: { opacity: 0.7 },
   row: { marginBottom: spacing(2.5) },
