@@ -3,10 +3,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
+import Icon from './Icon';
+import { IconName } from '../theme/icons';
 
 export interface TabItem {
   key: string;
   label: string;
+  // Optional so screens outside this phase's scope (e.g. AdminDashboardScreen)
+  // keep their current generic-dot look unchanged.
+  icon?: IconName;
 }
 
 interface Props {
@@ -47,7 +52,11 @@ export default function GlassTabBar({ items, activeKey, onSelect }: Props) {
               hitSlop={8}
             >
               <View style={[styles.iconWrap, active && { backgroundColor: theme.neuDark }]}>
-                <View style={[styles.dot, { borderColor: active ? brand.primary : theme.text3 }]} />
+                {item.icon ? (
+                  <Icon name={item.icon} size={20} color={active ? brand.primary : theme.text3} />
+                ) : (
+                  <View style={[styles.dot, { borderColor: active ? brand.primary : theme.text3 }]} />
+                )}
               </View>
               <Text style={[styles.label, { color: active ? brand.primary : theme.text3 }]}>{item.label}</Text>
               <View style={[styles.indicator, active && { backgroundColor: brand.primary }]} />

@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import MeshBackground from '../components/MeshBackground';
-import GlassTabBar from '../components/GlassTabBar';
+import GlassTabBar, { TabItem } from '../components/GlassTabBar';
 import GlowButton from '../components/GlowButton';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -24,12 +24,12 @@ interface Props {
 // (not duplicated) across all of them. Matches NEST's real 5-tab design —
 // see docs/superpowers/specs/2026-08-19-nest-profile.md §3. "More" is
 // gone: Profile is a real tab now, not a placeholder holding area.
-export const EMPLOYEE_TABS = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'attendance', label: 'Attendance' },
-  { key: 'jobtools', label: 'Job Tools' },
-  { key: 'earnings', label: 'Earnings' },
-  { key: 'profile', label: 'Profile' },
+export const EMPLOYEE_TABS: TabItem[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'home' },
+  { key: 'attendance', label: 'Attendance', icon: 'clock' },
+  { key: 'jobtools', label: 'Job Tools', icon: 'wrench' },
+  { key: 'earnings', label: 'Earnings', icon: 'wallet' },
+  { key: 'profile', label: 'Profile', icon: 'user' },
 ];
 
 const FILTERS: { key: string; label: string }[] = [
