@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -68,7 +69,7 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
         <MeshBackground />
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Course not found'}</Text>
-          <Text style={styles.link} onPress={onBack}>← Back</Text>
+          <BackLink onPress={onBack} />
         </View>
       </View>
     );
@@ -81,7 +82,7 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
 
         <GlassCard style={styles.headerCard}>
           <Text style={[styles.courseTitle, { color: theme.text }]}>{detail.course.title}</Text>
@@ -125,7 +126,6 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing(3) },
   body: { ...typography.body },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
   headerCard: { marginBottom: spacing(4) },
   courseTitle: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18 },
