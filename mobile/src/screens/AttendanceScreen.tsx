@@ -5,6 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
+import PulseDot from '../components/PulseDot';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -138,7 +139,11 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
           <>
             <GlassCard style={styles.clockCard}>
               <View style={[styles.clockChip, { backgroundColor: clockedIn ? 'rgba(21,160,90,0.14)' : theme.panel2 }]}>
-                <View style={[styles.clockDot, { backgroundColor: clockedIn ? brand.primary : theme.text3 }]} />
+                {clockedIn ? (
+                  <PulseDot color={brand.primary} size={7} />
+                ) : (
+                  <View style={[styles.clockDot, { backgroundColor: theme.text3 }]} />
+                )}
                 <Text style={[styles.clockChipText, { color: clockedIn ? brand.primary : theme.text3 }]}>
                   {clockedIn ? 'Clocked in' : 'Clocked out'}
                 </Text>
