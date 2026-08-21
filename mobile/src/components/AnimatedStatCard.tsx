@@ -5,19 +5,23 @@ import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } fro
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { springs } from '../theme/motion';
+import Icon from './Icon';
+import { IconName } from '../theme/icons';
 
 interface Props {
   label: string;
   value: string | number;
   accentColor?: string;
   delayMs?: number;
+  icon?: IconName;
+  iconFilled?: boolean;
 }
 
 // Same public API as before (label/value/accentColor/delayMs) — dashboard
 // call sites don't change. The 3D AccentOrb is gone: NEST's own KPI cards
 // use a plain colored icon chip with a simple glyph, so that's what this
 // renders instead (see design spec §6).
-export default function AnimatedStatCard({ label, value, accentColor, delayMs = 0 }: Props) {
+export default function AnimatedStatCard({ label, value, accentColor, delayMs = 0, icon, iconFilled = false }: Props) {
   const { theme, mode } = useTheme();
   const color = accentColor || theme.text;
   const progress = useSharedValue(0);
@@ -39,7 +43,7 @@ export default function AnimatedStatCard({ label, value, accentColor, delayMs = 
       <BlurView intensity={mode === 'dark' ? 40 : 55} tint={mode} style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surface }]} pointerEvents="none" />
       <View style={[styles.iconChip, { backgroundColor: color + '29' }]}>
-        <View style={[styles.iconDot, { borderColor: color }]} />
+        {icon ? <Icon name={icon} size={16} color={color} filled={iconFilled} /> : <View style={[styles.iconDot, { borderColor: color }]} />}
       </View>
       <Text style={[styles.value, { color }]}>{value}</Text>
       <Text style={[styles.label, { color: theme.text3 }]}>{label}</Text>

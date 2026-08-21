@@ -90,8 +90,10 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
         <View style={styles.row}>
           <AnimatedStatCard
             label={clockedIn ? 'Clocked In' : 'Not Clocked In'}
-            value={clockedIn ? '●' : '○'}
+            value={clockedIn ? 'Active' : 'Off'}
             accentColor={clockedIn ? semantic.success : theme.text3}
+            icon={clockedIn ? 'check-circle' : 'clock'}
+            iconFilled={clockedIn}
             delayMs={0}
           />
           <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={semantic.warning} delayMs={100} />
