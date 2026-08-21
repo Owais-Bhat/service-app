@@ -3,6 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
@@ -59,7 +60,7 @@ export default function DeviceFollowUpScreen({ onBack, onOpenDevice }: Props) {
         contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Device Follow-up</Text>
         <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>Devices under service</Text>
 
@@ -94,7 +95,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
   pressed: { opacity: 0.7 },
   deviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },

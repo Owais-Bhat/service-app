@@ -5,6 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlowButton from '../components/GlowButton';
+import BackLink from '../components/BackLink';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
@@ -62,7 +63,7 @@ export default function EodReportScreen({ onBack }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>EOD Report</Text>
         <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>Submit end-of-day summary</Text>
 
@@ -102,7 +103,6 @@ const styles = StyleSheet.create({
   title: { ...typography.title },
   body: { ...typography.body },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3) },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
   input: { ...typography.body, borderRadius: 16, paddingHorizontal: spacing(4), paddingVertical: spacing(3) },

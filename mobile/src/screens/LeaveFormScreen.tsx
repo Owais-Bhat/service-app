@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
+import BackLink from '../components/BackLink';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
@@ -48,7 +49,7 @@ export default function LeaveFormScreen({ onBack }: Props) {
       <MeshBackground />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-          <Text style={styles.link} onPress={onBack}>← Back</Text>
+          <BackLink onPress={onBack} />
           <Text style={[styles.title, { color: theme.text }]}>New Leave Request</Text>
 
           <GlassCard style={styles.formCard}>
@@ -92,6 +93,5 @@ const styles = StyleSheet.create({
   title: { ...typography.title },
   input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3) },
 });

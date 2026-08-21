@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -85,7 +86,7 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Device Detail</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -216,7 +217,6 @@ const styles = StyleSheet.create({
   title: { ...typography.title, marginBottom: spacing(4) },
   body: { ...typography.body },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
   section: { marginBottom: spacing(4) },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
