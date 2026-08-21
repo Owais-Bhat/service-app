@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, categoryColors, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE, TECH_STATUS_ORDER } from '../theme/tokens';
@@ -75,7 +76,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
         <MeshBackground />
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Ticket not found'}</Text>
-          <Text style={styles.link} onPress={onBack}>← Back</Text>
+          <BackLink onPress={onBack} />
         </View>
       </View>
     );
@@ -97,7 +98,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
 
         <GlassCard>
           <View style={styles.headerRow}>
@@ -175,7 +176,6 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing(6), gap: spacing(3) },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   body: { ...typography.body, textAlign: 'center' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing(2) },
   ticketId: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13, color: brand.primary },
