@@ -3,6 +3,8 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
+import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
@@ -51,7 +53,7 @@ export default function LeaderboardScreen({ onBack }: Props) {
         contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Leaderboard</Text>
         <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>This month's verified jobs</Text>
 
@@ -69,7 +71,14 @@ export default function LeaderboardScreen({ onBack }: Props) {
                   <Text style={[styles.name, { color: theme.text }]}>{isMe ? 'You' : r.name}</Text>
                   <Text style={[styles.caption, { color: theme.text3 }]}>{r.jobsCount} job{r.jobsCount === 1 ? '' : 's'}</Text>
                 </View>
-                <Text style={[styles.score, { color: theme.text2 }]}>{r.avgRating != null ? `★ ${r.avgRating.toFixed(1)}` : '—'}</Text>
+                {r.avgRating != null ? (
+                  <View style={styles.scoreRow}>
+                    <Icon name="star" size={13} color={theme.text2} filled />
+                    <Text style={[styles.score, { color: theme.text2 }]}>{r.avgRating.toFixed(1)}</Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.score, { color: theme.text2 }]}>—</Text>
+                )}
               </Panel>
             );
           })
@@ -83,8 +92,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title },
   caption: { ...typography.caption },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
   rank: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 14, width: 28 },
   info: { flex: 1, minWidth: 0 },
