@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Canvas, RoundedRect, LinearGradient, vec } from '@shopify/react-native-skia';
 import Animated, {
   Easing,
@@ -10,12 +10,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
+import Icon from './Icon';
+import { IconName } from '../theme/icons';
 
 interface Props {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  icon?: IconName;
 }
 
 const HEIGHT = 52;
@@ -23,7 +26,7 @@ const HEIGHT = 52;
 // Skia-rendered gradient background with a Reanimated-driven pulsing glow —
 // the two animation systems doing what each is best at: Skia for the GPU
 // shader-drawn gradient, Reanimated for the UI-thread opacity/scale pulse.
-export default function GlowButton({ label, onPress, disabled, loading }: Props) {
+export default function GlowButton({ label, onPress, disabled, loading, icon }: Props) {
   const pulse = useSharedValue(0.6);
 
   useEffect(() => {
@@ -52,7 +55,10 @@ export default function GlowButton({ label, onPress, disabled, loading }: Props)
           </RoundedRect>
         </Canvas>
       </Animated.View>
-      <Text style={[typography.heading, styles.label]}>{loading ? 'Please wait…' : label}</Text>
+      <View style={styles.content}>
+        {icon && !loading && <Icon name={icon} size={17} color="#ffffff" />}
+        <Text style={[typography.heading, styles.label]}>{loading ? 'Please wait…' : label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -71,6 +77,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: 'hidden',
   },
+  content: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   label: {
     color: '#ffffff',
     fontWeight: '700',

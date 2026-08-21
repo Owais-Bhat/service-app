@@ -236,7 +236,7 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
               style={[styles.captchaInput, { borderColor: theme.line, backgroundColor: theme.panel2, color: theme.text }]}
             />
             {otpError && <Text style={styles.error}>{otpError}</Text>}
-            <GlowButton label={sendingOtp ? 'Sending…' : 'Send OTP by SMS'} onPress={handleSendOtp} loading={sendingOtp} />
+            <GlowButton label={sendingOtp ? 'Sending…' : 'Send OTP'} onPress={handleSendOtp} loading={sendingOtp} icon="arrow-right" />
           </>
         )}
 
