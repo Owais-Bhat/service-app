@@ -1,4 +1,16 @@
-import { api } from './client';
+import { api, API_BASE_URL } from './client';
+
+// API_BASE_URL is "<origin>/api" — ads store `url` as a path relative to
+// the origin (e.g. "/uploads/foo.png"), which a browser's <img> resolves
+// against the page's own origin for free. React Native's <Image> has no
+// such origin to resolve against, so a relative uri silently fails to
+// load — this makes it absolute.
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+
+function resolveAdUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
 
 export interface LandingAd {
   id: string;
@@ -66,13 +78,15 @@ export function filterAdsForPlacement(
   placement: 'landing' | 'popup_landing',
 ): LandingAd[] {
   const now = Date.now();
-  return ads.filter((ad) => {
-    if (!ad || !ad.url) return false;
-    if (ad.kind === 'video') return false;
-    if ((ad.device_target || 'both') === 'desktop') return false;
-    if ((ad.placement || 'landing') !== placement) return false;
-    if (ad.starts_at && new Date(ad.starts_at).getTime() > now) return false;
-    if (ad.expires_at && new Date(ad.expires_at).getTime() <= now) return false;
-    return true;
-  });
+  return ads
+    .filter((ad) => {
+      if (!ad || !ad.url) return false;
+      if (ad.kind === 'video') return false;
+      if ((ad.device_target || 'both') === 'desktop') return false;
+      if ((ad.placement || 'landing') !== placement) return false;
+      if (ad.starts_at && new Date(ad.starts_at).getTime() > now) return false;
+      if (ad.expires_at && new Date(ad.expires_at).getTime() <= now) return false;
+      return true;
+    })
+    .map((ad) => ({ ...ad, url: resolveAdUrl(ad.url) }));
 }
