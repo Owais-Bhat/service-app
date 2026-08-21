@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
@@ -87,8 +87,11 @@ export default function LandingScreen({ onStaffLogin }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <PopupAd ad={showPopup ? popupAd : null} onDismiss={() => setShowPopup(false)} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.root}>
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(10), paddingHorizontal: spacing(5) }}
+        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         <Animated.View entering={FadeInUp.duration(550)} style={styles.header}>
           <View style={styles.brandRow}>
@@ -138,6 +141,7 @@ export default function LandingScreen({ onStaffLogin }: Props) {
           <ContactCard />
         </Animated.View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
