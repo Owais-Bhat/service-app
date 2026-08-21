@@ -96,7 +96,7 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
             iconFilled={clockedIn}
             delayMs={0}
           />
-          <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={semantic.warning} delayMs={100} />
+          <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={semantic.warning} icon="tasks" delayMs={100} />
         </View>
 
         <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tasks</Text>
