@@ -3,6 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
+import BackLink from '../components/BackLink';
+import Icon from '../components/Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -44,7 +46,7 @@ export default function EstimatorScreen({ onBack }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(20) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
+        <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Estimator</Text>
         <Text style={[styles.caption, { color: theme.text3 }]}>Tap a service to add it to the quote — nothing is saved.</Text>
 
@@ -58,7 +60,7 @@ export default function EstimatorScreen({ onBack }: Props) {
                 <Text style={[styles.itemName, { color: theme.text, flex: 1 }]} numberOfLines={1}>{item.sub_category || item.name}</Text>
                 <Text style={[styles.quoteCost, { color: brand.primary }]}>₹{(Number(item.cost) || 0).toLocaleString('en-IN')}</Text>
                 <Pressable onPress={() => removeAt(i)} hitSlop={8}>
-                  <Text style={[styles.removeText, { color: theme.text3 }]}>✕</Text>
+                  <Icon name="trash" size={16} color={theme.text3} />
                 </Pressable>
               </Panel>
             ))}
@@ -110,7 +112,6 @@ const styles = StyleSheet.create({
   title: { ...typography.title },
   caption: { ...typography.caption },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing(4), marginBottom: spacing(2.5) },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3) },
   itemRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing(2.5) },
   itemInfo: { flex: 1, minWidth: 0 },
@@ -120,7 +121,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   quoteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginBottom: spacing(2) },
   quoteCost: { fontFamily: 'JetBrainsMono_500Medium', fontSize: 13 },
-  removeText: { fontSize: 16, paddingHorizontal: spacing(1) },
   totalBar: {
     position: 'absolute',
     left: 0,
