@@ -52,6 +52,8 @@ export const ICONS = {
   pin: ['M12 21s7-6.5 7-11.5A7 7 0 105 9.5C5 14.5 12 21 12 21z', 'M12 11a2 2 0 100-4 2 2 0 000 4z'],
   receipt: ['M6 3h12v18l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3z', 'M9 8h6M9 12h6M9 16h3'],
   close: ['M5 5l14 14', 'M19 5L5 19'],
+  mail: ['M4 6h16v12H4z', 'M4.5 6.5l7.5 6 7.5-6'],
+  lock: ['M6.5 10.5h11v9h-11z', 'M8.5 10.5v-3a3.5 3.5 0 017 0v3', 'M12 14v2.5'],
 } as const;
 
 export type IconName = keyof typeof ICONS;
