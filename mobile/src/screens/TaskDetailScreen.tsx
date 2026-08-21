@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import BackLink from '../components/BackLink';
+import GlowButton from '../components/GlowButton';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, categoryColors, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE, TECH_STATUS_ORDER } from '../theme/tokens';
@@ -137,13 +138,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
           </View>
           {advanceLabel ? (
             canAdvance ? (
-              <Pressable
-                onPress={advance}
-                disabled={advancing}
-                style={({ pressed }) => [styles.advanceButton, pressed && styles.pressed, advancing && styles.disabled]}
-              >
-                <Text style={styles.advanceButtonText}>{advancing ? 'Updating…' : advanceLabel}</Text>
-              </Pressable>
+              <GlowButton label={advanceLabel} onPress={advance} loading={advancing} icon="arrow-right" />
             ) : (
               <View style={[styles.advanceButton, styles.advanceButtonDone, { borderColor: theme.line }]}>
                 <Text style={[styles.advanceButtonText, { color: theme.text3 }]}>{advanceLabel}</Text>
@@ -194,8 +189,6 @@ const styles = StyleSheet.create({
   advanceButton: { padding: spacing(3.5), borderRadius: radius.md, alignItems: 'center', backgroundColor: brand.primary },
   advanceButtonDone: { backgroundColor: 'transparent', borderWidth: 1 },
   advanceButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
-  pressed: { opacity: 0.8 },
-  disabled: { opacity: 0.6 },
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3), textAlign: 'center' },
   photoRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(5) },
   photoTile: { flex: 1, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md, paddingVertical: spacing(5), alignItems: 'center', gap: spacing(1) },

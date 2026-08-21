@@ -6,6 +6,7 @@ import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
 import PulseDot from '../components/PulseDot';
+import GlowButton from '../components/GlowButton';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -209,9 +210,7 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
           </>
         ) : (
           <>
-            <Pressable onPress={onOpenLeaveForm} style={({ pressed }) => [styles.newLeaveButton, pressed && styles.pressed]}>
-              <Text style={styles.newLeaveButtonText}>+ New Leave Request</Text>
-            </Pressable>
+            <GlowButton label="New Leave Request" onPress={onOpenLeaveForm} icon="edit" />
             {leaves.length === 0 ? (
               <Text style={[styles.caption, { color: theme.text3 }]}>No leave requests yet.</Text>
             ) : (
@@ -277,8 +276,6 @@ const styles = StyleSheet.create({
   historyTimes: { alignItems: 'flex-end' },
   historyTime: { fontFamily: 'JetBrainsMono_500Medium', fontSize: 12 },
   historyHours: { fontFamily: 'Manrope_700Bold', fontSize: 12, marginTop: spacing(0.5) },
-  newLeaveButton: { padding: spacing(3.5), borderRadius: 14, backgroundColor: brand.primary, alignItems: 'center', marginBottom: spacing(4) },
-  newLeaveButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
   leaveRow: { marginBottom: spacing(2.5) },
   leaveHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(1) },
   leaveDates: { fontFamily: 'Manrope_700Bold', fontSize: 13 },

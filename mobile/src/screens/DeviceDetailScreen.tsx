@@ -5,6 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import BackLink from '../components/BackLink';
+import GlowButton from '../components/GlowButton';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -101,13 +102,11 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
               value={takenNote}
               onChangeText={setTakenNote}
             />
-            <Pressable
+            <GlowButton
+              label="Mark Device Taken"
               onPress={() => runAction(() => markDeviceTaken(inquiryId, takenNote.trim()))}
-              disabled={submitting}
-              style={({ pressed }) => [styles.actionButton, pressed && styles.pressed, submitting && styles.disabled]}
-            >
-              <Text style={styles.actionButtonText}>Mark Device Taken</Text>
-            </Pressable>
+              loading={submitting}
+            />
           </GlassCard>
         ) : (
           <>
@@ -144,13 +143,11 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
                   value={followupNote}
                   onChangeText={setFollowupNote}
                 />
-                <Pressable
+                <GlowButton
+                  label="Log Update"
                   onPress={() => runAction(() => logFollowUp(inquiryId, followupStatus, followupNote.trim()))}
-                  disabled={submitting}
-                  style={({ pressed }) => [styles.actionButton, pressed && styles.pressed, submitting && styles.disabled]}
-                >
-                  <Text style={styles.actionButtonText}>Log Update</Text>
-                </Pressable>
+                  loading={submitting}
+                />
               </GlassCard>
             ) : null}
 
@@ -186,13 +183,11 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
                   value={returnNote}
                   onChangeText={setReturnNote}
                 />
-                <Pressable
+                <GlowButton
+                  label="Mark Returned"
                   onPress={() => runAction(() => markDeviceReturned(inquiryId, returnCondition.trim() || 'good', returnNote.trim()))}
-                  disabled={submitting}
-                  style={({ pressed }) => [styles.actionButton, pressed && styles.pressed, submitting && styles.disabled]}
-                >
-                  <Text style={styles.actionButtonText}>Mark Returned</Text>
-                </Pressable>
+                  loading={submitting}
+                />
               </GlassCard>
             ) : (
               <Panel style={styles.section}>
@@ -221,10 +216,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing(4) },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
   input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
-  actionButton: { padding: spacing(3.5), borderRadius: radius.md, backgroundColor: brand.primary, alignItems: 'center' },
-  actionButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
-  pressed: { opacity: 0.8 },
-  disabled: { opacity: 0.6 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
   chip: { paddingHorizontal: spacing(3), paddingVertical: spacing(2), borderRadius: 10, borderWidth: 1 },
   chipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
