@@ -5,6 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
 import Icon from '../components/Icon';
+import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
@@ -19,10 +20,10 @@ interface Props {
   onOpenEodReport: () => void;
 }
 
-const TOOLS = [
-  { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', color: '#15a05a' },
-  { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5' },
-  { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1' },
+const TOOLS: { key: string; label: string; desc: string; color: string; icon: IconName }[] = [
+  { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', color: '#15a05a', icon: 'estimator' },
+  { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5', icon: 'device' },
+  { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
 ];
 
 export default function JobToolsScreen({
@@ -54,7 +55,7 @@ export default function JobToolsScreen({
           <Pressable key={tool.key} onPress={() => openTool(tool.key)} style={({ pressed }) => [pressed && styles.pressed]}>
             <Panel style={styles.toolRow}>
               <View style={[styles.toolIcon, { backgroundColor: tool.color + '24' }]}>
-                <View style={[styles.toolDot, { backgroundColor: tool.color }]} />
+                <Icon name={tool.icon} size={22} color={tool.color} />
               </View>
               <View style={styles.toolInfo}>
                 <Text style={[styles.toolLabel, { color: theme.text }]}>{tool.label}</Text>
@@ -67,7 +68,7 @@ export default function JobToolsScreen({
 
         <Panel style={{ ...styles.toolRow, ...styles.comingSoonRow }}>
           <View style={[styles.toolIcon, { backgroundColor: theme.panel2 }]}>
-            <View style={[styles.toolDot, { backgroundColor: theme.text3 }]} />
+            <Icon name="tasks" size={22} color={theme.text3} />
           </View>
           <View style={styles.toolInfo}>
             <Text style={[styles.toolLabel, { color: theme.text3 }]}>Job Cards</Text>
@@ -98,7 +99,6 @@ const styles = StyleSheet.create({
   toolRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
   comingSoonRow: { opacity: 0.6 },
   toolIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  toolDot: { width: 10, height: 10, borderRadius: 5 },
   toolInfo: { flex: 1, minWidth: 0 },
   toolLabel: { fontFamily: 'Manrope_700Bold', fontSize: 15, marginBottom: spacing(0.5) },
 });
