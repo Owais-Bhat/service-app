@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
+import Icon from '../components/Icon';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -77,7 +78,7 @@ export default function ProfileScreen({
           <Pressable key={item.key} onPress={() => openRow(item.key)} style={({ pressed }) => [pressed && styles.pressed]}>
             <Panel style={styles.row}>
               <Text style={[styles.rowLabel, { color: theme.text }]}>{item.label}</Text>
-              <Text style={[styles.chevron, { color: theme.text3 }]}>›</Text>
+              <Icon name="chevron-right" size={18} color={theme.text3} />
             </Panel>
           </Pressable>
         ))}
@@ -113,7 +114,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(2.5) },
   rowLabel: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
-  chevron: { fontSize: 20 },
   logoutRow: {
     flexDirection: 'row',
     alignItems: 'center',

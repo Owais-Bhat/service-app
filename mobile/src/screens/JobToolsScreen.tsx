@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
+import Icon from '../components/Icon';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
@@ -59,7 +60,7 @@ export default function JobToolsScreen({
                 <Text style={[styles.toolLabel, { color: theme.text }]}>{tool.label}</Text>
                 <Text style={[styles.caption, { color: theme.text3 }]}>{tool.desc}</Text>
               </View>
-              <Text style={[styles.chevron, { color: theme.text3 }]}>›</Text>
+              <Icon name="chevron-right" size={18} color={theme.text3} />
             </Panel>
           </Pressable>
         ))}
@@ -100,5 +101,4 @@ const styles = StyleSheet.create({
   toolDot: { width: 10, height: 10, borderRadius: 5 },
   toolInfo: { flex: 1, minWidth: 0 },
   toolLabel: { fontFamily: 'Manrope_700Bold', fontSize: 15, marginBottom: spacing(0.5) },
-  chevron: { fontSize: 20 },
 });
