@@ -59,13 +59,7 @@ const GuestStack = createNativeStackNavigator<GuestStackParams>();
 const EmployeeStack = createNativeStackNavigator<EmployeeStackParams>();
 
 function LandingRoute({ navigation }: any) {
-  return (
-    <LandingScreen
-      onStaffLogin={() => navigation.navigate('Login')}
-      onGoSubmit={() => navigation.navigate('SubmitTicket')}
-      onGoTrack={() => navigation.navigate('TrackTicket')}
-    />
-  );
+  return <LandingScreen onStaffLogin={() => navigation.navigate('Login')} />;
 }
 
 function LoginRoute({ navigation }: any) {
