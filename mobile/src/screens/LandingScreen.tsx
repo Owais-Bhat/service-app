@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
@@ -92,10 +92,7 @@ export default function LandingScreen({ onStaffLogin }: Props) {
       >
         <Animated.View entering={FadeInUp.duration(550)} style={styles.header}>
           <View style={styles.brandRow}>
-            <View style={styles.logoChip}>
-              <Text style={styles.logoLetter}>N</Text>
-            </View>
-            <Text style={[styles.wordmark, { color: theme.text }]}>NEST</Text>
+            <Image source={require('../../assets/images/logo.png')} style={styles.logoImage} resizeMode="contain" />
           </View>
           <View style={styles.headerActions}>
             <ThemeToggleButton />
@@ -150,9 +147,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(5) },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
-  logoChip: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: brand.primary },
-  logoLetter: { ...typography.heading, color: '#ffffff', fontSize: 16 },
-  wordmark: { ...typography.heading, fontSize: 18 },
+  logoImage: { width: 96, height: 46 },
   loginButton: { paddingHorizontal: spacing(4), paddingVertical: spacing(2.5), borderRadius: radius.md, borderWidth: 1 },
   loginButtonText: { ...typography.caption, fontSize: 12 },
   pressed: { opacity: 0.7 },
