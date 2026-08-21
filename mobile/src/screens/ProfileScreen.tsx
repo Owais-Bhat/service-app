@@ -5,6 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
 import Icon from '../components/Icon';
+import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -23,11 +24,11 @@ interface Props {
   onOpenSettings: () => void;
 }
 
-const MENU = [
-  { key: 'leaderboard', label: 'Leaderboard' },
-  { key: 'training', label: 'Training Courses' },
-  { key: 'tutorials', label: 'Tutorials' },
-  { key: 'notifications', label: 'Notifications' },
+const MENU: { key: string; label: string; icon?: IconName }[] = [
+  { key: 'leaderboard', label: 'Leaderboard', icon: 'leaderboard' },
+  { key: 'training', label: 'Training Courses', icon: 'training' },
+  { key: 'tutorials', label: 'Tutorials', icon: 'tutorial' },
+  { key: 'notifications', label: 'Notifications', icon: 'notification' },
   { key: 'settings', label: 'Settings' },
 ];
 
@@ -77,7 +78,14 @@ export default function ProfileScreen({
         {MENU.map((item) => (
           <Pressable key={item.key} onPress={() => openRow(item.key)} style={({ pressed }) => [pressed && styles.pressed]}>
             <Panel style={styles.row}>
-              <Text style={[styles.rowLabel, { color: theme.text }]}>{item.label}</Text>
+              <View style={styles.rowLeft}>
+                {item.icon ? (
+                  <View style={styles.rowIconChip}>
+                    <Icon name={item.icon} size={16} color={brand.primary} />
+                  </View>
+                ) : null}
+                <Text style={[styles.rowLabel, { color: theme.text }]}>{item.label}</Text>
+              </View>
               <Icon name="chevron-right" size={18} color={theme.text3} />
             </Panel>
           </Pressable>
@@ -113,6 +121,8 @@ const styles = StyleSheet.create({
   caption: { ...typography.caption, marginTop: spacing(0.5) },
   pressed: { opacity: 0.7 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(2.5) },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
+  rowIconChip: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(21,160,90,0.14)' },
   rowLabel: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
   logoutRow: {
     flexDirection: 'row',
