@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
@@ -7,6 +7,7 @@ import GlassCard from '../components/GlassCard';
 import BackLink from '../components/BackLink';
 import Icon from '../components/Icon';
 import PressScale from '../components/PressScale';
+import PulseDot from '../components/PulseDot';
 import TaskStatusModal from '../components/TaskStatusModal';
 import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
@@ -132,16 +133,14 @@ export default function ManageTasksScreen({ onBack }: Props) {
           {filters.map((f) => {
             const active = filter === f;
             return (
-              <Pressable
-                key={f}
-                onPress={() => setFilter(f)}
-                style={[styles.filterPill, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}
-              >
-                <Text style={[styles.filterPillText, { color: active ? '#fff' : theme.text2 }]}>{FILTER_LABEL[f]}</Text>
-                <View style={[styles.filterCountBubble, { backgroundColor: active ? 'rgba(255,255,255,0.25)' : theme.panel2 }]}>
-                  <Text style={[styles.filterCountText, { color: active ? '#fff' : theme.text3 }]}>{counts[f]}</Text>
+              <PressScale key={f} onPress={() => setFilter(f)}>
+                <View style={[styles.filterPill, active && styles.filterPillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
+                  <Text style={[styles.filterPillText, { color: active ? '#fff' : theme.text2 }]}>{FILTER_LABEL[f]}</Text>
+                  <View style={[styles.filterCountBubble, { backgroundColor: active ? 'rgba(255,255,255,0.25)' : theme.panel2 }]}>
+                    <Text style={[styles.filterCountText, { color: active ? '#fff' : theme.text3 }]}>{counts[f]}</Text>
+                  </View>
                 </View>
-              </Pressable>
+              </PressScale>
             );
           })}
         </View>
@@ -165,69 +164,84 @@ export default function ManageTasksScreen({ onBack }: Props) {
           filtered.map((item, idx) => {
             const statusStyle = statusColors[displayStatus(item.status)] || DEFAULT_STATUS_STYLE;
             const locked = isLocked(item.status);
+            const inProgress = groupOf(item.status) === 'in_progress';
+            const initial = (item.fullName || '?').trim().charAt(0).toUpperCase();
             return (
-              <Animated.View key={item.key} entering={FadeInUp.delay(Math.min(idx, 8) * 70).duration(420).springify()}>
-                <GlassCard shadow style={StyleSheet.flatten([styles.taskCard, item.reopened && styles.taskCardReopened])}>
-                  {item.reopened ? (
-                    <View style={styles.reopenedTag}>
-                      <Text style={styles.reopenedTagText}>🔁 Reopened — free rework</Text>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.rowHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.name, { color: theme.text }]}>{item.fullName}</Text>
-                      {item.companyName ? <Text style={[styles.companyText, { color: theme.text3 }]}>{item.companyName}</Text> : null}
-                      <Text style={[styles.metaLine, { color: theme.text3 }]}>
-                        {item.ticketNo ? `Ticket: ${item.ticketNo}` : 'No ticket yet'} · {timeAgo(item.createdAt)}
-                      </Text>
-                      {item.serviceItem ? <Text style={[styles.metaLine, { color: theme.text2 }]}>{item.serviceItem}</Text> : null}
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                      <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-                    </View>
-                  </View>
-
-                  {item.employeeUpdateDetail ? (
-                    <View style={[styles.updateBox, { backgroundColor: theme.panel2 }]}>
-                      <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Employee update</Text>
-                      <Text style={[styles.metaValue, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
-                    </View>
-                  ) : null}
-
-                  {item.location ? (
-                    <View style={styles.locationRow}>
-                      <Icon name="pin" size={14} color={brand.primary} />
-                      <Text style={[styles.metaValue, { color: theme.text, flex: 1 }]} numberOfLines={2}>{item.location}</Text>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.actionRow}>
-                    {!locked && (
-                      <PressScale onPress={() => setStatusItem(item)} style={{ flex: 1, minWidth: 130 }}>
-                        <View style={[styles.actionBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                          <Icon name="edit" size={15} color={theme.text} />
-                          <Text style={[styles.actionBtnText, { color: theme.text }]}>Update Status</Text>
-                        </View>
-                      </PressScale>
-                    )}
-                    {item.phone ? (
-                      <>
-                        <Pressable onPress={() => call(item.phone!)} style={[styles.iconAction, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                          <Icon name="phone" size={16} color={theme.text} />
-                        </Pressable>
-                        <Pressable onPress={() => whatsapp(item.phone!)} style={[styles.iconAction, { backgroundColor: '#25D366' }]}>
-                          <Icon name="whatsapp" size={16} color="#fff" />
-                        </Pressable>
-                      </>
+              <Animated.View key={item.key} entering={FadeInUp.delay(Math.min(idx, 8) * 70).duration(450).springify().damping(14)}>
+                <View style={[styles.cardOuter, { shadowColor: item.reopened ? semantic.warning : statusStyle.color }]}>
+                  <View style={[styles.accentBar, { backgroundColor: item.reopened ? semantic.warning : statusStyle.color }]} />
+                  <GlassCard shadow style={styles.taskCard}>
+                    {item.reopened ? (
+                      <View style={styles.reopenedTag}>
+                        <Text style={styles.reopenedTagText}>🔁 Reopened — free rework</Text>
+                      </View>
                     ) : null}
+
+                    <View style={styles.rowHeader}>
+                      <View style={[styles.avatar, { backgroundColor: `${statusStyle.color}26` }]}>
+                        <Text style={[styles.avatarText, { color: statusStyle.color }]}>{initial}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.name, { color: theme.text }]}>{item.fullName}</Text>
+                        {item.companyName ? <Text style={[styles.companyText, { color: theme.text3 }]}>{item.companyName}</Text> : null}
+                        <Text style={[styles.metaLine, { color: theme.text3 }]}>
+                          {item.ticketNo ? `Ticket: ${item.ticketNo}` : 'No ticket yet'} · {timeAgo(item.createdAt)}
+                        </Text>
+                        {item.serviceItem ? <Text style={[styles.metaLine, { color: theme.text2 }]}>{item.serviceItem}</Text> : null}
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                        {inProgress ? <PulseDot color={statusStyle.color} size={6} /> : null}
+                        <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                      </View>
+                    </View>
+
+                    {item.employeeUpdateDetail ? (
+                      <View style={[styles.updateBox, { backgroundColor: theme.panel2 }]}>
+                        <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Employee update</Text>
+                        <Text style={[styles.metaValue, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
+                      </View>
+                    ) : null}
+
                     {item.location ? (
-                      <Pressable onPress={() => openMaps(item.location!)} style={[styles.iconAction, { backgroundColor: brand.primary }]}>
-                        <Icon name="pin" size={16} color="#fff" />
-                      </Pressable>
+                      <View style={styles.locationRow}>
+                        <Icon name="pin" size={14} color={brand.primary} />
+                        <Text style={[styles.metaValue, { color: theme.text, flex: 1 }]} numberOfLines={2}>{item.location}</Text>
+                      </View>
                     ) : null}
-                  </View>
-                </GlassCard>
+
+                    <View style={styles.actionRow}>
+                      {!locked && (
+                        <PressScale onPress={() => setStatusItem(item)} style={{ flex: 1, minWidth: 130 }}>
+                          <View style={[styles.actionBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                            <Icon name="edit" size={15} color={theme.text} />
+                            <Text style={[styles.actionBtnText, { color: theme.text }]}>Update Status</Text>
+                          </View>
+                        </PressScale>
+                      )}
+                      {item.phone ? (
+                        <>
+                          <PressScale onPress={() => call(item.phone!)}>
+                            <View style={[styles.iconAction, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                              <Icon name="phone" size={16} color={theme.text} />
+                            </View>
+                          </PressScale>
+                          <PressScale onPress={() => whatsapp(item.phone!)}>
+                            <View style={[styles.iconAction, { backgroundColor: '#25D366' }]}>
+                              <Icon name="whatsapp" size={16} color="#fff" />
+                            </View>
+                          </PressScale>
+                        </>
+                      ) : null}
+                      {item.location ? (
+                        <PressScale onPress={() => openMaps(item.location!)}>
+                          <View style={[styles.iconAction, { backgroundColor: brand.primary }]}>
+                            <Icon name="pin" size={16} color="#fff" />
+                          </View>
+                        </PressScale>
+                      ) : null}
+                    </View>
+                  </GlassCard>
+                </View>
               </Animated.View>
             );
           })
@@ -266,15 +280,19 @@ const styles = StyleSheet.create({
   filterCountText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 44, marginBottom: spacing(4) },
   searchInput: { flex: 1, fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
-  taskCard: { marginBottom: spacing(3) },
-  taskCardReopened: { borderLeftWidth: 3, borderLeftColor: semantic.warning },
+  cardOuter: { flexDirection: 'row', marginBottom: spacing(3.5), shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 3 },
+  accentBar: { width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
+  taskCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+  avatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', marginRight: spacing(1) },
+  avatarText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
   reopenedTag: { alignSelf: 'flex-start', backgroundColor: 'rgba(224,138,20,0.16)', borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), marginBottom: spacing(2) },
   reopenedTagText: { fontFamily: 'Manrope_700Bold', fontSize: 10, color: semantic.warning },
-  statusBadge: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
   statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
   updateBox: { borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(3) },
   actionRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(1), flexWrap: 'wrap' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 40, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: spacing(2) },
   actionBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   iconAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  filterPillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 4 },
 });

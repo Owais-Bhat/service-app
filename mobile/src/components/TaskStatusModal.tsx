@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
@@ -8,12 +8,28 @@ import ServicePickerModal, { PickedService } from './ServicePickerModal';
 import PhotoPicker from './PhotoPicker';
 import CalendarPickerModal from './CalendarPickerModal';
 import { IconName } from '../theme/icons';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { updateTaskStatus, saveDeviceInfo, computeBill, haversineKm, TaskItem, StatusOption, PaymentMethod } from '../api/tasks';
+import {
+  updateTaskStatus,
+  saveDeviceInfo,
+  computeBill,
+  haversineKm,
+  generatePaymentLinkForBill,
+  TaskItem,
+  StatusOption,
+  PaymentMethod,
+  ResolveBill,
+} from '../api/tasks';
+import { checkPaymentStatus } from '../api/payments';
+import { validateCoupon } from '../api/coupons';
+import { generateBillPdf, billWhatsAppCaption, BillPdfData } from '../api/bills';
 import { markDeviceTaken } from '../api/deviceTracking';
 import { ApiError } from '../api/client';
+
+const BUSINESS_NAME = 'Networking Experts';
 
 const DEVICE_TYPE_CHIPS = ['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'];
 
@@ -30,6 +46,8 @@ const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 // instead of each screen growing its own copy.
 export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const isGig = user?.worker_type === 'gig';
   const options: { key: StatusOption; label: string; icon: IconName }[] = item.reopened
     ? [{ key: 'foc', label: 'FOC — Free of Cost (rework)', icon: 'check' }]
     : [
@@ -66,8 +84,28 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [locatingKm, setLocatingKm] = useState(false);
   const [discountAmount, setDiscountAmount] = useState('');
   const [discountReason, setDiscountReason] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [cashCollected, setCashCollected] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(isGig ? 'online' : 'cash');
+
+  // Admin discount coupon — validated server-side, stacks with the manual
+  // employee discount (same combination rule as web).
+  const [couponCode, setCouponCode] = useState('');
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discount: number; label: string } | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
+  const [couponMsg, setCouponMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  // Online payment link — generating it is a separate step from resolving:
+  // the ticket only actually resolves once the customer pays (poll below),
+  // matching web's Save-button gating exactly.
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const finalizingRef = useRef(false);
+
+  // Bill PDF + WhatsApp — same server-rendered invoice web generates
+  // (/api/bills/generate), independent of payment method or resolve state.
+  const [billPdfUrl, setBillPdfUrl] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const bill = useMemo(
     () =>
@@ -76,12 +114,187 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         services,
         extraCost: Number(extraCost) || 0,
         transportKm: Number(transportKm) || 0,
-        discountAmount: Number(discountAmount) || 0,
+        manualDiscount: Number(discountAmount) || 0,
+        couponDiscount: couponApplied?.discount || 0,
+        couponLabel: couponApplied?.label,
       }),
-    [companyName, services, extraCost, transportKm, discountAmount],
+    [companyName, services, extraCost, transportKm, discountAmount, couponApplied],
   );
 
+  const buildResolveBill = (): ResolveBill => ({
+    companyName,
+    services,
+    extraCost: Number(extraCost) || 0,
+    extraReason: extraReason.trim() || undefined,
+    transportKm: Number(transportKm) || 0,
+    manualDiscount: Number(discountAmount) || 0,
+    discountReason: discountReason.trim() || undefined,
+    couponDiscount: couponApplied?.discount || 0,
+    couponLabel: couponApplied?.label,
+    couponCode: couponApplied?.code,
+    paymentMethod,
+  });
+
   const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
+
+  const buildBillPdfData = (): BillPdfData => ({
+    customer: {
+      name: item.fullName,
+      phone: item.phone || '',
+      location: item.location || '',
+      company: companyName,
+      device_type: deviceType,
+      device_serial: deviceSerialNo,
+      service_item: item.serviceItem || '',
+      ticket_no: item.ticketNo || '',
+    },
+    technician: user?.full_name || 'Technician',
+    services: services.map((s) => ({ name: s.label, cost: s.cost })),
+    servicesSubtotal: bill.servicesSubtotal,
+    extra: Number(extraCost) || 0,
+    extraReason: extraReason.trim(),
+    platform: bill.platformFee,
+    km: Number(transportKm) || 0,
+    transport: bill.transportFee,
+    taxable: bill.servicesSubtotal + (Number(extraCost) || 0) + bill.platformFee + bill.transportFee,
+    gst: bill.gst,
+    discount: bill.discount,
+    discountLabel: couponApplied?.label || (Number(discountAmount) > 0 ? 'Employee discount' : ''),
+    discountReason: discountReason.trim(),
+    total: bill.total,
+    paymentLink: paymentLink || '',
+    paymentStatus: paymentConfirmed ? 'paid' : paymentMethod === 'cash' ? 'paid' : 'unpaid',
+  });
+
+  // Shared by the bill PDF, payment-link, and final-save actions so "extra
+  // cost needs a reason, same as discount" (and every other bill guard)
+  // can't drift between the three places a bill gets validated.
+  const validateBillFields = (): string | null => {
+    if (!companyName.trim()) return 'Company name is required to resolve';
+    if (services.length === 0 && !(Number(extraCost) > 0)) return 'Add at least one service, or an extra charge';
+    if (Number(extraCost) > 0 && !extraReason.trim()) return 'Enter a reason for the extra cost';
+    if (Number(discountAmount) > 0 && !discountReason.trim()) return 'Enter a reason for the discount';
+    return null;
+  };
+
+  const handleGenerateBillPdf = async () => {
+    const validationError = validateBillFields();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
+    setGeneratingPdf(true);
+    try {
+      const url = await generateBillPdf(buildBillPdfData(), item.inquiryId);
+      setBillPdfUrl(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not generate the bill PDF — check your connection');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareBillWhatsApp = () => {
+    if (!billPdfUrl) return;
+    const phone = (item.phone || '').replace(/\D/g, '');
+    if (!phone) {
+      setError('This customer has no phone number on file');
+      return;
+    }
+    const caption = billWhatsAppCaption(BUSINESS_NAME, buildBillPdfData(), billPdfUrl);
+    Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(caption)}`);
+  };
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      setCouponMsg({ text: 'Enter a coupon code', ok: false });
+      return;
+    }
+    setCouponChecking(true);
+    setCouponMsg(null);
+    try {
+      // Coupons are measured against the pre-discount gross total.
+      const grossBase = computeBill({
+        companyName,
+        services,
+        extraCost: Number(extraCost) || 0,
+        transportKm: Number(transportKm) || 0,
+        manualDiscount: 0,
+        couponDiscount: 0,
+      }).total;
+      const result = await validateCoupon(code, grossBase);
+      if (!result.valid) {
+        setCouponMsg({ text: result.error || 'Invalid coupon', ok: false });
+        return;
+      }
+      setCouponApplied({ code, discount: result.discount || 0, label: result.label || `Coupon ${code}` });
+      setCouponMsg({ text: `Applied: -${inr(result.discount || 0)}`, ok: true });
+    } finally {
+      setCouponChecking(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponApplied(null);
+    setCouponCode('');
+    setCouponMsg(null);
+  };
+
+  const handleGenerateLink = async () => {
+    if (!item.inquiryId) return;
+    const validationError = validateBillFields();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
+    setGeneratingLink(true);
+    try {
+      const { shortUrl } = await generatePaymentLinkForBill(item, buildResolveBill());
+      setPaymentLink(shortUrl);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not generate payment link — check your connection');
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const handleCheckPayment = async (silent: boolean) => {
+    if (!item.inquiryId || finalizingRef.current) return;
+    if (!silent) setCheckingPayment(true);
+    try {
+      const res = await checkPaymentStatus(item.inquiryId);
+      if (res.payment_status === 'paid' && !finalizingRef.current) {
+        finalizingRef.current = true;
+        setPaymentConfirmed(true);
+        try {
+          await updateTaskStatus(item, { status: 'resolved', detail: detail.trim(), bill: buildResolveBill() });
+          onSaved();
+        } catch {
+          // Payment landed but the final resolve write failed — leave
+          // paymentConfirmed true so the (now-enabled) Save button lets the
+          // employee retry without waiting on the poll again.
+          finalizingRef.current = false;
+        }
+      }
+    } catch {
+      // Silent poll failures are expected on a flaky connection — the next
+      // tick tries again. The manual re-check button surfaces a real error.
+      if (!silent) setError('Could not check payment status — check your connection');
+    } finally {
+      if (!silent) setCheckingPayment(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!paymentLink || paymentConfirmed) return;
+    handleCheckPayment(true);
+    const poll = setInterval(() => handleCheckPayment(true), 3000);
+    return () => clearInterval(poll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentLink, paymentConfirmed]);
 
   const handleAutoKm = async () => {
     if (item.customerLat == null || item.customerLng == null) {
@@ -137,16 +350,13 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
       return;
     }
     if (status === 'resolved') {
-      if (!companyName.trim()) {
-        setError('Company name is required to resolve');
+      const validationError = validateBillFields();
+      if (validationError) {
+        setError(validationError);
         return;
       }
-      if (services.length === 0 && !(Number(extraCost) > 0)) {
-        setError('Add at least one service, or an extra charge');
-        return;
-      }
-      if (Number(discountAmount) > 0 && !discountReason.trim()) {
-        setError('Enter a reason for the discount');
+      if (paymentMethod === 'online' && !paymentConfirmed) {
+        setError('Generate a payment link and wait for the customer to pay before saving');
         return;
       }
     }
@@ -157,20 +367,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         detail: detail.trim(),
         scheduledAt: status === 'reschedule' ? `${scheduledAt.trim()}:00` : undefined,
         billNo: status === 'foc' ? billNo.trim() : undefined,
-        bill:
-          status === 'resolved'
-            ? {
-                companyName,
-                services,
-                extraCost: Number(extraCost) || 0,
-                extraReason: extraReason.trim() || undefined,
-                transportKm: Number(transportKm) || 0,
-                discountAmount: Number(discountAmount) || 0,
-                discountReason: discountReason.trim() || undefined,
-                paymentMethod,
-                cashCollected: paymentMethod === 'cash' && cashCollected,
-              }
-            : undefined,
+        bill: status === 'resolved' ? buildResolveBill() : undefined,
       });
       onSaved();
     } catch (err) {
@@ -344,10 +541,15 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     </Pressable>
                   </View>
                 ))}
-                <Pressable onPress={() => setShowPicker(true)} style={[styles.addServiceBtn, { borderColor: brand.primary }]}>
-                  <Icon name="edit" size={14} color={brand.primary} />
-                  <Text style={[styles.addServiceText, { color: brand.primary }]}>Add Service</Text>
-                </Pressable>
+                <PressScale onPress={() => setShowPicker(true)}>
+                  <View style={styles.addServiceBtn}>
+                    <View style={styles.addServiceBadge}>
+                      <Text style={styles.addServiceBadgeText}>+</Text>
+                    </View>
+                    <Text style={styles.addServiceText}>Add Service</Text>
+                    <Icon name="chevron-right" size={16} color="#ffffff" />
+                  </View>
+                </PressScale>
 
                 <View style={styles.twoCol}>
                   <View style={{ flex: 1 }}>
@@ -388,14 +590,39 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 {Number(extraCost) > 0 ? (
                   <TextInput
                     style={[styles.input, { color: theme.text, borderColor: theme.line, marginTop: spacing(2) }]}
-                    placeholder="Reason for extra cost"
+                    placeholder="Reason for extra cost (required)"
                     placeholderTextColor={theme.text3}
                     value={extraReason}
                     onChangeText={setExtraReason}
                   />
                 ) : null}
 
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Discount</Text>
+                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Redeem Coupon</Text>
+                <View style={styles.couponRow}>
+                  <TextInput
+                    style={[styles.input, styles.couponInput, { color: theme.text, borderColor: theme.line }]}
+                    placeholder="e.g. SAVE50"
+                    placeholderTextColor={theme.text3}
+                    autoCapitalize="characters"
+                    value={couponCode}
+                    onChangeText={setCouponCode}
+                    editable={!couponApplied}
+                  />
+                  <Pressable
+                    onPress={couponApplied ? handleRemoveCoupon : handleApplyCoupon}
+                    disabled={couponChecking}
+                    style={[styles.couponBtn, { backgroundColor: couponApplied ? semantic.danger : brand.primary, opacity: couponChecking ? 0.7 : 1 }]}
+                  >
+                    {couponChecking ? <ActivityIndicator size="small" color="#fff" /> : (
+                      <Text style={styles.couponBtnText}>{couponApplied ? 'Remove' : 'Apply'}</Text>
+                    )}
+                  </Pressable>
+                </View>
+                {couponMsg ? (
+                  <Text style={[styles.couponMsg, { color: couponMsg.ok ? semantic.success : semantic.danger }]}>{couponMsg.text}</Text>
+                ) : null}
+
+                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Employee Discount</Text>
                 <TextInput
                   style={[styles.input, { color: theme.text, borderColor: theme.line }]}
                   placeholder="₹0"
@@ -416,7 +643,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
                 <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Payment Method</Text>
                 <View style={styles.paymentRow}>
-                  {(['cash', 'online'] as PaymentMethod[]).map((m) => {
+                  {(isGig ? (['online'] as PaymentMethod[]) : (['cash', 'online'] as PaymentMethod[])).map((m) => {
                     const active = paymentMethod === m;
                     return (
                       <Pressable
@@ -430,17 +657,53 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     );
                   })}
                 </View>
+                {isGig ? (
+                  <Text style={[styles.paymentHint, { color: theme.text3 }]}>Gig workers are online-payment only.</Text>
+                ) : null}
+
                 {paymentMethod === 'cash' ? (
-                  <Pressable onPress={() => setCashCollected((v) => !v)} style={[styles.cashRow, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                    <View style={[styles.checkbox, { borderColor: cashCollected ? brand.primary : theme.line, backgroundColor: cashCollected ? brand.primary : 'transparent' }]}>
-                      {cashCollected ? <Icon name="check" size={12} color="#fff" /> : null}
-                    </View>
-                    <Text style={[styles.cashRowText, { color: theme.text }]}>I've physically collected {inr(bill.total)} in cash</Text>
-                  </Pressable>
-                ) : (
                   <Text style={[styles.paymentHint, { color: theme.text3 }]}>
-                    Payment stays unpaid until admin sends a payment link — that flow isn't on mobile yet.
+                    Saving marks this {inr(bill.total)} as collected in cash automatically.
                   </Text>
+                ) : (
+                  <View style={[styles.onlineBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                    {paymentConfirmed ? (
+                      <View style={styles.paidRow}>
+                        <Icon name="check" size={16} color={semantic.success} />
+                        <Text style={[styles.paidText, { color: semantic.success }]}>Payment received — saving will resolve this ticket.</Text>
+                      </View>
+                    ) : paymentLink ? (
+                      <>
+                        <Text style={[styles.linkLabel, { color: theme.text3 }]}>Payment Link</Text>
+                        <Text style={[styles.linkValue, { color: brand.primary }]} numberOfLines={1}>{paymentLink}</Text>
+                        <Image
+                          source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(paymentLink)}` }}
+                          style={styles.qr}
+                        />
+                        <Pressable
+                          onPress={() => Linking.openURL(`https://wa.me/?text=${encodeURIComponent('Please use this link to pay for your service: ' + paymentLink)}`)}
+                          style={[styles.waBtn, { backgroundColor: '#25D366' }]}
+                        >
+                          <Icon name="whatsapp" size={15} color="#fff" />
+                          <Text style={styles.waBtnText}>Share via WhatsApp</Text>
+                        </Pressable>
+                        <View style={styles.waitingRow}>
+                          {checkingPayment ? <ActivityIndicator size="small" color={semantic.warning} /> : <Icon name="clock" size={13} color={semantic.warning} />}
+                          <Text style={[styles.waitingText, { color: semantic.warning }]}>Waiting for payment · auto-checking every 3s</Text>
+                          <Pressable onPress={() => handleCheckPayment(false)} hitSlop={8}>
+                            <Icon name="refresh" size={14} color={theme.text3} />
+                          </Pressable>
+                        </View>
+                      </>
+                    ) : (
+                      <PressScale onPress={handleGenerateLink} disabled={generatingLink}>
+                        <View style={[styles.genLinkBtn, { backgroundColor: brand.primary, opacity: generatingLink ? 0.7 : 1 }]}>
+                          <Icon name="receipt" size={15} color="#fff" />
+                          <Text style={styles.genLinkBtnText}>{generatingLink ? 'Generating…' : 'Generate Payment Link'}</Text>
+                        </View>
+                      </PressScale>
+                    )}
+                  </View>
                 )}
 
                 <View style={[styles.receipt, { borderColor: theme.line }]}>
@@ -471,25 +734,56 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     <Text style={[styles.receiptTotalValue, { color: brand.primary }]}>{inr(bill.total)}</Text>
                   </View>
                 </View>
+
+                {billPdfUrl ? (
+                  <View style={styles.pdfRow}>
+                    <PressScale onPress={() => Linking.openURL(billPdfUrl)} style={{ flex: 1 }}>
+                      <View style={[styles.pdfBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                        <Icon name="receipt" size={14} color={theme.text} />
+                        <Text style={[styles.pdfBtnText, { color: theme.text }]}>View PDF</Text>
+                      </View>
+                    </PressScale>
+                    <PressScale onPress={handleShareBillWhatsApp} style={{ flex: 1 }}>
+                      <View style={[styles.pdfBtn, { backgroundColor: '#25D366' }]}>
+                        <Icon name="whatsapp" size={14} color="#fff" />
+                        <Text style={[styles.pdfBtnText, { color: '#fff' }]}>Send via WhatsApp</Text>
+                      </View>
+                    </PressScale>
+                  </View>
+                ) : (
+                  <PressScale onPress={handleGenerateBillPdf} disabled={generatingPdf} style={{ marginTop: spacing(3) }}>
+                    <View style={[styles.pdfGenerateBtn, { borderColor: brand.primary, opacity: generatingPdf ? 0.7 : 1 }]}>
+                      {generatingPdf ? <ActivityIndicator size="small" color={brand.primary} /> : <Icon name="receipt" size={15} color={brand.primary} />}
+                      <Text style={[styles.pdfGenerateBtnText, { color: brand.primary }]}>
+                        {generatingPdf ? 'Generating…' : 'Generate Bill PDF'}
+                      </Text>
+                    </View>
+                  </PressScale>
+                )}
               </View>
             ) : null}
 
-            {mode === 'status' && (
-              <>
-                {error ? <Text style={styles.error}>{error}</Text> : null}
+            {mode === 'status' && (() => {
+              const awaitingPayment = status === 'resolved' && paymentMethod === 'online' && !paymentConfirmed;
+              return (
+                <>
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
 
-                <View style={styles.modalActions}>
-                  <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
-                    <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
-                  </Pressable>
-                  <PressScale onPress={handleSave} disabled={saving} style={{ flex: 1 }}>
-                    <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving ? 0.7 : 1 }]}>
-                      <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
-                    </View>
-                  </PressScale>
-                </View>
-              </>
-            )}
+                  <View style={styles.modalActions}>
+                    <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
+                      <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
+                    </Pressable>
+                    <PressScale onPress={handleSave} disabled={saving || awaitingPayment} style={{ flex: 1 }}>
+                      <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving || awaitingPayment ? 0.6 : 1 }]}>
+                        <Text style={styles.saveBtnText}>
+                          {saving ? 'Saving…' : awaitingPayment ? 'Awaiting Payment…' : 'Save Changes'}
+                        </Text>
+                      </View>
+                    </PressScale>
+                  </View>
+                </>
+              );
+            })()}
           </ScrollView>
         </GlassSurface>
       </View>
@@ -541,8 +835,24 @@ const styles = StyleSheet.create({
   serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(2.5), paddingVertical: spacing(2), marginBottom: spacing(1.5) },
   serviceLabel: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
   serviceCost: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  addServiceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.sm, paddingVertical: spacing(2.25), marginTop: spacing(1) },
-  addServiceText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  addServiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(2.5),
+    backgroundColor: brand.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing(2.5),
+    paddingHorizontal: spacing(3),
+    marginTop: spacing(1),
+    shadowColor: brand.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  addServiceBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  addServiceBadgeText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16, color: '#fff', marginTop: -2 },
+  addServiceText: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
   twoCol: { flexDirection: 'row', gap: spacing(3) },
   receipt: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(4) },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing(1) },
@@ -560,10 +870,29 @@ const styles = StyleSheet.create({
   paymentRow: { flexDirection: 'row', gap: spacing(2) },
   paymentPill: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(2.5) },
   paymentPillText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  cashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(2) },
-  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  cashRowText: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
   paymentHint: { fontSize: 11, marginTop: spacing(2), lineHeight: 15 },
   scheduleInput: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   scheduleInputText: { fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
+  couponRow: { flexDirection: 'row', gap: spacing(2) },
+  couponInput: { flex: 1 },
+  couponBtn: { paddingHorizontal: spacing(4), borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  couponBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
+  couponMsg: { fontSize: 11, marginTop: spacing(1.5), fontFamily: 'Manrope_600SemiBold' },
+  onlineBox: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginTop: spacing(2), alignItems: 'center' },
+  paidRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
+  paidText: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
+  linkLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, alignSelf: 'flex-start' },
+  linkValue: { fontSize: 12, fontFamily: 'Manrope_600SemiBold', alignSelf: 'stretch', marginTop: spacing(1), marginBottom: spacing(3) },
+  qr: { width: 140, height: 140, borderRadius: radius.sm, marginBottom: spacing(3) },
+  waBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), alignSelf: 'stretch', height: 42, borderRadius: radius.sm, marginBottom: spacing(3) },
+  waBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
+  waitingText: { fontSize: 11, fontFamily: 'Manrope_600SemiBold' },
+  genLinkBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), alignSelf: 'stretch', height: 46, borderRadius: radius.md },
+  genLinkBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
+  pdfGenerateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(3) },
+  pdfGenerateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  pdfRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(3) },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.sm, borderWidth: 1 },
+  pdfBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
 });
