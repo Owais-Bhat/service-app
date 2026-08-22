@@ -80,6 +80,16 @@ export async function dataPatch<T>(table: string, eq: string | string[], body: u
   return request<T>(`/data/${table}?${sp.toString()}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
+// Uploaded files come back as a path relative to the API origin (e.g.
+// "/uploads/foo.jpg") — a browser <img> resolves that against the page's
+// own origin for free, but React Native's <Image> has no such origin to
+// resolve against, so this makes it absolute.
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+export function resolveUploadUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 export async function postForm<T>(path: string, form: FormData): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {};

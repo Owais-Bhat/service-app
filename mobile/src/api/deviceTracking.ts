@@ -65,18 +65,23 @@ export async function fetchDeviceStatus(inquiryId: string): Promise<DeviceStatus
   return api.get<DeviceStatusDetail>(`/device-tracking/status/${inquiryId}`);
 }
 
-export async function markDeviceTaken(inquiryId: string, description: string): Promise<void> {
-  await api.post(`/device-tracking/taken`, { inquiry_id: inquiryId, description: description || null });
+export async function markDeviceTaken(inquiryId: string, description: string, imageUrl?: string | null): Promise<void> {
+  await api.post(`/device-tracking/taken`, {
+    inquiry_id: inquiryId,
+    description: description || null,
+    device_image_url: imageUrl || null,
+  });
 }
 
 export async function logFollowUp(inquiryId: string, status: string, notes: string): Promise<void> {
   await api.post(`/device-tracking/followup`, { inquiry_id: inquiryId, status, notes: notes || null });
 }
 
-export async function markDeviceReturned(inquiryId: string, condition: string, notes: string): Promise<void> {
+export async function markDeviceReturned(inquiryId: string, condition: string, notes: string, imageUrl?: string | null): Promise<void> {
   await api.post(`/device-tracking/return`, {
     inquiry_id: inquiryId,
     device_condition: condition,
     return_notes: notes || null,
+    return_image_url: imageUrl || null,
   });
 }

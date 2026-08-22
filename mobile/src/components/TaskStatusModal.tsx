@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import PressScale from './PressScale';
 import ServicePickerModal, { PickedService } from './ServicePickerModal';
+import PhotoPicker from './PhotoPicker';
+import CalendarPickerModal from './CalendarPickerModal';
 import { IconName } from '../theme/icons';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { updateTaskStatus, saveDeviceInfo, computeBill, TaskItem, StatusOption } from '../api/tasks';
+import { updateTaskStatus, saveDeviceInfo, computeBill, haversineKm, TaskItem, StatusOption, PaymentMethod } from '../api/tasks';
 import { markDeviceTaken } from '../api/deviceTracking';
 import { ApiError } from '../api/client';
 
@@ -40,6 +43,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [status, setStatus] = useState<StatusOption>(options[0].key);
   const [detail, setDetail] = useState(item.employeeUpdateDetail || '');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
   const [billNo, setBillNo] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +53,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [deviceType, setDeviceType] = useState(item.deviceType || '');
   const [deviceSerialNo, setDeviceSerialNo] = useState(item.deviceSerialNo || '');
   const [deviceDesc, setDeviceDesc] = useState('');
+  const [devicePhoto, setDevicePhoto] = useState<string | null>(null);
   const alreadyTaken = item.deviceStatus === 'taken' || item.deviceStatus === 'in_service';
 
   // Bill fields (only used when status === 'resolved')
@@ -58,8 +63,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [extraCost, setExtraCost] = useState('');
   const [extraReason, setExtraReason] = useState('');
   const [transportKm, setTransportKm] = useState('');
+  const [locatingKm, setLocatingKm] = useState(false);
   const [discountAmount, setDiscountAmount] = useState('');
   const [discountReason, setDiscountReason] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [cashCollected, setCashCollected] = useState(false);
 
   const bill = useMemo(
     () =>
@@ -75,12 +83,35 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
   const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
 
+  const handleAutoKm = async () => {
+    if (item.customerLat == null || item.customerLng == null) {
+      setError("This customer has no saved location to measure from");
+      return;
+    }
+    setLocatingKm(true);
+    setError(null);
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        setError('Location permission is required for Auto km');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const km = haversineKm(pos.coords.latitude, pos.coords.longitude, item.customerLat, item.customerLng);
+      setTransportKm(km.toFixed(1));
+    } catch {
+      setError('Could not get your location — check your connection');
+    } finally {
+      setLocatingKm(false);
+    }
+  };
+
   const handleMarkDeviceTaken = async () => {
     if (!item.inquiryId) return;
     setError(null);
     setSaving(true);
     try {
-      await markDeviceTaken(item.inquiryId, deviceDesc.trim());
+      await markDeviceTaken(item.inquiryId, deviceDesc.trim(), devicePhoto);
       await saveDeviceInfo(item.inquiryId, deviceType, deviceSerialNo);
       onSaved();
     } catch (err) {
@@ -93,8 +124,8 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const handleSave = async () => {
     setError(null);
     if (status === 'reschedule') {
-      if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(scheduledAt.trim())) {
-        setError('Enter the new visit time as YYYY-MM-DD HH:MM');
+      if (!scheduledAt) {
+        setError('Pick the new visit date & time');
         return;
       }
     } else if (!detail.trim()) {
@@ -136,6 +167,8 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 transportKm: Number(transportKm) || 0,
                 discountAmount: Number(discountAmount) || 0,
                 discountReason: discountReason.trim() || undefined,
+                paymentMethod,
+                cashCollected: paymentMethod === 'cash' && cashCollected,
               }
             : undefined,
       });
@@ -235,6 +268,10 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     multiline
                   />
 
+                  <View style={{ marginTop: spacing(3) }}>
+                    <PhotoPicker label="Device Photo (when taken)" value={devicePhoto} onChange={setDevicePhoto} />
+                  </View>
+
                   {error ? <Text style={styles.error}>{error}</Text> : null}
 
                   <View style={styles.modalActions}>
@@ -252,13 +289,12 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
             ) : status === 'reschedule' ? (
               <>
                 <Text style={[styles.fieldLabel, { color: theme.text3 }]}>New visit date &amp; time</Text>
-                <TextInput
-                  style={[styles.input, { color: theme.text, borderColor: theme.line }]}
-                  placeholder="YYYY-MM-DD HH:MM"
-                  placeholderTextColor={theme.text3}
-                  value={scheduledAt}
-                  onChangeText={setScheduledAt}
-                />
+                <Pressable onPress={() => setShowCalendar(true)} style={[styles.input, styles.scheduleInput, { borderColor: theme.line }]}>
+                  <Icon name="calendar" size={15} color={brand.primary} />
+                  <Text style={[styles.scheduleInputText, { color: scheduledAt ? theme.text : theme.text3 }]}>
+                    {scheduledAt || 'Tap to pick a date & time'}
+                  </Text>
+                </Pressable>
               </>
             ) : (
               <>
@@ -326,7 +362,19 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Transport (km)</Text>
+                    <View style={styles.transportLabelRow}>
+                      <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Transport (km)</Text>
+                      <Pressable onPress={handleAutoKm} disabled={locatingKm} style={styles.autoKmBtn}>
+                        {locatingKm ? (
+                          <ActivityIndicator size="small" color={brand.primary} />
+                        ) : (
+                          <>
+                            <Icon name="crosshair" size={11} color={brand.primary} />
+                            <Text style={[styles.autoKmText, { color: brand.primary }]}>Auto</Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </View>
                     <TextInput
                       style={[styles.input, { color: theme.text, borderColor: theme.line }]}
                       placeholder="0"
@@ -365,6 +413,35 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     onChangeText={setDiscountReason}
                   />
                 ) : null}
+
+                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Payment Method</Text>
+                <View style={styles.paymentRow}>
+                  {(['cash', 'online'] as PaymentMethod[]).map((m) => {
+                    const active = paymentMethod === m;
+                    return (
+                      <Pressable
+                        key={m}
+                        onPress={() => setPaymentMethod(m)}
+                        style={[styles.paymentPill, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}1a` : theme.panel2 }]}
+                      >
+                        <Icon name={m === 'cash' ? 'wallet' : 'receipt'} size={14} color={active ? brand.primary : theme.text3} />
+                        <Text style={[styles.paymentPillText, { color: active ? brand.primary : theme.text }]}>{m === 'cash' ? 'Cash' : 'Online'}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {paymentMethod === 'cash' ? (
+                  <Pressable onPress={() => setCashCollected((v) => !v)} style={[styles.cashRow, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                    <View style={[styles.checkbox, { borderColor: cashCollected ? brand.primary : theme.line, backgroundColor: cashCollected ? brand.primary : 'transparent' }]}>
+                      {cashCollected ? <Icon name="check" size={12} color="#fff" /> : null}
+                    </View>
+                    <Text style={[styles.cashRowText, { color: theme.text }]}>I've physically collected {inr(bill.total)} in cash</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={[styles.paymentHint, { color: theme.text3 }]}>
+                    Payment stays unpaid until admin sends a payment link — that flow isn't on mobile yet.
+                  </Text>
+                )}
 
                 <View style={[styles.receipt, { borderColor: theme.line }]}>
                   <View style={styles.receiptRow}>
@@ -426,6 +503,17 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
           }}
         />
       )}
+
+      {showCalendar && (
+        <CalendarPickerModal
+          value={scheduledAt}
+          onDismiss={() => setShowCalendar(false)}
+          onConfirm={(v) => {
+            setScheduledAt(v);
+            setShowCalendar(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -466,4 +554,16 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginTop: spacing(1.5) },
   chip: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
   chipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  transportLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  autoKmBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minWidth: 40, justifyContent: 'flex-end' },
+  autoKmText: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase' },
+  paymentRow: { flexDirection: 'row', gap: spacing(2) },
+  paymentPill: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(2.5) },
+  paymentPillText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  cashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(2) },
+  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  cashRowText: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
+  paymentHint: { fontSize: 11, marginTop: spacing(2), lineHeight: 15 },
+  scheduleInput: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
+  scheduleInputText: { fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
 });

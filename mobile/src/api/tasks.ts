@@ -18,6 +18,8 @@ interface RawInquiry {
   device_status: string | null;
   device_type: string | null;
   device_serial_no: string | null;
+  customer_lat: number | string | null;
+  customer_lng: number | string | null;
   created_at: string;
 }
 
@@ -52,6 +54,8 @@ export interface TaskItem {
   deviceStatus: string | null;
   deviceType: string | null;
   deviceSerialNo: string | null;
+  customerLat: number | null;
+  customerLng: number | null;
 }
 
 function fromTicketOnly(t: RawTicket): TaskItem {
@@ -74,6 +78,8 @@ function fromTicketOnly(t: RawTicket): TaskItem {
     deviceStatus: null,
     deviceType: null,
     deviceSerialNo: null,
+    customerLat: null,
+    customerLng: null,
   };
 }
 
@@ -102,6 +108,8 @@ function fromInquiry(inq: RawInquiry, ticketId: string | null): TaskItem {
     deviceStatus: inq.device_status,
     deviceType: inq.device_type,
     deviceSerialNo: inq.device_serial_no,
+    customerLat: inq.customer_lat != null ? Number(inq.customer_lat) : null,
+    customerLng: inq.customer_lng != null ? Number(inq.customer_lng) : null,
   };
 }
 
@@ -191,6 +199,18 @@ export interface BillInput {
   discountAmount: number;
 }
 
+const EARTH_RADIUS_KM = 6371;
+const ROAD_FACTOR = 1.3; // roads aren't straight lines — approximates real driving distance
+
+// Same haversine + road-factor approximation web uses for its "Auto km" button.
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(a)) * ROAD_FACTOR;
+}
+
 export interface BillBreakdown {
   servicesSubtotal: number;
   platformFee: number;
@@ -218,12 +238,19 @@ export function computeBill(input: BillInput): BillBreakdown {
   return { servicesSubtotal, platformFee, transportFee, gst, discount, total: grossTotal - discount };
 }
 
+export type PaymentMethod = 'cash' | 'online';
+
 export interface StatusUpdatePayload {
   status: StatusOption;
   detail: string;
   scheduledAt?: string;
   billNo?: string;
-  bill?: BillInput & { extraReason?: string; discountReason?: string };
+  bill?: BillInput & {
+    extraReason?: string;
+    discountReason?: string;
+    paymentMethod: PaymentMethod;
+    cashCollected: boolean;
+  };
 }
 
 // Resolved's bill covers services + extra + transport + platform fee + 18%
@@ -270,6 +297,15 @@ export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayl
       patch.gst_amount = bd.gst;
       patch.bill_total = bd.total;
       patch.bill_generated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      patch.payment_method = b.paymentMethod;
+      if (b.paymentMethod === 'cash' && b.cashCollected) {
+        patch.payment_status = 'paid';
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        patch.cash_collected_at = now;
+        patch.payment_received_at = now;
+      } else {
+        patch.payment_status = 'unpaid';
+      }
       if (b.services.length) {
         const summary = b.services.map((s) => `${s.label} (₹${s.cost})`).join(', ');
         detail = `${detail}\n\nServices: ${summary}`;

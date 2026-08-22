@@ -1,16 +1,4 @@
-import { api, API_BASE_URL } from './client';
-
-// API_BASE_URL is "<origin>/api" — ads store `url` as a path relative to
-// the origin (e.g. "/uploads/foo.png"), which a browser's <img> resolves
-// against the page's own origin for free. React Native's <Image> has no
-// such origin to resolve against, so a relative uri silently fails to
-// load — this makes it absolute.
-const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
-
-function resolveAdUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
-}
+import { api, resolveUploadUrl } from './client';
 
 export interface LandingAd {
   id: string;
@@ -88,5 +76,5 @@ export function filterAdsForPlacement(
       if (ad.expires_at && new Date(ad.expires_at).getTime() <= now) return false;
       return true;
     })
-    .map((ad) => ({ ...ad, url: resolveAdUrl(ad.url) }));
+    .map((ad) => ({ ...ad, url: resolveUploadUrl(ad.url) }));
 }

@@ -6,6 +6,7 @@ import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import BackLink from '../components/BackLink';
 import GlowButton from '../components/GlowButton';
+import PhotoPicker from '../components/PhotoPicker';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -34,10 +35,12 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [takenNote, setTakenNote] = useState('');
+  const [takenPhoto, setTakenPhoto] = useState<string | null>(null);
   const [followupStatus, setFollowupStatus] = useState(FOLLOWUP_OPTIONS[0].key);
   const [followupNote, setFollowupNote] = useState('');
   const [returnCondition, setReturnCondition] = useState('good');
   const [returnNote, setReturnNote] = useState('');
+  const [returnPhoto, setReturnPhoto] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,9 +105,12 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
               value={takenNote}
               onChangeText={setTakenNote}
             />
+            <View style={{ marginBottom: spacing(3) }}>
+              <PhotoPicker label="Device Photo" value={takenPhoto} onChange={setTakenPhoto} />
+            </View>
             <GlowButton
               label="Mark Device Taken"
-              onPress={() => runAction(() => markDeviceTaken(inquiryId, takenNote.trim()))}
+              onPress={() => runAction(() => markDeviceTaken(inquiryId, takenNote.trim(), takenPhoto))}
               loading={submitting}
             />
           </GlassCard>
@@ -183,9 +189,12 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
                   value={returnNote}
                   onChangeText={setReturnNote}
                 />
+                <View style={{ marginBottom: spacing(3) }}>
+                  <PhotoPicker label="Return Photo" value={returnPhoto} onChange={setReturnPhoto} />
+                </View>
                 <GlowButton
                   label="Mark Returned"
-                  onPress={() => runAction(() => markDeviceReturned(inquiryId, returnCondition.trim() || 'good', returnNote.trim()))}
+                  onPress={() => runAction(() => markDeviceReturned(inquiryId, returnCondition.trim() || 'good', returnNote.trim(), returnPhoto))}
                   loading={submitting}
                 />
               </GlassCard>
