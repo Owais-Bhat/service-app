@@ -166,13 +166,21 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     paymentStatus: paymentConfirmed ? 'paid' : paymentMethod === 'cash' ? 'paid' : 'unpaid',
   });
 
+  // Shared by the bill PDF, payment-link, and final-save actions so "extra
+  // cost needs a reason, same as discount" (and every other bill guard)
+  // can't drift between the three places a bill gets validated.
+  const validateBillFields = (): string | null => {
+    if (!companyName.trim()) return 'Company name is required to resolve';
+    if (services.length === 0 && !(Number(extraCost) > 0)) return 'Add at least one service, or an extra charge';
+    if (Number(extraCost) > 0 && !extraReason.trim()) return 'Enter a reason for the extra cost';
+    if (Number(discountAmount) > 0 && !discountReason.trim()) return 'Enter a reason for the discount';
+    return null;
+  };
+
   const handleGenerateBillPdf = async () => {
-    if (!companyName.trim()) {
-      setError('Company name is required to generate a bill');
-      return;
-    }
-    if (services.length === 0 && !(Number(extraCost) > 0)) {
-      setError('Add at least one service, or an extra charge');
+    const validationError = validateBillFields();
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setError(null);
@@ -236,16 +244,9 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
   const handleGenerateLink = async () => {
     if (!item.inquiryId) return;
-    if (!companyName.trim()) {
-      setError('Company name is required to generate a payment link');
-      return;
-    }
-    if (services.length === 0 && !(Number(extraCost) > 0)) {
-      setError('Add at least one service, or an extra charge');
-      return;
-    }
-    if (Number(discountAmount) > 0 && !discountReason.trim()) {
-      setError('Enter a reason for the discount');
+    const validationError = validateBillFields();
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setError(null);
@@ -349,16 +350,9 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
       return;
     }
     if (status === 'resolved') {
-      if (!companyName.trim()) {
-        setError('Company name is required to resolve');
-        return;
-      }
-      if (services.length === 0 && !(Number(extraCost) > 0)) {
-        setError('Add at least one service, or an extra charge');
-        return;
-      }
-      if (Number(discountAmount) > 0 && !discountReason.trim()) {
-        setError('Enter a reason for the discount');
+      const validationError = validateBillFields();
+      if (validationError) {
+        setError(validationError);
         return;
       }
       if (paymentMethod === 'online' && !paymentConfirmed) {
@@ -596,7 +590,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 {Number(extraCost) > 0 ? (
                   <TextInput
                     style={[styles.input, { color: theme.text, borderColor: theme.line, marginTop: spacing(2) }]}
-                    placeholder="Reason for extra cost"
+                    placeholder="Reason for extra cost (required)"
                     placeholderTextColor={theme.text3}
                     value={extraReason}
                     onChangeText={setExtraReason}
