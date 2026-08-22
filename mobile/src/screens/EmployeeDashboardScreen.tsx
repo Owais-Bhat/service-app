@@ -7,6 +7,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import GlassTabBar, { TabItem } from '../components/GlassTabBar';
 import NotificationBell from '../components/NotificationBell';
+import PulseDot from '../components/PulseDot';
 import ThemeToggleButton from '../components/ThemeToggleButton';
 import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
@@ -194,9 +195,13 @@ export default function EmployeeDashboardScreen({
                 const service = inq?.service_item || t.category;
                 const when = new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
                 return (
-                  <View key={t.id} style={styles.routeRow}>
+                  <Animated.View key={t.id} entering={FadeInUp.delay(180 + i * 90).duration(450)} style={styles.routeRow}>
                     <View style={styles.routeTimeline}>
-                      <View style={[styles.routeDot, { borderColor: statusStyle.color, backgroundColor: t.status === 'in_progress' ? statusStyle.color : 'transparent' }]} />
+                      {t.status === 'in_progress' ? (
+                        <PulseDot color={statusStyle.color} size={12} />
+                      ) : (
+                        <View style={[styles.routeDot, { borderColor: statusStyle.color, backgroundColor: 'transparent' }]} />
+                      )}
                       {!isLast && <View style={[styles.routeLine, { backgroundColor: theme.line }]} />}
                     </View>
                     <View style={[styles.routeInfo, isLast && { marginBottom: 0 }]}>
@@ -219,7 +224,7 @@ export default function EmployeeDashboardScreen({
                         </Pressable>
                       </View>
                     </View>
-                  </View>
+                  </Animated.View>
                 );
               })}
             </GlassCard>
