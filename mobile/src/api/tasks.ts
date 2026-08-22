@@ -48,6 +48,31 @@ export interface TaskItem {
   scheduledAt: string | null;
 }
 
+function fromTicketOnly(t: RawTicket): TaskItem {
+  return {
+    key: t.id,
+    ticketId: t.id,
+    inquiryId: null,
+    status: t.status,
+    reopened: false,
+    createdAt: t.created_at,
+    fullName: t.title,
+    phone: null,
+    location: null,
+    ticketNo: null,
+    serviceItem: t.description,
+    preferredTime: null,
+    employeeUpdateDetail: null,
+    companyName: null,
+    scheduledAt: null,
+  };
+}
+
+function ticketToTaskItem(t: RawTicket): TaskItem {
+  const inq = t.inquiries?.[0];
+  return inq ? fromInquiry(inq, t.id) : fromTicketOnly(t);
+}
+
 function fromInquiry(inq: RawInquiry, ticketId: string | null): TaskItem {
   return {
     key: inq.id,
@@ -84,29 +109,8 @@ export async function fetchMyTasks(userId: string): Promise<{ pending: TaskItem[
   const linkedInquiryIds = new Set<string>();
   const items: TaskItem[] = [];
   tickets.forEach((t) => {
-    const inq = t.inquiries?.[0];
-    if (inq) {
-      linkedInquiryIds.add(inq.id);
-      items.push(fromInquiry(inq, t.id));
-    } else {
-      items.push({
-        key: t.id,
-        ticketId: t.id,
-        inquiryId: null,
-        status: t.status,
-        reopened: false,
-        createdAt: t.created_at,
-        fullName: t.title,
-        phone: null,
-        location: null,
-        ticketNo: null,
-        serviceItem: t.description,
-        preferredTime: null,
-        employeeUpdateDetail: null,
-        companyName: null,
-        scheduledAt: null,
-      });
-    }
+    if (t.inquiries?.[0]) linkedInquiryIds.add(t.inquiries[0].id);
+    items.push(ticketToTaskItem(t));
   });
 
   const pending = inquiries
@@ -120,6 +124,16 @@ export async function fetchMyTasks(userId: string): Promise<{ pending: TaskItem[
   items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return { pending, items };
+}
+
+// Single-item fetch for TaskDetailScreen (Today's Route "Open" deep link) —
+// same normalized shape as the list, so it reuses TaskStatusModal unchanged.
+export async function fetchTaskByTicketId(ticketId: string): Promise<TaskItem | null> {
+  const tickets = await dataGet<RawTicket[]>('tickets', {
+    select: 'id,status,title,description,created_at,inquiries(*)',
+    eq: [`id:${ticketId}`],
+  });
+  return tickets[0] ? ticketToTaskItem(tickets[0]) : null;
 }
 
 export async function acceptAssignment(item: TaskItem): Promise<void> {

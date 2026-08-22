@@ -1,36 +1,44 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import BackLink from '../components/BackLink';
-import GlowButton from '../components/GlowButton';
+import Icon from '../components/Icon';
+import PressScale from '../components/PressScale';
+import TaskStatusModal from '../components/TaskStatusModal';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, categoryColors, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE, TECH_STATUS_ORDER } from '../theme/tokens';
-import { fetchTicketDetail, updateTicketStatus, TicketDetail } from '../api/tickets';
+import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { fetchTaskByTicketId, TaskItem } from '../api/tasks';
 
 interface Props {
   ticketId: string;
   onBack: () => void;
 }
 
-type TechStatus = (typeof TECH_STATUS_ORDER)[number];
+function displayStatus(status: string): string {
+  return status === 'closed' ? 'resolved' : status || 'open';
+}
+
+function isLocked(status: string): boolean {
+  return ['resolved', 'case_closed', 'foc'].includes(displayStatus(status));
+}
 
 export default function TaskDetailScreen({ ticketId, onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const [ticket, setTicket] = useState<TicketDetail | null>(null);
+  const [item, setItem] = useState<TaskItem | null>(null);
   const [loading, setLoading] = useState(true);
-  const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showStatus, setShowStatus] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      const t = await fetchTicketDetail(ticketId);
-      setTicket(t);
+      const t = await fetchTaskByTicketId(ticketId);
+      setItem(t);
       setError(t ? null : 'Ticket not found');
     } catch {
       setError('Could not load this task — check your connection');
@@ -43,22 +51,9 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
     load();
   }, [load]);
 
-  const advance = async () => {
-    if (!ticket) return;
-    const idx = TECH_STATUS_ORDER.indexOf(ticket.status as TechStatus);
-    if (idx < 0 || idx >= TECH_STATUS_ORDER.length - 1) return;
-    const next = TECH_STATUS_ORDER[idx + 1];
-    setAdvancing(true);
-    try {
-      await updateTicketStatus(ticket.id, next);
-      setTicket({ ...ticket, status: next });
-      setError(null);
-    } catch {
-      setError('Could not update status — check your connection');
-    } finally {
-      setAdvancing(false);
-    }
-  };
+  const call = (phone: string) => Linking.openURL(`tel:${phone}`);
+  const whatsapp = (phone: string) => Linking.openURL(`https://wa.me/${phone.replace(/\D/g, '')}`);
+  const openMaps = (location: string) => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`);
 
   if (loading) {
     return (
@@ -71,7 +66,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
     );
   }
 
-  if (!ticket) {
+  if (!item) {
     return (
       <View style={styles.root}>
         <MeshBackground />
@@ -83,87 +78,106 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
     );
   }
 
-  const statusIdx = TECH_STATUS_ORDER.indexOf(ticket.status as TechStatus);
-  const isTechStatus = statusIdx >= 0;
-  const statusStyle = statusColors[ticket.status] || DEFAULT_STATUS_STYLE;
-  const categoryStyle = categoryColors[ticket.category] || DEFAULT_CATEGORY_STYLE;
-  const contact = ticket.inquiries?.[0];
-  const canAdvance = isTechStatus && statusIdx < TECH_STATUS_ORDER.length - 1;
-  const advanceLabel = !isTechStatus
-    ? null
-    : statusIdx >= TECH_STATUS_ORDER.length - 1
-      ? 'Job Resolved'
-      : `Mark as ${(statusColors[TECH_STATUS_ORDER[statusIdx + 1]] || DEFAULT_STATUS_STYLE).label}`;
+  const statusStyle = statusColors[displayStatus(item.status)] || DEFAULT_STATUS_STYLE;
+  const locked = isLocked(item.status);
 
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(10) }}>
         <BackLink onPress={onBack} />
 
-        <GlassCard>
-          <View style={styles.headerRow}>
-            <Text style={styles.ticketId}>{ticket.id.slice(0, 8).toUpperCase()}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-              <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+        <Animated.View entering={FadeInUp.duration(450).springify()}>
+          <GlassCard shadow>
+            {item.reopened ? (
+              <View style={styles.reopenedTag}>
+                <Text style={styles.reopenedTagText}>🔁 Reopened — free rework</Text>
+              </View>
+            ) : null}
+            <View style={styles.headerRow}>
+              <Text style={styles.ticketId}>{item.ticketNo || 'No ticket'}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+              </View>
             </View>
-          </View>
-          <Text style={[styles.title, { color: theme.text }]}>{ticket.title}</Text>
-          {ticket.description ? (
-            <Text style={[styles.description, { color: theme.text2 }]}>{ticket.description}</Text>
-          ) : null}
-          <View style={[styles.categoryChip, { backgroundColor: categoryStyle.bg }]}>
-            <Text style={[styles.categoryChipText, { color: categoryStyle.color }]}>{ticket.category}</Text>
-          </View>
-        </GlassCard>
+            <Text style={[styles.title, { color: theme.text }]}>{item.serviceItem || item.fullName}</Text>
+            {item.companyName ? (
+              <View style={styles.categoryChip}>
+                <Text style={styles.categoryChipText}>{item.companyName}</Text>
+              </View>
+            ) : null}
+          </GlassCard>
+        </Animated.View>
 
-        {contact ? (
+        <Animated.View entering={FadeInUp.delay(80).duration(450).springify()}>
           <Panel style={styles.section}>
             <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Customer</Text>
-            {contact.full_name ? <Text style={[styles.contactName, { color: theme.text }]}>{contact.full_name}</Text> : null}
-            {contact.phone ? <Text style={[styles.contactLine, { color: theme.text2 }]}>{contact.phone}</Text> : null}
-            {contact.location ? <Text style={[styles.contactLine, { color: theme.text3 }]}>{contact.location}</Text> : null}
-          </Panel>
-        ) : null}
+            <Text style={[styles.contactName, { color: theme.text }]}>{item.fullName}</Text>
+            {item.phone ? <Text style={[styles.contactLine, { color: theme.text2 }]}>{item.phone}</Text> : null}
+            {item.location ? <Text style={[styles.contactLine, { color: theme.text3 }]}>{item.location}</Text> : null}
+            {item.preferredTime ? (
+              <Text style={[styles.contactLine, { color: brand.primary, marginTop: spacing(1) }]}>Preferred: {item.preferredTime}</Text>
+            ) : null}
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Status</Text>
-          <View style={styles.stepperRow}>
-            {TECH_STATUS_ORDER.map((s, i) => (
-              <View
-                key={s}
-                style={[styles.step, { backgroundColor: isTechStatus && i <= statusIdx ? brand.primary : theme.line }]}
-              />
-            ))}
-          </View>
-          {advanceLabel ? (
-            canAdvance ? (
-              <GlowButton label={advanceLabel} onPress={advance} loading={advancing} icon="arrow-right" />
-            ) : (
-              <View style={[styles.advanceButton, styles.advanceButtonDone, { borderColor: theme.line }]}>
-                <Text style={[styles.advanceButtonText, { color: theme.text3 }]}>{advanceLabel}</Text>
-              </View>
-            )
-          ) : null}
-        </View>
+            <View style={styles.actionRow}>
+              {item.phone ? (
+                <>
+                  <Pressable onPress={() => call(item.phone!)} style={[styles.iconAction, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                    <Icon name="phone" size={16} color={theme.text} />
+                  </Pressable>
+                  <Pressable onPress={() => whatsapp(item.phone!)} style={[styles.iconAction, { backgroundColor: '#25D366' }]}>
+                    <Icon name="whatsapp" size={16} color="#fff" />
+                  </Pressable>
+                </>
+              ) : null}
+              {item.location ? (
+                <Pressable onPress={() => openMaps(item.location!)} style={[styles.iconAction, { backgroundColor: brand.primary }]}>
+                  <Icon name="pin" size={16} color="#fff" />
+                </Pressable>
+              ) : null}
+            </View>
+          </Panel>
+        </Animated.View>
+
+        {item.employeeUpdateDetail ? (
+          <Animated.View entering={FadeInUp.delay(140).duration(450).springify()}>
+            <Panel style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Employee Update</Text>
+              <Text style={[styles.body, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
+            </Panel>
+          </Animated.View>
+        ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={styles.photoRow}>
-          <View style={[styles.photoTile, { borderColor: theme.line }]}>
-            <Text style={[styles.photoTileText, { color: theme.text3 }]}>Before photo</Text>
-            <Text style={[styles.comingSoon, { color: theme.text3 }]}>Coming soon</Text>
-          </View>
-          <View style={[styles.photoTile, { borderColor: theme.line }]}>
-            <Text style={[styles.photoTileText, { color: theme.text3 }]}>After photo</Text>
-            <Text style={[styles.comingSoon, { color: theme.text3 }]}>Coming soon</Text>
-          </View>
-        </View>
-        <View style={[styles.signatureTile, { borderColor: theme.line }]}>
-          <Text style={[styles.photoTileText, { color: theme.text3 }]}>Customer signature</Text>
-          <Text style={[styles.comingSoon, { color: theme.text3 }]}>Coming soon</Text>
-        </View>
+        <Animated.View entering={FadeInUp.delay(200).duration(450).springify()} style={styles.section}>
+          {locked ? (
+            <View style={[styles.doneBanner, { borderColor: theme.line }]}>
+              <Icon name="check" size={16} color={semantic.success} />
+              <Text style={[styles.doneBannerText, { color: theme.text2 }]}>This service is completed and locked.</Text>
+            </View>
+          ) : (
+            <PressScale onPress={() => setShowStatus(true)}>
+              <View style={styles.updateBtn}>
+                <Icon name="edit" size={16} color="#fff" />
+                <Text style={styles.updateBtnText}>Update Status</Text>
+              </View>
+            </PressScale>
+          )}
+        </Animated.View>
       </ScrollView>
+
+      {showStatus && (
+        <TaskStatusModal
+          item={item}
+          onDismiss={() => setShowStatus(false)}
+          onSaved={() => {
+            setShowStatus(false);
+            setLoading(true);
+            load();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -177,22 +191,19 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.sm },
   statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
   title: { ...typography.heading, marginBottom: spacing(2) },
-  description: { ...typography.body, marginBottom: spacing(3) },
-  categoryChip: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.sm, alignSelf: 'flex-start' },
-  categoryChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
+  categoryChip: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.sm, alignSelf: 'flex-start', backgroundColor: 'rgba(21,160,90,0.14)' },
+  categoryChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: brand.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  reopenedTag: { alignSelf: 'flex-start', backgroundColor: 'rgba(224,138,20,0.16)', borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), marginBottom: spacing(2.5) },
+  reopenedTagText: { fontFamily: 'Manrope_700Bold', fontSize: 10, color: semantic.warning },
   section: { marginTop: spacing(4) },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
   contactName: { ...typography.body, fontFamily: 'Manrope_700Bold', marginBottom: spacing(0.5) },
   contactLine: { ...typography.caption, marginBottom: spacing(0.5) },
-  stepperRow: { flexDirection: 'row', gap: spacing(1.5), marginBottom: spacing(3) },
-  step: { flex: 1, height: 6, borderRadius: 3 },
-  advanceButton: { padding: spacing(3.5), borderRadius: radius.md, alignItems: 'center', backgroundColor: brand.primary },
-  advanceButtonDone: { backgroundColor: 'transparent', borderWidth: 1 },
-  advanceButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
+  actionRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(3) },
+  iconAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3), textAlign: 'center' },
-  photoRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(5) },
-  photoTile: { flex: 1, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md, paddingVertical: spacing(5), alignItems: 'center', gap: spacing(1) },
-  signatureTile: { borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md, paddingVertical: spacing(4.5), alignItems: 'center', gap: spacing(1), marginTop: spacing(2.5) },
-  photoTileText: { ...typography.caption, fontSize: 12 },
-  comingSoon: { ...typography.caption, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  doneBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5) },
+  doneBannerText: { ...typography.body, fontSize: 13 },
+  updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.primary, height: 52, borderRadius: radius.md },
+  updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
 });
