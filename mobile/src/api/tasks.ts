@@ -153,18 +153,63 @@ export async function declineAssignment(inquiryId: string, reason: string): Prom
   });
 }
 
-export type StatusOption = 'in_progress' | 'reschedule' | 'issue_not_resolved' | 'case_closed' | 'foc';
+export type StatusOption = 'in_progress' | 'reschedule' | 'issue_not_resolved' | 'case_closed' | 'foc' | 'resolved';
+
+export interface BillService {
+  id: string;
+  label: string;
+  cost: number;
+}
+
+export interface BillInput {
+  companyName: string;
+  services: BillService[];
+  extraCost: number;
+  transportKm: number;
+  discountAmount: number;
+}
+
+export interface BillBreakdown {
+  servicesSubtotal: number;
+  platformFee: number;
+  transportFee: number;
+  gst: number;
+  discount: number;
+  total: number;
+}
+
+const TRANSPORT_PER_KM = 5;
+const GST_RATE = 0.18;
+
+// Same math as web's calcTotal() (src/pages/employee.js) — kept in one place
+// so the live breakdown shown in TaskStatusModal and the values actually
+// saved by updateTaskStatus can never drift apart.
+export function computeBill(input: BillInput): BillBreakdown {
+  const servicesSubtotal = input.services.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  const isNetworkingExperts = input.companyName.trim().toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
+  const platformFee = isNetworkingExperts ? 50 : 100;
+  const transportFee = Math.round(Math.max(0, input.transportKm) * TRANSPORT_PER_KM);
+  const base = servicesSubtotal + input.extraCost + platformFee + transportFee;
+  const gst = Math.round(base * GST_RATE);
+  const grossTotal = base + gst;
+  const discount = Math.min(grossTotal, Math.max(0, input.discountAmount));
+  return { servicesSubtotal, platformFee, transportFee, gst, discount, total: grossTotal - discount };
+}
 
 export interface StatusUpdatePayload {
   status: StatusOption;
   detail: string;
   scheduledAt?: string;
   billNo?: string;
+  bill?: BillInput & { extraReason?: string; discountReason?: string };
 }
 
-// Resolved (+ billing) is a separate feature not yet built on mobile — the
-// options here are exactly what a reopened-free-rework (foc) or an ordinary
-// in-progress ticket can reach without a bill.
+// Resolved's bill covers services + extra + transport + platform fee + 18%
+// GST, minus a manual discount — matches web's math (computeBill above).
+// It intentionally skips coupon codes and inquiry_services linking (the
+// generic mobile data API can't delete/relink that join table yet) — the
+// chosen services are still recorded, just as a readable summary appended
+// to the employee update note rather than structured rows.
 export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayload): Promise<void> {
   const resched = payload.status === 'reschedule';
   const savedStatus = resched ? 'in_progress' : payload.status;
@@ -175,9 +220,9 @@ export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayl
   }
 
   if (item.inquiryId) {
+    let detail = payload.detail;
     const patch: Record<string, unknown> = {
       status: savedStatus,
-      employee_update_detail: payload.detail,
       employee_update_status: payload.status,
       employee_update_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
@@ -187,6 +232,28 @@ export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayl
       patch.bill_total = 0;
       patch.bill_amount = 0;
     }
+    if (payload.status === 'resolved' && payload.bill) {
+      const b = payload.bill;
+      const bd = computeBill(b);
+      patch.company_name = b.companyName.trim();
+      patch.bill_amount = bd.servicesSubtotal + b.extraCost;
+      patch.extra_cost = b.extraCost;
+      patch.extra_cost_reason = b.extraReason || null;
+      patch.transport_km = b.transportKm;
+      patch.transport_fee = bd.transportFee;
+      patch.platform_fee = bd.platformFee;
+      patch.discount_amount = bd.discount;
+      patch.discount_label = bd.discount > 0 ? 'Employee discount' : null;
+      patch.discount_reason = bd.discount > 0 ? b.discountReason || null : null;
+      patch.gst_amount = bd.gst;
+      patch.bill_total = bd.total;
+      patch.bill_generated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      if (b.services.length) {
+        const summary = b.services.map((s) => `${s.label} (₹${s.cost})`).join(', ');
+        detail = `${detail}\n\nServices: ${summary}`;
+      }
+    }
+    patch.employee_update_detail = detail;
     ops.push(dataPatch('inquiries', `id:${item.inquiryId}`, patch));
   }
 

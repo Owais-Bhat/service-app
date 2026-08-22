@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import PressScale from './PressScale';
+import ServicePickerModal, { PickedService } from './ServicePickerModal';
 import { IconName } from '../theme/icons';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { updateTaskStatus, TaskItem, StatusOption } from '../api/tasks';
+import { updateTaskStatus, computeBill, TaskItem, StatusOption } from '../api/tasks';
 import { ApiError } from '../api/client';
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   onDismiss: () => void;
   onSaved: () => void;
 }
+
+const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 // Shared between ManageTasksScreen (list) and TaskDetailScreen (single-item
 // deep link from Today's Route) so both reach the same real status workflow
@@ -25,6 +28,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     ? [{ key: 'foc', label: 'FOC — Free of Cost (rework)', icon: 'check' }]
     : [
         { key: 'in_progress', label: 'In Progress', icon: 'clock' },
+        { key: 'resolved', label: 'Resolved — generate bill', icon: 'wallet' },
         { key: 'reschedule', label: 'Reschedule visit', icon: 'calendar' },
         { key: 'issue_not_resolved', label: 'Issue Not Resolved', icon: 'alert' },
         { key: 'case_closed', label: 'Case Closed (final)', icon: 'close' },
@@ -35,6 +39,30 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [billNo, setBillNo] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Bill fields (only used when status === 'resolved')
+  const [companyName, setCompanyName] = useState(item.companyName || 'Networking Experts');
+  const [services, setServices] = useState<PickedService[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [extraCost, setExtraCost] = useState('');
+  const [extraReason, setExtraReason] = useState('');
+  const [transportKm, setTransportKm] = useState('');
+  const [discountAmount, setDiscountAmount] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
+
+  const bill = useMemo(
+    () =>
+      computeBill({
+        companyName,
+        services,
+        extraCost: Number(extraCost) || 0,
+        transportKm: Number(transportKm) || 0,
+        discountAmount: Number(discountAmount) || 0,
+      }),
+    [companyName, services, extraCost, transportKm, discountAmount],
+  );
+
+  const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
 
   const handleSave = async () => {
     setError(null);
@@ -51,6 +79,20 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
       setError("Enter the client's existing bill number");
       return;
     }
+    if (status === 'resolved') {
+      if (!companyName.trim()) {
+        setError('Company name is required to resolve');
+        return;
+      }
+      if (services.length === 0 && !(Number(extraCost) > 0)) {
+        setError('Add at least one service, or an extra charge');
+        return;
+      }
+      if (Number(discountAmount) > 0 && !discountReason.trim()) {
+        setError('Enter a reason for the discount');
+        return;
+      }
+    }
     setSaving(true);
     try {
       await updateTaskStatus(item, {
@@ -58,6 +100,18 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         detail: detail.trim(),
         scheduledAt: status === 'reschedule' ? `${scheduledAt.trim()}:00` : undefined,
         billNo: status === 'foc' ? billNo.trim() : undefined,
+        bill:
+          status === 'resolved'
+            ? {
+                companyName,
+                services,
+                extraCost: Number(extraCost) || 0,
+                extraReason: extraReason.trim() || undefined,
+                transportKm: Number(transportKm) || 0,
+                discountAmount: Number(discountAmount) || 0,
+                discountReason: discountReason.trim() || undefined,
+              }
+            : undefined,
       });
       onSaved();
     } catch (err) {
@@ -138,6 +192,116 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               </>
             ) : null}
 
+            {status === 'resolved' ? (
+              <View style={[styles.billBlock, { borderColor: theme.line }]}>
+                <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Company</Text>
+                <TextInput
+                  style={[styles.input, { color: theme.text, borderColor: theme.line }]}
+                  placeholder="Company name"
+                  placeholderTextColor={theme.text3}
+                  value={companyName}
+                  onChangeText={setCompanyName}
+                />
+
+                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Services</Text>
+                {services.map((s) => (
+                  <View key={s.id} style={[styles.serviceRow, { borderColor: theme.line }]}>
+                    <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={2}>{s.label}</Text>
+                    <Text style={[styles.serviceCost, { color: semantic.success }]}>{inr(s.cost)}</Text>
+                    <Pressable onPress={() => removeService(s.id)} hitSlop={8}>
+                      <Icon name="close" size={14} color={theme.text3} />
+                    </Pressable>
+                  </View>
+                ))}
+                <Pressable onPress={() => setShowPicker(true)} style={[styles.addServiceBtn, { borderColor: brand.primary }]}>
+                  <Icon name="edit" size={14} color={brand.primary} />
+                  <Text style={[styles.addServiceText, { color: brand.primary }]}>Add Service</Text>
+                </Pressable>
+
+                <View style={styles.twoCol}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Extra Cost</Text>
+                    <TextInput
+                      style={[styles.input, { color: theme.text, borderColor: theme.line }]}
+                      placeholder="₹0"
+                      placeholderTextColor={theme.text3}
+                      keyboardType="numeric"
+                      value={extraCost}
+                      onChangeText={setExtraCost}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Transport (km)</Text>
+                    <TextInput
+                      style={[styles.input, { color: theme.text, borderColor: theme.line }]}
+                      placeholder="0"
+                      placeholderTextColor={theme.text3}
+                      keyboardType="numeric"
+                      value={transportKm}
+                      onChangeText={setTransportKm}
+                    />
+                  </View>
+                </View>
+                {Number(extraCost) > 0 ? (
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.line, marginTop: spacing(2) }]}
+                    placeholder="Reason for extra cost"
+                    placeholderTextColor={theme.text3}
+                    value={extraReason}
+                    onChangeText={setExtraReason}
+                  />
+                ) : null}
+
+                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Discount</Text>
+                <TextInput
+                  style={[styles.input, { color: theme.text, borderColor: theme.line }]}
+                  placeholder="₹0"
+                  placeholderTextColor={theme.text3}
+                  keyboardType="numeric"
+                  value={discountAmount}
+                  onChangeText={setDiscountAmount}
+                />
+                {Number(discountAmount) > 0 ? (
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.line, marginTop: spacing(2) }]}
+                    placeholder="Reason for discount (required)"
+                    placeholderTextColor={theme.text3}
+                    value={discountReason}
+                    onChangeText={setDiscountReason}
+                  />
+                ) : null}
+
+                <View style={[styles.receipt, { borderColor: theme.line }]}>
+                  <View style={styles.receiptRow}>
+                    <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Services</Text>
+                    <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.servicesSubtotal)}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Platform fee</Text>
+                    <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.platformFee)}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Transport</Text>
+                    <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.transportFee)}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={[styles.receiptLabel, { color: theme.text3 }]}>GST (18%)</Text>
+                    <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.gst)}</Text>
+                  </View>
+                  {bill.discount > 0 ? (
+                    <View style={styles.receiptRow}>
+                      <Text style={[styles.receiptLabel, { color: semantic.danger }]}>Discount</Text>
+                      <Text style={[styles.receiptValue, { color: semantic.danger }]}>-{inr(bill.discount)}</Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.receiptRow, styles.receiptTotalRow, { borderColor: theme.line }]}>
+                    <Text style={[styles.receiptTotalLabel, { color: theme.text }]}>Total</Text>
+                    <Text style={[styles.receiptTotalValue, { color: brand.primary }]}>{inr(bill.total)}</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <View style={styles.modalActions}>
@@ -153,6 +317,16 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
           </ScrollView>
         </GlassSurface>
       </View>
+
+      {showPicker && (
+        <ServicePickerModal
+          onDismiss={() => setShowPicker(false)}
+          onSelect={(s) => {
+            setServices((prev) => (prev.some((x) => x.id === s.id) ? prev : [...prev, s]));
+            setShowPicker(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -176,4 +350,18 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
   saveBtn: { height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   saveBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
+  billBlock: { borderTopWidth: 1, marginTop: spacing(4), paddingTop: spacing(2) },
+  serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(2.5), paddingVertical: spacing(2), marginBottom: spacing(1.5) },
+  serviceLabel: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
+  serviceCost: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  addServiceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.sm, paddingVertical: spacing(2.25), marginTop: spacing(1) },
+  addServiceText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  twoCol: { flexDirection: 'row', gap: spacing(3) },
+  receipt: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(4) },
+  receiptRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing(1) },
+  receiptLabel: { fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
+  receiptValue: { fontSize: 12, fontFamily: 'Manrope_700Bold' },
+  receiptTotalRow: { borderTopWidth: 1, marginTop: spacing(1), paddingTop: spacing(2) },
+  receiptTotalLabel: { fontFamily: 'Manrope_800ExtraBold', fontSize: 14 },
+  receiptTotalValue: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
 });
