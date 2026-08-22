@@ -1,4 +1,5 @@
 import { dataGet, dataPatch } from './client';
+import { createPaymentLink } from './payments';
 
 interface RawInquiry {
   id: string;
@@ -196,7 +197,9 @@ export interface BillInput {
   services: BillService[];
   extraCost: number;
   transportKm: number;
-  discountAmount: number;
+  manualDiscount: number;
+  couponDiscount: number;
+  couponLabel?: string;
 }
 
 const EARTH_RADIUS_KM = 6371;
@@ -225,7 +228,9 @@ const GST_RATE = 0.18;
 
 // Same math as web's calcTotal() (src/pages/employee.js) — kept in one place
 // so the live breakdown shown in TaskStatusModal and the values actually
-// saved by updateTaskStatus can never drift apart.
+// saved always match. Discount = coupon (admin-configured, validated
+// server-side) + manual employee discount, capped at the gross total —
+// same combination rule web uses.
 export function computeBill(input: BillInput): BillBreakdown {
   const servicesSubtotal = input.services.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
   const isNetworkingExperts = input.companyName.trim().toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
@@ -234,32 +239,117 @@ export function computeBill(input: BillInput): BillBreakdown {
   const base = servicesSubtotal + input.extraCost + platformFee + transportFee;
   const gst = Math.round(base * GST_RATE);
   const grossTotal = base + gst;
-  const discount = Math.min(grossTotal, Math.max(0, input.discountAmount));
+  const discount = Math.min(grossTotal, Math.max(0, input.couponDiscount) + Math.max(0, input.manualDiscount));
   return { servicesSubtotal, platformFee, transportFee, gst, discount, total: grossTotal - discount };
 }
 
 export type PaymentMethod = 'cash' | 'online';
+
+export interface ResolveBill extends BillInput {
+  extraReason?: string;
+  discountReason?: string;
+  couponCode?: string;
+  paymentMethod: PaymentMethod;
+}
+
+function billPatch(bill: ResolveBill): Record<string, unknown> {
+  const bd = computeBill(bill);
+  const labels: string[] = [];
+  if (bill.couponDiscount > 0) labels.push(bill.couponLabel || (bill.couponCode ? `Coupon ${bill.couponCode}` : 'Coupon'));
+  if (bill.manualDiscount > 0) labels.push('Employee discount');
+  return {
+    company_name: bill.companyName.trim(),
+    bill_amount: bd.servicesSubtotal + bill.extraCost,
+    extra_cost: bill.extraCost,
+    extra_cost_reason: bill.extraReason || null,
+    transport_km: bill.transportKm,
+    transport_fee: bd.transportFee,
+    platform_fee: bd.platformFee,
+    discount_amount: bd.discount,
+    discount_label: labels.join(' + ') || null,
+    discount_reason: bill.manualDiscount > 0 ? bill.discountReason || null : null,
+    coupon_code: bill.couponCode || null,
+    gst_amount: bd.gst,
+    bill_total: bd.total,
+    bill_generated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    payment_method: bill.paymentMethod,
+  };
+}
+
+// Saves the full bill breakdown WITHOUT touching ticket/inquiry status —
+// used before generating a payment link (the ticket stays in_progress until
+// the customer actually pays) and folded into the final resolve write below.
+async function saveBillFields(item: TaskItem, bill: ResolveBill): Promise<void> {
+  if (!item.inquiryId) return;
+  await dataPatch('inquiries', `id:${item.inquiryId}`, billPatch(bill));
+}
+
+// Generates a real Razorpay payment link (same endpoint web's "Generate"
+// button hits) and persists it + the bill breakdown. Deliberately does NOT
+// touch status — the ticket only resolves once the customer actually pays
+// (see finalizeResolvedBill, called automatically by the poll in
+// TaskStatusModal once payment confirms).
+export async function generatePaymentLinkForBill(item: TaskItem, bill: ResolveBill): Promise<{ shortUrl: string; linkId: string }> {
+  const bd = computeBill(bill);
+  const { id, short_url } = await createPaymentLink({
+    amount: bd.total,
+    description: `Service: ${item.serviceItem || 'Service'}`,
+    ticketNo: item.ticketNo || '',
+    customerName: item.fullName,
+    customerPhone: item.phone || '',
+  });
+  await saveBillFields(item, bill);
+  if (item.inquiryId) {
+    await dataPatch('inquiries', `id:${item.inquiryId}`, { payment_link: short_url, payment_link_id: id });
+  }
+  return { shortUrl: short_url, linkId: id };
+}
+
+// The actual "Resolved" write for a billed job. For cash, this IS the
+// collection confirmation — no separate "mark collected" tap, matching how
+// this app handles it (an employee standing there with cash in hand
+// confirming a second time is just friction). For online, payment_status is
+// left untouched here: /api/payments/check-status already set it 'paid'
+// server-side by the time this is called (TaskStatusModal only allows this
+// once its poll sees paid, exactly like web gates its Save button).
+async function finalizeResolvedBill(item: TaskItem, bill: ResolveBill, detail: string): Promise<void> {
+  const ops: Promise<unknown>[] = [];
+  if (item.ticketId) ops.push(dataPatch('tickets', `id:${item.ticketId}`, { status: 'resolved' }));
+  if (item.inquiryId) {
+    const patch = billPatch(bill);
+    patch.status = 'resolved';
+    patch.employee_update_status = 'resolved';
+    patch.employee_update_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    if (bill.services.length) {
+      const summary = bill.services.map((s) => `${s.label} (₹${s.cost})`).join(', ');
+      detail = `${detail}\n\nServices: ${summary}`;
+    }
+    patch.employee_update_detail = detail;
+    if (bill.paymentMethod === 'cash') {
+      const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      patch.payment_status = 'paid';
+      patch.cash_collected_at = now;
+      patch.payment_received_at = now;
+    }
+    ops.push(dataPatch('inquiries', `id:${item.inquiryId}`, patch));
+  }
+  await Promise.all(ops);
+}
 
 export interface StatusUpdatePayload {
   status: StatusOption;
   detail: string;
   scheduledAt?: string;
   billNo?: string;
-  bill?: BillInput & {
-    extraReason?: string;
-    discountReason?: string;
-    paymentMethod: PaymentMethod;
-    cashCollected: boolean;
-  };
+  bill?: ResolveBill;
 }
 
-// Resolved's bill covers services + extra + transport + platform fee + 18%
-// GST, minus a manual discount — matches web's math (computeBill above).
-// It intentionally skips coupon codes and inquiry_services linking (the
-// generic mobile data API can't delete/relink that join table yet) — the
-// chosen services are still recorded, just as a readable summary appended
-// to the employee update note rather than structured rows.
 export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayload): Promise<void> {
+  if (payload.status === 'resolved' && payload.bill) {
+    await finalizeResolvedBill(item, payload.bill, payload.detail);
+    return;
+  }
+
   const resched = payload.status === 'reschedule';
   const savedStatus = resched ? 'in_progress' : payload.status;
   const ops: Promise<unknown>[] = [];
@@ -269,11 +359,11 @@ export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayl
   }
 
   if (item.inquiryId) {
-    let detail = payload.detail;
     const patch: Record<string, unknown> = {
       status: savedStatus,
       employee_update_status: payload.status,
       employee_update_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      employee_update_detail: payload.detail,
     };
     if (resched && payload.scheduledAt) patch.scheduled_at = payload.scheduledAt;
     if (payload.status === 'foc' && payload.billNo) {
@@ -281,37 +371,6 @@ export async function updateTaskStatus(item: TaskItem, payload: StatusUpdatePayl
       patch.bill_total = 0;
       patch.bill_amount = 0;
     }
-    if (payload.status === 'resolved' && payload.bill) {
-      const b = payload.bill;
-      const bd = computeBill(b);
-      patch.company_name = b.companyName.trim();
-      patch.bill_amount = bd.servicesSubtotal + b.extraCost;
-      patch.extra_cost = b.extraCost;
-      patch.extra_cost_reason = b.extraReason || null;
-      patch.transport_km = b.transportKm;
-      patch.transport_fee = bd.transportFee;
-      patch.platform_fee = bd.platformFee;
-      patch.discount_amount = bd.discount;
-      patch.discount_label = bd.discount > 0 ? 'Employee discount' : null;
-      patch.discount_reason = bd.discount > 0 ? b.discountReason || null : null;
-      patch.gst_amount = bd.gst;
-      patch.bill_total = bd.total;
-      patch.bill_generated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
-      patch.payment_method = b.paymentMethod;
-      if (b.paymentMethod === 'cash' && b.cashCollected) {
-        patch.payment_status = 'paid';
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        patch.cash_collected_at = now;
-        patch.payment_received_at = now;
-      } else {
-        patch.payment_status = 'unpaid';
-      }
-      if (b.services.length) {
-        const summary = b.services.map((s) => `${s.label} (₹${s.cost})`).join(', ');
-        detail = `${detail}\n\nServices: ${summary}`;
-      }
-    }
-    patch.employee_update_detail = detail;
     ops.push(dataPatch('inquiries', `id:${item.inquiryId}`, patch));
   }
 
