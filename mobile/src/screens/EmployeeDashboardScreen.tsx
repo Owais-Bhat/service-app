@@ -10,6 +10,7 @@ import NotificationBell from '../components/NotificationBell';
 import PulseDot from '../components/PulseDot';
 import ThemeToggleButton from '../components/ThemeToggleButton';
 import Icon from '../components/Icon';
+import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
@@ -27,6 +28,7 @@ import { fetchMyTickets, TicketRow } from '../api/employee';
 import { fetchActiveNotices, Notice } from '../api/notices';
 import { fetchNotifications } from '../api/notifications';
 import { fetchEodReports, EodReport } from '../api/eod';
+import { fetchMyTasks, TaskItem } from '../api/tasks';
 
 interface Props {
   onOpenTask: (ticketId: string) => void;
@@ -139,6 +141,7 @@ export default function EmployeeDashboardScreen({
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRow[]>([]);
   const [eodReports, setEodReports] = useState<EodReport[]>([]);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [pending, setPending] = useState<TaskItem[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
   const [unread, setUnread] = useState(0);
@@ -152,13 +155,14 @@ export default function EmployeeDashboardScreen({
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const [att, hist, eods, tix, notes, notifs] = await Promise.all([
+      const [att, hist, eods, tix, notes, notifs, tasks] = await Promise.all([
         fetchTodayAttendance(user.id),
         fetchAttendanceHistory(user.id),
         fetchEodReports(user.id).catch(() => []),
         fetchMyTickets(user.id),
         fetchActiveNotices().catch(() => []),
         fetchNotifications().catch(() => ({ items: [], unread: 0 })),
+        fetchMyTasks(user.id).catch(() => ({ pending: [], items: [] })),
       ]);
       setAttendance(att);
       setAttendanceHistory(hist);
@@ -166,6 +170,7 @@ export default function EmployeeDashboardScreen({
       setTickets(tix);
       setNotices(notes);
       setUnread(notifs.unread);
+      setPending(tasks.pending);
       setError(null);
     } catch (err) {
       setError('Could not load dashboard — pull to retry');
@@ -296,6 +301,10 @@ export default function EmployeeDashboardScreen({
             </Pressable>
           </GlassCard>
         </Animated.View>
+
+        <View style={{ marginTop: spacing(6) }}>
+          <PendingAssignments pending={pending} onChanged={load} />
+        </View>
 
         {routeTickets.length > 0 && (
           <Animated.View entering={FadeInUp.delay(120).duration(550)}>
