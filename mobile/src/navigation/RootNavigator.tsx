@@ -100,6 +100,8 @@ function EmployeeDashboardRoute({ navigation }: any) {
       onGoJobTools={() => navigation.navigate('JobTools')}
       onGoEarnings={() => navigation.navigate('Earnings')}
       onGoProfile={() => navigation.navigate('Profile')}
+      onOpenNotifications={() => navigation.navigate('Notifications')}
+      onOpenGigPool={() => navigation.navigate('GigPool')}
     />
   );
 }

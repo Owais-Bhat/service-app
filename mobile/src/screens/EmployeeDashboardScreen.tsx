@@ -1,16 +1,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import MeshBackground from '../components/MeshBackground';
+import GlassCard from '../components/GlassCard';
 import GlassTabBar, { TabItem } from '../components/GlassTabBar';
 import GlowButton from '../components/GlowButton';
+import NotificationBell from '../components/NotificationBell';
+import ThemeToggleButton from '../components/ThemeToggleButton';
+import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 import { brand, categoryColors, semantic, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { fetchTodayAttendance, AttendanceRow } from '../api/attendance';
 import { fetchMyTickets, TicketRow } from '../api/employee';
+import { fetchActiveNotices, Notice } from '../api/notices';
+import { fetchNotifications } from '../api/notifications';
 
 interface Props {
   onOpenTask: (ticketId: string) => void;
@@ -18,6 +25,8 @@ interface Props {
   onGoJobTools: () => void;
   onGoEarnings: () => void;
   onGoProfile: () => void;
+  onOpenNotifications: () => void;
+  onOpenGigPool: () => void;
 }
 
 // Shared by every employee top-level screen so the tab bar is identical
@@ -39,22 +48,47 @@ const FILTERS: { key: string; label: string }[] = [
   { key: 'resolved', label: 'Resolved' },
 ];
 
-export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, onGoJobTools, onGoEarnings, onGoProfile }: Props) {
+const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
+  normal: { color: brand.primary, label: 'Notice' },
+  high: { color: semantic.warning, label: 'Important' },
+  urgent: { color: semantic.danger, label: 'Urgent' },
+};
+
+export default function EmployeeDashboardScreen({
+  onOpenTask,
+  onGoAttendance,
+  onGoJobTools,
+  onGoEarnings,
+  onGoProfile,
+  onOpenNotifications,
+  onOpenGigPool,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
   const [attendance, setAttendance] = useState<AttendanceRow | null>(null);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
 
+  const isGigWorker = user?.worker_type === 'gig';
+
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const [att, tix] = await Promise.all([fetchTodayAttendance(user.id), fetchMyTickets(user.id)]);
+      const [att, tix, notes, notifs] = await Promise.all([
+        fetchTodayAttendance(user.id),
+        fetchMyTickets(user.id),
+        fetchActiveNotices().catch(() => []),
+        fetchNotifications().catch(() => ({ items: [], unread: 0 })),
+      ]);
       setAttendance(att);
       setTickets(tix);
+      setNotices(notes);
+      setUnread(notifs.unread);
       setError(null);
     } catch (err) {
       setError('Could not load dashboard — pull to retry');
@@ -82,12 +116,20 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
         contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Text style={[styles.title, { color: theme.text }]}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
-        <Text style={[styles.caption, { color: theme.text3 }]}>{user?.worker_type === 'gig' ? 'Gig worker' : 'Fixed employee'}</Text>
+        <Animated.View entering={FadeInUp.duration(550)} style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: theme.text }]}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
+            <Text style={[styles.caption, { color: theme.text3 }]}>{isGigWorker ? 'Gig worker' : 'Fixed employee'}</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <NotificationBell unread={unread} onPress={onOpenNotifications} />
+            <ThemeToggleButton />
+          </View>
+        </Animated.View>
 
         {error ? <Text style={[styles.caption, { color: semantic.danger, marginTop: spacing(3) }]}>{error}</Text> : null}
 
-        <View style={styles.row}>
+        <Animated.View entering={FadeInUp.delay(80).duration(550)} style={styles.row}>
           <AnimatedStatCard
             label={clockedIn ? 'Clocked In' : 'Not Clocked In'}
             value={clockedIn ? 'Active' : 'Off'}
@@ -97,53 +139,93 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
             delayMs={0}
           />
           <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={semantic.warning} icon="tasks" delayMs={100} />
-        </View>
+        </Animated.View>
 
-        <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tasks</Text>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: spacing(2) }}>
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={[styles.filterChip, { borderColor: theme.line, backgroundColor: active ? brand.primary : theme.panel2 }]}
-              >
-                <Text style={[styles.filterChipText, { color: active ? '#ffffff' : theme.text2 }]}>{f.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {filteredTickets.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>No tasks in this filter.</Text>
-        ) : (
-          filteredTickets.map((t) => {
-            const categoryStyle = categoryColors[t.category] || DEFAULT_CATEGORY_STYLE;
-            const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
-            return (
-              <Pressable
-                key={t.id}
-                onPress={() => onOpenTask(t.id)}
-                style={({ pressed }) => [styles.taskRow, { borderColor: theme.line, backgroundColor: theme.panel2 }, pressed && styles.pressed]}
-              >
-                <View style={[styles.taskIcon, { backgroundColor: categoryStyle.bg }]}>
-                  <Text style={[styles.taskIconText, { color: categoryStyle.color }]}>{categoryStyle.initials}</Text>
-                </View>
-                <View style={styles.taskInfo}>
-                  <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{t.title}</Text>
-                  <Text style={[styles.caption, { color: theme.text3 }]}>#{t.id.slice(0, 8).toUpperCase()}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-                </View>
-              </Pressable>
-            );
-          })
+        {notices.length > 0 && (
+          <Animated.View entering={FadeInUp.delay(150).duration(550)}>
+            <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>Notice Board</Text>
+            {notices.map((n) => {
+              const p = PRIORITY_STYLE[n.priority] || PRIORITY_STYLE.normal;
+              return (
+                <GlassCard key={n.id} style={styles.noticeCard}>
+                  <View style={styles.noticeHeader}>
+                    <View style={[styles.noticeDot, { backgroundColor: p.color }]} />
+                    <Text style={[styles.noticeTag, { color: p.color }]}>{p.label}</Text>
+                  </View>
+                  <Text style={[styles.noticeTitle, { color: theme.text }]}>{n.title}</Text>
+                  <Text style={[styles.body, { color: theme.text2 }]}>{n.body}</Text>
+                </GlassCard>
+              );
+            })}
+          </Animated.View>
         )}
 
-        <GlowButton label="Sign Out" onPress={logout} />
+        {isGigWorker && (
+          <Animated.View entering={FadeInUp.delay(200).duration(550)}>
+            <Pressable onPress={onOpenGigPool} style={({ pressed }) => [pressed && styles.pressed]}>
+              <GlassCard style={styles.gigTeaser}>
+                <View style={[styles.gigIcon, { backgroundColor: 'rgba(124,92,252,0.18)' }]}>
+                  <Icon name="star" size={18} color="#7c5cfc" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.noticeTitle, { color: theme.text }]}>Public Jobs</Text>
+                  <Text style={[styles.caption, { color: theme.text3 }]}>See unclaimed jobs open to gig workers</Text>
+                </View>
+                <Icon name="chevron-right" size={18} color={theme.text3} />
+              </GlassCard>
+            </Pressable>
+          </Animated.View>
+        )}
+
+        <Animated.View entering={FadeInUp.delay(250).duration(550)}>
+          <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tasks</Text>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: spacing(2) }}>
+            {FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <Pressable
+                  key={f.key}
+                  onPress={() => setFilter(f.key)}
+                  style={[styles.filterChip, { borderColor: theme.line, backgroundColor: active ? brand.primary : theme.panel2 }]}
+                >
+                  <Text style={[styles.filterChipText, { color: active ? '#ffffff' : theme.text2 }]}>{f.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {filteredTickets.length === 0 ? (
+            <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>No tasks in this filter.</Text>
+          ) : (
+            filteredTickets.map((t) => {
+              const categoryStyle = categoryColors[t.category] || DEFAULT_CATEGORY_STYLE;
+              const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => onOpenTask(t.id)}
+                  style={({ pressed }) => [styles.taskRow, { borderColor: theme.line, backgroundColor: theme.panel2 }, pressed && styles.pressed]}
+                >
+                  <View style={[styles.taskIcon, { backgroundColor: categoryStyle.bg }]}>
+                    <Text style={[styles.taskIconText, { color: categoryStyle.color }]}>{categoryStyle.initials}</Text>
+                  </View>
+                  <View style={styles.taskInfo}>
+                    <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{t.title}</Text>
+                    <Text style={[styles.caption, { color: theme.text3 }]}>#{t.id.slice(0, 8).toUpperCase()}</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                  </View>
+                </Pressable>
+              );
+            })
+          )}
+        </Animated.View>
+
+        <Animated.View entering={FadeInUp.delay(300).duration(550)}>
+          <GlowButton label="Sign Out" onPress={logout} />
+        </Animated.View>
       </ScrollView>
 
       <GlassTabBar
@@ -162,19 +244,29 @@ export default function EmployeeDashboardScreen({ onOpenTask, onGoAttendance, on
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
   row: { flexDirection: 'row', gap: spacing(3), marginTop: spacing(5) },
   title: { ...typography.title },
   heading: { ...typography.heading },
   caption: { ...typography.caption },
+  body: { ...typography.body, fontSize: 13 },
+  pressed: { opacity: 0.7 },
   filterRow: { marginBottom: spacing(3) },
   filterChip: { paddingHorizontal: spacing(3.5), paddingVertical: spacing(2), borderRadius: 12, borderWidth: 1 },
   filterChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   taskRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5), borderRadius: 18, borderWidth: 1, marginBottom: spacing(2.5) },
-  pressed: { opacity: 0.7 },
   taskIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   taskIconText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
   taskInfo: { flex: 1, minWidth: 0 },
   taskTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
   statusBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: 8 },
   statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
+  noticeCard: { marginBottom: spacing(2.5) },
+  noticeHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(1.5) },
+  noticeDot: { width: 6, height: 6, borderRadius: 3 },
+  noticeTag: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
+  noticeTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(1) },
+  gigTeaser: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginTop: spacing(5) },
+  gigIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });
