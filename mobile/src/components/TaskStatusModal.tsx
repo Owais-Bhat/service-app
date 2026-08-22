@@ -711,6 +711,12 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Services</Text>
                     <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.servicesSubtotal)}</Text>
                   </View>
+                  {Number(extraCost) > 0 ? (
+                    <View style={styles.receiptRow}>
+                      <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Extra charges{extraReason.trim() ? ` (${extraReason.trim()})` : ''}</Text>
+                      <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(Number(extraCost))}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.receiptRow}>
                     <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Platform fee</Text>
                     <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.platformFee)}</Text>
