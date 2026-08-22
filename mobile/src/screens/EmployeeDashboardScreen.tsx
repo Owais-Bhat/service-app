@@ -178,22 +178,48 @@ export default function EmployeeDashboardScreen({
 
         {routeTickets.length > 0 && (
           <Animated.View entering={FadeInUp.delay(120).duration(550)}>
-            <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(3) }]}>Today's Route</Text>
-            <GlassCard>
+            <View style={styles.routeHeadingRow}>
+              <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6) }]}>Today's Route</Text>
+              <View style={[styles.stopsPill, { backgroundColor: theme.panel2, marginTop: spacing(6) }]}>
+                <Text style={[styles.caption, { color: theme.text2 }]}>{routeTickets.length} stops</Text>
+              </View>
+            </View>
+            <GlassCard style={{ marginTop: spacing(3) }}>
               {routeTickets.map((t, i) => {
                 const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
                 const isLast = i === routeTickets.length - 1;
+                const inq = t.inquiries?.[0];
+                const ticketNo = inq?.ticket_no || `#${t.id.slice(0, 8).toUpperCase()}`;
+                const customerName = inq?.full_name || t.title;
+                const service = inq?.service_item || t.category;
+                const when = new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
                 return (
-                  <Pressable key={t.id} onPress={() => onOpenTask(t.id)} style={styles.routeRow}>
+                  <View key={t.id} style={styles.routeRow}>
                     <View style={styles.routeTimeline}>
                       <View style={[styles.routeDot, { borderColor: statusStyle.color, backgroundColor: t.status === 'in_progress' ? statusStyle.color : 'transparent' }]} />
                       {!isLast && <View style={[styles.routeLine, { backgroundColor: theme.line }]} />}
                     </View>
                     <View style={[styles.routeInfo, isLast && { marginBottom: 0 }]}>
-                      <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{t.title}</Text>
-                      <Text style={[styles.caption, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                      <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{customerName}</Text>
+                      <Text style={[styles.caption, { color: theme.text3 }]} numberOfLines={1}>
+                        <Text style={styles.routeTicketNo}>{ticketNo}</Text> · {service}
+                      </Text>
+                      <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(2) }]}>{when}</Text>
+                      <View style={styles.routeActionRow}>
+                        <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
+                          <View style={[styles.statusPillDot, { backgroundColor: statusStyle.color }]} />
+                          <Text style={[styles.statusPillText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                        </View>
+                        <Pressable
+                          onPress={() => onOpenTask(t.id)}
+                          style={({ pressed }) => [styles.openBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }, pressed && styles.pressed]}
+                        >
+                          <Icon name="edit" size={13} color={theme.text} />
+                          <Text style={[styles.openBtnText, { color: theme.text }]}>Open</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                  </Pressable>
+                  </View>
                 );
               })}
             </GlassCard>
@@ -281,6 +307,15 @@ const styles = StyleSheet.create({
   routeLine: { width: 2, flex: 1, marginTop: spacing(1) },
   routeInfo: { flex: 1, minWidth: 0, marginBottom: spacing(4) },
   taskTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
+  routeHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stopsPill: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
+  routeTicketNo: { fontFamily: 'JetBrainsMono_700Bold', color: brand.primary },
+  routeActionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing(1) },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
+  statusPillDot: { width: 5, height: 5, borderRadius: 3 },
+  statusPillText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
+  openBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(1.5), borderRadius: radius.sm, borderWidth: 1 },
+  openBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   noticeCard: { marginBottom: spacing(2.5) },
   noticeHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(1.5) },
   noticeDot: { width: 6, height: 6, borderRadius: 3 },
