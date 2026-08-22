@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
+import GlassSurface from '../components/GlassSurface';
 import GlassTabBar, { TabItem } from '../components/GlassTabBar';
 import NotificationBell from '../components/NotificationBell';
 import PulseDot from '../components/PulseDot';
@@ -54,6 +55,38 @@ const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
   high: { color: semantic.warning, label: 'Important' },
   urgent: { color: semantic.danger, label: 'Urgent' },
 };
+
+// Same tap-to-open modal pattern as NotificationsScreen's NotificationDetail —
+// notices open the same way notifications do, not just look the same in the list.
+function NoticeDetail({ notice, onDismiss }: { notice: Notice; onDismiss: () => void }) {
+  const { theme } = useTheme();
+  const p = PRIORITY_STYLE[notice.priority] || PRIORITY_STYLE.normal;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
+      <View style={styles.backdrop}>
+        <GlassSurface style={styles.detailCard} borderRadius={radius.lg}>
+          <View style={[styles.detailIconWrap, { backgroundColor: `${p.color}24` }]}>
+            <Icon name="notification" size={22} color={p.color} />
+          </View>
+          <Text style={[styles.detailTag, { color: p.color }]}>{p.label}</Text>
+          <Text style={[styles.detailTitle, { color: theme.text }]}>{notice.title}</Text>
+          {notice.body ? <Text style={[styles.detailBody, { color: theme.text2 }]}>{notice.body}</Text> : null}
+          <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>
+            {new Date(notice.created_at).toLocaleString('en-IN')}
+          </Text>
+
+          <Pressable
+            onPress={onDismiss}
+            style={({ pressed }) => [styles.dismissBtn, { backgroundColor: brand.primary }, pressed && styles.pressed]}
+          >
+            <Text style={styles.dismissBtnText}>Dismiss</Text>
+          </Pressable>
+        </GlassSurface>
+      </View>
+    </Modal>
+  );
+}
 
 function RefreshButton({ spinning, onPress }: { spinning: boolean; onPress: () => void }) {
   const { theme } = useTheme();
@@ -107,6 +140,7 @@ export default function EmployeeDashboardScreen({
   const [eodReports, setEodReports] = useState<EodReport[]>([]);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [clocking, setClocking] = useState(false);
@@ -323,14 +357,16 @@ export default function EmployeeDashboardScreen({
             {notices.map((n) => {
               const p = PRIORITY_STYLE[n.priority] || PRIORITY_STYLE.normal;
               return (
-                <GlassCard key={n.id} style={styles.noticeCard}>
-                  <View style={styles.noticeHeader}>
-                    <View style={[styles.noticeDot, { backgroundColor: p.color }]} />
-                    <Text style={[styles.noticeTag, { color: p.color }]}>{p.label}</Text>
-                  </View>
-                  <Text style={[styles.noticeTitle, { color: theme.text }]}>{n.title}</Text>
-                  <Text style={[styles.body, { color: theme.text2 }]}>{n.body}</Text>
-                </GlassCard>
+                <Pressable key={n.id} onPress={() => setSelectedNotice(n)} style={({ pressed }) => [pressed && styles.pressed]}>
+                  <GlassCard style={styles.noticeCard}>
+                    <View style={styles.noticeHeader}>
+                      <View style={[styles.noticeDot, { backgroundColor: p.color }]} />
+                      <Text style={[styles.noticeTag, { color: p.color }]}>{p.label}</Text>
+                    </View>
+                    <Text style={[styles.noticeTitle, { color: theme.text }]}>{n.title}</Text>
+                    <Text style={[styles.body, { color: theme.text2 }]} numberOfLines={2}>{n.body}</Text>
+                  </GlassCard>
+                </Pressable>
               );
             })}
           </Animated.View>
@@ -365,6 +401,8 @@ export default function EmployeeDashboardScreen({
           else if (key === 'profile') onGoProfile();
         }}
       />
+
+      {selectedNotice && <NoticeDetail notice={selectedNotice} onDismiss={() => setSelectedNotice(null)} />}
     </View>
   );
 }
@@ -426,4 +464,12 @@ const styles = StyleSheet.create({
   noticeTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(1) },
   gigTeaser: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginTop: spacing(5) },
   gigIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(6) },
+  detailCard: { width: '100%', maxWidth: 400, padding: spacing(5) },
+  detailIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
+  detailTag: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing(1) },
+  detailTitle: { ...typography.heading, fontSize: 17, marginBottom: spacing(1.5) },
+  detailBody: { ...typography.body, marginBottom: spacing(2) },
+  dismissBtn: { paddingVertical: spacing(3.5), borderRadius: radius.md, alignItems: 'center' },
+  dismissBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
 });
