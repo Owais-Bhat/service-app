@@ -21,6 +21,7 @@ interface Props {
   onOpenEodReport: () => void;
   onOpenInstallations: () => void;
   onOpenGigPool: () => void;
+  onOpenManageTasks: () => void;
 }
 
 interface Tool {
@@ -32,6 +33,7 @@ interface Tool {
 }
 
 const BASE_TOOLS: Tool[] = [
+  { key: 'tasks', label: 'Manage Tasks', desc: 'Assigned jobs, service requests & assignments', color: '#15a05a', icon: 'tasks' },
   { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', color: '#15a05a', icon: 'estimator' },
   { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5', icon: 'device' },
   { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
@@ -47,6 +49,7 @@ export default function JobToolsScreen({
   onOpenEodReport,
   onOpenInstallations,
   onOpenGigPool,
+  onOpenManageTasks,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -68,7 +71,8 @@ export default function JobToolsScreen({
   ];
 
   const openTool = (key: string) => {
-    if (key === 'estimator') onOpenEstimator();
+    if (key === 'tasks') onOpenManageTasks();
+    else if (key === 'estimator') onOpenEstimator();
     else if (key === 'devices') onOpenDeviceFollowUp();
     else if (key === 'eod') onOpenEodReport();
     else if (key === 'installations') onOpenInstallations();
@@ -80,7 +84,7 @@ export default function JobToolsScreen({
       <MeshBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}>
         <Text style={[styles.title, { color: theme.text }]}>Job Tools</Text>
-        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(5) }]}>Estimator, devices & reports</Text>
+        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(5) }]}>Tasks, estimator, devices & reports</Text>
 
         {tools.map((tool) => (
           <Pressable key={tool.key} onPress={() => openTool(tool.key)} style={({ pressed }) => [pressed && styles.pressed]}>
@@ -96,16 +100,6 @@ export default function JobToolsScreen({
             </Panel>
           </Pressable>
         ))}
-
-        <Panel style={{ ...styles.toolRow, ...styles.comingSoonRow }}>
-          <View style={[styles.toolIcon, { backgroundColor: theme.panel2 }]}>
-            <Icon name="tasks" size={22} color={theme.text3} />
-          </View>
-          <View style={styles.toolInfo}>
-            <Text style={[styles.toolLabel, { color: theme.text3 }]}>Job Cards</Text>
-            <Text style={[styles.caption, { color: theme.text3 }]}>Coming soon</Text>
-          </View>
-        </Panel>
       </ScrollView>
 
       <GlassTabBar
@@ -128,7 +122,6 @@ const styles = StyleSheet.create({
   caption: { ...typography.caption },
   pressed: { opacity: 0.7 },
   toolRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
-  comingSoonRow: { opacity: 0.6 },
   toolIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   toolInfo: { flex: 1, minWidth: 0 },
   toolLabel: { fontFamily: 'Manrope_700Bold', fontSize: 15, marginBottom: spacing(0.5) },

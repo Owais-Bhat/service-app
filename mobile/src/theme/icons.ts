@@ -54,6 +54,10 @@ export const ICONS = {
   close: ['M5 5l14 14', 'M19 5L5 19'],
   mail: ['M4 6h16v12H4z', 'M4.5 6.5l7.5 6 7.5-6'],
   lock: ['M6.5 10.5h11v9h-11z', 'M8.5 10.5v-3a3.5 3.5 0 017 0v3', 'M12 14v2.5'],
+  check: ['M4.5 12.5l5 5 10-11'],
+  alert: ['M12 3.5l9.5 16.5h-19z', 'M12 9.5v5', 'M12 17.2h.01'],
+  filter: ['M3.5 5h17', 'M6.5 12h11', 'M9.5 19h5'],
+  calendar: ['M4.5 5.5h15v14h-15z', 'M8 3.5v4M16 3.5v4M4.5 10h15'],
 } as const;
 
 export type IconName = keyof typeof ICONS;

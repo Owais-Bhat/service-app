@@ -29,6 +29,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
+import ManageTasksScreen from '../screens/ManageTasksScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -62,6 +63,7 @@ type EmployeeStackParams = {
   Settings: undefined;
   Installations: undefined;
   GigPool: undefined;
+  ManageTasks: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -144,8 +146,13 @@ function JobToolsRoute({ navigation }: any) {
       onOpenEodReport={() => navigation.navigate('EodReport')}
       onOpenInstallations={() => navigation.navigate('Installations')}
       onOpenGigPool={() => navigation.navigate('GigPool')}
+      onOpenManageTasks={() => navigation.navigate('ManageTasks')}
     />
   );
+}
+
+function ManageTasksRoute({ navigation }: any) {
+  return <ManageTasksScreen onBack={() => navigation.goBack()} />;
 }
 
 function InstallationsRoute({ navigation }: any) {
@@ -254,6 +261,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="EodReport" component={EodReportRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Installations" component={InstallationsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="ManageTasks" component={ManageTasksRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="CoursePlayer" component={CoursePlayerRoute} options={{ animation: 'slide_from_right' }} />
