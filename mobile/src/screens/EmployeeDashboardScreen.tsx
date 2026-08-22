@@ -1,19 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import GlassTabBar, { TabItem } from '../components/GlassTabBar';
-import GlowButton from '../components/GlowButton';
 import NotificationBell from '../components/NotificationBell';
 import ThemeToggleButton from '../components/ThemeToggleButton';
 import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, categoryColors, semantic, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { fetchTodayAttendance, AttendanceRow } from '../api/attendance';
 import { fetchMyTickets, TicketRow } from '../api/employee';
 import { fetchActiveNotices, Notice } from '../api/notices';
@@ -39,13 +38,6 @@ export const EMPLOYEE_TABS: TabItem[] = [
   { key: 'jobtools', label: 'Job Tools', icon: 'wrench' },
   { key: 'earnings', label: 'Earnings', icon: 'wallet' },
   { key: 'profile', label: 'Profile', icon: 'user' },
-];
-
-const FILTERS: { key: string; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'open', label: 'Open' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'resolved', label: 'Resolved' },
 ];
 
 const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
@@ -100,15 +92,13 @@ export default function EmployeeDashboardScreen({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [attendance, setAttendance] = useState<AttendanceRow | null>(null);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
   const [headerHeight, setHeaderHeight] = useState(0);
 
   const isGigWorker = user?.worker_type === 'gig';
@@ -146,10 +136,6 @@ export default function EmployeeDashboardScreen({
   const routeTickets = [...activeTickets].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const openTickets = activeTickets.length;
   const clockedIn = !!attendance?.clock_in && !attendance?.clock_out;
-  const statusFiltered = filter === 'all' ? tickets : tickets.filter((t) => t.status === filter);
-  const filteredTickets = search.trim()
-    ? statusFiltered.filter((t) => t.title.toLowerCase().includes(search.trim().toLowerCase()))
-    : statusFiltered;
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 78;
 
@@ -250,66 +236,6 @@ export default function EmployeeDashboardScreen({
           </Animated.View>
         )}
 
-        <Animated.View entering={FadeInUp.delay(250).duration(550)}>
-          <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tasks</Text>
-
-          <View style={[styles.searchWrap, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-            <Icon name="search" size={15} color={theme.text3} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search tasks…"
-              placeholderTextColor={theme.text3}
-              style={[styles.searchInput, { color: theme.text }]}
-            />
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: spacing(2) }}>
-            {FILTERS.map((f) => {
-              const active = filter === f.key;
-              return (
-                <Pressable
-                  key={f.key}
-                  onPress={() => setFilter(f.key)}
-                  style={[styles.filterChip, { borderColor: theme.line, backgroundColor: active ? brand.primary : theme.panel2 }]}
-                >
-                  <Text style={[styles.filterChipText, { color: active ? '#ffffff' : theme.text2 }]}>{f.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {filteredTickets.length === 0 ? (
-            <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>No tasks in this filter.</Text>
-          ) : (
-            filteredTickets.map((t) => {
-              const categoryStyle = categoryColors[t.category] || DEFAULT_CATEGORY_STYLE;
-              const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
-              return (
-                <Pressable
-                  key={t.id}
-                  onPress={() => onOpenTask(t.id)}
-                  style={({ pressed }) => [styles.taskRow, { borderColor: theme.line, backgroundColor: theme.panel2 }, pressed && styles.pressed]}
-                >
-                  <View style={[styles.taskIcon, { backgroundColor: categoryStyle.bg }]}>
-                    <Text style={[styles.taskIconText, { color: categoryStyle.color }]}>{categoryStyle.initials}</Text>
-                  </View>
-                  <View style={styles.taskInfo}>
-                    <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{t.title}</Text>
-                    <Text style={[styles.caption, { color: theme.text3 }]}>#{t.id.slice(0, 8).toUpperCase()}</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
-        </Animated.View>
-
-        <Animated.View entering={FadeInUp.delay(300).duration(550)}>
-          <GlowButton label="Sign Out" onPress={logout} />
-        </Animated.View>
       </ScrollView>
 
       <GlassTabBar
@@ -349,23 +275,12 @@ const styles = StyleSheet.create({
   body: { ...typography.body, fontSize: 13 },
   pressed: { opacity: 0.7 },
   iconBtn: { width: 36, height: 36, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(3), marginBottom: spacing(3) },
-  searchInput: { flex: 1, paddingVertical: spacing(2.5), fontSize: 14, fontFamily: 'Manrope_400Regular' },
   routeRow: { flexDirection: 'row', gap: spacing(3) },
   routeTimeline: { alignItems: 'center', width: 16 },
   routeDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
   routeLine: { width: 2, flex: 1, marginTop: spacing(1) },
   routeInfo: { flex: 1, minWidth: 0, marginBottom: spacing(4) },
-  filterRow: { marginBottom: spacing(3) },
-  filterChip: { paddingHorizontal: spacing(3.5), paddingVertical: spacing(2), borderRadius: 12, borderWidth: 1 },
-  filterChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  taskRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5), borderRadius: 18, borderWidth: 1, marginBottom: spacing(2.5) },
-  taskIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  taskIconText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
-  taskInfo: { flex: 1, minWidth: 0 },
   taskTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
-  statusBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: 8 },
-  statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
   noticeCard: { marginBottom: spacing(2.5) },
   noticeHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(1.5) },
   noticeDot: { width: 6, height: 6, borderRadius: 3 },
