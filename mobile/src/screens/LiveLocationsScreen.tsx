@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import MapView, { Marker, Callout } from 'react-native-maps';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import PulseDot from '../components/PulseDot';
@@ -17,6 +18,10 @@ interface Props {
 }
 
 const POLL_MS = 20000;
+const GIG_COLOR = '#7c5cfc';
+// Networking Experts is based in Srinagar — sensible map center when no one
+// is clocked in yet, instead of dropping the admin somewhere off Africa (0,0).
+const FALLBACK_REGION = { latitude: 34.0837, longitude: 74.7973, latitudeDelta: 0.6, longitudeDelta: 0.6 };
 
 function timeAgo(iso: string): string {
   const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -30,6 +35,7 @@ export default function LiveLocationsScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [rows, setRows] = useState<LiveLocationRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -40,8 +46,21 @@ export default function LiveLocationsScreen({ onBack }: Props) {
       setError(null);
     } catch {
       setError('Could not load locations — pull to retry');
+    } finally {
+      setLoaded(true);
     }
   }, []);
+
+  // Computed once (on first successful load) and handed to MapView's
+  // uncontrolled initialRegion — recomputing this on every poll would yank
+  // the map back to center under the admin's finger while they're panning.
+  const initialRegion = useMemo(() => {
+    if (rows.length === 0) return FALLBACK_REGION;
+    const lat = rows.reduce((sum, r) => sum + r.latitude, 0) / rows.length;
+    const lng = rows.reduce((sum, r) => sum + r.longitude, 0) / rows.length;
+    return { latitude: lat, longitude: lng, latitudeDelta: 0.15, longitudeDelta: 0.15 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   useEffect(() => {
     load();
@@ -73,6 +92,30 @@ export default function LiveLocationsScreen({ onBack }: Props) {
         </Text>
 
         {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
+
+        {loaded && (
+          <View style={[styles.mapWrap, { borderColor: theme.line }]}>
+            <MapView style={StyleSheet.absoluteFill} initialRegion={initialRegion}>
+              {rows.map((r) => (
+                <Marker
+                  key={r.user_id}
+                  coordinate={{ latitude: r.latitude, longitude: r.longitude }}
+                  pinColor={r.worker_type === 'gig' ? GIG_COLOR : brand.primary}
+                >
+                  <Callout onPress={() => openMaps(r.latitude, r.longitude)}>
+                    <View style={{ padding: 4, minWidth: 140 }}>
+                      <Text style={{ fontWeight: '700', fontSize: 13 }}>{r.full_name}</Text>
+                      <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
+                        {(r.worker_type || 'fixed').replace(/^\w/, (c) => c.toUpperCase())} · {timeAgo(r.updated_at)}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: brand.primary, marginTop: 4 }}>Tap for directions →</Text>
+                    </View>
+                  </Callout>
+                </Marker>
+              ))}
+            </MapView>
+          </View>
+        )}
 
         {rows.length === 0 ? (
           <Text style={[styles.caption, { color: theme.text3, textAlign: 'center', marginTop: spacing(8) }]}>
@@ -113,6 +156,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title, marginTop: spacing(4) },
   caption: { ...typography.caption, lineHeight: 18 },
+  mapWrap: { height: 320, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: spacing(4) },
   row: { marginBottom: spacing(3) },
   rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), marginBottom: spacing(2.5) },
   name: { fontFamily: 'Manrope_700Bold', fontSize: 15 },

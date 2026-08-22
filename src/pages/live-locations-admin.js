@@ -2,6 +2,9 @@
 // clocked in (mobile/src/api/liveLocation.ts -> server/index.cjs's
 // /api/live-location endpoints). Not a real Supabase table, so this talks to
 // the same Express API directly, same as device-tracking-admin.js's status call.
+// Leaflet (`L`) is already loaded globally via a CDN <script> in index.html —
+// same library openLocationMapModal() in admin.js already uses for single-pin
+// location popups, so no new dependency here.
 import { ICONS } from '../icons.js';
 import { toast } from '../utils.js';
 
@@ -14,6 +17,11 @@ const authHeaders = () => ({
 });
 
 const POLL_MS = 20000;
+const GIG_COLOR = '#7c5cfc';
+const FIXED_COLOR = '#15a05a';
+// Networking Experts is based in Srinagar — sensible map center when no one
+// is clocked in yet, instead of dropping the admin somewhere off Africa (0,0).
+const FALLBACK_CENTER = [34.0837, 74.7973];
 
 async function fetchLiveLocations() {
   const res = await fetch(`${API_BASE}/live-location`, { headers: authHeaders() });
@@ -34,11 +42,23 @@ function mapsLink(lat, lng) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
 
+function dotIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+    popupAnchor: [0, -8],
+  });
+}
+
 export async function renderLiveLocationsTab(container) {
   if (container._liveLocationsPoll) {
     clearInterval(container._liveLocationsPoll);
     container._liveLocationsPoll = null;
   }
+  container._llMap = null;
+  container._llMarkers = [];
 
   container.innerHTML = `
     <div class="page-header">
@@ -50,15 +70,31 @@ export async function renderLiveLocationsTab(container) {
         <p>Where fixed and gig employees are right now, while clocked in. Updates every ${POLL_MS / 1000}s.</p>
       </div>
     </div>
+
+    <div id="ll-map" style="height:420px;width:100%;border-radius:16px;overflow:hidden;border:1px solid var(--border);margin-bottom:20px;background:var(--bg-soft);"></div>
+
     <div id="ll-content"></div>
   `;
 
+  const mapEl = container.querySelector('#ll-map');
   const contentEl = container.querySelector('#ll-content');
+
+  if (typeof L === 'undefined') {
+    mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);">Map failed to load</div>';
+  } else {
+    container._llMap = L.map(mapEl, { attributionControl: false }).setView(FALLBACK_CENTER, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(container._llMap);
+    setTimeout(() => container._llMap.invalidateSize(), 50);
+  }
+
+  let firstLoad = true;
 
   const load = async () => {
     try {
       const rows = await fetchLiveLocations();
       renderTable(contentEl, rows);
+      updateMap(container, rows, firstLoad);
+      firstLoad = false;
     } catch (err) {
       toast(err.message || 'Could not load locations', 'error');
       contentEl.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--danger);">${err.message || 'Could not load locations'}</div></div>`;
@@ -75,6 +111,33 @@ export async function renderLiveLocationsTab(container) {
     }
     load();
   }, POLL_MS);
+}
+
+// Redraws markers on every poll but only re-fits the view on the FIRST load —
+// otherwise the map would yank back to center under the admin while they're
+// panning around to check on someone.
+function updateMap(container, rows, firstLoad) {
+  const map = container._llMap;
+  if (!map) return;
+
+  container._llMarkers.forEach((m) => map.removeLayer(m));
+  container._llMarkers = rows.map((r) => {
+    const color = r.worker_type === 'gig' ? GIG_COLOR : FIXED_COLOR;
+    const marker = L.marker([r.latitude, r.longitude], { icon: dotIcon(color) }).addTo(map);
+    marker.bindPopup(`
+      <div style="font-family:inherit;">
+        <div style="font-weight:700;font-size:0.85rem;">${r.full_name || 'Unknown'}</div>
+        <div style="font-size:0.75rem;color:#666;margin-top:2px;text-transform:capitalize;">${r.worker_type || 'fixed'} · ${timeAgo(r.updated_at)}</div>
+        <a href="${mapsLink(r.latitude, r.longitude)}" target="_blank" rel="noopener" style="font-size:0.75rem;color:${color};">Open in Google Maps</a>
+      </div>
+    `);
+    return marker;
+  });
+
+  if (firstLoad && rows.length > 0) {
+    const bounds = L.latLngBounds(rows.map((r) => [r.latitude, r.longitude]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+  }
 }
 
 function renderTable(container, rows) {
