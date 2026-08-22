@@ -17,25 +17,29 @@ const TABS = [
   { key: 'more', label: 'More' },
 ];
 
-// The web app's admin sections not yet ported to mobile — see design
-// spec §5/§8. Each becomes a real route in a later phase.
-const MORE_SECTIONS = [
-  { label: 'Job Cards' },
-  { label: 'Finance' },
-  { label: 'Discounts' },
-  { label: 'Device Tracking' },
-  { label: 'Training' },
-  { label: 'Media Training' },
-  { label: 'Stats' },
-  { label: 'Admin Notices' },
-  { label: 'Collections' },
-  { label: 'AI Assistant' },
-  { label: 'Notifications' },
-  { label: 'Dashboard Widgets' },
-  { label: 'Profile' },
-];
+interface Props {
+  onOpenNotifications: () => void;
+}
 
-export default function AdminDashboardScreen() {
+export default function AdminDashboardScreen({ onOpenNotifications }: Props) {
+  // The web app's admin sections not yet ported to mobile — see design
+  // spec §5/§8. Each becomes a real route in a later phase; Notifications
+  // is the first to move out of "Coming soon" and into a real screen.
+  const MORE_SECTIONS = [
+    { label: 'Job Cards' },
+    { label: 'Finance' },
+    { label: 'Discounts' },
+    { label: 'Device Tracking' },
+    { label: 'Training' },
+    { label: 'Media Training' },
+    { label: 'Stats' },
+    { label: 'Admin Notices' },
+    { label: 'Collections' },
+    { label: 'AI Assistant' },
+    { label: 'Notifications', onPress: onOpenNotifications },
+    { label: 'Dashboard Widgets' },
+    { label: 'Profile' },
+  ];
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();

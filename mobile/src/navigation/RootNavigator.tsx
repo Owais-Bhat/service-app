@@ -37,6 +37,11 @@ type GuestStackParams = {
   TrackTicket: undefined;
 };
 
+type AdminStackParams = {
+  Dashboard: undefined;
+  Notifications: undefined;
+};
+
 type EmployeeStackParams = {
   Dashboard: undefined;
   TaskDetail: { ticketId: string };
@@ -61,6 +66,7 @@ type EmployeeStackParams = {
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
 const EmployeeStack = createNativeStackNavigator<EmployeeStackParams>();
+const AdminStack = createNativeStackNavigator<AdminStackParams>();
 
 function LandingRoute({ navigation }: any) {
   return <LandingScreen onStaffLogin={() => navigation.navigate('Login')} />;
@@ -258,6 +264,27 @@ function EmployeeNavigator() {
   );
 }
 
+function AdminDashboardRoute({ navigation }: any) {
+  return <AdminDashboardScreen onOpenNotifications={() => navigation.navigate('Notifications')} />;
+}
+
+function AdminNotificationsRoute({ navigation }: any) {
+  return <NotificationsScreen onBack={() => navigation.goBack()} />;
+}
+
+// Only Dashboard + Notifications for now — the rest of admin (Job Cards,
+// Finance, Device Tracking, etc.) is still the MoreSheet's "Coming soon"
+// placeholder list (AdminDashboardScreen's MORE_SECTIONS), each becoming a
+// real route here as it's built.
+function AdminNavigator() {
+  return (
+    <AdminStack.Navigator screenOptions={{ headerShown: false }}>
+      <AdminStack.Screen name="Dashboard" component={AdminDashboardRoute} options={{ animation: 'none' }} />
+      <AdminStack.Screen name="Notifications" component={AdminNotificationsRoute} options={{ animation: 'slide_from_right' }} />
+    </AdminStack.Navigator>
+  );
+}
+
 export default function RootNavigator() {
   const { user, loading } = useAuth();
   const { theme, mode } = useTheme();
@@ -282,7 +309,7 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminDashboardScreen /> : <EmployeeNavigator />}
+      {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminNavigator /> : <EmployeeNavigator />}
     </NavigationContainer>
   );
 }

@@ -8,6 +8,7 @@ import { springs } from '../theme/motion';
 
 export interface MoreSheetSection {
   label: string;
+  onPress?: () => void;
 }
 
 interface Props {
@@ -73,10 +74,20 @@ export default function MoreSheet({ visible, sections, onClose }: Props) {
           <View style={[styles.grabber, { backgroundColor: theme.line }]} />
           <Text style={[styles.title, { color: theme.text }]}>More</Text>
           {sections.map((s) => (
-            <View key={s.label} style={[styles.row, { borderBottomColor: theme.line }]}>
+            <Pressable
+              key={s.label}
+              disabled={!s.onPress}
+              onPress={() => {
+                if (s.onPress) {
+                  onClose();
+                  s.onPress();
+                }
+              }}
+              style={({ pressed }) => [styles.row, { borderBottomColor: theme.line }, pressed && s.onPress && styles.rowPressed]}
+            >
               <Text style={[styles.rowLabel, { color: theme.text }]}>{s.label}</Text>
-              <Text style={[styles.rowMeta, { color: theme.text3 }]}>Coming soon</Text>
-            </View>
+              <Text style={[styles.rowMeta, { color: theme.text3 }]}>{s.onPress ? '' : 'Coming soon'}</Text>
+            </Pressable>
           ))}
         </GlassSurface>
       </Animated.View>
@@ -91,6 +102,7 @@ const styles = StyleSheet.create({
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginBottom: spacing(3) },
   title: { ...typography.heading, marginBottom: spacing(3) },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing(3), borderBottomWidth: 1 },
+  rowPressed: { opacity: 0.6 },
   rowLabel: { ...typography.body },
   rowMeta: { ...typography.caption },
 });
