@@ -8,8 +8,11 @@ import { IconName } from '../theme/icons';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { updateTaskStatus, computeBill, TaskItem, StatusOption } from '../api/tasks';
+import { updateTaskStatus, saveDeviceInfo, computeBill, TaskItem, StatusOption } from '../api/tasks';
+import { markDeviceTaken } from '../api/deviceTracking';
 import { ApiError } from '../api/client';
+
+const DEVICE_TYPE_CHIPS = ['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'];
 
 interface Props {
   item: TaskItem;
@@ -33,12 +36,20 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         { key: 'issue_not_resolved', label: 'Issue Not Resolved', icon: 'alert' },
         { key: 'case_closed', label: 'Case Closed (final)', icon: 'close' },
       ];
+  const [mode, setMode] = useState<'status' | 'device'>('status');
   const [status, setStatus] = useState<StatusOption>(options[0].key);
   const [detail, setDetail] = useState(item.employeeUpdateDetail || '');
   const [scheduledAt, setScheduledAt] = useState('');
   const [billNo, setBillNo] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Device Service — a separate action, not a ticket status (the ticket
+  // stays whatever it currently is). No bill/payment fields here at all.
+  const [deviceType, setDeviceType] = useState(item.deviceType || '');
+  const [deviceSerialNo, setDeviceSerialNo] = useState(item.deviceSerialNo || '');
+  const [deviceDesc, setDeviceDesc] = useState('');
+  const alreadyTaken = item.deviceStatus === 'taken' || item.deviceStatus === 'in_service';
 
   // Bill fields (only used when status === 'resolved')
   const [companyName, setCompanyName] = useState(item.companyName || 'Networking Experts');
@@ -63,6 +74,21 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   );
 
   const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
+
+  const handleMarkDeviceTaken = async () => {
+    if (!item.inquiryId) return;
+    setError(null);
+    setSaving(true);
+    try {
+      await markDeviceTaken(item.inquiryId, deviceDesc.trim());
+      await saveDeviceInfo(item.inquiryId, deviceType, deviceSerialNo);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save — check your connection');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -139,11 +165,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
             <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(3) }]}>New Status</Text>
             <View style={styles.optionList}>
               {options.map((opt) => {
-                const active = status === opt.key;
+                const active = mode === 'status' && status === opt.key;
                 return (
                   <Pressable
                     key={opt.key}
-                    onPress={() => setStatus(opt.key)}
+                    onPress={() => { setMode('status'); setStatus(opt.key); }}
                     style={[styles.optionRow, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}1a` : theme.panel2 }]}
                   >
                     <Icon name={opt.icon} size={16} color={active ? brand.primary : theme.text3} />
@@ -152,9 +178,78 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   </Pressable>
                 );
               })}
+              {item.inquiryId ? (
+                <Pressable
+                  onPress={() => setMode('device')}
+                  style={[styles.optionRow, { borderColor: mode === 'device' ? brand.primary : theme.line, backgroundColor: mode === 'device' ? `${brand.primary}1a` : theme.panel2 }]}
+                >
+                  <Icon name="device" size={16} color={mode === 'device' ? brand.primary : theme.text3} />
+                  <Text style={[styles.optionText, { color: mode === 'device' ? brand.primary : theme.text }]}>Device Service</Text>
+                  {mode === 'device' ? <Icon name="check" size={15} color={brand.primary} /> : null}
+                </Pressable>
+              ) : null}
             </View>
 
-            {status === 'reschedule' ? (
+            {mode === 'device' ? (
+              alreadyTaken ? (
+                <View style={styles.reopenedBanner}>
+                  <Icon name="device" size={14} color={semantic.warning} />
+                  <Text style={styles.reopenedBannerText}>
+                    Device already marked as taken. Manage follow-up / return from Job Tools → Device Follow-up.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Device Type</Text>
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.line }]}
+                    placeholder="e.g. Video Door Phone"
+                    placeholderTextColor={theme.text3}
+                    value={deviceType}
+                    onChangeText={setDeviceType}
+                  />
+                  <View style={styles.chipRow}>
+                    {DEVICE_TYPE_CHIPS.map((c) => (
+                      <Pressable key={c} onPress={() => setDeviceType(c)} style={[styles.chip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                        <Text style={[styles.chipText, { color: theme.text2 }]}>{c}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Device Serial No</Text>
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.line }]}
+                    placeholder="e.g. SN-12345"
+                    placeholderTextColor={theme.text3}
+                    value={deviceSerialNo}
+                    onChangeText={setDeviceSerialNo}
+                  />
+
+                  <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Condition on pickup</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea, { color: theme.text, borderColor: theme.line }]}
+                    placeholder="e.g. CCTV DVR, power issue, scratches on top panel"
+                    placeholderTextColor={theme.text3}
+                    value={deviceDesc}
+                    onChangeText={setDeviceDesc}
+                    multiline
+                  />
+
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+
+                  <View style={styles.modalActions}>
+                    <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
+                      <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
+                    </Pressable>
+                    <PressScale onPress={handleMarkDeviceTaken} disabled={saving} style={{ flex: 1 }}>
+                      <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving ? 0.7 : 1 }]}>
+                        <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Mark Device Taken'}</Text>
+                      </View>
+                    </PressScale>
+                  </View>
+                </>
+              )
+            ) : status === 'reschedule' ? (
               <>
                 <Text style={[styles.fieldLabel, { color: theme.text3 }]}>New visit date &amp; time</Text>
                 <TextInput
@@ -179,7 +274,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               </>
             )}
 
-            {status === 'foc' ? (
+            {mode === 'status' && status === 'foc' ? (
               <>
                 <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Client Bill Number</Text>
                 <TextInput
@@ -192,7 +287,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               </>
             ) : null}
 
-            {status === 'resolved' ? (
+            {mode === 'status' && status === 'resolved' ? (
               <View style={[styles.billBlock, { borderColor: theme.line }]}>
                 <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Company</Text>
                 <TextInput
@@ -302,18 +397,22 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               </View>
             ) : null}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {mode === 'status' && (
+              <>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            <View style={styles.modalActions}>
-              <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
-                <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
-              </Pressable>
-              <PressScale onPress={handleSave} disabled={saving} style={{ flex: 1 }}>
-                <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving ? 0.7 : 1 }]}>
-                  <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
+                <View style={styles.modalActions}>
+                  <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
+                    <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
+                  </Pressable>
+                  <PressScale onPress={handleSave} disabled={saving} style={{ flex: 1 }}>
+                    <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving ? 0.7 : 1 }]}>
+                      <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
+                    </View>
+                  </PressScale>
                 </View>
-              </PressScale>
-            </View>
+              </>
+            )}
           </ScrollView>
         </GlassSurface>
       </View>
@@ -364,4 +463,7 @@ const styles = StyleSheet.create({
   receiptTotalRow: { borderTopWidth: 1, marginTop: spacing(1), paddingTop: spacing(2) },
   receiptTotalLabel: { fontFamily: 'Manrope_800ExtraBold', fontSize: 14 },
   receiptTotalValue: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginTop: spacing(1.5) },
+  chip: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
+  chipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
 });

@@ -15,6 +15,9 @@ interface RawInquiry {
   reopened: number | null;
   scheduled_at: string | null;
   company_name: string | null;
+  device_status: string | null;
+  device_type: string | null;
+  device_serial_no: string | null;
   created_at: string;
 }
 
@@ -46,6 +49,9 @@ export interface TaskItem {
   employeeUpdateDetail: string | null;
   companyName: string | null;
   scheduledAt: string | null;
+  deviceStatus: string | null;
+  deviceType: string | null;
+  deviceSerialNo: string | null;
 }
 
 function fromTicketOnly(t: RawTicket): TaskItem {
@@ -65,6 +71,9 @@ function fromTicketOnly(t: RawTicket): TaskItem {
     employeeUpdateDetail: null,
     companyName: null,
     scheduledAt: null,
+    deviceStatus: null,
+    deviceType: null,
+    deviceSerialNo: null,
   };
 }
 
@@ -90,6 +99,9 @@ function fromInquiry(inq: RawInquiry, ticketId: string | null): TaskItem {
     employeeUpdateDetail: inq.employee_update_detail,
     companyName: inq.company_name,
     scheduledAt: inq.scheduled_at,
+    deviceStatus: inq.device_status,
+    deviceType: inq.device_type,
+    deviceSerialNo: inq.device_serial_no,
   };
 }
 
@@ -150,6 +162,16 @@ export async function declineAssignment(inquiryId: string, reason: string): Prom
     assignment_status: 'declined',
     decline_reason: reason,
     status: 'open',
+  });
+}
+
+// Device type/serial live directly on the inquiry (shown on the bill later),
+// separate from the device_taken_logs/follow_up/return history in
+// api/deviceTracking.ts — saved together when marking a device taken.
+export async function saveDeviceInfo(inquiryId: string, deviceType: string, deviceSerialNo: string): Promise<void> {
+  await dataPatch('inquiries', `id:${inquiryId}`, {
+    device_type: deviceType.trim() || null,
+    device_serial_no: deviceSerialNo.trim() || null,
   });
 }
 
