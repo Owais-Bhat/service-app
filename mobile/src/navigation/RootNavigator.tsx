@@ -30,6 +30,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
+import LiveLocationsScreen from '../screens/LiveLocationsScreen';
+import { useLiveLocationPing } from '../hooks/useLiveLocationPing';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -41,6 +43,7 @@ type GuestStackParams = {
 type AdminStackParams = {
   Dashboard: undefined;
   Notifications: undefined;
+  LiveLocations: undefined;
 };
 
 type EmployeeStackParams = {
@@ -246,6 +249,8 @@ function SettingsRoute({ navigation }: any) {
 // Every other screen is a genuine drill-down push with a slide
 // transition and no tab bar.
 function EmployeeNavigator() {
+  const { user } = useAuth();
+  useLiveLocationPing(user?.id);
   return (
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
       <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} options={{ animation: 'none' }} />
@@ -273,22 +278,32 @@ function EmployeeNavigator() {
 }
 
 function AdminDashboardRoute({ navigation }: any) {
-  return <AdminDashboardScreen onOpenNotifications={() => navigation.navigate('Notifications')} />;
+  return (
+    <AdminDashboardScreen
+      onOpenNotifications={() => navigation.navigate('Notifications')}
+      onOpenLiveLocations={() => navigation.navigate('LiveLocations')}
+    />
+  );
 }
 
 function AdminNotificationsRoute({ navigation }: any) {
   return <NotificationsScreen onBack={() => navigation.goBack()} />;
 }
 
-// Only Dashboard + Notifications for now — the rest of admin (Job Cards,
-// Finance, Device Tracking, etc.) is still the MoreSheet's "Coming soon"
-// placeholder list (AdminDashboardScreen's MORE_SECTIONS), each becoming a
-// real route here as it's built.
+function AdminLiveLocationsRoute({ navigation }: any) {
+  return <LiveLocationsScreen onBack={() => navigation.goBack()} />;
+}
+
+// Only Dashboard + Notifications + Live Locations for now — the rest of
+// admin (Job Cards, Finance, Device Tracking, etc.) is still the
+// MoreSheet's "Coming soon" placeholder list (AdminDashboardScreen's
+// MORE_SECTIONS), each becoming a real route here as it's built.
 function AdminNavigator() {
   return (
     <AdminStack.Navigator screenOptions={{ headerShown: false }}>
       <AdminStack.Screen name="Dashboard" component={AdminDashboardRoute} options={{ animation: 'none' }} />
       <AdminStack.Screen name="Notifications" component={AdminNotificationsRoute} options={{ animation: 'slide_from_right' }} />
+      <AdminStack.Screen name="LiveLocations" component={AdminLiveLocationsRoute} options={{ animation: 'slide_from_right' }} />
     </AdminStack.Navigator>
   );
 }

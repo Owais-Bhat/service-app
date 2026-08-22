@@ -19,17 +19,20 @@ const TABS = [
 
 interface Props {
   onOpenNotifications: () => void;
+  onOpenLiveLocations: () => void;
 }
 
-export default function AdminDashboardScreen({ onOpenNotifications }: Props) {
+export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLocations }: Props) {
   // The web app's admin sections not yet ported to mobile — see design
   // spec §5/§8. Each becomes a real route in a later phase; Notifications
-  // is the first to move out of "Coming soon" and into a real screen.
+  // and Live Locations are the first to move out of "Coming soon" and
+  // into real screens.
   const MORE_SECTIONS = [
     { label: 'Job Cards' },
     { label: 'Finance' },
     { label: 'Discounts' },
     { label: 'Device Tracking' },
+    { label: 'Live Locations', onPress: onOpenLiveLocations },
     { label: 'Training' },
     { label: 'Media Training' },
     { label: 'Stats' },
