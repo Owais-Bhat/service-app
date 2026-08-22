@@ -7268,6 +7268,15 @@ async function buildInvoicePdfBuffer(billData) {
     const RUPEE = INVOICE_UNICODE_FONTS ? '₹' : 'Rs. ';
     const inr = (n) => RUPEE + Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     const GREEN = '#10B981', DGREEN = '#064E3B', DARK = '#0F172A', GRAY = '#6B7280', LIGHT = '#9CA3AF', BORDER = '#E5E7EB', SOFT = '#F9FAFB';
+    // Business info shown on every premium bill — matches src/pages/employee.js's BUSINESS.
+    const BUSINESS = {
+        name: 'Networking Experts',
+        tagline: 'Service | Installation | Support',
+        address: 'Srinagar, J&K, India',
+        phone: '+91 8899133144',
+        email: 'support@networkingexperts.in',
+        gstin: '-',
+    };
 
     // Optional payment QR — fetched up front so drawing stays synchronous.
     let qrBuf = null;
