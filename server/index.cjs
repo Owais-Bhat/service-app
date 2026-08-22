@@ -1837,6 +1837,17 @@ const requiredTables = [
         FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE CASCADE
     )`,
+    // One row per user, overwritten on every ping — this is a "where are they
+    // right now" table, not a location history log. Foreground-only pings from
+    // the mobile app while clocked in (see /api/live-location/ping).
+    `CREATE TABLE IF NOT EXISTS employee_live_locations (
+        user_id VARCHAR(36) PRIMARY KEY,
+        latitude DECIMAL(10, 7) NOT NULL,
+        longitude DECIMAL(10, 7) NOT NULL,
+        accuracy DECIMAL(10, 2),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -5250,6 +5261,61 @@ app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (r
     } catch (error) {
         console.error('Error fetching employee devices:', error);
         res.status(500).json({ error: error.message || 'Could not fetch devices' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Foreground-only location ping from the mobile app while an employee is
+// clocked in — see mobile/src/api/liveLocation.ts. One row per user,
+// overwritten every ping (employee_live_locations has user_id as its PK).
+app.post('/api/live-location/ping', rateLimit({ windowMs: 60_000, max: 10, key: 'live-location-ping' }), authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    const { lat, lng, accuracy } = req.body;
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return res.status(400).json({ error: 'lat/lng required' });
+    }
+    let connection;
+    try {
+        connection = await getConn();
+        await connection.execute(
+            `INSERT INTO employee_live_locations (user_id, latitude, longitude, accuracy)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE latitude = VALUES(latitude), longitude = VALUES(longitude), accuracy = VALUES(accuracy)`,
+            [req.user.id, latitude, longitude, Number.isFinite(Number(accuracy)) ? Number(accuracy) : null]
+        );
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('live-location ping error:', error);
+        res.status(500).json({ error: 'Could not save location' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Admin (and the mobile admin screen) reads everyone currently clocked in's
+// last-known location. Filtered to today's open attendance row so a location
+// from before clock-out (or from a day off) never lingers on the map.
+app.get('/api/live-location', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(`
+            SELECT p.id AS user_id, p.full_name, p.worker_type,
+                   l.latitude, l.longitude, l.accuracy, l.updated_at
+            FROM employee_live_locations l
+            JOIN profiles p ON p.id = l.user_id
+            JOIN attendance a ON a.user_id = p.id
+                AND a.date = CURDATE() AND a.clock_in IS NOT NULL AND a.clock_out IS NULL
+            ORDER BY l.updated_at DESC
+        `);
+        res.json(rows);
+    } catch (error) {
+        console.error('live-location list error:', error);
+        res.status(500).json({ error: 'Could not fetch locations' });
     } finally {
         if (connection) connection.release();
     }
