@@ -25,8 +25,11 @@ import {
 } from '../api/tasks';
 import { checkPaymentStatus } from '../api/payments';
 import { validateCoupon } from '../api/coupons';
+import { generateBillPdf, billWhatsAppCaption, BillPdfData } from '../api/bills';
 import { markDeviceTaken } from '../api/deviceTracking';
 import { ApiError } from '../api/client';
+
+const BUSINESS_NAME = 'Networking Experts';
 
 const DEVICE_TYPE_CHIPS = ['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'];
 
@@ -99,6 +102,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [checkingPayment, setCheckingPayment] = useState(false);
   const finalizingRef = useRef(false);
 
+  // Bill PDF + WhatsApp — same server-rendered invoice web generates
+  // (/api/bills/generate), independent of payment method or resolve state.
+  const [billPdfUrl, setBillPdfUrl] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+
   const bill = useMemo(
     () =>
       computeBill({
@@ -128,6 +136,67 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   });
 
   const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
+
+  const buildBillPdfData = (): BillPdfData => ({
+    customer: {
+      name: item.fullName,
+      phone: item.phone || '',
+      location: item.location || '',
+      company: companyName,
+      device_type: deviceType,
+      device_serial: deviceSerialNo,
+      service_item: item.serviceItem || '',
+      ticket_no: item.ticketNo || '',
+    },
+    technician: user?.full_name || 'Technician',
+    services: services.map((s) => ({ name: s.label, cost: s.cost })),
+    servicesSubtotal: bill.servicesSubtotal,
+    extra: Number(extraCost) || 0,
+    extraReason: extraReason.trim(),
+    platform: bill.platformFee,
+    km: Number(transportKm) || 0,
+    transport: bill.transportFee,
+    taxable: bill.servicesSubtotal + (Number(extraCost) || 0) + bill.platformFee + bill.transportFee,
+    gst: bill.gst,
+    discount: bill.discount,
+    discountLabel: couponApplied?.label || (Number(discountAmount) > 0 ? 'Employee discount' : ''),
+    discountReason: discountReason.trim(),
+    total: bill.total,
+    paymentLink: paymentLink || '',
+    paymentStatus: paymentConfirmed ? 'paid' : paymentMethod === 'cash' ? 'paid' : 'unpaid',
+  });
+
+  const handleGenerateBillPdf = async () => {
+    if (!companyName.trim()) {
+      setError('Company name is required to generate a bill');
+      return;
+    }
+    if (services.length === 0 && !(Number(extraCost) > 0)) {
+      setError('Add at least one service, or an extra charge');
+      return;
+    }
+    setError(null);
+    setGeneratingPdf(true);
+    try {
+      const url = await generateBillPdf(buildBillPdfData(), item.inquiryId);
+      setBillPdfUrl(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not generate the bill PDF — check your connection');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareBillWhatsApp = () => {
+    if (!billPdfUrl) return;
+    const phone = (item.phone || '').replace(/\D/g, '');
+    if (!phone) {
+      setError('This customer has no phone number on file');
+      return;
+    }
+    const caption = billWhatsAppCaption(BUSINESS_NAME, buildBillPdfData(), billPdfUrl);
+    Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(caption)}`);
+  };
 
   const handleApplyCoupon = async () => {
     const code = couponCode.trim().toUpperCase();
@@ -478,10 +547,15 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     </Pressable>
                   </View>
                 ))}
-                <Pressable onPress={() => setShowPicker(true)} style={[styles.addServiceBtn, { borderColor: brand.primary }]}>
-                  <Icon name="edit" size={14} color={brand.primary} />
-                  <Text style={[styles.addServiceText, { color: brand.primary }]}>Add Service</Text>
-                </Pressable>
+                <PressScale onPress={() => setShowPicker(true)}>
+                  <View style={styles.addServiceBtn}>
+                    <View style={styles.addServiceBadge}>
+                      <Text style={styles.addServiceBadgeText}>+</Text>
+                    </View>
+                    <Text style={styles.addServiceText}>Add Service</Text>
+                    <Icon name="chevron-right" size={16} color="#ffffff" />
+                  </View>
+                </PressScale>
 
                 <View style={styles.twoCol}>
                   <View style={{ flex: 1 }}>
@@ -666,6 +740,32 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     <Text style={[styles.receiptTotalValue, { color: brand.primary }]}>{inr(bill.total)}</Text>
                   </View>
                 </View>
+
+                {billPdfUrl ? (
+                  <View style={styles.pdfRow}>
+                    <PressScale onPress={() => Linking.openURL(billPdfUrl)} style={{ flex: 1 }}>
+                      <View style={[styles.pdfBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                        <Icon name="receipt" size={14} color={theme.text} />
+                        <Text style={[styles.pdfBtnText, { color: theme.text }]}>View PDF</Text>
+                      </View>
+                    </PressScale>
+                    <PressScale onPress={handleShareBillWhatsApp} style={{ flex: 1 }}>
+                      <View style={[styles.pdfBtn, { backgroundColor: '#25D366' }]}>
+                        <Icon name="whatsapp" size={14} color="#fff" />
+                        <Text style={[styles.pdfBtnText, { color: '#fff' }]}>Send via WhatsApp</Text>
+                      </View>
+                    </PressScale>
+                  </View>
+                ) : (
+                  <PressScale onPress={handleGenerateBillPdf} disabled={generatingPdf} style={{ marginTop: spacing(3) }}>
+                    <View style={[styles.pdfGenerateBtn, { borderColor: brand.primary, opacity: generatingPdf ? 0.7 : 1 }]}>
+                      {generatingPdf ? <ActivityIndicator size="small" color={brand.primary} /> : <Icon name="receipt" size={15} color={brand.primary} />}
+                      <Text style={[styles.pdfGenerateBtnText, { color: brand.primary }]}>
+                        {generatingPdf ? 'Generating…' : 'Generate Bill PDF'}
+                      </Text>
+                    </View>
+                  </PressScale>
+                )}
               </View>
             ) : null}
 
@@ -741,8 +841,24 @@ const styles = StyleSheet.create({
   serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(2.5), paddingVertical: spacing(2), marginBottom: spacing(1.5) },
   serviceLabel: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
   serviceCost: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  addServiceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.sm, paddingVertical: spacing(2.25), marginTop: spacing(1) },
-  addServiceText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  addServiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(2.5),
+    backgroundColor: brand.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing(2.5),
+    paddingHorizontal: spacing(3),
+    marginTop: spacing(1),
+    shadowColor: brand.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  addServiceBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  addServiceBadgeText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16, color: '#fff', marginTop: -2 },
+  addServiceText: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
   twoCol: { flexDirection: 'row', gap: spacing(3) },
   receipt: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(4) },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing(1) },
@@ -780,4 +896,9 @@ const styles = StyleSheet.create({
   waitingText: { fontSize: 11, fontFamily: 'Manrope_600SemiBold' },
   genLinkBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), alignSelf: 'stretch', height: 46, borderRadius: radius.md },
   genLinkBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
+  pdfGenerateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(3) },
+  pdfGenerateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  pdfRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(3) },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.sm, borderWidth: 1 },
+  pdfBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
 });
