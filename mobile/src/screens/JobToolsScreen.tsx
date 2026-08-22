@@ -7,6 +7,7 @@ import GlassTabBar from '../components/GlassTabBar';
 import Icon from '../components/Icon';
 import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing, typography } from '../theme';
 
@@ -18,9 +19,19 @@ interface Props {
   onOpenEstimator: () => void;
   onOpenDeviceFollowUp: () => void;
   onOpenEodReport: () => void;
+  onOpenInstallations: () => void;
+  onOpenGigPool: () => void;
 }
 
-const TOOLS: { key: string; label: string; desc: string; color: string; icon: IconName }[] = [
+interface Tool {
+  key: string;
+  label: string;
+  desc: string;
+  color: string;
+  icon: IconName;
+}
+
+const BASE_TOOLS: Tool[] = [
   { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', color: '#15a05a', icon: 'estimator' },
   { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5', icon: 'device' },
   { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
@@ -34,14 +45,34 @@ export default function JobToolsScreen({
   onOpenEstimator,
   onOpenDeviceFollowUp,
   onOpenEodReport,
+  onOpenInstallations,
+  onOpenGigPool,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { user } = useAuth();
+
+  // installations_enabled defaults to visible (server treats undefined as 1)
+  // — only explicit 0/false hides it, matching web's default-on behavior.
+  const installationsOn = user?.installations_enabled !== 0 && user?.installations_enabled !== false;
+  const isGigWorker = user?.worker_type === 'gig';
+
+  const tools: Tool[] = [
+    ...BASE_TOOLS,
+    ...(installationsOn
+      ? [{ key: 'installations', label: 'My Installations', desc: 'Assigned installation jobs', color: '#e08a14', icon: 'box' as IconName }]
+      : []),
+    ...(isGigWorker
+      ? [{ key: 'gigpool', label: 'Public Jobs', desc: 'Unclaimed jobs open to any gig worker', color: '#7c5cfc', icon: 'star' as IconName }]
+      : []),
+  ];
 
   const openTool = (key: string) => {
     if (key === 'estimator') onOpenEstimator();
     else if (key === 'devices') onOpenDeviceFollowUp();
-    else onOpenEodReport();
+    else if (key === 'eod') onOpenEodReport();
+    else if (key === 'installations') onOpenInstallations();
+    else if (key === 'gigpool') onOpenGigPool();
   };
 
   return (
@@ -51,7 +82,7 @@ export default function JobToolsScreen({
         <Text style={[styles.title, { color: theme.text }]}>Job Tools</Text>
         <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(5) }]}>Estimator, devices & reports</Text>
 
-        {TOOLS.map((tool) => (
+        {tools.map((tool) => (
           <Pressable key={tool.key} onPress={() => openTool(tool.key)} style={({ pressed }) => [pressed && styles.pressed]}>
             <Panel style={styles.toolRow}>
               <View style={[styles.toolIcon, { backgroundColor: tool.color + '24' }]}>

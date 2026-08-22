@@ -27,6 +27,8 @@ import CoursePlayerScreen from '../screens/CoursePlayerScreen';
 import TutorialsScreen from '../screens/TutorialsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import InstallationsScreen from '../screens/InstallationsScreen';
+import GigPoolScreen from '../screens/GigPoolScreen';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -53,6 +55,8 @@ type EmployeeStackParams = {
   Tutorials: undefined;
   Notifications: undefined;
   Settings: undefined;
+  Installations: undefined;
+  GigPool: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -130,8 +134,18 @@ function JobToolsRoute({ navigation }: any) {
       onOpenEstimator={() => navigation.navigate('Estimator')}
       onOpenDeviceFollowUp={() => navigation.navigate('DeviceFollowUp')}
       onOpenEodReport={() => navigation.navigate('EodReport')}
+      onOpenInstallations={() => navigation.navigate('Installations')}
+      onOpenGigPool={() => navigation.navigate('GigPool')}
     />
   );
+}
+
+function InstallationsRoute({ navigation }: any) {
+  return <InstallationsScreen onBack={() => navigation.goBack()} />;
+}
+
+function GigPoolRoute({ navigation }: any) {
+  return <GigPoolScreen onBack={() => navigation.goBack()} />;
 }
 
 function EstimatorRoute({ navigation }: any) {
@@ -230,6 +244,8 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="DeviceFollowUp" component={DeviceFollowUpRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="DeviceDetail" component={DeviceDetailRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="EodReport" component={EodReportRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Installations" component={InstallationsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="CoursePlayer" component={CoursePlayerRoute} options={{ animation: 'slide_from_right' }} />
