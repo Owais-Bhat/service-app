@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { Easing, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
@@ -12,7 +12,7 @@ import ThemeToggleButton from '../components/ThemeToggleButton';
 import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
 import { brand, categoryColors, semantic, statusColors, DEFAULT_CATEGORY_STYLE, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { fetchTodayAttendance, AttendanceRow } from '../api/attendance';
 import { fetchMyTickets, TicketRow } from '../api/employee';
@@ -54,6 +54,41 @@ const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
   urgent: { color: semantic.danger, label: 'Urgent' },
 };
 
+function RefreshButton({ spinning, onPress }: { spinning: boolean; onPress: () => void }) {
+  const { theme } = useTheme();
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (spinning) {
+      rotation.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.linear }), -1, false);
+    } else {
+      rotation.value = 0;
+    }
+  }, [spinning, rotation]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value * 360}deg` }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={spinning}
+      style={({ pressed }) => [
+        styles.iconBtn,
+        { borderColor: theme.line, backgroundColor: theme.panel2 },
+        pressed && styles.pressed,
+      ]}
+      hitSlop={8}
+      accessibilityLabel="Refresh"
+    >
+      <Animated.View style={animatedStyle}>
+        <Icon name="refresh" size={16} color={theme.text2} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 export default function EmployeeDashboardScreen({
   onOpenTask,
   onGoAttendance,
@@ -73,6 +108,7 @@ export default function EmployeeDashboardScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   const isGigWorker = user?.worker_type === 'gig';
 
@@ -105,9 +141,14 @@ export default function EmployeeDashboardScreen({
     setRefreshing(false);
   };
 
-  const openTickets = tickets.filter((t) => t.status !== 'resolved' && t.status !== 'case_closed').length;
+  const activeTickets = tickets.filter((t) => t.status !== 'resolved' && t.status !== 'case_closed');
+  const routeTickets = [...activeTickets].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const openTickets = activeTickets.length;
   const clockedIn = !!attendance?.clock_in && !attendance?.clock_out;
-  const filteredTickets = filter === 'all' ? tickets : tickets.filter((t) => t.status === filter);
+  const statusFiltered = filter === 'all' ? tickets : tickets.filter((t) => t.status === filter);
+  const filteredTickets = search.trim()
+    ? statusFiltered.filter((t) => t.title.toLowerCase().includes(search.trim().toLowerCase()))
+    : statusFiltered;
 
   return (
     <View style={styles.root}>
@@ -122,6 +163,7 @@ export default function EmployeeDashboardScreen({
             <Text style={[styles.caption, { color: theme.text3 }]}>{isGigWorker ? 'Gig worker' : 'Fixed employee'}</Text>
           </View>
           <View style={styles.headerActions}>
+            <RefreshButton spinning={refreshing} onPress={onRefresh} />
             <NotificationBell unread={unread} onPress={onOpenNotifications} />
             <ThemeToggleButton />
           </View>
@@ -140,6 +182,30 @@ export default function EmployeeDashboardScreen({
           />
           <AnimatedStatCard label="Open Tickets" value={openTickets} accentColor={semantic.warning} icon="tasks" delayMs={100} />
         </Animated.View>
+
+        {routeTickets.length > 0 && (
+          <Animated.View entering={FadeInUp.delay(120).duration(550)}>
+            <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(3) }]}>Today's Route</Text>
+            <GlassCard>
+              {routeTickets.map((t, i) => {
+                const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
+                const isLast = i === routeTickets.length - 1;
+                return (
+                  <Pressable key={t.id} onPress={() => onOpenTask(t.id)} style={styles.routeRow}>
+                    <View style={styles.routeTimeline}>
+                      <View style={[styles.routeDot, { borderColor: statusStyle.color, backgroundColor: t.status === 'in_progress' ? statusStyle.color : 'transparent' }]} />
+                      {!isLast && <View style={[styles.routeLine, { backgroundColor: theme.line }]} />}
+                    </View>
+                    <View style={[styles.routeInfo, isLast && { marginBottom: 0 }]}>
+                      <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{t.title}</Text>
+                      <Text style={[styles.caption, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </GlassCard>
+          </Animated.View>
+        )}
 
         {notices.length > 0 && (
           <Animated.View entering={FadeInUp.delay(150).duration(550)}>
@@ -179,6 +245,17 @@ export default function EmployeeDashboardScreen({
 
         <Animated.View entering={FadeInUp.delay(250).duration(550)}>
           <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>My Tasks</Text>
+
+          <View style={[styles.searchWrap, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+            <Icon name="search" size={15} color={theme.text3} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search tasks…"
+              placeholderTextColor={theme.text3}
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+          </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: spacing(2) }}>
             {FILTERS.map((f) => {
@@ -252,6 +329,14 @@ const styles = StyleSheet.create({
   caption: { ...typography.caption },
   body: { ...typography.body, fontSize: 13 },
   pressed: { opacity: 0.7 },
+  iconBtn: { width: 36, height: 36, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(3), marginBottom: spacing(3) },
+  searchInput: { flex: 1, paddingVertical: spacing(2.5), fontSize: 14, fontFamily: 'Manrope_400Regular' },
+  routeRow: { flexDirection: 'row', gap: spacing(3) },
+  routeTimeline: { alignItems: 'center', width: 16 },
+  routeDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
+  routeLine: { width: 2, flex: 1, marginTop: spacing(1) },
+  routeInfo: { flex: 1, minWidth: 0, marginBottom: spacing(4) },
   filterRow: { marginBottom: spacing(3) },
   filterChip: { paddingHorizontal: spacing(3.5), paddingVertical: spacing(2), borderRadius: 12, borderWidth: 1 },
   filterChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
