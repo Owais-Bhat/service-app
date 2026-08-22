@@ -30,22 +30,23 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'payments', label: 'Payments' },
 ];
 
-// Subject -> icon/color so the list reads at a glance, same spirit as web's
-// per-subject emoji icon in notifications.js. Falls back to a plain bell.
-function subjectStyle(subject: string | null): { icon: IconName; color: string } {
+// Subject -> icon/color/label — the label+dot pairing is the same pattern
+// as the dashboard's Notice Board (priority dot + tag), reused here for
+// visual consistency across the two lists instead of a different layout.
+function subjectStyle(subject: string | null): { icon: IconName; color: string; label: string } {
   const s = (subject || '').toLowerCase();
-  if (s.includes('payment') || s.includes('cash') || s.includes('bill')) return { icon: 'wallet', color: semantic.success };
-  if (s.includes('complaint')) return { icon: 'shield', color: semantic.danger };
-  if (s.includes('device')) return { icon: 'device', color: semantic.info };
-  if (s.includes('leave')) return { icon: 'clock', color: semantic.warning };
-  if (s.includes('leaderboard') || s.includes('rank') || s.includes('award')) return { icon: 'leaderboard', color: '#7c5cfc' };
-  if (s.includes('training') || s.includes('tutorial')) return { icon: 'training', color: '#0ea5a5' };
-  if (s.includes('eod')) return { icon: 'report', color: semantic.warning };
-  if (s.includes('pool') || s.includes('claim')) return { icon: 'star', color: '#7c5cfc' };
+  if (s.includes('payment') || s.includes('cash') || s.includes('bill')) return { icon: 'wallet', color: semantic.success, label: 'Payment' };
+  if (s.includes('complaint')) return { icon: 'shield', color: semantic.danger, label: 'Complaint' };
+  if (s.includes('device')) return { icon: 'device', color: semantic.info, label: 'Device' };
+  if (s.includes('leave')) return { icon: 'clock', color: semantic.warning, label: 'Leave' };
+  if (s.includes('leaderboard') || s.includes('rank') || s.includes('award')) return { icon: 'leaderboard', color: '#7c5cfc', label: 'Award' };
+  if (s.includes('training') || s.includes('tutorial')) return { icon: 'training', color: '#0ea5a5', label: 'Training' };
+  if (s.includes('eod')) return { icon: 'report', color: semantic.warning, label: 'EOD' };
+  if (s.includes('pool') || s.includes('claim')) return { icon: 'star', color: '#7c5cfc', label: 'Public Job' };
   if (s.includes('assign') || s.includes('task') || s.includes('service_request') || s.includes('installation')) {
-    return { icon: 'tasks', color: brand.primary };
+    return { icon: 'tasks', color: brand.primary, label: 'Task' };
   }
-  return { icon: 'notification', color: brand.primary };
+  return { icon: 'notification', color: brand.primary, label: 'Update' };
 }
 
 // Turns snake_case/camelCase data keys into readable labels, and ₹-formats
@@ -220,23 +221,17 @@ export default function NotificationsScreen({ onBack }: Props) {
             return (
               <Animated.View key={`${filter}-${item.id}`} entering={FadeInUp.delay(i * 60).duration(400)}>
                 <Pressable onPress={() => handlePress(item)} style={({ pressed }) => [pressed && styles.pressed]}>
-                  <GlassCard style={item.read_at ? styles.rowCard : { ...styles.rowCard, borderColor: brand.primary }}>
-                    <View style={styles.rowInner}>
-                      <View style={[styles.rowIcon, { backgroundColor: `${style.color}24` }]}>
-                        <Icon name={style.icon} size={18} color={style.color} />
-                      </View>
-                      <View style={styles.rowBody}>
-                        <View style={styles.rowHeader}>
-                          <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-                          {!item.read_at ? <View style={styles.dot} /> : null}
-                        </View>
-                        {item.body ? <Text style={[styles.body, { color: theme.text2 }]} numberOfLines={2}>{item.body}</Text> : null}
-                        <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(1) }]}>
-                          {new Date(item.created_at).toLocaleString('en-IN')}
-                        </Text>
-                      </View>
-                      <Icon name="chevron-right" size={16} color={theme.text3} />
+                  <GlassCard style={styles.rowCard}>
+                    <View style={styles.rowHeader}>
+                      <View style={[styles.rowDot, { backgroundColor: style.color }]} />
+                      <Text style={[styles.rowTag, { color: style.color }]}>{style.label}</Text>
+                      {!item.read_at && <View style={styles.unreadDot} />}
                     </View>
+                    <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
+                    {item.body ? <Text style={[styles.body, { color: theme.text2 }]} numberOfLines={2}>{item.body}</Text> : null}
+                    <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(1) }]}>
+                      {new Date(item.created_at).toLocaleString('en-IN')}
+                    </Text>
                   </GlassCard>
                 </Pressable>
               </Animated.View>
@@ -265,12 +260,11 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
   pressed: { opacity: 0.7 },
   rowCard: { marginBottom: spacing(2.5) },
-  rowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(3) },
-  rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
-  name: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 14, minWidth: 0 },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: brand.primary },
+  rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(1.5) },
+  rowDot: { width: 6, height: 6, borderRadius: 3 },
+  rowTag: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
+  unreadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: brand.primary },
+  name: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(6) },
   detailCard: { width: '100%', maxWidth: 400, padding: spacing(5) },
   detailIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
