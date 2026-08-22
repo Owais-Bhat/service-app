@@ -109,6 +109,7 @@ export default function EmployeeDashboardScreen({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const isGigWorker = user?.worker_type === 'gig';
 
@@ -150,26 +151,32 @@ export default function EmployeeDashboardScreen({
     ? statusFiltered.filter((t) => t.title.toLowerCase().includes(search.trim().toLowerCase()))
     : statusFiltered;
 
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 78;
+
   return (
     <View style={styles.root}>
       <MeshBackground />
+
+      <View
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.headerFixed, { paddingTop: insets.top + spacing(3), borderColor: theme.line, backgroundColor: theme.bg }]}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: theme.text }]}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
+          <Text style={[styles.caption, { color: theme.text3 }]}>{isGigWorker ? 'Gig worker' : 'Fixed employee'}</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <RefreshButton spinning={refreshing} onPress={onRefresh} />
+          <NotificationBell unread={unread} onPress={onOpenNotifications} />
+          <ThemeToggleButton />
+        </View>
+      </View>
+
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Animated.View entering={FadeInUp.duration(550)} style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: theme.text }]}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
-            <Text style={[styles.caption, { color: theme.text3 }]}>{isGigWorker ? 'Gig worker' : 'Fixed employee'}</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <RefreshButton spinning={refreshing} onPress={onRefresh} />
-            <NotificationBell unread={unread} onPress={onOpenNotifications} />
-            <ThemeToggleButton />
-          </View>
-        </Animated.View>
-
-        {error ? <Text style={[styles.caption, { color: semantic.danger, marginTop: spacing(3) }]}>{error}</Text> : null}
+        {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
 
         <Animated.View entering={FadeInUp.delay(80).duration(550)} style={styles.row}>
           <AnimatedStatCard
@@ -321,7 +328,19 @@ export default function EmployeeDashboardScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  headerFixed: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing(4),
+    paddingBottom: spacing(3),
+    borderBottomWidth: 1,
+  },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
   row: { flexDirection: 'row', gap: spacing(3), marginTop: spacing(5) },
   title: { ...typography.title },
