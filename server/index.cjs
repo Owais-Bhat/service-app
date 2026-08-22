@@ -7423,8 +7423,13 @@ async function buildInvoicePdfBuffer(billData) {
         y += ph + 14;
     }
 
-    // Footer (bottom of current page)
-    const fy = doc.page.height - 58;
+    // Footer — pinned near the bottom of whichever page the content ends
+    // on; only spills to a fresh page if the content has already run past
+    // where the footer would sit (long item lists / multi-page bills).
+    // 90pt clears pdfkit's own bottom margin (40pt) so this text never
+    // triggers an automatic page break of its own.
+    let fy = doc.page.height - 90;
+    if (y > fy - 10) { doc.addPage(); y = M; fy = doc.page.height - 90; }
     dline(M, fy, right, BORDER);
     doc.fillColor(GREEN).font(FONT_BOLD).fontSize(11).text('Thank you for your business!', M, fy + 8, { width: contentW, align: 'center' });
     doc.fillColor(GRAY).font(FONT).fontSize(8).text(`${BUSINESS.address}  |  ${BUSINESS.phone}  |  ${BUSINESS.email}`, M, fy + 24, { width: contentW, align: 'center' });
