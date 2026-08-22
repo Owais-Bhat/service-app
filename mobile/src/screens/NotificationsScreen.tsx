@@ -1,18 +1,51 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassSurface from '../components/GlassSurface';
-import Panel from '../components/Panel';
+import GlassCard from '../components/GlassCard';
 import BackLink from '../components/BackLink';
 import Icon from '../components/Icon';
+import { IconName } from '../theme/icons';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { fetchNotifications, markNotificationRead, NotificationItem } from '../api/notifications';
+import {
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  NotificationItem,
+} from '../api/notifications';
 
 interface Props {
   onBack: () => void;
+}
+
+type FilterKey = 'all' | 'unread' | 'payments';
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'unread', label: 'Unread' },
+  { key: 'payments', label: 'Payments' },
+];
+
+// Subject -> icon/color so the list reads at a glance, same spirit as web's
+// per-subject emoji icon in notifications.js. Falls back to a plain bell.
+function subjectStyle(subject: string | null): { icon: IconName; color: string } {
+  const s = (subject || '').toLowerCase();
+  if (s.includes('payment') || s.includes('cash') || s.includes('bill')) return { icon: 'wallet', color: semantic.success };
+  if (s.includes('complaint')) return { icon: 'shield', color: semantic.danger };
+  if (s.includes('device')) return { icon: 'device', color: semantic.info };
+  if (s.includes('leave')) return { icon: 'clock', color: semantic.warning };
+  if (s.includes('leaderboard') || s.includes('rank') || s.includes('award')) return { icon: 'leaderboard', color: '#7c5cfc' };
+  if (s.includes('training') || s.includes('tutorial')) return { icon: 'training', color: '#0ea5a5' };
+  if (s.includes('eod')) return { icon: 'report', color: semantic.warning };
+  if (s.includes('pool') || s.includes('claim')) return { icon: 'star', color: '#7c5cfc' };
+  if (s.includes('assign') || s.includes('task') || s.includes('service_request') || s.includes('installation')) {
+    return { icon: 'tasks', color: brand.primary };
+  }
+  return { icon: 'notification', color: brand.primary };
 }
 
 // Turns snake_case/camelCase data keys into readable labels, and ₹-formats
@@ -35,6 +68,7 @@ function prettyValue(key: string, value: unknown): string {
 
 function NotificationDetail({ item, onDismiss }: { item: NotificationItem; onDismiss: () => void }) {
   const { theme } = useTheme();
+  const style = subjectStyle(item.subject);
   const dataEntries =
     item.data && typeof item.data === 'object' && !Array.isArray(item.data)
       ? Object.entries(item.data as Record<string, unknown>)
@@ -44,8 +78,8 @@ function NotificationDetail({ item, onDismiss }: { item: NotificationItem; onDis
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <GlassSurface style={styles.detailCard} borderRadius={radius.lg}>
-          <View style={styles.detailIconWrap}>
-            <Icon name="notification" size={22} color={brand.primary} />
+          <View style={[styles.detailIconWrap, { backgroundColor: `${style.color}24` }]}>
+            <Icon name={style.icon} size={22} color={style.color} />
           </View>
           <Text style={[styles.detailTitle, { color: theme.text }]}>{item.title || 'Notification'}</Text>
           {item.body ? <Text style={[styles.detailBody, { color: theme.text2 }]}>{item.body}</Text> : null}
@@ -85,6 +119,8 @@ export default function NotificationsScreen({ onBack }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<NotificationItem | null>(null);
+  const [filter, setFilter] = useState<FilterKey>('all');
+  const [markingAll, setMarkingAll] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +153,28 @@ export default function NotificationsScreen({ onBack }: Props) {
     }
   };
 
+  const handleMarkAllRead = async () => {
+    setMarkingAll(true);
+    const now = new Date().toISOString();
+    setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: now })));
+    try {
+      await markAllNotificationsRead();
+    } catch {
+      load();
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
+  const unreadCount = items.filter((n) => !n.read_at).length;
+  const paymentsCount = items.filter((n) => (n.subject || '').toLowerCase().includes('payment')).length;
+  const filterCounts: Record<FilterKey, number> = { all: items.length, unread: unreadCount, payments: paymentsCount };
+  const filteredItems = items.filter((n) => {
+    if (filter === 'unread') return !n.read_at;
+    if (filter === 'payments') return (n.subject || '').toLowerCase().includes('payment');
+    return true;
+  });
+
   return (
     <View style={styles.root}>
       <MeshBackground />
@@ -125,28 +183,65 @@ export default function NotificationsScreen({ onBack }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <BackLink onPress={onBack} />
-        <Text style={[styles.title, { color: theme.text }]}>Notifications</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: theme.text }]}>Notifications</Text>
+          {unreadCount > 0 && (
+            <Pressable onPress={handleMarkAllRead} disabled={markingAll} hitSlop={8}>
+              <Text style={[styles.markAllText, { color: brand.primary, opacity: markingAll ? 0.5 : 1 }]}>Mark all read</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <View style={[styles.filterRow, { backgroundColor: theme.panel2 }]}>
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <Pressable key={f.key} onPress={() => setFilter(f.key)} style={[styles.filterPill, active && { backgroundColor: brand.primary }]}>
+                <Text style={[styles.filterPillText, { color: active ? '#ffffff' : theme.text2 }]}>{f.label}</Text>
+                {filterCounts[f.key] > 0 && (
+                  <View style={[styles.filterBadge, { backgroundColor: active ? 'rgba(255,255,255,0.28)' : theme.surfaceStrong }]}>
+                    <Text style={[styles.filterBadgeText, { color: active ? '#ffffff' : theme.text2 }]}>{filterCounts[f.key]}</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {items.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>No notifications yet.</Text>
+        {filteredItems.length === 0 ? (
+          <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>
+            {filter === 'all' ? 'No notifications yet.' : `No ${filter} notifications.`}
+          </Text>
         ) : (
-          items.map((item) => (
-            <Pressable key={item.id} onPress={() => handlePress(item)} style={({ pressed }) => [pressed && styles.pressed]}>
-              <Panel style={!item.read_at ? { ...styles.row, borderColor: brand.primary } : styles.row}>
-                <View style={styles.rowHeader}>
-                  <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-                  {!item.read_at ? <View style={styles.dot} /> : null}
-                  <Icon name="chevron-right" size={16} color={theme.text3} />
-                </View>
-                {item.body ? <Text style={[styles.body, { color: theme.text2 }]} numberOfLines={2}>{item.body}</Text> : null}
-                <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(1) }]}>
-                  {new Date(item.created_at).toLocaleString('en-IN')}
-                </Text>
-              </Panel>
-            </Pressable>
-          ))
+          filteredItems.map((item, i) => {
+            const style = subjectStyle(item.subject);
+            return (
+              <Animated.View key={`${filter}-${item.id}`} entering={FadeInUp.delay(i * 60).duration(400)}>
+                <Pressable onPress={() => handlePress(item)} style={({ pressed }) => [pressed && styles.pressed]}>
+                  <GlassCard style={item.read_at ? styles.rowCard : { ...styles.rowCard, borderColor: brand.primary }}>
+                    <View style={styles.rowInner}>
+                      <View style={[styles.rowIcon, { backgroundColor: `${style.color}24` }]}>
+                        <Icon name={style.icon} size={18} color={style.color} />
+                      </View>
+                      <View style={styles.rowBody}>
+                        <View style={styles.rowHeader}>
+                          <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
+                          {!item.read_at ? <View style={styles.dot} /> : null}
+                        </View>
+                        {item.body ? <Text style={[styles.body, { color: theme.text2 }]} numberOfLines={2}>{item.body}</Text> : null}
+                        <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(1) }]}>
+                          {new Date(item.created_at).toLocaleString('en-IN')}
+                        </Text>
+                      </View>
+                      <Icon name="chevron-right" size={16} color={theme.text3} />
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              </Animated.View>
+            );
+          })
         )}
       </ScrollView>
 
@@ -157,18 +252,28 @@ export default function NotificationsScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  title: { ...typography.title, marginBottom: spacing(4) },
-  body: { ...typography.body, marginTop: spacing(0.5) },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(4) },
+  title: { ...typography.title },
+  markAllText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  filterRow: { flexDirection: 'row', borderRadius: radius.md, padding: spacing(1), marginBottom: spacing(4), gap: spacing(1) },
+  filterPill: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), paddingVertical: spacing(2.5), borderRadius: radius.sm },
+  filterPillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  filterBadge: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  filterBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
+  body: { ...typography.body, fontSize: 13, marginTop: spacing(0.5) },
   caption: { ...typography.caption },
   error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
   pressed: { opacity: 0.7 },
-  row: { marginBottom: spacing(2.5) },
+  rowCard: { marginBottom: spacing(2.5) },
+  rowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(3) },
+  rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  rowBody: { flex: 1, minWidth: 0 },
   rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   name: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 14, minWidth: 0 },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: brand.primary },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(6) },
   detailCard: { width: '100%', maxWidth: 400, padding: spacing(5) },
-  detailIconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(21,160,90,0.14)', alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
+  detailIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
   detailTitle: { ...typography.heading, fontSize: 17, marginBottom: spacing(1.5) },
   detailBody: { ...typography.body, marginBottom: spacing(2) },
   detailDataBlock: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginBottom: spacing(4) },
