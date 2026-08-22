@@ -1,5 +1,6 @@
 import { dataGet, dataPatch } from './client';
 import { createPaymentLink } from './payments';
+import { redeemCoupon } from './coupons';
 
 interface RawInquiry {
   id: string;
@@ -284,6 +285,21 @@ async function saveBillFields(item: TaskItem, bill: ResolveBill): Promise<void> 
   await dataPatch('inquiries', `id:${item.inquiryId}`, billPatch(bill));
 }
 
+// Actually consumes one use of the coupon (idempotent server-side per
+// inquiry — safe to call again on the same bill without double-spending a
+// usage_limit). Called both when generating a payment link and when
+// finalizing a cash bill, same as web's redeemCouponIfAny() being called at
+// both points. Non-fatal on failure — a coupon that fails to redeem still
+// leaves the bill's discount_amount correct, just doesn't decrement the
+// admin-side counter, which is a smaller problem than blocking the save.
+async function redeemCouponIfAny(item: TaskItem, bill: ResolveBill): Promise<void> {
+  if (!bill.couponCode || !item.inquiryId) return;
+  const grossBeforeDiscount = computeBill({ ...bill, manualDiscount: 0, couponDiscount: 0 }).total;
+  // redeemCoupon() never throws (see api/coupons.ts) — failures come back as
+  // { valid: false }, which we deliberately ignore here (best-effort).
+  await redeemCoupon(bill.couponCode, grossBeforeDiscount, item.inquiryId);
+}
+
 // Generates a real Razorpay payment link (same endpoint web's "Generate"
 // button hits) and persists it + the bill breakdown. Deliberately does NOT
 // touch status — the ticket only resolves once the customer actually pays
@@ -299,6 +315,7 @@ export async function generatePaymentLinkForBill(item: TaskItem, bill: ResolveBi
     customerPhone: item.phone || '',
   });
   await saveBillFields(item, bill);
+  await redeemCouponIfAny(item, bill);
   if (item.inquiryId) {
     await dataPatch('inquiries', `id:${item.inquiryId}`, { payment_link: short_url, payment_link_id: id });
   }
@@ -313,6 +330,7 @@ export async function generatePaymentLinkForBill(item: TaskItem, bill: ResolveBi
 // server-side by the time this is called (TaskStatusModal only allows this
 // once its poll sees paid, exactly like web gates its Save button).
 async function finalizeResolvedBill(item: TaskItem, bill: ResolveBill, detail: string): Promise<void> {
+  await redeemCouponIfAny(item, bill);
   const ops: Promise<unknown>[] = [];
   if (item.ticketId) ops.push(dataPatch('tickets', `id:${item.ticketId}`, { status: 'resolved' }));
   if (item.inquiryId) {
