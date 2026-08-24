@@ -152,41 +152,58 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
           const done = detail.doneLessonIds.includes(lesson.id);
           const isVideo = lesson.type === 'video' && !!lesson.media_url;
           const expanded = expandedId === lesson.id;
-          const accent = done ? brand.primary : theme.text3;
+          const typeColor = isVideo ? '#2e9bff' : '#0ea5a5';
+          const accent = done ? brand.primary : typeColor;
+          const isLast = i === detail.lessons.length - 1;
           return (
-            <Animated.View key={lesson.id} entering={FadeInUp.delay(Math.min(i, 10) * 50).duration(400).springify().damping(15)}>
-              <View style={[styles.rowOuter, { shadowColor: accent }]}>
-                <View style={[styles.rowAccent, { backgroundColor: accent }]} />
-                <GlassCard shadow style={styles.lessonCard}>
+            <Animated.View key={lesson.id} entering={FadeInUp.delay(Math.min(i, 10) * 60).duration(420).springify().damping(15)}>
+              <View style={styles.timelineRow}>
+                <View style={styles.timelineCol}>
+                  <View style={[styles.timelineDot, { backgroundColor: done ? brand.primary : `${typeColor}22`, borderColor: done ? brand.primary : typeColor }]}>
+                    {done ? <Icon name="check" size={15} color="#fff" /> : <Text style={[styles.timelineDotText, { color: typeColor }]}>{i + 1}</Text>}
+                  </View>
+                  {!isLast ? <View style={[styles.timelineLine, { backgroundColor: done ? brand.primary : theme.line }]} /> : null}
+                </View>
+
+                <View style={[styles.lessonOuter, { shadowColor: accent }]}>
                   <PressScale onPress={() => openLesson(lesson)}>
-                    <View style={styles.lessonHeader}>
-                      <View style={[styles.lessonIndex, { backgroundColor: done ? brand.primary : `${theme.text3}22` }]}>
-                        {done ? <Icon name="check" size={14} color="#fff" /> : <Text style={[styles.lessonIndexText, { color: theme.text2 }]}>{i + 1}</Text>}
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[styles.lessonTitle, { color: theme.text }]} numberOfLines={1}>{lesson.title}</Text>
-                        <View style={styles.lessonMetaRow}>
-                          <Icon name={isVideo ? 'tutorial' : 'report'} size={11} color={theme.text3} />
-                          <Text style={[styles.caption, { color: theme.text3 }]}>{isVideo ? 'Video' : 'Reading'}</Text>
+                    <GlassCard shadow style={styles.lessonCard}>
+                      {isVideo ? (
+                        <View style={[styles.videoThumb, { backgroundColor: `${typeColor}22` }]}>
+                          <View style={[styles.videoPlayChip, { backgroundColor: typeColor }]}>
+                            <Icon name="tutorial" size={20} color="#fff" filled />
+                          </View>
+                          <Text style={[styles.videoThumbLabel, { color: typeColor }]}>Tap to watch</Text>
                         </View>
+                      ) : null}
+                      <View style={styles.lessonBody}>
+                        <View style={[styles.typePill, { backgroundColor: `${typeColor}1c` }]}>
+                          <Icon name={isVideo ? 'tutorial' : 'report'} size={10} color={typeColor} />
+                          <Text style={[styles.typePillText, { color: typeColor }]}>{isVideo ? 'Video' : 'Reading'}</Text>
+                        </View>
+                        <View style={styles.lessonTitleRow}>
+                          <Text style={[styles.lessonTitle, { color: theme.text, flex: 1 }]}>{lesson.title}</Text>
+                          {!isVideo ? <Icon name={expanded ? 'chevron-left' : 'chevron-right'} size={15} color={theme.text3} /> : null}
+                        </View>
+
+                        {expanded && lesson.content ? (
+                          <Animated.Text entering={FadeInUp.duration(250)} style={[styles.lessonContent, { color: theme.text2, borderTopColor: theme.line }]}>
+                            {lesson.content}
+                          </Animated.Text>
+                        ) : null}
+
+                        <PressScale onPress={() => !done && handleComplete(lesson.id)} disabled={done || completingId === lesson.id}>
+                          <View style={[styles.completeButton, { backgroundColor: done ? `${brand.primary}18` : brand.primary, opacity: completingId === lesson.id ? 0.7 : 1 }]}>
+                            <Icon name="check" size={13} color={done ? brand.primary : '#fff'} />
+                            <Text style={[styles.completeButtonText, { color: done ? brand.primary : '#fff' }]}>
+                              {completingId === lesson.id ? 'Saving…' : done ? 'Completed' : 'Mark Done'}
+                            </Text>
+                          </View>
+                        </PressScale>
                       </View>
-                      <Icon name={isVideo ? 'tutorial' : expanded ? 'chevron-left' : 'chevron-right'} size={16} color={theme.text3} />
-                    </View>
+                    </GlassCard>
                   </PressScale>
-
-                  {expanded && lesson.content ? (
-                    <Text style={[styles.lessonContent, { color: theme.text2, borderTopColor: theme.line }]}>{lesson.content}</Text>
-                  ) : null}
-
-                  <PressScale onPress={() => !done && handleComplete(lesson.id)} disabled={done || completingId === lesson.id}>
-                    <View style={[styles.completeButton, { backgroundColor: done ? theme.panel2 : brand.primary, opacity: completingId === lesson.id ? 0.7 : 1 }]}>
-                      <Icon name="check" size={13} color={done ? theme.text3 : '#fff'} />
-                      <Text style={[styles.completeButtonText, { color: done ? theme.text3 : '#fff' }]}>
-                        {completingId === lesson.id ? 'Saving…' : done ? 'Completed' : 'Mark Done'}
-                      </Text>
-                    </View>
-                  </PressScale>
-                </GlassCard>
+                </View>
               </View>
             </Animated.View>
           );
@@ -242,15 +259,27 @@ const styles = StyleSheet.create({
   passedChipText: { fontFamily: 'Manrope_700Bold', fontSize: 10.5, color: '#fff' },
   quizOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
   quizCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
-  rowOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
   rowAccent: { width: 4, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
-  lessonCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
   lessonHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
   lessonIndex: { width: 30, height: 30, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   lessonIndexText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
-  lessonTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
-  lessonMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1) },
+  lessonTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, lineHeight: 20 },
   lessonContent: { fontSize: 13, lineHeight: 19, marginTop: spacing(3), paddingTop: spacing(3), borderTopWidth: 1 },
   completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 38, borderRadius: 10, marginTop: spacing(3) },
   completeButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+
+  timelineRow: { flexDirection: 'row', gap: spacing(3) },
+  timelineCol: { alignItems: 'center', width: 34 },
+  timelineDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  timelineDotText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
+  timelineLine: { width: 2.5, flex: 1, minHeight: spacing(4), marginTop: spacing(1), borderRadius: 2 },
+  lessonOuter: { flex: 1, marginBottom: spacing(4), shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 3 },
+  lessonCard: { padding: 0, overflow: 'hidden' },
+  videoThumb: { height: 96, alignItems: 'center', justifyContent: 'center', gap: spacing(1.5) },
+  videoPlayChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  videoThumbLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10.5 },
+  lessonBody: { padding: spacing(4) },
+  typePill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), alignSelf: 'flex-start', paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), borderRadius: radius.full, marginBottom: spacing(2) },
+  typePillText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 9.5, letterSpacing: 0.5, textTransform: 'uppercase' },
+  lessonTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
 });
