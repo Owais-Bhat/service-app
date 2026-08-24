@@ -10,6 +10,7 @@ import Icon from '../components/Icon';
 import ProgressRing from '../components/ProgressRing';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { resolveUploadUrl } from '../api/client';
 import { radius, spacing, typography } from '../theme';
 import { springs } from '../theme/motion';
 import { brand, semantic } from '../theme/tokens';
@@ -189,11 +190,12 @@ export default function TutorialsScreen({ onBack }: Props) {
             const done = completions.has(item.id);
             const isVideo = item.kind === 'video';
             const watchPct = isVideo ? progress[item.id]?.percent || 0 : 0;
+            const mediaUrl = resolveUploadUrl(item.url);
             return (
               <Animated.View key={item.id} entering={FadeInUp.delay(Math.min(idx, 8) * 60).duration(400).springify().damping(15)}>
                 <View style={[styles.cardOuter, { shadowColor: done ? brand.primary : theme.text3 }]}>
                   <GlassCard shadow style={styles.card}>
-                    <PressScale onPress={() => Linking.openURL(item.url)}>
+                    <PressScale onPress={() => Linking.openURL(mediaUrl)}>
                       <View style={styles.thumbWrap}>
                         {isVideo ? (
                           <View style={[styles.thumbVideo, { backgroundColor: `${brand.primary}22` }]}>
@@ -202,7 +204,7 @@ export default function TutorialsScreen({ onBack }: Props) {
                             </View>
                           </View>
                         ) : (
-                          <Image source={{ uri: item.url }} style={styles.thumbImg} resizeMode="cover" />
+                          <Image source={{ uri: mediaUrl }} style={styles.thumbImg} resizeMode="cover" />
                         )}
                         <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
                           <Icon name={isVideo ? 'tutorial' : 'box'} size={11} color="#fff" />
@@ -225,7 +227,7 @@ export default function TutorialsScreen({ onBack }: Props) {
                       ) : null}
 
                       <View style={styles.actionRow}>
-                        <PressScale onPress={() => Linking.openURL(item.url)} style={{ flex: 1 }}>
+                        <PressScale onPress={() => Linking.openURL(mediaUrl)} style={{ flex: 1 }}>
                           <View style={[styles.watchBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
                             <Icon name="tutorial" size={14} color={theme.text} />
                             <Text style={[styles.watchBtnText, { color: theme.text }]}>{isVideo ? 'Watch' : 'View'}</Text>
