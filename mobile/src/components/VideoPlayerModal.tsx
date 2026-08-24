@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import Icon from './Icon';
 import PressScale from './PressScale';
 import { reportWatchProgress } from '../api/training';
@@ -32,6 +33,27 @@ interface Props {
 export default function VideoPlayerModal({ itemId, title, mediaUrl, onDismiss, onProgress }: Props) {
   const insets = useSafeAreaInsets();
   const [percent, setPercent] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // The app is portrait-locked overall (app.json), so this player owns its
+  // own orientation for as long as it's mounted — always hands portrait
+  // back on close, even if the user leaves it in landscape.
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const next = !fullscreen;
+    setFullscreen(next);
+    try {
+      await ScreenOrientation.lockAsync(next ? ScreenOrientation.OrientationLock.LANDSCAPE : ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    } catch {
+      // Some devices/emulators don't support locking — fullscreen still
+      // widens the video area even if the OS never actually rotates.
+    }
+  };
 
   const html = `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -147,6 +169,12 @@ function ping(force) {
             </PressScale>
           </View>
         </LinearGradient>
+
+        <PressScale onPress={toggleFullscreen} style={{ ...styles.fullscreenBtn, bottom: 16 + (fullscreen ? insets.left : insets.bottom) }}>
+          <View style={styles.fullscreenBtnInner}>
+            <Icon name={fullscreen ? 'contract' : 'expand'} size={16} color="#fff" />
+          </View>
+        </PressScale>
       </View>
     </Modal>
   );
@@ -159,4 +187,6 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, fontSize: 15, color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   watchedText: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: spacing(0.5), fontFamily: 'Manrope_600SemiBold' },
   closeBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  fullscreenBtn: { position: 'absolute', right: 16 },
+  fullscreenBtnInner: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 });

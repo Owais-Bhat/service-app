@@ -48,6 +48,8 @@ export const ICONS = {
   calendar: { outline: 'calendar-outline', filled: 'calendar' },
   logout: { outline: 'log-out-outline', filled: 'log-out' },
   chart: { outline: 'bar-chart-outline', filled: 'bar-chart' },
+  expand: { outline: 'expand-outline', filled: 'expand' },
+  contract: { outline: 'contract-outline', filled: 'contract' },
 } as const;
 
 export type IconName = keyof typeof ICONS;
