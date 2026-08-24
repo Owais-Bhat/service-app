@@ -52,15 +52,6 @@ function hoursBetween(start: string | null, end: string | null): number {
   return ms > 0 ? ms / 3600000 : 0;
 }
 
-function formatElapsed(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
-}
-
 // A single week-view bar that springs to its target height on mount/update
 // instead of just appearing — small touch, but it's what makes the chart
 // read as "alive" rather than a static image.
@@ -86,7 +77,6 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   const [refreshing, setRefreshing] = useState(false);
   const [clocking, setClocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -124,15 +114,6 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   };
 
   const clockedIn = !!today?.clock_in && !today?.clock_out;
-
-  // Live stopwatch while clocked in — ticks every second for the "since"
-  // duration shown on the clock card.
-  useEffect(() => {
-    if (!clockedIn) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [clockedIn]);
-  const elapsedMs = clockedIn && today?.clock_in ? now - new Date(today.clock_in).getTime() : 0;
 
   const handleClock = async () => {
     if (!user) return;
@@ -215,15 +196,10 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
                   </Text>
                 </View>
 
-                {clockedIn ? (
-                  <>
-                    <Text style={[styles.elapsedText, { color: theme.text }]}>{formatElapsed(elapsedMs)}</Text>
-                    {today?.clock_in ? (
-                      <Text style={[styles.sinceText, { color: theme.text3 }]}>
-                        Since {new Date(today.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    ) : null}
-                  </>
+                {clockedIn && today?.clock_in ? (
+                  <Text style={[styles.sinceText, { color: theme.text3 }]}>
+                    Since {new Date(today.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
                 ) : null}
 
                 {today?.location ? (
@@ -386,7 +362,6 @@ const styles = StyleSheet.create({
   clockIconChip: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
   clockChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3.5), paddingVertical: spacing(1.75), borderRadius: radius.full, marginBottom: spacing(2) },
   clockChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  elapsedText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 32, marginBottom: spacing(0.5) },
   sinceText: { fontFamily: 'Manrope_600SemiBold', fontSize: 12, marginBottom: spacing(2) },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginTop: spacing(1) },
   clockOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 52, borderRadius: radius.md },
