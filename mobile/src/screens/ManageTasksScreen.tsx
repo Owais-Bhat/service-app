@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
@@ -8,12 +8,14 @@ import BackLink from '../components/BackLink';
 import Icon from '../components/Icon';
 import PressScale from '../components/PressScale';
 import PulseDot from '../components/PulseDot';
+import AnimatedStatCard from '../components/AnimatedStatCard';
 import TaskStatusModal from '../components/TaskStatusModal';
 import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { IconName } from '../theme/icons';
 import { fetchMyTasks, TaskItem } from '../api/tasks';
 
 interface Props {
@@ -28,6 +30,14 @@ const FILTER_LABEL: Record<FilterKey, string> = {
   resolved: 'Resolved',
   issue_not_resolved: 'Issue',
   case_closed: 'Closed',
+};
+
+const FILTER_ICON: Record<FilterKey, IconName> = {
+  in_progress: 'wrench',
+  reopened: 'refresh',
+  resolved: 'check-circle',
+  issue_not_resolved: 'alert',
+  case_closed: 'lock',
 };
 
 function displayStatus(status: string): string {
@@ -58,6 +68,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
   const { user } = useAuth();
   const [pending, setPending] = useState<TaskItem[]>([]);
   const [items, setItems] = useState<TaskItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('in_progress');
@@ -73,6 +84,8 @@ export default function ManageTasksScreen({ onBack }: Props) {
       setError(null);
     } catch {
       setError('Could not load your tasks — pull to retry');
+    } finally {
+      setLoading(false);
     }
   }, [user]);
 
@@ -125,7 +138,13 @@ export default function ManageTasksScreen({ onBack }: Props) {
           Assigned jobs, service requests, and pending assignments
         </Text>
 
-        {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
+        <View style={styles.statsRow}>
+          <AnimatedStatCard label="In Progress" value={counts.in_progress} accentColor={statusColors.in_progress.color} icon="wrench" delayMs={0} />
+          <AnimatedStatCard label="Resolved" value={counts.resolved} accentColor={statusColors.resolved.color} icon="check-circle" delayMs={80} />
+          <AnimatedStatCard label="Issues" value={counts.issue_not_resolved} accentColor={statusColors.issue_not_resolved.color} icon="alert" delayMs={160} />
+        </View>
+
+        {error ? <Text style={[styles.caption, { color: semantic.danger, marginTop: spacing(3) }]}>{error}</Text> : null}
 
         <PendingAssignments pending={pending} onChanged={load} />
 
@@ -135,6 +154,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
             return (
               <PressScale key={f} onPress={() => setFilter(f)}>
                 <View style={[styles.filterPill, active && styles.filterPillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
+                  <Icon name={FILTER_ICON[f]} size={13} color={active ? '#fff' : theme.text3} />
                   <Text style={[styles.filterPillText, { color: active ? '#fff' : theme.text2 }]}>{FILTER_LABEL[f]}</Text>
                   <View style={[styles.filterCountBubble, { backgroundColor: active ? 'rgba(255,255,255,0.25)' : theme.panel2 }]}>
                     <Text style={[styles.filterCountText, { color: active ? '#fff' : theme.text3 }]}>{counts[f]}</Text>
@@ -154,97 +174,132 @@ export default function ManageTasksScreen({ onBack }: Props) {
             value={search}
             onChangeText={setSearch}
           />
+          {search.length > 0 ? (
+            <PressScale onPress={() => setSearch('')}>
+              <View style={[styles.clearBtn, { backgroundColor: theme.line }]}>
+                <Icon name="close" size={11} color={theme.text3} />
+              </View>
+            </PressScale>
+          ) : null}
         </View>
 
-        {filtered.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3, textAlign: 'center', marginTop: spacing(8) }]}>
-            Nothing here for this filter.
-          </Text>
+        {loading && items.length === 0 ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color={brand.primary} />
+            <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>Loading your tasks…</Text>
+          </View>
+        ) : filtered.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <View style={[styles.emptyIconChip, { backgroundColor: `${brand.primary}1f` }]}>
+              <Icon name="tasks" size={22} color={brand.primary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>Nothing here</Text>
+            <Text style={[styles.caption, { color: theme.text3, textAlign: 'center' }]}>
+              {search ? 'No tasks match your search in this filter.' : 'No tasks in this filter right now.'}
+            </Text>
+          </View>
         ) : (
-          filtered.map((item, idx) => {
-            const statusStyle = statusColors[displayStatus(item.status)] || DEFAULT_STATUS_STYLE;
-            const locked = isLocked(item.status);
-            const inProgress = groupOf(item.status) === 'in_progress';
-            const initial = (item.fullName || '?').trim().charAt(0).toUpperCase();
-            return (
-              <Animated.View key={item.key} entering={FadeInUp.delay(Math.min(idx, 8) * 70).duration(450).springify().damping(14)}>
-                <View style={[styles.cardOuter, { shadowColor: item.reopened ? semantic.warning : statusStyle.color }]}>
-                  <View style={[styles.accentBar, { backgroundColor: item.reopened ? semantic.warning : statusStyle.color }]} />
-                  <GlassCard shadow style={styles.taskCard}>
-                    {item.reopened ? (
-                      <View style={styles.reopenedTag}>
-                        <Text style={styles.reopenedTagText}>🔁 Reopened — free rework</Text>
-                      </View>
-                    ) : null}
-
-                    <View style={styles.rowHeader}>
-                      <View style={[styles.avatar, { backgroundColor: `${statusStyle.color}26` }]}>
-                        <Text style={[styles.avatarText, { color: statusStyle.color }]}>{initial}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.name, { color: theme.text }]}>{item.fullName}</Text>
-                        {item.companyName ? <Text style={[styles.companyText, { color: theme.text3 }]}>{item.companyName}</Text> : null}
-                        <Text style={[styles.metaLine, { color: theme.text3 }]}>
-                          {item.ticketNo ? `Ticket: ${item.ticketNo}` : 'No ticket yet'} · {timeAgo(item.createdAt)}
-                        </Text>
-                        {item.serviceItem ? <Text style={[styles.metaLine, { color: theme.text2 }]}>{item.serviceItem}</Text> : null}
-                      </View>
-                      <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                        {inProgress ? <PulseDot color={statusStyle.color} size={6} /> : null}
-                        <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-                      </View>
-                    </View>
-
-                    {item.employeeUpdateDetail ? (
-                      <View style={[styles.updateBox, { backgroundColor: theme.panel2 }]}>
-                        <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Employee update</Text>
-                        <Text style={[styles.metaValue, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
-                      </View>
-                    ) : null}
-
-                    {item.location ? (
-                      <View style={styles.locationRow}>
-                        <Icon name="pin" size={14} color={brand.primary} />
-                        <Text style={[styles.metaValue, { color: theme.text, flex: 1 }]} numberOfLines={2}>{item.location}</Text>
-                      </View>
-                    ) : null}
-
-                    <View style={styles.actionRow}>
-                      {!locked && (
-                        <PressScale onPress={() => setStatusItem(item)} style={{ flex: 1, minWidth: 130 }}>
-                          <View style={[styles.actionBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                            <Icon name="edit" size={15} color={theme.text} />
-                            <Text style={[styles.actionBtnText, { color: theme.text }]}>Update Status</Text>
-                          </View>
-                        </PressScale>
-                      )}
-                      {item.phone ? (
-                        <>
-                          <PressScale onPress={() => call(item.phone!)}>
-                            <View style={[styles.iconAction, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                              <Icon name="phone" size={16} color={theme.text} />
-                            </View>
-                          </PressScale>
-                          <PressScale onPress={() => whatsapp(item.phone!)}>
-                            <View style={[styles.iconAction, { backgroundColor: '#25D366' }]}>
-                              <Icon name="whatsapp" size={16} color="#fff" />
-                            </View>
-                          </PressScale>
-                        </>
+          <>
+            <Text style={[styles.resultCount, { color: theme.text3 }]}>{filtered.length} of {items.length} tasks</Text>
+            {filtered.map((item, idx) => {
+              const statusStyle = statusColors[displayStatus(item.status)] || DEFAULT_STATUS_STYLE;
+              const locked = isLocked(item.status);
+              const inProgress = groupOf(item.status) === 'in_progress';
+              const initial = (item.fullName || '?').trim().charAt(0).toUpperCase();
+              return (
+                <Animated.View key={item.key} entering={FadeInUp.delay(Math.min(idx, 8) * 70).duration(450).springify().damping(14)}>
+                  <View style={[styles.cardOuter, { shadowColor: item.reopened ? semantic.warning : statusStyle.color }]}>
+                    <View style={[styles.accentBar, { backgroundColor: item.reopened ? semantic.warning : statusStyle.color }]} />
+                    <GlassCard shadow style={styles.taskCard}>
+                      {item.reopened ? (
+                        <View style={styles.reopenedTag}>
+                          <Icon name="refresh" size={11} color={semantic.warning} />
+                          <Text style={styles.reopenedTagText}>Reopened — free rework</Text>
+                        </View>
                       ) : null}
+
+                      <View style={styles.rowHeader}>
+                        <View style={[styles.avatar, { backgroundColor: `${statusStyle.color}26`, borderColor: `${statusStyle.color}40` }]}>
+                          <Text style={[styles.avatarText, { color: statusStyle.color }]}>{initial}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.name, { color: theme.text }]}>{item.fullName}</Text>
+                          {item.companyName ? <Text style={[styles.companyText, { color: theme.text3 }]}>{item.companyName}</Text> : null}
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                          {inProgress ? <PulseDot color={statusStyle.color} size={6} /> : null}
+                          <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.chipRow}>
+                        <View style={[styles.metaChip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                          <Icon name="receipt" size={11} color={theme.text3} />
+                          <Text style={[styles.metaChipText, { color: theme.text2 }]}>{item.ticketNo || 'No ticket yet'}</Text>
+                        </View>
+                        <View style={[styles.metaChip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                          <Icon name="clock" size={11} color={theme.text3} />
+                          <Text style={[styles.metaChipText, { color: theme.text2 }]}>{timeAgo(item.createdAt)}</Text>
+                        </View>
+                      </View>
+                      {item.serviceItem ? (
+                        <View style={[styles.serviceChip, { backgroundColor: `${brand.primary}14` }]}>
+                          <Icon name="wrench" size={12} color={brand.primary} />
+                          <Text style={[styles.serviceChipText, { color: brand.primaryDim }]} numberOfLines={1}>{item.serviceItem}</Text>
+                        </View>
+                      ) : null}
+
+                      {item.employeeUpdateDetail ? (
+                        <View style={[styles.updateBox, { backgroundColor: theme.panel2 }]}>
+                          <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Employee update</Text>
+                          <Text style={[styles.metaValue, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
+                        </View>
+                      ) : null}
+
                       {item.location ? (
-                        <PressScale onPress={() => openMaps(item.location!)}>
-                          <View style={[styles.iconAction, { backgroundColor: brand.primary }]}>
-                            <Icon name="pin" size={16} color="#fff" />
-                          </View>
-                        </PressScale>
+                        <View style={styles.locationRow}>
+                          <Icon name="pin" size={14} color={brand.primary} />
+                          <Text style={[styles.metaValue, { color: theme.text, flex: 1 }]} numberOfLines={2}>{item.location}</Text>
+                        </View>
                       ) : null}
-                    </View>
-                  </GlassCard>
-                </View>
-              </Animated.View>
-            );
-          })
+
+                      <View style={styles.actionRow}>
+                        {!locked && (
+                          <PressScale onPress={() => setStatusItem(item)} style={{ flex: 1, minWidth: 130 }}>
+                            <View style={[styles.actionBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
+                              <Icon name="edit" size={15} color="#fff" />
+                              <Text style={styles.actionBtnTextFilled}>Update Status</Text>
+                            </View>
+                          </PressScale>
+                        )}
+                        {item.phone ? (
+                          <>
+                            <PressScale onPress={() => call(item.phone!)}>
+                              <View style={[styles.iconAction, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                                <Icon name="phone" size={16} color={theme.text} />
+                              </View>
+                            </PressScale>
+                            <PressScale onPress={() => whatsapp(item.phone!)}>
+                              <View style={[styles.iconAction, styles.iconActionShadow, { backgroundColor: '#25D366', shadowColor: '#25D366' }]}>
+                                <Icon name="whatsapp" size={16} color="#fff" />
+                              </View>
+                            </PressScale>
+                          </>
+                        ) : null}
+                        {item.location ? (
+                          <PressScale onPress={() => openMaps(item.location!)}>
+                            <View style={[styles.iconAction, styles.iconActionShadow, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
+                              <Icon name="pin" size={16} color="#fff" />
+                            </View>
+                          </PressScale>
+                        ) : null}
+                      </View>
+                    </GlassCard>
+                  </View>
+                </Animated.View>
+              );
+            })}
+          </>
         )}
       </ScrollView>
 
@@ -266,33 +321,45 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title, marginTop: spacing(4) },
   caption: { ...typography.caption },
-  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing(2.5), gap: spacing(2) },
+  statsRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(1) },
+  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(2.5), gap: spacing(2) },
   name: { fontFamily: 'Manrope_700Bold', fontSize: 16 },
   companyText: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(0.5) },
-  metaLine: { fontSize: 12, marginTop: spacing(0.5) },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginBottom: spacing(2) },
+  metaChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.full, borderWidth: 1 },
+  metaChipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 10.5 },
+  serviceChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), alignSelf: 'flex-start', paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.25), borderRadius: radius.sm, marginBottom: spacing(2.5), maxWidth: '100%' },
+  serviceChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11.5, flexShrink: 1 },
   fieldLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(3), marginBottom: spacing(1) },
   metaValue: { fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
   locationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(1.5), marginBottom: spacing(3) },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginBottom: spacing(3) },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginTop: spacing(4), marginBottom: spacing(3) },
   filterPill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(1.75), borderRadius: radius.full, borderWidth: 1 },
   filterPillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   filterCountBubble: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   filterCountText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 44, marginBottom: spacing(4) },
   searchInput: { flex: 1, fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
+  clearBtn: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  loadingBox: { alignItems: 'center', paddingVertical: spacing(10) },
+  emptyBox: { alignItems: 'center', paddingVertical: spacing(9), gap: spacing(1) },
+  emptyIconChip: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(2) },
+  emptyTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, marginBottom: spacing(0.5) },
+  resultCount: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, marginBottom: spacing(2.5) },
   cardOuter: { flexDirection: 'row', marginBottom: spacing(3.5), shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 3 },
   accentBar: { width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
   taskCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
-  avatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', marginRight: spacing(1) },
+  avatar: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: spacing(1), borderWidth: 1.5 },
   avatarText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
-  reopenedTag: { alignSelf: 'flex-start', backgroundColor: 'rgba(224,138,20,0.16)', borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), marginBottom: spacing(2) },
+  reopenedTag: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), alignSelf: 'flex-start', backgroundColor: 'rgba(224,138,20,0.16)', borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), marginBottom: spacing(2) },
   reopenedTagText: { fontFamily: 'Manrope_700Bold', fontSize: 10, color: semantic.warning },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
   statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
   updateBox: { borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(3) },
   actionRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(1), flexWrap: 'wrap' },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 40, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: spacing(2) },
-  actionBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 40, borderRadius: radius.sm, paddingHorizontal: spacing(2), shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 3 },
+  actionBtnTextFilled: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
   iconAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  iconActionShadow: { borderWidth: 0, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 3 },
   filterPillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 4 },
 });
