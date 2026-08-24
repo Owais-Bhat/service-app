@@ -8,6 +8,7 @@ import BackLink from '../components/BackLink';
 import PressScale from '../components/PressScale';
 import Icon from '../components/Icon';
 import ProgressRing from '../components/ProgressRing';
+import VideoPlayerModal from '../components/VideoPlayerModal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { resolveUploadUrl } from '../api/client';
@@ -56,6 +57,7 @@ export default function TutorialsScreen({ onBack }: Props) {
   const [marking, setMarking] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playingItem, setPlayingItem] = useState<TrainingItem | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -191,11 +193,12 @@ export default function TutorialsScreen({ onBack }: Props) {
             const isVideo = item.kind === 'video';
             const watchPct = isVideo ? progress[item.id]?.percent || 0 : 0;
             const mediaUrl = resolveUploadUrl(item.url);
+            const openMedia = () => (isVideo ? setPlayingItem(item) : Linking.openURL(mediaUrl));
             return (
               <Animated.View key={item.id} entering={FadeInUp.delay(Math.min(idx, 8) * 60).duration(400).springify().damping(15)}>
                 <View style={[styles.cardOuter, { shadowColor: done ? brand.primary : theme.text3 }]}>
                   <GlassCard shadow style={styles.card}>
-                    <PressScale onPress={() => Linking.openURL(mediaUrl)}>
+                    <PressScale onPress={openMedia}>
                       <View style={styles.thumbWrap}>
                         {isVideo ? (
                           <View style={[styles.thumbVideo, { backgroundColor: `${brand.primary}22` }]}>
@@ -227,7 +230,7 @@ export default function TutorialsScreen({ onBack }: Props) {
                       ) : null}
 
                       <View style={styles.actionRow}>
-                        <PressScale onPress={() => Linking.openURL(mediaUrl)} style={{ flex: 1 }}>
+                        <PressScale onPress={openMedia} style={{ flex: 1 }}>
                           <View style={[styles.watchBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
                             <Icon name="tutorial" size={14} color={theme.text} />
                             <Text style={[styles.watchBtnText, { color: theme.text }]}>{isVideo ? 'Watch' : 'View'}</Text>
@@ -250,6 +253,24 @@ export default function TutorialsScreen({ onBack }: Props) {
           })
         )}
       </ScrollView>
+
+      {playingItem && (
+        <VideoPlayerModal
+          itemId={playingItem.id}
+          title={playingItem.title}
+          mediaUrl={resolveUploadUrl(playingItem.url)}
+          onProgress={(pct) => {
+            setProgress((prev) => ({
+              ...prev,
+              [playingItem.id]: { item_id: playingItem.id, percent: pct, seconds_watched: 0, duration_seconds: 0 },
+            }));
+          }}
+          onDismiss={() => {
+            setPlayingItem(null);
+            load();
+          }}
+        />
+      )}
     </View>
   );
 }

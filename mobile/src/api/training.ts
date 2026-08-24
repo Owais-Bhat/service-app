@@ -71,10 +71,21 @@ export async function fetchTrainingItems(): Promise<TrainingItem[]> {
   });
 }
 
-// No in-app player exists this phase (design spec §2), so this only shows
-// whatever progress already exists (e.g. from web usage) — read-only.
 export async function fetchWatchProgress(): Promise<WatchProgress[]> {
   return api.get<WatchProgress[]>('/training/watch-progress/mine');
+}
+
+// Called periodically from the in-app player (VideoPlayerModal), not per
+// frame — mirrors web's reportWatchProgress. The server keeps a high-water
+// mark itself (never lets seconds_watched regress), so it's safe to call
+// this on every progress ping without worrying about clobbering a further-
+// along value from a previous viewing.
+export async function reportWatchProgress(itemId: string, secondsWatched: number, durationSeconds: number): Promise<{ percent: number }> {
+  return api.post<{ percent: number }>('/training/watch-progress', {
+    item_id: itemId,
+    seconds_watched: secondsWatched,
+    duration_seconds: durationSeconds,
+  });
 }
 
 export async function fetchMyCompletions(userId: string): Promise<TrainingCompletion[]> {
