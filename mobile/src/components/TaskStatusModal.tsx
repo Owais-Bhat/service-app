@@ -395,19 +395,18 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
       <View style={styles.backdrop}>
         <Animated.View entering={ZoomIn.duration(360).springify().damping(15).mass(0.85)} style={styles.modalCardWrap}>
           <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.modalTitle, { color: theme.text }]}>Update Status</Text>
-                  <Text style={[styles.modalSub, { color: theme.text3 }]}>{item.fullName} · {item.ticketNo || 'No ticket'}</Text>
-                </View>
-                <PressScale onPress={onDismiss}>
-                  <View style={[styles.closeBtn, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-                    <Icon name="close" size={13} color={theme.text3} />
-                  </View>
-                </PressScale>
+            <View style={[styles.modalHeaderRow, { borderBottomColor: theme.line }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Update Status</Text>
+                <Text style={[styles.modalSub, { color: theme.text3 }]}>{item.fullName} · {item.ticketNo || 'No ticket'}</Text>
               </View>
-
+              <PressScale onPress={onDismiss}>
+                <View style={[styles.closeBtn, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+                  <Icon name="close" size={13} color={theme.text3} />
+                </View>
+              </PressScale>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
               {item.reopened ? (
                 <View style={styles.reopenedBanner}>
                   <Icon name="alert" size={14} color={semantic.warning} />
@@ -872,7 +871,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
   modalCardWrap: { width: '100%', maxWidth: 440, maxHeight: '86%' },
   modalCard: { width: '100%', maxHeight: '100%', padding: spacing(5) },
-  modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2) },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), paddingBottom: spacing(3), marginBottom: spacing(1), borderBottomWidth: 1 },
   closeBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   modalTitle: { ...typography.heading, fontSize: 18 },
   modalSub: { ...typography.caption, marginTop: spacing(0.5) },
