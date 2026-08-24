@@ -10,6 +10,7 @@ import PressScale from '../components/PressScale';
 import PulseDot from '../components/PulseDot';
 import AnimatedStatCard from '../components/AnimatedStatCard';
 import TaskStatusModal from '../components/TaskStatusModal';
+import LocationMapModal from '../components/LocationMapModal';
 import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -74,6 +75,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
   const [filter, setFilter] = useState<FilterKey>('in_progress');
   const [search, setSearch] = useState('');
   const [statusItem, setStatusItem] = useState<TaskItem | null>(null);
+  const [mapItem, setMapItem] = useState<TaskItem | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -123,8 +125,6 @@ export default function ManageTasksScreen({ onBack }: Props) {
 
   const call = (phone: string) => Linking.openURL(`tel:${phone}`);
   const whatsapp = (phone: string) => Linking.openURL(`https://wa.me/${phone.replace(/\D/g, '')}`);
-  const openMaps = (location: string) => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`);
-
   return (
     <View style={styles.root}>
       <MeshBackground />
@@ -287,7 +287,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
                           </>
                         ) : null}
                         {item.location ? (
-                          <PressScale onPress={() => openMaps(item.location!)}>
+                          <PressScale onPress={() => setMapItem(item)}>
                             <View style={[styles.iconAction, styles.iconActionShadow, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
                               <Icon name="pin" size={16} color="#fff" />
                             </View>
@@ -311,6 +311,15 @@ export default function ManageTasksScreen({ onBack }: Props) {
             setStatusItem(null);
             load();
           }}
+        />
+      )}
+
+      {mapItem && (
+        <LocationMapModal
+          location={mapItem.location}
+          lat={mapItem.customerLat}
+          lng={mapItem.customerLng}
+          onDismiss={() => setMapItem(null)}
         />
       )}
     </View>
