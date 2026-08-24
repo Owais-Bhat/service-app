@@ -124,28 +124,6 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {detail.quiz.length > 0 ? (
-          <Animated.View entering={FadeInUp.delay(60).duration(400).springify().damping(15)}>
-            <PressScale onPress={() => setShowQuiz(true)}>
-              <View style={[styles.quizOuter, { shadowColor: detail.completion ? brand.primary : semantic.warning }]}>
-                <View style={[styles.rowAccent, { backgroundColor: detail.completion ? brand.primary : semantic.warning }]} />
-                <GlassCard shadow style={styles.quizCard}>
-                  <View style={styles.lessonHeader}>
-                    <View style={[styles.lessonIndex, { backgroundColor: detail.completion ? `${brand.primary}22` : `${semantic.warning}22` }]}>
-                      <Icon name="shield" size={15} color={detail.completion ? brand.primary : semantic.warning} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[styles.lessonTitle, { color: theme.text }]}>Course Quiz</Text>
-                      <Text style={[styles.caption, { color: theme.text3 }]}>{detail.quiz.length} question{detail.quiz.length > 1 ? 's' : ''} · 70% to pass</Text>
-                    </View>
-                    <Icon name="chevron-right" size={16} color={theme.text3} />
-                  </View>
-                </GlassCard>
-              </View>
-            </PressScale>
-          </Animated.View>
-        ) : null}
-
         <Text style={[styles.sectionLabel, { color: theme.text3, marginTop: spacing(3) }]}>Lessons</Text>
 
         {detail.lessons.map((lesson, i) => {
@@ -154,7 +132,7 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
           const expanded = expandedId === lesson.id;
           const typeColor = isVideo ? '#2e9bff' : '#0ea5a5';
           const accent = done ? brand.primary : typeColor;
-          const isLast = i === detail.lessons.length - 1;
+          const isLast = i === detail.lessons.length - 1 && detail.quiz.length === 0;
           return (
             <Animated.View key={lesson.id} entering={FadeInUp.delay(Math.min(i, 10) * 60).duration(420).springify().damping(15)}>
               <View style={styles.timelineRow}>
@@ -208,6 +186,52 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
             </Animated.View>
           );
         })}
+
+        {detail.quiz.length > 0 ? (() => {
+          const done = !!detail.completion;
+          const typeColor = '#7c5cfc';
+          const accent = done ? brand.primary : typeColor;
+          return (
+            <Animated.View entering={FadeInUp.delay(Math.min(detail.lessons.length, 10) * 60).duration(420).springify().damping(15)}>
+              <View style={styles.timelineRow}>
+                <View style={styles.timelineCol}>
+                  <View style={[styles.timelineDot, { backgroundColor: done ? brand.primary : `${typeColor}22`, borderColor: done ? brand.primary : typeColor }]}>
+                    {done ? <Icon name="check" size={15} color="#fff" /> : <Icon name="shield" size={14} color={typeColor} />}
+                  </View>
+                </View>
+
+                <View style={[styles.lessonOuter, { shadowColor: accent }]}>
+                  <PressScale onPress={() => setShowQuiz(true)}>
+                    <GlassCard shadow style={styles.lessonCard}>
+                      <View style={[styles.videoThumb, { backgroundColor: `${typeColor}22` }]}>
+                        <View style={[styles.videoPlayChip, { backgroundColor: typeColor }]}>
+                          <Icon name="shield" size={20} color="#fff" />
+                        </View>
+                        <Text style={[styles.videoThumbLabel, { color: typeColor }]}>{detail.quiz.length} question{detail.quiz.length > 1 ? 's' : ''} · 70% to pass</Text>
+                      </View>
+                      <View style={styles.lessonBody}>
+                        <View style={[styles.typePill, { backgroundColor: `${typeColor}1c` }]}>
+                          <Icon name="shield" size={10} color={typeColor} />
+                          <Text style={[styles.typePillText, { color: typeColor }]}>Quiz</Text>
+                        </View>
+                        <View style={styles.lessonTitleRow}>
+                          <Text style={[styles.lessonTitle, { color: theme.text, flex: 1 }]}>Course Quiz</Text>
+                        </View>
+
+                        <View style={[styles.completeButton, { backgroundColor: done ? `${brand.primary}18` : typeColor }]}>
+                          <Icon name={done ? 'check' : 'arrow-right'} size={13} color={done ? brand.primary : '#fff'} />
+                          <Text style={[styles.completeButtonText, { color: done ? brand.primary : '#fff' }]}>
+                            {done ? 'Passed — Retake' : 'Take Quiz'}
+                          </Text>
+                        </View>
+                      </View>
+                    </GlassCard>
+                  </PressScale>
+                </View>
+              </View>
+            </Animated.View>
+          );
+        })() : null}
       </ScrollView>
 
       {playingLesson && (
@@ -237,7 +261,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing(3) },
   body: { ...typography.body },
-  caption: { ...typography.caption },
   error: { ...typography.caption, color: semantic.danger, marginTop: spacing(3) },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
   headerCard: {
@@ -257,12 +280,6 @@ const styles = StyleSheet.create({
   progressLabel: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: 'rgba(255,255,255,0.9)' },
   passedChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full, marginTop: spacing(3) },
   passedChipText: { fontFamily: 'Manrope_700Bold', fontSize: 10.5, color: '#fff' },
-  quizOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
-  quizCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
-  rowAccent: { width: 4, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
-  lessonHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
-  lessonIndex: { width: 30, height: 30, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  lessonIndexText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
   lessonTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, lineHeight: 20 },
   lessonContent: { fontSize: 13, lineHeight: 19, marginTop: spacing(3), paddingTop: spacing(3), borderTopWidth: 1 },
   completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 38, borderRadius: 10, marginTop: spacing(3) },

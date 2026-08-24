@@ -1,11 +1,13 @@
-import React, { useRef, useState } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Modal, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Icon from './Icon';
 import PressScale from './PressScale';
 import { reportWatchProgress } from '../api/training';
 import { spacing, typography } from '../theme';
+import { brand } from '../theme/tokens';
 
 interface Props {
   // Present for standalone tutorials (training_items) — pings the server's
@@ -24,7 +26,9 @@ interface Props {
 // progress bar so the video can be freely scrubbed forward and back.
 // Reuses the same safe-in-Expo-Go WebView approach already used for the
 // OSM maps (no native video module → no config plugin → no custom dev
-// build needed).
+// build needed). The WebView fills the entire screen — title/close and
+// the scrubber are floating gradient overlays, not boxes that eat into
+// the video area, so playback is genuinely edge-to-edge.
 export default function VideoPlayerModal({ itemId, title, mediaUrl, onDismiss, onProgress }: Props) {
   const insets = useSafeAreaInsets();
   const [percent, setPercent] = useState(0);
@@ -35,18 +39,20 @@ export default function VideoPlayerModal({ itemId, title, mediaUrl, onDismiss, o
 html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden;}
 .wrap{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
 video{width:100%;height:100%;object-fit:contain;background:#000;}
-.center-btn{position:absolute;width:64px;height:64px;border-radius:32px;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;}
-.bar{position:absolute;left:14px;right:14px;bottom:18px;display:flex;align-items:center;gap:10px;}
-.track-hit{flex:1;padding:12px 0;touch-action:none;}
-.track{position:relative;height:4px;background:rgba(255,255,255,0.3);border-radius:2px;}
-.fill{position:absolute;left:0;top:0;height:100%;width:0%;background:#15a05a;border-radius:2px;}
-.knob{position:absolute;top:50%;width:13px;height:13px;border-radius:7px;background:#fff;left:0%;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,0.4);}
-.time{color:#fff;font-size:11px;font-family:sans-serif;min-width:78px;text-align:right;}
+.center-btn{position:absolute;width:72px;height:72px;border-radius:36px;background:rgba(21,160,90,0.85);display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;box-shadow:0 8px 24px rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.35);}
+.scrim{position:absolute;left:0;right:0;bottom:0;height:110px;background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);pointer-events:none;}
+.bar{position:absolute;left:18px;right:18px;bottom:${16 + insets.bottom}px;display:flex;align-items:center;gap:10px;}
+.track-hit{flex:1;padding:14px 0;touch-action:none;}
+.track{position:relative;height:5px;background:rgba(255,255,255,0.28);border-radius:3px;}
+.fill{position:absolute;left:0;top:0;height:100%;width:0%;background:${brand.primary};border-radius:3px;}
+.knob{position:absolute;top:50%;width:15px;height:15px;border-radius:8px;background:#fff;left:0%;transform:translate(-50%,-50%);box-shadow:0 1px 5px rgba(0,0,0,0.5);}
+.time{color:#fff;font-size:11px;font-family:sans-serif;font-weight:600;min-width:80px;text-align:right;text-shadow:0 1px 3px rgba(0,0,0,0.6);}
 </style></head>
 <body>
 <div class="wrap" id="wrap">
 <video id="v" src="${mediaUrl}" playsinline webkit-playsinline></video>
 <div class="center-btn" id="btn">&#9654;</div>
+<div class="scrim"></div>
 <div class="bar"><div class="track-hit" id="trackHit"><div class="track"><div class="fill" id="fill"></div><div class="knob" id="knob"></div></div></div><div class="time" id="time">0:00 / 0:00</div></div>
 </div>
 <script>
@@ -116,29 +122,31 @@ function ping(force) {
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
+    <Modal visible transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
+      <StatusBar hidden />
       <View style={styles.root}>
-        <View style={[styles.header, { paddingTop: insets.top + spacing(2) }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title} numberOfLines={1}>{title}</Text>
-            <Text style={styles.watchedText}>{percent}% watched</Text>
-          </View>
-          <PressScale onPress={onDismiss}>
-            <View style={styles.closeBtn}>
-              <Icon name="close" size={16} color="#fff" />
+        <WebView
+          style={StyleSheet.absoluteFill}
+          originWhitelist={['*']}
+          source={{ html }}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          onMessage={handleMessage}
+        />
+
+        <LinearGradient colors={['rgba(0,0,0,0.7)', 'transparent']} style={[styles.topOverlay, { paddingTop: insets.top + spacing(2) }]} pointerEvents="box-none">
+          <View style={styles.topRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title} numberOfLines={1}>{title}</Text>
+              <Text style={styles.watchedText}>{percent}% watched</Text>
             </View>
-          </PressScale>
-        </View>
-        <View style={styles.playerWrap}>
-          <WebView
-            style={StyleSheet.absoluteFill}
-            originWhitelist={['*']}
-            source={{ html }}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            onMessage={handleMessage}
-          />
-        </View>
+            <PressScale onPress={onDismiss}>
+              <View style={styles.closeBtn}>
+                <Icon name="close" size={16} color="#fff" />
+              </View>
+            </PressScale>
+          </View>
+        </LinearGradient>
       </View>
     </Modal>
   );
@@ -146,9 +154,9 @@ function ping(force) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(4), paddingBottom: spacing(3) },
-  title: { ...typography.heading, fontSize: 15, color: '#fff' },
-  watchedText: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: spacing(0.5), fontFamily: 'Manrope_600SemiBold' },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  playerWrap: { flex: 1 },
+  topOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: spacing(6) },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(4) },
+  title: { ...typography.heading, fontSize: 15, color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  watchedText: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: spacing(0.5), fontFamily: 'Manrope_600SemiBold' },
+  closeBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 });
