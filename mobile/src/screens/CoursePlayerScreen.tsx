@@ -9,9 +9,10 @@ import PressScale from '../components/PressScale';
 import Icon from '../components/Icon';
 import ProgressRing from '../components/ProgressRing';
 import VideoPlayerModal from '../components/VideoPlayerModal';
+import QuizModal from '../components/QuizModal';
 import { useTheme } from '../theme/ThemeContext';
 import { resolveUploadUrl } from '../api/client';
-import { spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import { fetchCourseDetail, completeLesson, CourseDetail, Lesson } from '../api/training';
 
@@ -29,6 +30,7 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [playingLesson, setPlayingLesson] = useState<Lesson | null>(null);
+  const [showQuiz, setShowQuiz] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,12 +113,40 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
                 <Text style={styles.progressLabel}>{doneCount} of {detail.lessons.length} lessons done</Text>
               </View>
             </View>
+            {detail.completion ? (
+              <View style={styles.passedChip}>
+                <Icon name="check-circle" size={13} color="#fff" filled />
+                <Text style={styles.passedChipText}>Course passed</Text>
+              </View>
+            ) : null}
           </View>
         </Animated.View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Text style={[styles.sectionLabel, { color: theme.text3, marginTop: spacing(5) }]}>Lessons</Text>
+        {detail.quiz.length > 0 ? (
+          <Animated.View entering={FadeInUp.delay(60).duration(400).springify().damping(15)}>
+            <PressScale onPress={() => setShowQuiz(true)}>
+              <View style={[styles.quizOuter, { shadowColor: detail.completion ? brand.primary : semantic.warning }]}>
+                <View style={[styles.rowAccent, { backgroundColor: detail.completion ? brand.primary : semantic.warning }]} />
+                <GlassCard shadow style={styles.quizCard}>
+                  <View style={styles.lessonHeader}>
+                    <View style={[styles.lessonIndex, { backgroundColor: detail.completion ? `${brand.primary}22` : `${semantic.warning}22` }]}>
+                      <Icon name="shield" size={15} color={detail.completion ? brand.primary : semantic.warning} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.lessonTitle, { color: theme.text }]}>Course Quiz</Text>
+                      <Text style={[styles.caption, { color: theme.text3 }]}>{detail.quiz.length} question{detail.quiz.length > 1 ? 's' : ''} · 70% to pass</Text>
+                    </View>
+                    <Icon name="chevron-right" size={16} color={theme.text3} />
+                  </View>
+                </GlassCard>
+              </View>
+            </PressScale>
+          </Animated.View>
+        ) : null}
+
+        <Text style={[styles.sectionLabel, { color: theme.text3, marginTop: spacing(3) }]}>Lessons</Text>
 
         {detail.lessons.map((lesson, i) => {
           const done = detail.doneLessonIds.includes(lesson.id);
@@ -170,6 +200,18 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
           onDismiss={() => setPlayingLesson(null)}
         />
       )}
+
+      {showQuiz && (
+        <QuizModal
+          courseId={courseId}
+          questions={detail.quiz}
+          onDismiss={() => {
+            setShowQuiz(false);
+            load();
+          }}
+          onPassed={load}
+        />
+      )}
     </View>
   );
 }
@@ -196,6 +238,10 @@ const styles = StyleSheet.create({
   courseTitle: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 17, color: '#fff', marginBottom: spacing(1) },
   courseDesc: { fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 17, marginBottom: spacing(1.5) },
   progressLabel: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: 'rgba(255,255,255,0.9)' },
+  passedChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full, marginTop: spacing(3) },
+  passedChipText: { fontFamily: 'Manrope_700Bold', fontSize: 10.5, color: '#fff' },
+  quizOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
+  quizCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
   rowOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
   rowAccent: { width: 4, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
   lessonCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },

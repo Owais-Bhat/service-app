@@ -22,10 +22,33 @@ export interface Lesson {
   position: number;
 }
 
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+}
+
+export interface QuizResultItem {
+  id: string;
+  correct_index: number;
+  chosen: number | null;
+  correct: boolean;
+}
+
+export interface QuizSubmitResult {
+  score: number;
+  passed: boolean;
+  results: QuizResultItem[];
+}
+
 export interface CourseDetail {
   course: { id: string; title: string; description: string | null; category: string };
   lessons: Lesson[];
+  quiz: QuizQuestion[];
   doneLessonIds: string[];
+  // Real course-pass status. When the course has a quiz, this only gets set
+  // by quiz-submit (score >= 70) — completing every lesson is not itself
+  // enough, and a quiz-less course auto-passes on submitting an empty quiz.
   completion: { id: string; completed_at: string } | null;
 }
 
@@ -63,6 +86,11 @@ export async function fetchCourseDetail(courseId: string): Promise<CourseDetail>
 
 export async function completeLesson(lessonId: string): Promise<void> {
   await api.post(`/training/lessons/${lessonId}/complete`);
+}
+
+// answers keys are quiz question ids, values are the chosen option index.
+export async function submitQuiz(courseId: string, answers: Record<string, number>): Promise<QuizSubmitResult> {
+  return api.post<QuizSubmitResult>(`/training/course/${courseId}/quiz-submit`, { answers });
 }
 
 export async function fetchTrainingItems(): Promise<TrainingItem[]> {
