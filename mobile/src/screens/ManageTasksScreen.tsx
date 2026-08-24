@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
-import BackLink from '../components/BackLink';
+import AppHeaderBar from '../components/AppHeaderBar';
 import Icon from '../components/Icon';
 import PressScale from '../components/PressScale';
 import PulseDot from '../components/PulseDot';
@@ -76,6 +76,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
   const [search, setSearch] = useState('');
   const [statusItem, setStatusItem] = useState<TaskItem | null>(null);
   const [mapItem, setMapItem] = useState<TaskItem | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -125,19 +126,21 @@ export default function ManageTasksScreen({ onBack }: Props) {
 
   const call = (phone: string) => Linking.openURL(`tel:${phone}`);
   const whatsapp = (phone: string) => Linking.openURL(`https://wa.me/${phone.replace(/\D/g, '')}`);
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
+
   return (
     <View style={styles.root}>
       <MeshBackground />
+      <AppHeaderBar
+        title="Manage Tasks"
+        subtitle="Assigned jobs, service requests, and pending assignments"
+        onBack={onBack}
+        onLayout={setHeaderHeight}
+      />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <BackLink onPress={onBack} />
-        <Text style={[styles.title, { color: theme.text }]}>Manage Tasks</Text>
-        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>
-          Assigned jobs, service requests, and pending assignments
-        </Text>
-
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
           <AnimatedStatCard label="In Progress" value={counts.in_progress} accentColor={statusColors.in_progress.color} icon="wrench" delayMs={0} />
           <AnimatedStatCard label="Resolved" value={counts.resolved} accentColor={statusColors.resolved.color} icon="check-circle" delayMs={80} />

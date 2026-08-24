@@ -7,8 +7,10 @@ import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
 import PulseDot from '../components/PulseDot';
 import GlowButton from '../components/GlowButton';
+import AppHeaderBar from '../components/AppHeaderBar';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
@@ -48,6 +50,8 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { refresh: refreshHeaderAttendance } = useAttendanceStatus();
+  const [headerHeight, setHeaderHeight] = useState(0);
   const [segment, setSegment] = useState<'attendance' | 'leave'>('attendance');
   const [today, setToday] = useState<AttendanceRow | null>(null);
   const [history, setHistory] = useState<AttendanceRow[]>([]);
@@ -98,6 +102,7 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
         await clockInFixed();
       }
       await load();
+      refreshHeaderAttendance();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Could not update attendance';
       setError(
@@ -115,15 +120,16 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
     .sort((a, b) => a.date.localeCompare(b.date));
   const maxHours = Math.max(1, ...last7.map((r) => hoursBetween(r.clock_in, r.clock_out)));
 
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
+
   return (
     <View style={styles.root}>
       <MeshBackground />
+      <AppHeaderBar title="Attendance" subtitle="Clock in, hours & leave" onLayout={setHeaderHeight} />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Text style={[styles.title, { color: theme.text }]}>Attendance</Text>
-        <Text style={[styles.caption, { color: theme.text3 }]}>Clock in, hours & leave</Text>
 
         <View style={[styles.segmentRow, { backgroundColor: theme.panel2 }]}>
           <Pressable onPress={() => setSegment('attendance')} style={[styles.segment, segment === 'attendance' && styles.segmentActive]}>

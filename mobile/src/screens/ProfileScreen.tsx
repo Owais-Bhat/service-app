@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
+import AppHeaderBar from '../components/AppHeaderBar';
 import Icon from '../components/Icon';
 import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
@@ -46,6 +47,7 @@ export default function ProfileScreen({
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const initials = (user?.full_name || '?')
     .split(' ')
@@ -63,10 +65,13 @@ export default function ProfileScreen({
     else onOpenSettings();
   };
 
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
+
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}>
+      <AppHeaderBar title="Profile" onOpenNotifications={onOpenNotifications} onLayout={setHeaderHeight} />
+      <ScrollView contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}>
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>

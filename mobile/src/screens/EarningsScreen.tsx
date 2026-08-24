@@ -5,6 +5,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
+import AppHeaderBar from '../components/AppHeaderBar';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -32,6 +33,7 @@ export default function EarningsScreen({ onGoDashboard, onGoAttendance, onGoJobT
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const [headerHeight, setHeaderHeight] = useState(0);
   const [segment, setSegment] = useState<Segment>('cash');
   const [cashRows, setCashRows] = useState<CashInquiry[]>([]);
   const [daysPresent, setDaysPresent] = useState(0);
@@ -97,15 +99,16 @@ export default function EarningsScreen({ onGoDashboard, onGoAttendance, onGoJobT
   const payableDays = daysPresent + leaveDays;
   const estimated = daysInMonth > 0 ? (salary * payableDays) / daysInMonth : 0;
 
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
+
   return (
     <View style={styles.root}>
       <MeshBackground />
+      <AppHeaderBar title="Earnings" subtitle="Cash, collections & salary" onLayout={setHeaderHeight} />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <Text style={[styles.title, { color: theme.text }]}>Earnings</Text>
-        <Text style={[styles.caption, { color: theme.text3 }]}>Cash, collections & salary</Text>
 
         <View style={[styles.segmentRow, { backgroundColor: theme.panel2 }]}>
           {SEGMENTS.map((s) => {

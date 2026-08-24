@@ -32,6 +32,7 @@ import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import { useLiveLocationPing } from '../hooks/useLiveLocationPing';
+import { AttendanceProvider } from '../context/AttendanceContext';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -252,6 +253,7 @@ function EmployeeNavigator() {
   const { user } = useAuth();
   useLiveLocationPing(user?.id);
   return (
+    <AttendanceProvider>
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
       <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="Attendance" component={AttendanceRoute} options={{ animation: 'none' }} />
@@ -274,6 +276,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Notifications" component={NotificationsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Settings" component={SettingsRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
+    </AttendanceProvider>
   );
 }
 

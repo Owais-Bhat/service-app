@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
+import AppHeaderBar from '../components/AppHeaderBar';
 import Icon from '../components/Icon';
 import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
@@ -54,6 +55,7 @@ export default function JobToolsScreen({
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   // installations_enabled defaults to visible (server treats undefined as 1)
   // — only explicit 0/false hides it, matching web's default-on behavior.
@@ -79,13 +81,13 @@ export default function JobToolsScreen({
     else if (key === 'gigpool') onOpenGigPool();
   };
 
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
+
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}>
-        <Text style={[styles.title, { color: theme.text }]}>Job Tools</Text>
-        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(5) }]}>Tasks, estimator, devices & reports</Text>
-
+      <AppHeaderBar title="Job Tools" subtitle="Tasks, estimator, devices & reports" onLayout={setHeaderHeight} />
+      <ScrollView contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}>
         {tools.map((tool) => (
           <Pressable key={tool.key} onPress={() => openTool(tool.key)} style={({ pressed }) => [pressed && styles.pressed]}>
             <Panel style={styles.toolRow}>

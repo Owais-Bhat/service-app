@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import GlassSurface from '../components/GlassSurface';
 import GlassTabBar, { TabItem } from '../components/GlassTabBar';
-import NotificationBell from '../components/NotificationBell';
+import AppHeaderBar from '../components/AppHeaderBar';
 import PulseDot from '../components/PulseDot';
-import ThemeToggleButton from '../components/ThemeToggleButton';
 import Icon from '../components/Icon';
 import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
@@ -46,8 +46,8 @@ interface Props {
 // gone: Profile is a real tab now, not a placeholder holding area.
 export const EMPLOYEE_TABS: TabItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { key: 'attendance', label: 'Attendance', icon: 'clock' },
   { key: 'jobtools', label: 'Job Tools', icon: 'wrench' },
+  { key: 'attendance', label: 'Attendance', icon: 'clock' },
   { key: 'earnings', label: 'Earnings', icon: 'wallet' },
   { key: 'profile', label: 'Profile', icon: 'user' },
 ];
@@ -87,41 +87,6 @@ function NoticeDetail({ notice, onDismiss }: { notice: Notice; onDismiss: () => 
         </GlassSurface>
       </View>
     </Modal>
-  );
-}
-
-function RefreshButton({ spinning, onPress }: { spinning: boolean; onPress: () => void }) {
-  const { theme } = useTheme();
-  const rotation = useSharedValue(0);
-
-  useEffect(() => {
-    if (spinning) {
-      rotation.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.linear }), -1, false);
-    } else {
-      rotation.value = 0;
-    }
-  }, [spinning, rotation]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value * 360}deg` }],
-  }));
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={spinning}
-      style={({ pressed }) => [
-        styles.iconBtn,
-        { borderColor: theme.line, backgroundColor: theme.panel2 },
-        pressed && styles.pressed,
-      ]}
-      hitSlop={8}
-      accessibilityLabel="Refresh"
-    >
-      <Animated.View style={animatedStyle}>
-        <Icon name="refresh" size={16} color={theme.text2} />
-      </Animated.View>
-    </Pressable>
   );
 }
 
@@ -197,6 +162,8 @@ export default function EmployeeDashboardScreen({
   const eodDates = new Set(eodReports.map((r) => r.date));
   const missedEodCount = attendanceHistory.filter((r) => r.clock_out && !eodDates.has(r.date)).length;
 
+  const { refresh: refreshHeaderAttendance } = useAttendanceStatus();
+
   const handleClock = async () => {
     if (!user) return;
     setClocking(true);
@@ -210,6 +177,7 @@ export default function EmployeeDashboardScreen({
         await clockInFixed();
       }
       await load();
+      refreshHeaderAttendance();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Could not update attendance';
       setError(
@@ -222,26 +190,21 @@ export default function EmployeeDashboardScreen({
     }
   };
 
-  const topInset = headerHeight > 0 ? headerHeight : insets.top + 78;
+  const topInset = headerHeight > 0 ? headerHeight : insets.top + 110;
 
   return (
     <View style={styles.root}>
       <MeshBackground />
 
-      <View
-        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
-        style={[styles.headerFixed, { paddingTop: insets.top + spacing(3), borderColor: theme.line, backgroundColor: theme.bg }]}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: theme.text }]}>Hi, {user?.full_name?.split(' ')[0] || 'there'}</Text>
-          <Text style={[styles.caption, { color: theme.text3 }]}>{isGigWorker ? 'Gig worker' : 'Fixed employee'}</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <RefreshButton spinning={refreshing} onPress={onRefresh} />
-          <NotificationBell unread={unread} onPress={onOpenNotifications} />
-          <ThemeToggleButton />
-        </View>
-      </View>
+      <AppHeaderBar
+        title={`Hi, ${user?.full_name?.split(' ')[0] || 'there'}`}
+        subtitle={isGigWorker ? 'Gig worker' : 'Fixed employee'}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        unread={unread}
+        onOpenNotifications={onOpenNotifications}
+        onLayout={setHeaderHeight}
+      />
 
       <ScrollView
         contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
