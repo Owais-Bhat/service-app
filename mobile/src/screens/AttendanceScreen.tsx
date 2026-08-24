@@ -29,6 +29,10 @@ interface Props {
   onOpenLeaveForm: () => void;
 }
 
+type Period = 'week' | 'month' | 'all';
+
+const PERIOD_LABEL: Record<Period, string> = { week: 'This Week', month: 'This Month', all: 'All Time' };
+
 const LEAVE_STATUS_STYLE: Record<string, { color: string; bg: string; label: string; icon: IconName }> = {
   pending: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)', label: 'Pending', icon: 'clock' },
   approved: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)', label: 'Approved', icon: 'check-circle' },
@@ -60,6 +64,7 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   const { attendance: sharedAttendance } = useAttendanceStatus();
   const [headerHeight, setHeaderHeight] = useState(0);
   const [segment, setSegment] = useState<'attendance' | 'leave'>('attendance');
+  const [period, setPeriod] = useState<Period>('week');
   const [history, setHistory] = useState<AttendanceRow[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -98,12 +103,18 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
     setRefreshing(false);
   };
 
-  const last7 = [...history]
-    .filter((r) => new Date(r.date).getTime() >= Date.now() - 7 * 24 * 3600 * 1000)
+  const periodStart =
+    period === 'week'
+      ? Date.now() - 7 * 24 * 3600 * 1000
+      : period === 'month'
+        ? new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime()
+        : 0;
+  const periodHistory = [...history]
+    .filter((r) => new Date(r.date).getTime() >= periodStart)
     .sort((a, b) => a.date.localeCompare(b.date));
-  const maxHours = Math.max(1, ...last7.map((r) => hoursBetween(r.clock_in, r.clock_out)));
-  const weekHours = last7.reduce((sum, r) => sum + hoursBetween(r.clock_in, r.clock_out), 0);
-  const presentDays = history.filter((r) => r.clock_in).length;
+  const maxHours = Math.max(1, ...periodHistory.map((r) => hoursBetween(r.clock_in, r.clock_out)));
+  const periodHours = periodHistory.reduce((sum, r) => sum + hoursBetween(r.clock_in, r.clock_out), 0);
+  const periodPresentDays = periodHistory.filter((r) => r.clock_in).length;
   const pendingLeaves = leaves.filter((l) => l.status === 'pending').length;
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
@@ -117,9 +128,22 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
-          <AnimatedStatCard label="This Week" value={`${weekHours.toFixed(1)}h`} accentColor={brand.primary} icon="clock" delayMs={0} />
-          <AnimatedStatCard label="Present Days" value={presentDays} accentColor="#2e9bff" icon="check-circle" delayMs={80} />
+          <AnimatedStatCard label={PERIOD_LABEL[period]} value={`${periodHours.toFixed(1)}h`} accentColor={brand.primary} icon="clock" delayMs={0} />
+          <AnimatedStatCard label="Present Days" value={periodPresentDays} accentColor="#2e9bff" icon="check-circle" delayMs={80} />
           <AnimatedStatCard label="Leave Requests" value={pendingLeaves} accentColor={semantic.warning} icon="calendar" delayMs={160} />
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodScroll} contentContainerStyle={styles.periodRow}>
+          {(['week', 'month', 'all'] as Period[]).map((p) => {
+            const active = period === p;
+            return (
+              <PressScale key={p} onPress={() => setPeriod(p)}>
+                <View style={[styles.periodPill, active && styles.periodPillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
+                  <Text style={[styles.periodPillText, { color: active ? '#fff' : theme.text2 }]}>{PERIOD_LABEL[p]}</Text>
+                </View>
+              </PressScale>
+            );
+          })}
         </ScrollView>
 
         <View style={[styles.segmentRow, { backgroundColor: theme.panel2 }]}>
@@ -145,39 +169,41 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
               <Panel style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
                   <Icon name="chart" size={13} color={theme.text3} />
-                  <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Hours this week</Text>
+                  <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Hours ({PERIOD_LABEL[period]})</Text>
                 </View>
-                <View style={styles.barsRow}>
-                  {last7.length === 0 ? (
-                    <Text style={[styles.caption, { color: theme.text3 }]}>No attendance yet this week.</Text>
-                  ) : (
-                    last7.map((r, i) => {
-                      const h = hoursBetween(r.clock_in, r.clock_out);
-                      return (
-                        <View key={r.id} style={styles.barCol}>
-                          <Text style={[styles.barValue, { color: theme.text3 }]}>{h > 0 ? h.toFixed(1) : ''}</Text>
-                          <View style={styles.barTrack}>
-                            <HoursBar heightTarget={Math.max(6, (h / maxHours) * 64)} delayMs={i * 60} color={brand.primary} />
+                {periodHistory.length === 0 ? (
+                  <Text style={[styles.caption, { color: theme.text3 }]}>No attendance in this period.</Text>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.barsRow}>
+                      {periodHistory.map((r, i) => {
+                        const h = hoursBetween(r.clock_in, r.clock_out);
+                        return (
+                          <View key={r.id} style={styles.barCol}>
+                            <Text style={[styles.barValue, { color: theme.text3 }]}>{h > 0 ? h.toFixed(1) : ''}</Text>
+                            <View style={styles.barTrack}>
+                              <HoursBar heightTarget={Math.max(6, (h / maxHours) * 64)} delayMs={Math.min(i, 20) * 30} color={brand.primary} />
+                            </View>
+                            <Text style={[styles.barLabel, { color: theme.text3 }]}>
+                              {new Date(r.date).toLocaleDateString('en-US', period === 'week' ? { weekday: 'narrow' } : { day: 'numeric' })}
+                            </Text>
                           </View>
-                          <Text style={[styles.barLabel, { color: theme.text3 }]}>
-                            {new Date(r.date).toLocaleDateString('en-US', { weekday: 'narrow' })}
-                          </Text>
-                        </View>
-                      );
-                    })
-                  )}
-                </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                )}
               </Panel>
             </Animated.View>
 
             <View style={[styles.sectionHeaderRow, { marginTop: spacing(5) }]}>
               <Icon name="report" size={13} color={theme.text3} />
-              <Text style={[styles.sectionLabel, { color: theme.text3 }]}>History</Text>
+              <Text style={[styles.sectionLabel, { color: theme.text3 }]}>History ({PERIOD_LABEL[period]})</Text>
             </View>
-            {history.length === 0 ? (
-              <Text style={[styles.caption, { color: theme.text3 }]}>No attendance history yet.</Text>
+            {periodHistory.length === 0 ? (
+              <Text style={[styles.caption, { color: theme.text3 }]}>No attendance history in this period.</Text>
             ) : (
-              history.slice(0, 14).map((r, idx) => {
+              [...periodHistory].reverse().slice(0, 30).map((r, idx) => {
                 const complete = !!r.clock_out;
                 const accent = complete ? brand.primary : semantic.warning;
                 return (
@@ -274,9 +300,14 @@ const styles = StyleSheet.create({
   segmentActive: { backgroundColor: brand.primary },
   segmentActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
   segmentText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  periodScroll: { marginBottom: spacing(4) },
+  periodRow: { flexDirection: 'row', gap: spacing(2) },
+  periodPill: { paddingHorizontal: spacing(3.5), paddingVertical: spacing(1.75), borderRadius: radius.full, borderWidth: 1 },
+  periodPillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
+  periodPillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(3) },
   barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing(2), height: 110 },
-  barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: spacing(1) },
+  barCol: { width: 34, alignItems: 'center', justifyContent: 'flex-end', gap: spacing(1) },
   barValue: { fontFamily: 'Manrope_700Bold', fontSize: 9, height: 12 },
   barTrack: { width: '100%', height: 64, justifyContent: 'flex-end', alignItems: 'center' },
   bar: { width: '100%', maxWidth: 20, borderRadius: 6 },
