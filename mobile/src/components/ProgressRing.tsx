@@ -48,11 +48,13 @@ export default function ProgressRing({ percent, size = 92, strokeWidth = 9, colo
           origin={`${size / 2}, ${size / 2}`}
         />
       </Svg>
-      <Text style={[styles.label, { color: labelColor }]}>{Math.round(percent)}%</Text>
+      <Text style={[styles.label, { color: labelColor, fontSize: Math.max(11, Math.round(size * 0.24)), width: size }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {Math.round(percent)}%
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  label: { fontFamily: 'Manrope_800ExtraBold', fontSize: 20 },
+  label: { fontFamily: 'Manrope_800ExtraBold', textAlign: 'center' },
 });
