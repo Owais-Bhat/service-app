@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
-import PulseDot from '../components/PulseDot';
 import GlowButton from '../components/GlowButton';
 import AppHeaderBar from '../components/AppHeaderBar';
 import AnimatedStatCard from '../components/AnimatedStatCard';
@@ -20,17 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { springs } from '../theme/motion';
 import { brand, semantic } from '../theme/tokens';
-import { ApiError } from '../api/client';
-import {
-  AttendanceRow,
-  LeaveRequest,
-  fetchTodayAttendance,
-  fetchAttendanceHistory,
-  fetchLeaveRequests,
-  clockInGig,
-  clockInFixed,
-  clockOut,
-} from '../api/attendance';
+import { AttendanceRow, LeaveRequest, fetchAttendanceHistory, fetchLeaveRequests } from '../api/attendance';
 
 interface Props {
   onGoDashboard: () => void;
@@ -68,25 +57,21 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { attendance: sharedAttendance, refresh: refreshHeaderAttendance } = useAttendanceStatus();
+  const { attendance: sharedAttendance } = useAttendanceStatus();
   const [headerHeight, setHeaderHeight] = useState(0);
   const [segment, setSegment] = useState<'attendance' | 'leave'>('attendance');
-  const [today, setToday] = useState<AttendanceRow | null>(null);
   const [history, setHistory] = useState<AttendanceRow[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [clocking, setClocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const [t, h, l] = await Promise.all([
-        fetchTodayAttendance(user.id),
+      const [h, l] = await Promise.all([
         fetchAttendanceHistory(user.id),
         fetchLeaveRequests(user.id),
       ]);
-      setToday(t);
       setHistory(h);
       setLeaves(l);
       setError(null);
@@ -99,9 +84,9 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
     load();
   }, [load]);
 
-  // Keeps this screen's own attendance state in sync when clock-in happens
-  // elsewhere — e.g. the blocking ClockInGateModal — instead of only
-  // updating on this screen's next manual refresh/poll.
+  // Clocking in/out happens on Dashboard (or the blocking ClockInGateModal)
+  // now — this just keeps History/Leave in sync when that happens elsewhere
+  // instead of only updating on this screen's next manual refresh/poll.
   useEffect(() => {
     if (sharedAttendance) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,34 +96,6 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
     setRefreshing(true);
     await load();
     setRefreshing(false);
-  };
-
-  const clockedIn = !!today?.clock_in && !today?.clock_out;
-
-  const handleClock = async () => {
-    if (!user) return;
-    setClocking(true);
-    setError(null);
-    try {
-      if (clockedIn && today) {
-        await clockOut(today.id);
-      } else if (user.worker_type === 'gig') {
-        await clockInGig(user.id);
-      } else {
-        await clockInFixed();
-      }
-      await load();
-      refreshHeaderAttendance();
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Could not update attendance';
-      setError(
-        message.toLowerCase().includes('photo')
-          ? "Photo clock-in isn't supported in the mobile app yet — use the web app."
-          : message,
-      );
-    } finally {
-      setClocking(false);
-    }
   };
 
   const last7 = [...history]
@@ -185,46 +142,6 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
         {segment === 'attendance' ? (
           <>
             <Animated.View entering={FadeInUp.duration(450).springify().damping(15)}>
-              <GlassCard shadow style={styles.clockCard}>
-                <View style={[styles.clockIconChip, { backgroundColor: clockedIn ? `${brand.primary}24` : `${theme.text3}1f` }]}>
-                  {clockedIn ? <PulseDot color={brand.primary} size={10} /> : <Icon name="clock" size={26} color={theme.text3} />}
-                </View>
-
-                <View style={[styles.clockChip, { backgroundColor: clockedIn ? 'rgba(21,160,90,0.14)' : theme.panel2 }]}>
-                  <Text style={[styles.clockChipText, { color: clockedIn ? brand.primary : theme.text3 }]}>
-                    {clockedIn ? 'Clocked in' : 'Clocked out'}
-                  </Text>
-                </View>
-
-                {clockedIn && today?.clock_in ? (
-                  <Text style={[styles.sinceText, { color: theme.text3 }]}>
-                    Since {new Date(today.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                ) : null}
-
-                {today?.location ? (
-                  <View style={styles.locationRow}>
-                    <Icon name="pin" size={13} color={theme.text3} />
-                    <Text style={[styles.caption, { color: theme.text3 }]} numberOfLines={1}>{today.location}</Text>
-                  </View>
-                ) : null}
-
-                {clockedIn ? (
-                  <PressScale onPress={handleClock} disabled={clocking} style={{ width: '100%', marginTop: spacing(3) }}>
-                    <View style={[styles.clockOutBtn, { backgroundColor: semantic.danger, opacity: clocking ? 0.7 : 1 }]}>
-                      {clocking ? <ActivityIndicator color="#fff" size="small" /> : <Icon name="logout" size={16} color="#fff" filled />}
-                      <Text style={styles.clockOutBtnText}>{clocking ? 'Please wait…' : 'Clock Out'}</Text>
-                    </View>
-                  </PressScale>
-                ) : (
-                  <View style={{ width: '100%', marginTop: spacing(3) }}>
-                    <GlowButton label={clocking ? 'Please wait…' : 'Clock In'} onPress={handleClock} disabled={clocking} loading={clocking} icon="clock" />
-                  </View>
-                )}
-              </GlassCard>
-            </Animated.View>
-
-            <Animated.View entering={FadeInUp.delay(90).duration(450).springify().damping(15)}>
               <Panel style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
                   <Icon name="chart" size={13} color={theme.text3} />
@@ -358,14 +275,6 @@ const styles = StyleSheet.create({
   segmentActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
   segmentText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
   error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(3) },
-  clockCard: { alignItems: 'center', paddingVertical: spacing(6) },
-  clockIconChip: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
-  clockChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3.5), paddingVertical: spacing(1.75), borderRadius: radius.full, marginBottom: spacing(2) },
-  clockChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  sinceText: { fontFamily: 'Manrope_600SemiBold', fontSize: 12, marginBottom: spacing(2) },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginTop: spacing(1) },
-  clockOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 52, borderRadius: radius.md },
-  clockOutBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
   barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing(2), height: 110 },
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: spacing(1) },
   barValue: { fontFamily: 'Manrope_700Bold', fontSize: 9, height: 12 },

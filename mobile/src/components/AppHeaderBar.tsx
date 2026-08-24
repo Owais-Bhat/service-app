@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BackLink from './BackLink';
 import Icon from './Icon';
@@ -7,6 +7,7 @@ import PulseDot from './PulseDot';
 import NotificationBell from './NotificationBell';
 import RefreshButton from './RefreshButton';
 import ThemeToggleButton from './ThemeToggleButton';
+import LogoutConfirmModal from './LogoutConfirmModal';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
@@ -34,13 +35,7 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
   const { attendance } = useAttendanceStatus();
   const { logout } = useAuth();
   const [now, setNow] = useState(new Date());
-
-  const confirmLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: logout },
-    ]);
-  };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -68,7 +63,7 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
           {onOpenNotifications ? <NotificationBell unread={unread || 0} onPress={onOpenNotifications} /> : null}
           <ThemeToggleButton />
           <Pressable
-            onPress={confirmLogout}
+            onPress={() => setShowLogoutConfirm(true)}
             style={({ pressed }) => [styles.logoutBtn, { backgroundColor: semantic.danger }, pressed && styles.pressed]}
             hitSlop={8}
             accessibilityLabel="Log out"
@@ -98,6 +93,16 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
           </View>
         ) : null}
       </View>
+
+      {showLogoutConfirm && (
+        <LogoutConfirmModal
+          onCancel={() => setShowLogoutConfirm(false)}
+          onConfirm={() => {
+            setShowLogoutConfirm(false);
+            logout();
+          }}
+        />
+      )}
     </View>
   );
 }
