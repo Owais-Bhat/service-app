@@ -1,17 +1,20 @@
 import { api } from './client';
 
+// Matches the server's actual /api/leaderboard response — ranked by review
+// count (then average rating, then 5-star count), computed from
+// inquiries.feedback_rating. Same shape web's renderEmployeeLeaderboard()
+// consumes.
 export interface LeaderboardEntry {
-  employeeId: string;
+  id: string;
   name: string;
-  avgRating: number | null;
-  avgTimeEfficiency: number | null;
-  jobsCount: number;
-  combinedScore: number;
+  count: number;
+  avg: number;
+  fiveStars: number;
 }
 
 export interface LeaderboardResponse {
-  month: string;
-  leaderboard: LeaderboardEntry[];
+  monthly: LeaderboardEntry[];
+  allTime: LeaderboardEntry[];
 }
 
 const currentMonthKey = () => new Date().toISOString().slice(0, 7); // YYYY-MM
