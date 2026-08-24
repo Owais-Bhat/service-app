@@ -138,11 +138,11 @@ export default function ManageTasksScreen({ onBack }: Props) {
           Assigned jobs, service requests, and pending assignments
         </Text>
 
-        <View style={styles.statsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
           <AnimatedStatCard label="In Progress" value={counts.in_progress} accentColor={statusColors.in_progress.color} icon="wrench" delayMs={0} />
           <AnimatedStatCard label="Resolved" value={counts.resolved} accentColor={statusColors.resolved.color} icon="check-circle" delayMs={80} />
           <AnimatedStatCard label="Issues" value={counts.issue_not_resolved} accentColor={statusColors.issue_not_resolved.color} icon="alert" delayMs={160} />
-        </View>
+        </ScrollView>
 
         {error ? <Text style={[styles.caption, { color: semantic.danger, marginTop: spacing(3) }]}>{error}</Text> : null}
 
@@ -321,7 +321,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   title: { ...typography.title, marginTop: spacing(4) },
   caption: { ...typography.caption },
-  statsRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(1) },
+  statsScroll: { marginTop: spacing(1), marginHorizontal: -spacing(5) },
+  statsRow: { flexDirection: 'row', gap: spacing(2.5), paddingHorizontal: spacing(5) },
   rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(2.5), gap: spacing(2) },
   name: { fontFamily: 'Manrope_700Bold', fontSize: 16 },
   companyText: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(0.5) },
