@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
-import Panel from '../components/Panel';
+import GlassCard from '../components/GlassCard';
 import BackLink from '../components/BackLink';
+import PressScale from '../components/PressScale';
+import Icon from '../components/Icon';
+import ProgressRing from '../components/ProgressRing';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import { fetchMyCourses, CourseSummary } from '../api/training';
 
@@ -45,31 +49,55 @@ export default function TrainingCoursesScreen({ onBack, onOpenCourse }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}
+        contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(12) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <BackLink onPress={onBack} />
         <Text style={[styles.title, { color: theme.text }]}>Training Courses</Text>
+        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>Structured lessons assigned to you</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {courses.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(3) }]}>No courses assigned to you yet.</Text>
+          <View style={styles.emptyBox}>
+            <View style={[styles.emptyIconChip, { backgroundColor: `${brand.primary}1f` }]}>
+              <Icon name="training" size={22} color={brand.primary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No courses assigned yet</Text>
+            <Text style={[styles.caption, { color: theme.text3, textAlign: 'center' }]}>Your trainer hasn't assigned any courses. Check back soon.</Text>
+          </View>
         ) : (
-          courses.map((c) => {
+          courses.map((c, idx) => {
             const pct = c.lesson_count > 0 ? Math.round((c.done_count / c.lesson_count) * 100) : 0;
+            const done = pct >= 100;
+            const accent = done ? brand.primary : c.due_date ? semantic.warning : '#2e9bff';
             return (
-              <Pressable key={c.id} onPress={() => onOpenCourse(c.id)} style={({ pressed }) => [pressed && styles.pressed]}>
-                <Panel style={styles.row}>
-                  <View style={[styles.ring, { borderColor: theme.line }]}>
-                    <Text style={[styles.ringText, { color: theme.text }]}>{pct}%</Text>
+              <Animated.View key={c.id} entering={FadeInUp.delay(Math.min(idx, 8) * 60).duration(400).springify().damping(15)}>
+                <PressScale onPress={() => onOpenCourse(c.id)}>
+                  <View style={[styles.cardOuter, { shadowColor: accent }]}>
+                    <View style={[styles.rowAccent, { backgroundColor: accent }]} />
+                    <GlassCard shadow style={styles.card}>
+                      <View style={styles.cardRow}>
+                        <ProgressRing percent={pct} size={52} strokeWidth={5} color={accent} trackColor={theme.line} labelColor={theme.text} />
+                        <View style={styles.info}>
+                          <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{c.title}</Text>
+                          <View style={styles.metaRow}>
+                            <Icon name="tasks" size={11} color={theme.text3} />
+                            <Text style={[styles.caption, { color: theme.text3 }]}>{c.category} · {c.lesson_count} lessons</Text>
+                          </View>
+                          {c.due_date ? (
+                            <View style={styles.metaRow}>
+                              <Icon name="calendar" size={11} color={semantic.warning} />
+                              <Text style={[styles.dueText, { color: semantic.warning }]}>Due {c.due_date}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Icon name="chevron-right" size={18} color={theme.text3} />
+                      </View>
+                    </GlassCard>
                   </View>
-                  <View style={styles.info}>
-                    <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{c.title}</Text>
-                    <Text style={[styles.caption, { color: theme.text3 }]}>{c.category} · {c.lesson_count} lessons</Text>
-                  </View>
-                </Panel>
-              </Pressable>
+                </PressScale>
+              </Animated.View>
             );
           })
         )}
@@ -80,13 +108,18 @@ export default function TrainingCoursesScreen({ onBack, onOpenCourse }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  title: { ...typography.title, marginBottom: spacing(4) },
+  title: { ...typography.title, marginTop: spacing(1) },
   caption: { ...typography.caption },
-  error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
-  pressed: { opacity: 0.7 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
-  ring: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  ringText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
-  info: { flex: 1, minWidth: 0 },
-  name: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
+  error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(3) },
+  emptyBox: { alignItems: 'center', paddingVertical: spacing(9), gap: spacing(1) },
+  emptyIconChip: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(2) },
+  emptyTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, marginBottom: spacing(0.5) },
+  cardOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
+  rowAccent: { width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
+  card: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
+  info: { flex: 1, minWidth: 0, gap: spacing(0.5) },
+  name: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1) },
+  dueText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
 });

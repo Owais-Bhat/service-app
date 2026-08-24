@@ -17,6 +17,8 @@ export interface Lesson {
   course_id: string;
   title: string;
   type: string;
+  media_url: string | null;
+  content: string | null;
   position: number;
 }
 

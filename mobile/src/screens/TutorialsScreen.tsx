@@ -129,7 +129,7 @@ export default function TutorialsScreen({ onBack }: Props) {
 
         {total > 0 ? (
           <Animated.View entering={FadeInUp.duration(450).springify().damping(15)}>
-            <GlassCard shadow style={styles.progressCard}>
+            <View style={styles.progressCard}>
               <ProgressRing percent={pct} color="#ffffff" trackColor="rgba(255,255,255,0.28)" labelColor="#ffffff" />
               <View style={styles.progressMeta}>
                 <Text style={styles.progressTitle}>Your training progress</Text>
@@ -143,7 +143,7 @@ export default function TutorialsScreen({ onBack }: Props) {
                   </View>
                 </View>
               </View>
-            </GlassCard>
+            </View>
           </Animated.View>
         ) : null}
 
@@ -280,7 +280,20 @@ const styles = StyleSheet.create({
   title: { ...typography.title, marginTop: spacing(1) },
   caption: { ...typography.caption },
   error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(3) },
-  progressCard: { flexDirection: 'row', alignItems: 'center', gap: spacing(4), backgroundColor: brand.primary, marginBottom: spacing(4) },
+  progressCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(4),
+    backgroundColor: brand.primary,
+    borderRadius: 20,
+    padding: spacing(4),
+    marginBottom: spacing(4),
+    shadowColor: brand.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 6,
+  },
   progressMeta: { flex: 1, minWidth: 0 },
   progressTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, color: '#fff', marginBottom: spacing(2) },
   progressChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5) },

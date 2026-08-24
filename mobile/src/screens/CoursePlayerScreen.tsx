@@ -1,14 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
-import Panel from '../components/Panel';
 import BackLink from '../components/BackLink';
+import PressScale from '../components/PressScale';
+import Icon from '../components/Icon';
+import ProgressRing from '../components/ProgressRing';
+import VideoPlayerModal from '../components/VideoPlayerModal';
 import { useTheme } from '../theme/ThemeContext';
+import { resolveUploadUrl } from '../api/client';
 import { spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
-import { fetchCourseDetail, completeLesson, CourseDetail } from '../api/training';
+import { brand, semantic } from '../theme/tokens';
+import { fetchCourseDetail, completeLesson, CourseDetail, Lesson } from '../api/training';
 
 interface Props {
   courseId: string;
@@ -22,6 +27,8 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [playingLesson, setPlayingLesson] = useState<Lesson | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,12 +59,20 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
     }
   };
 
+  const openLesson = (lesson: Lesson) => {
+    if (lesson.type === 'video' && lesson.media_url) {
+      setPlayingLesson(lesson);
+    } else {
+      setExpandedId((prev) => (prev === lesson.id ? null : lesson.id));
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.root}>
         <MeshBackground />
         <View style={styles.centered}>
-          <Text style={[styles.caption, { color: theme.text3 }]}>Loading…</Text>
+          <ActivityIndicator color={brand.primary} size="large" />
         </View>
       </View>
     );
@@ -81,42 +96,80 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(12) }}>
         <BackLink onPress={onBack} />
 
-        <GlassCard style={styles.headerCard}>
-          <Text style={[styles.courseTitle, { color: theme.text }]}>{detail.course.title}</Text>
-          {detail.course.description ? (
-            <Text style={[styles.body, { color: theme.text2, marginTop: spacing(2) }]}>{detail.course.description}</Text>
-          ) : null}
-          <Text style={[styles.caption, { color: brand.primary, marginTop: spacing(2) }]}>{pct}% complete</Text>
-        </GlassCard>
+        <Animated.View entering={FadeInUp.duration(450).springify().damping(15)}>
+          <View style={styles.headerCard}>
+            <View style={styles.headerRow}>
+              <ProgressRing percent={pct} color="#ffffff" trackColor="rgba(255,255,255,0.28)" labelColor="#ffffff" size={72} strokeWidth={7} />
+              <View style={styles.headerInfo}>
+                <Text style={styles.courseTitle}>{detail.course.title}</Text>
+                {detail.course.description ? (
+                  <Text style={styles.courseDesc} numberOfLines={3}>{detail.course.description}</Text>
+                ) : null}
+                <Text style={styles.progressLabel}>{doneCount} of {detail.lessons.length} lessons done</Text>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
+        <Text style={[styles.sectionLabel, { color: theme.text3, marginTop: spacing(5) }]}>Lessons</Text>
+
         {detail.lessons.map((lesson, i) => {
           const done = detail.doneLessonIds.includes(lesson.id);
+          const isVideo = lesson.type === 'video' && !!lesson.media_url;
+          const expanded = expandedId === lesson.id;
+          const accent = done ? brand.primary : theme.text3;
           return (
-            <Panel key={lesson.id} style={styles.lessonRow}>
-              <View style={[styles.lessonIndex, { backgroundColor: done ? brand.primary : theme.line }]}>
-                <Text style={[styles.lessonIndexText, { color: done ? '#ffffff' : theme.text2 }]}>{i + 1}</Text>
+            <Animated.View key={lesson.id} entering={FadeInUp.delay(Math.min(i, 10) * 50).duration(400).springify().damping(15)}>
+              <View style={[styles.rowOuter, { shadowColor: accent }]}>
+                <View style={[styles.rowAccent, { backgroundColor: accent }]} />
+                <GlassCard shadow style={styles.lessonCard}>
+                  <PressScale onPress={() => openLesson(lesson)}>
+                    <View style={styles.lessonHeader}>
+                      <View style={[styles.lessonIndex, { backgroundColor: done ? brand.primary : `${theme.text3}22` }]}>
+                        {done ? <Icon name="check" size={14} color="#fff" /> : <Text style={[styles.lessonIndexText, { color: theme.text2 }]}>{i + 1}</Text>}
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.lessonTitle, { color: theme.text }]} numberOfLines={1}>{lesson.title}</Text>
+                        <View style={styles.lessonMetaRow}>
+                          <Icon name={isVideo ? 'tutorial' : 'report'} size={11} color={theme.text3} />
+                          <Text style={[styles.caption, { color: theme.text3 }]}>{isVideo ? 'Video' : 'Reading'}</Text>
+                        </View>
+                      </View>
+                      <Icon name={isVideo ? 'tutorial' : expanded ? 'chevron-left' : 'chevron-right'} size={16} color={theme.text3} />
+                    </View>
+                  </PressScale>
+
+                  {expanded && lesson.content ? (
+                    <Text style={[styles.lessonContent, { color: theme.text2, borderTopColor: theme.line }]}>{lesson.content}</Text>
+                  ) : null}
+
+                  <PressScale onPress={() => !done && handleComplete(lesson.id)} disabled={done || completingId === lesson.id}>
+                    <View style={[styles.completeButton, { backgroundColor: done ? theme.panel2 : brand.primary, opacity: completingId === lesson.id ? 0.7 : 1 }]}>
+                      <Icon name="check" size={13} color={done ? theme.text3 : '#fff'} />
+                      <Text style={[styles.completeButtonText, { color: done ? theme.text3 : '#fff' }]}>
+                        {completingId === lesson.id ? 'Saving…' : done ? 'Completed' : 'Mark Done'}
+                      </Text>
+                    </View>
+                  </PressScale>
+                </GlassCard>
               </View>
-              <Text style={[styles.lessonTitle, { color: theme.text }]}>{lesson.title}</Text>
-              {done ? (
-                <Text style={[styles.doneLabel, { color: brand.primary }]}>Done</Text>
-              ) : (
-                <Pressable
-                  onPress={() => handleComplete(lesson.id)}
-                  disabled={completingId === lesson.id}
-                  style={({ pressed }) => [styles.completeButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.completeButtonText}>{completingId === lesson.id ? '…' : 'Mark done'}</Text>
-                </Pressable>
-              )}
-            </Panel>
+            </Animated.View>
           );
         })}
       </ScrollView>
+
+      {playingLesson && (
+        <VideoPlayerModal
+          title={playingLesson.title}
+          mediaUrl={resolveUploadUrl(playingLesson.media_url!)}
+          onDismiss={() => setPlayingLesson(null)}
+        />
+      )}
     </View>
   );
 }
@@ -126,15 +179,32 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing(3) },
   body: { ...typography.body },
   caption: { ...typography.caption },
-  error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
-  headerCard: { marginBottom: spacing(4) },
-  courseTitle: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18 },
-  pressed: { opacity: 0.7 },
-  lessonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
-  lessonIndex: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  error: { ...typography.caption, color: semantic.danger, marginTop: spacing(3) },
+  sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
+  headerCard: {
+    backgroundColor: brand.primary,
+    borderRadius: 20,
+    padding: spacing(4),
+    shadowColor: brand.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(4) },
+  headerInfo: { flex: 1, minWidth: 0 },
+  courseTitle: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 17, color: '#fff', marginBottom: spacing(1) },
+  courseDesc: { fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 17, marginBottom: spacing(1.5) },
+  progressLabel: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: 'rgba(255,255,255,0.9)' },
+  rowOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 3 },
+  rowAccent: { width: 4, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
+  lessonCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+  lessonHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
+  lessonIndex: { width: 30, height: 30, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   lessonIndexText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
-  lessonTitle: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13, minWidth: 0 },
-  doneLabel: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
-  completeButton: { paddingHorizontal: spacing(3), paddingVertical: spacing(1.5), borderRadius: 8, backgroundColor: brand.primary },
-  completeButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: '#ffffff' },
+  lessonTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
+  lessonMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1) },
+  lessonContent: { fontSize: 13, lineHeight: 19, marginTop: spacing(3), paddingTop: spacing(3), borderTopWidth: 1 },
+  completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 38, borderRadius: 10, marginTop: spacing(3) },
+  completeButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
 });
