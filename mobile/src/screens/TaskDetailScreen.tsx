@@ -9,6 +9,7 @@ import BackLink from '../components/BackLink';
 import Icon from '../components/Icon';
 import PressScale from '../components/PressScale';
 import TaskStatusModal from '../components/TaskStatusModal';
+import LocationMapModal from '../components/LocationMapModal';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
@@ -34,6 +35,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showStatus, setShowStatus] = useState(false);
+  const [showMap, setShowMap] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -53,7 +55,6 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
 
   const call = (phone: string) => Linking.openURL(`tel:${phone}`);
   const whatsapp = (phone: string) => Linking.openURL(`https://wa.me/${phone.replace(/\D/g, '')}`);
-  const openMaps = (location: string) => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`);
 
   if (loading) {
     return (
@@ -131,7 +132,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
                 </>
               ) : null}
               {item.location ? (
-                <Pressable onPress={() => openMaps(item.location!)} style={[styles.iconAction, { backgroundColor: brand.primary }]}>
+                <Pressable onPress={() => setShowMap(true)} style={[styles.iconAction, { backgroundColor: brand.primary }]}>
                   <Icon name="pin" size={16} color="#fff" />
                 </Pressable>
               ) : null}
@@ -176,6 +177,15 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
             setLoading(true);
             load();
           }}
+        />
+      )}
+
+      {showMap && (
+        <LocationMapModal
+          location={item.location}
+          lat={item.customerLat}
+          lng={item.customerLng}
+          onDismiss={() => setShowMap(false)}
         />
       )}
     </View>
