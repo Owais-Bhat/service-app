@@ -102,6 +102,7 @@ export default function EmployeeDashboardScreen({
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { attendance: sharedAttendance, refresh: refreshHeaderAttendance } = useAttendanceStatus();
   const [attendance, setAttendance] = useState<AttendanceRow | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRow[]>([]);
   const [eodReports, setEodReports] = useState<EodReport[]>([]);
@@ -146,6 +147,14 @@ export default function EmployeeDashboardScreen({
     load();
   }, [load]);
 
+  // Keeps this screen's own attendance state in sync when clock-in happens
+  // elsewhere — e.g. the blocking ClockInGateModal — instead of only
+  // updating on this screen's next manual refresh/poll.
+  useEffect(() => {
+    if (sharedAttendance) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedAttendance?.clock_in, sharedAttendance?.clock_out]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -161,8 +170,6 @@ export default function EmployeeDashboardScreen({
   // dedicated "warning" flag from the server.
   const eodDates = new Set(eodReports.map((r) => r.date));
   const missedEodCount = attendanceHistory.filter((r) => r.clock_out && !eodDates.has(r.date)).length;
-
-  const { refresh: refreshHeaderAttendance } = useAttendanceStatus();
 
   const handleClock = async () => {
     if (!user) return;

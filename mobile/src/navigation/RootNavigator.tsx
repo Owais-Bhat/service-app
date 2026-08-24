@@ -33,6 +33,7 @@ import ManageTasksScreen from '../screens/ManageTasksScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import { useLiveLocationPing } from '../hooks/useLiveLocationPing';
 import { AttendanceProvider } from '../context/AttendanceContext';
+import ClockInGateModal from '../components/ClockInGateModal';
 
 type GuestStackParams = {
   Landing: undefined;
@@ -276,6 +277,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Notifications" component={NotificationsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Settings" component={SettingsRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
+    <ClockInGateModal />
     </AttendanceProvider>
   );
 }

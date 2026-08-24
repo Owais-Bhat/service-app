@@ -4,28 +4,37 @@ import { useAuth } from './AuthContext';
 
 interface AttendanceContextValue {
   attendance: AttendanceRow | null;
+  loaded: boolean;
   refresh: () => Promise<void>;
 }
 
-const AttendanceContext = createContext<AttendanceContextValue>({ attendance: null, refresh: async () => {} });
+const AttendanceContext = createContext<AttendanceContextValue>({ attendance: null, loaded: false, refresh: async () => {} });
 
 const POLL_MS = 60000;
 
 // Single shared fetch of today's attendance row, used by every employee
-// tab's header status strip (date/time/location/clocked-in state) so each
-// screen doesn't re-fetch the same thing on its own. Dashboard's clock
-// in/out action calls refresh() directly for an immediate update instead
-// of waiting for the next poll.
+// tab's header status strip (date/time/location/clocked-in state), plus
+// ClockInGateModal's "haven't clocked in yet" check, so nothing re-fetches
+// the same thing on its own. Dashboard/Attendance's own clock in/out
+// actions call refresh() directly for an immediate update instead of
+// waiting for the next poll.
+//
+// `loaded` only flips true on a SUCCESSFUL fetch — on failure it stays
+// false and the poll keeps retrying. This matters for the gate: it must
+// never block the whole app just because of a transient network error, so
+// it only ever gates once we have a confirmed answer from the server.
 export function AttendanceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [attendance, setAttendance] = useState<AttendanceRow | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!user) return;
     try {
       setAttendance(await fetchTodayAttendance(user.id));
+      setLoaded(true);
     } catch {
-      // Header status is best-effort — keep showing the last known value.
+      // Best-effort — keep showing the last known value, don't flip `loaded`.
     }
   }, [user]);
 
@@ -35,7 +44,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     return () => clearInterval(id);
   }, [refresh]);
 
-  return <AttendanceContext.Provider value={{ attendance, refresh }}>{children}</AttendanceContext.Provider>;
+  return <AttendanceContext.Provider value={{ attendance, loaded, refresh }}>{children}</AttendanceContext.Provider>;
 }
 
 export function useAttendanceStatus(): AttendanceContextValue {

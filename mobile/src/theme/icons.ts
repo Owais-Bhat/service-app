@@ -46,6 +46,7 @@ export const ICONS = {
   alert: { outline: 'alert-circle-outline', filled: 'alert-circle' },
   filter: { outline: 'filter-outline', filled: 'filter' },
   calendar: { outline: 'calendar-outline', filled: 'calendar' },
+  logout: { outline: 'log-out-outline', filled: 'log-out' },
 } as const;
 
 export type IconName = keyof typeof ICONS;

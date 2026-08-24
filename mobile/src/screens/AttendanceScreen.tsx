@@ -50,7 +50,7 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { refresh: refreshHeaderAttendance } = useAttendanceStatus();
+  const { attendance: sharedAttendance, refresh: refreshHeaderAttendance } = useAttendanceStatus();
   const [headerHeight, setHeaderHeight] = useState(0);
   const [segment, setSegment] = useState<'attendance' | 'leave'>('attendance');
   const [today, setToday] = useState<AttendanceRow | null>(null);
@@ -80,6 +80,14 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
   useEffect(() => {
     load();
   }, [load]);
+
+  // Keeps this screen's own attendance state in sync when clock-in happens
+  // elsewhere — e.g. the blocking ClockInGateModal — instead of only
+  // updating on this screen's next manual refresh/poll.
+  useEffect(() => {
+    if (sharedAttendance) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedAttendance?.clock_in, sharedAttendance?.clock_out]);
 
   const onRefresh = async () => {
     setRefreshing(true);

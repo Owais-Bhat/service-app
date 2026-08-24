@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BackLink from './BackLink';
 import Icon from './Icon';
@@ -8,9 +8,10 @@ import NotificationBell from './NotificationBell';
 import RefreshButton from './RefreshButton';
 import ThemeToggleButton from './ThemeToggleButton';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme';
+import { brand, semantic } from '../theme/tokens';
 import { useAttendanceStatus } from '../context/AttendanceContext';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   title: string;
@@ -31,7 +32,15 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { attendance } = useAttendanceStatus();
+  const { logout } = useAuth();
   const [now, setNow] = useState(new Date());
+
+  const confirmLogout = () => {
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: logout },
+    ]);
+  };
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -58,6 +67,14 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
           {onRefresh ? <RefreshButton spinning={!!refreshing} onPress={onRefresh} /> : null}
           {onOpenNotifications ? <NotificationBell unread={unread || 0} onPress={onOpenNotifications} /> : null}
           <ThemeToggleButton />
+          <Pressable
+            onPress={confirmLogout}
+            style={({ pressed }) => [styles.logoutBtn, { backgroundColor: semantic.danger }, pressed && styles.pressed]}
+            hitSlop={8}
+            accessibilityLabel="Log out"
+          >
+            <Icon name="logout" size={16} color="#fff" />
+          </Pressable>
         </View>
       </View>
 
@@ -96,4 +113,6 @@ const styles = StyleSheet.create({
   statusText: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
   statusMono: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 11 },
   staticDot: { width: 6, height: 6, borderRadius: 3 },
+  logoutBtn: { width: 36, height: 36, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.7 },
 });
