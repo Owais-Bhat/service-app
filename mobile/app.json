@@ -27,7 +27,20 @@
       "expo-font",
       "expo-splash-screen",
       "expo-secure-store",
-      "expo-status-bar"
-    ]
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#15a05a"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3cb66104-4a21-4aa8-8b00-c524097568ee"
+      }
+    },
+    "owner": "owais_07"
   }
 }

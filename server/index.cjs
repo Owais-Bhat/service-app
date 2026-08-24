@@ -154,6 +154,16 @@ if (PUSH_ENABLED) {
     console.log('[push] Web Push disabled (set VAPID_PUBLIC / VAPID_PRIVATE in .env)');
 }
 
+// Expo Push (mobile app — background/foreground/killed-state notifications).
+// Loaded defensively, same reasoning as web-push above.
+let ExpoSDK = null;
+try {
+    ExpoSDK = require('expo-server-sdk').Expo;
+} catch {
+    console.warn('[push] "expo-server-sdk" not installed — mobile push disabled. Run `npm install` in /server to enable it.');
+}
+const expoPush = ExpoSDK ? new ExpoSDK() : null;
+
 // Server-side invoice PDF generation. Loaded defensively so a missing module
 // never crashes the server — the bill endpoint just falls back to client-side.
 let PDFDocument = null;
@@ -1019,7 +1029,7 @@ function startAutoClockOutJob() {
 let _lastDeviceReminderDate = null;
 async function runDeviceFollowupReminders() {
     const now = new Date();
-    if (now.getHours() < 10) return; // fire from 10:00 server time onward
+    if (now.getHours() < 8) return; // fire from 08:00 server time onward (early morning)
     const today = localDateKey(now);
     if (_lastDeviceReminderDate === today) return;
 
@@ -1052,7 +1062,7 @@ async function runDeviceFollowupReminders() {
 }
 
 function startDeviceReminderJob() {
-    console.log('[device] Daily follow-up reminders scheduled for 10:00 server time');
+    console.log('[device] Daily follow-up reminders scheduled for 08:00 server time');
     runDeviceFollowupReminders();
     setInterval(runDeviceFollowupReminders, 60_000).unref();
 }
@@ -1692,6 +1702,19 @@ const requiredTables = [
         INDEX idx_notif_user (audience_user),
         INDEX idx_notif_created (created_at)
     )`,
+    // One row per (user, device) — Expo push tokens for the mobile app.
+    // Same device re-registering (even under a different user) just moves
+    // the token to the new owner via the UNIQUE key.
+    `CREATE TABLE IF NOT EXISTS expo_push_tokens (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        role VARCHAR(20) DEFAULT NULL,
+        token VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_expo_token (token),
+        INDEX idx_expo_user (user_id),
+        INDEX idx_expo_role (role)
+    )`,
     // Comprehensive training: courses → lessons + quiz, progress, assignments.
     `CREATE TABLE IF NOT EXISTS training_courses (
         id VARCHAR(36) PRIMARY KEY,
@@ -2028,6 +2051,54 @@ async function recordNotification(payload) {
     }
     broadcastNotify(payload);
     sendWebPush(audience, payload).catch(() => {});
+    sendExpoPush(audience, payload).catch(() => {});
+}
+
+// Send a real OS push (background/foreground/killed) to the mobile app via
+// Expo's push service. Mirrors sendWebPush's audience resolution + cleans up
+// tokens Expo reports as dead (uninstalled app, etc).
+async function sendExpoPush(audience, payload) {
+    if (!expoPush) return;
+    const aud = audience || 'all';
+    const userId = (typeof aud === 'object' && aud.userId) || null;
+    const role = (typeof aud === 'object' && aud.role) || null;
+    let conn;
+    try {
+        conn = await getConn();
+        let rows;
+        if (userId) [rows] = await conn.query('SELECT * FROM expo_push_tokens WHERE user_id = ?', [userId]);
+        else if (role) [rows] = await conn.query('SELECT * FROM expo_push_tokens WHERE role = ?', [role]);
+        else [rows] = await conn.query('SELECT * FROM expo_push_tokens');
+        const valid = (rows || []).filter((r) => ExpoSDK.isExpoPushToken(r.token));
+        if (!valid.length) return;
+        const messages = valid.map((r) => ({
+            to: r.token,
+            sound: 'default',
+            title: payload.title || 'Update',
+            body: payload.body || '',
+            data: { subject: payload.subject || null, ...(payload.data || {}) },
+        }));
+        const chunks = expoPush.chunkPushNotifications(messages);
+        const tickets = [];
+        for (const chunk of chunks) {
+            try {
+                tickets.push(...(await expoPush.sendPushNotificationsAsync(chunk)));
+            } catch (e) {
+                console.error('[push] expo chunk send failed:', e.message);
+            }
+        }
+        const deadTokens = [];
+        tickets.forEach((t, i) => {
+            if (t.status === 'error' && t.details?.error === 'DeviceNotRegistered') deadTokens.push(valid[i].token);
+        });
+        if (deadTokens.length) {
+            await conn.query('DELETE FROM expo_push_tokens WHERE token IN (?)', [deadTokens]);
+        }
+    } catch (e) {
+        console.error('[push] expo send failed:', e.message);
+    } finally {
+        if (conn) conn.release();
+    }
 }
 
 // Notify admin (and the assigned employee) when a device repair status changes.
@@ -4846,6 +4917,34 @@ app.post('/api/push/subscribe', authenticateToken, async (req, res) => {
              ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), role = VALUES(role), p256dh = VALUES(p256dh), auth = VALUES(auth)`,
             [uuidv4(), req.user.id, req.user.role, sub.endpoint, sub.keys.p256dh, sub.keys.auth]
         );
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+// ── EXPO PUSH (mobile) ──────────────────────────────────────────
+app.post('/api/push/register-token', authenticateToken, async (req, res) => {
+    const token = req.body?.token;
+    if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token required' });
+    let c;
+    try {
+        c = await getConn();
+        await c.query(
+            `INSERT INTO expo_push_tokens (id, user_id, role, token)
+             VALUES (?,?,?,?)
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), role = VALUES(role)`,
+            [uuidv4(), req.user.id, req.user.role, token]
+        );
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
+});
+
+app.post('/api/push/unregister-token', authenticateToken, async (req, res) => {
+    const token = req.body?.token;
+    if (!token) return res.status(400).json({ error: 'token required' });
+    let c;
+    try {
+        c = await getConn();
+        await c.query('DELETE FROM expo_push_tokens WHERE token = ? AND user_id = ?', [token, req.user.id]);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); } finally { if (c) c.release(); }
 });

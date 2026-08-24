@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as Notifications from 'expo-notifications';
+import { resolveNotificationRoute } from '../notifications';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { brand } from '../theme/tokens';
@@ -321,9 +323,39 @@ function AdminNavigator() {
   );
 }
 
+// Ref-based navigation so a notification tap can jump straight to the
+// relevant screen regardless of which stack (Guest/Employee/Admin) is
+// currently mounted. Cold-start taps (app was killed) race the container's
+// first render, so a route that arrives before it's ready is queued and
+// flushed from onReady below.
+const navigationRef = createNavigationContainerRef<any>();
+let pendingNotificationRoute: { name: string; params?: Record<string, unknown> } | null = null;
+
+function goToNotificationRoute(route: { name: string; params?: Record<string, unknown> }) {
+  const availableNames: string[] = navigationRef.getRootState()?.routeNames || [];
+  const target = availableNames.includes(route.name) ? route.name : availableNames.includes('Notifications') ? 'Notifications' : null;
+  if (target) (navigationRef.navigate as (name: string, params?: Record<string, unknown>) => void)(target, route.params);
+}
+
+function handleNotificationOpen(data: Record<string, unknown> | undefined) {
+  const route = resolveNotificationRoute((data?.subject as string) || null, data);
+  if (navigationRef.isReady()) goToNotificationRoute(route);
+  else pendingNotificationRoute = route;
+}
+
 export default function RootNavigator() {
   const { user, loading } = useAuth();
   const { theme, mode } = useTheme();
+
+  useEffect(() => {
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) handleNotificationOpen(response.notification.request.content.data as Record<string, unknown>);
+    });
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleNotificationOpen(response.notification.request.content.data as Record<string, unknown>);
+    });
+    return () => sub.remove();
+  }, []);
 
   const navTheme = {
     ...(mode === 'dark' ? DarkTheme : DefaultTheme),
@@ -344,7 +376,16 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onReady={() => {
+        if (pendingNotificationRoute) {
+          goToNotificationRoute(pendingNotificationRoute);
+          pendingNotificationRoute = null;
+        }
+      }}
+    >
       {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminNavigator /> : <EmployeeNavigator />}
     </NavigationContainer>
   );

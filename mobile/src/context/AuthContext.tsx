@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getToken, setToken as persistToken, ApiError } from '../api/client';
 import { signin as apiSignin, fetchMe, AuthUser } from '../api/auth';
+import { registerPushToken } from '../api/push';
+import { registerForPushNotificationsAsync } from '../notifications';
 
 interface AuthState {
   user: AuthUser | null;
@@ -45,6 +47,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await persistToken(null);
     setUser(null);
   }, []);
+
+  // Register (or re-register) the device's push token whenever a user
+  // becomes signed in — covers both cold-start session restore and a fresh
+  // login in one place. Failures are non-fatal (permission denied, no
+  // physical device, etc.) — push is a bonus, not a login requirement.
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const token = await registerForPushNotificationsAsync();
+        if (token) await registerPushToken(token);
+      } catch {
+        // ignore — push registration is best-effort
+      }
+    })();
+  }, [user]);
 
   const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
 
