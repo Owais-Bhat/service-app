@@ -20,6 +20,13 @@ export default function Icon({ name, size = 20, color, filled = false }: Props) 
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       {paths.map((d, i) => {
+        // WhatsApp is a two-tone brand mark, not a badge+detail icon: the
+        // bubble (path 0) fills `color`, and the receiver squiggle (path 1)
+        // fills WhatsApp green — a white accent stroke (the generic filled
+        // path below) is invisible on a white bubble, so it needs its own case.
+        if (filled && name === 'whatsapp') {
+          return <Path key={i} d={d} fill={i === 0 ? color : '#25D366'} stroke="none" />;
+        }
         if (filled && i === 0) {
           return <Path key={i} d={d} fill={color} stroke="none" />;
         }

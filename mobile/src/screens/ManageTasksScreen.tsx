@@ -281,7 +281,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
                             </PressScale>
                             <PressScale onPress={() => whatsapp(item.phone!)}>
                               <View style={[styles.iconAction, styles.iconActionShadow, { backgroundColor: '#25D366', shadowColor: '#25D366' }]}>
-                                <Icon name="whatsapp" size={16} color="#fff" />
+                                <Icon name="whatsapp" size={16} color="#fff" filled />
                               </View>
                             </PressScale>
                           </>

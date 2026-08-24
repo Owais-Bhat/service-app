@@ -127,7 +127,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
                     <Icon name="phone" size={16} color={theme.text} />
                   </Pressable>
                   <Pressable onPress={() => whatsapp(item.phone!)} style={[styles.iconAction, { backgroundColor: '#25D366' }]}>
-                    <Icon name="whatsapp" size={16} color="#fff" />
+                    <Icon name="whatsapp" size={16} color="#fff" filled />
                   </Pressable>
                 </>
               ) : null}
