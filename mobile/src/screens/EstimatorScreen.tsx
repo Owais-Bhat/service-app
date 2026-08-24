@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -10,13 +10,23 @@ import PressScale from '../components/PressScale';
 import Icon from '../components/Icon';
 import ServicePickerModal, { PickedService } from '../components/ServicePickerModal';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import { fetchCompanies, Company } from '../api/companies';
 import { fetchDiscountPresets, DiscountPreset } from '../api/discountPresets';
+import { generateBillPdf, BillPdfData } from '../api/bills';
+import { ApiError } from '../api/client';
 
 interface Props {
   onBack: () => void;
+}
+
+// A picked service plus how many of it — lets "Add" a camera once and bump
+// the count instead of reopening the picker per unit (e.g. a 4-camera
+// install is one line, not four re-picks of the same item).
+interface LineItem extends PickedService {
+  qty: number;
 }
 
 const BUSINESS_NAME = 'Networking Experts';
@@ -29,6 +39,7 @@ const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 export default function EstimatorScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { user } = useAuth();
 
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
@@ -39,7 +50,7 @@ export default function EstimatorScreen({ onBack }: Props) {
   const [isOtherCompany, setIsOtherCompany] = useState(false);
   const [customCompany, setCustomCompany] = useState('');
 
-  const [services, setServices] = useState<PickedService[]>([]);
+  const [services, setServices] = useState<LineItem[]>([]);
   const [showPicker, setShowPicker] = useState(false);
 
   const [extra, setExtra] = useState('');
@@ -56,6 +67,8 @@ export default function EstimatorScreen({ onBack }: Props) {
 
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     fetchCompanies().then(setCompanies).catch(() => {});
@@ -71,7 +84,7 @@ export default function EstimatorScreen({ onBack }: Props) {
   };
 
   const bill = useMemo(() => {
-    const servicesSubtotal = services.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+    const servicesSubtotal = services.reduce((sum, s) => sum + (Number(s.cost) || 0) * s.qty, 0);
     const extraNum = Math.max(0, Number(extra) || 0);
     const platformNum = Math.max(0, Number(platform) || 0);
     const kmNum = Math.max(0, Number(km) || 0);
@@ -99,8 +112,9 @@ export default function EstimatorScreen({ onBack }: Props) {
     if (location.trim()) lines.push(`Location: ${location.trim()}`);
     if (getCompanyName()) lines.push(`Company: ${getCompanyName()}`);
     lines.push('', 'Items:');
-    if (services.length) services.forEach((s, i) => lines.push(`${i + 1}. ${s.label} - ${inr(s.cost)}`));
-    else lines.push('No itemised service selected');
+    if (services.length) {
+      services.forEach((s, i) => lines.push(`${i + 1}. ${s.qty > 1 ? `${s.qty}x ` : ''}${s.label} - ${inr(s.cost * s.qty)}`));
+    } else lines.push('No itemised service selected');
     if (bill.extra > 0) lines.push(`Extra charge${extraReason.trim() ? ` (${extraReason.trim()})` : ''}: ${inr(bill.extra)}`);
     lines.push('', `Services subtotal: ${inr(bill.servicesSubtotal)}`);
     lines.push(`Platform fee: ${inr(bill.platform)}`);
@@ -110,7 +124,8 @@ export default function EstimatorScreen({ onBack }: Props) {
     lines.push(`GST (${bill.gstRate}%): ${inr(bill.gst)}`);
     lines.push(`Estimated total: ${inr(bill.total)}`);
     lines.push('', 'Final bill may change if extra work or material is required.');
-    lines.push(`- ${BUSINESS_NAME}`);
+    if (pdfUrl) lines.push('', 'View / download this estimate (PDF):', pdfUrl);
+    lines.push('', `- ${BUSINESS_NAME}`);
     return lines.join('\n');
   };
 
@@ -136,7 +151,68 @@ export default function EstimatorScreen({ onBack }: Props) {
     setServices([]);
     setExtra(''); setExtraReason(''); setPlatform('50'); setKm(''); setKmRate('5'); setGstRate('18');
     setPresetId(null); setManualDiscount(''); setDiscountReason('');
+    setError(null); setPdfUrl(null);
+  };
+
+  const addService = (s: PickedService) => {
+    setPdfUrl(null);
+    setServices((prev) => {
+      const existing = prev.find((p) => p.id === s.id);
+      if (existing) return prev.map((p) => (p.id === s.id ? { ...p, qty: p.qty + 1 } : p));
+      return [...prev, { ...s, qty: 1 }];
+    });
+  };
+
+  const changeQty = (id: string, delta: number) => {
+    setPdfUrl(null);
+    setServices((prev) =>
+      prev
+        .map((p) => (p.id === id ? { ...p, qty: p.qty + delta } : p))
+        .filter((p) => p.qty > 0),
+    );
+  };
+
+  const buildPdfData = (): BillPdfData => ({
+    customer: {
+      name: clientName.trim() || 'Client',
+      phone: clientPhone.trim(),
+      location: location.trim(),
+      company: getCompanyName(),
+      device_type: '',
+      device_serial: '',
+      service_item: serviceTitle.trim() || 'Service estimate',
+      ticket_no: '',
+    },
+    technician: user?.full_name || 'Technician',
+    services: services.map((s) => ({ name: s.qty > 1 ? `${s.qty}x ${s.label}` : s.label, cost: s.cost * s.qty })),
+    servicesSubtotal: bill.servicesSubtotal,
+    extra: bill.extra,
+    extraReason: extraReason.trim(),
+    platform: bill.platform,
+    km: bill.km,
+    transport: bill.transport,
+    taxable: bill.taxable,
+    gst: bill.gst,
+    discount: bill.discount,
+    discountLabel: bill.discountLabel,
+    discountReason: discountReason.trim(),
+    total: bill.total,
+    paymentLink: '',
+    paymentStatus: 'estimate',
+  });
+
+  const handleGeneratePdf = async () => {
     setError(null);
+    if (bill.total <= 0) return setError('Add at least one service or charge');
+    setGeneratingPdf(true);
+    try {
+      const url = await generateBillPdf(buildPdfData(), null, `Estimate-${(clientName.trim() || 'client').replace(/\s+/g, '_')}.pdf`);
+      setPdfUrl(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not generate the PDF — check your connection');
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   return (
@@ -207,13 +283,26 @@ export default function EstimatorScreen({ onBack }: Props) {
             {services.length === 0 ? (
               <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(2) }]}>No services added yet.</Text>
             ) : (
-              services.map((s, i) => (
-                <View key={`${s.id}-${i}`} style={[styles.serviceRow, { borderColor: theme.line }]}>
-                  <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={2}>{s.label}</Text>
-                  <Text style={[styles.serviceCost, { color: brand.primary }]}>{inr(s.cost)}</Text>
-                  <PressScale onPress={() => setServices((prev) => prev.filter((_, idx) => idx !== i))}>
-                    <Icon name="trash" size={15} color={theme.text3} />
-                  </PressScale>
+              services.map((s) => (
+                <View key={s.id} style={[styles.serviceRow, { borderColor: theme.line }]}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={2}>{s.label}</Text>
+                    <Text style={[styles.caption, { color: theme.text3 }]}>{inr(s.cost)} each</Text>
+                  </View>
+                  <View style={[styles.qtyStepper, { borderColor: theme.line }]}>
+                    <PressScale onPress={() => changeQty(s.id, -1)}>
+                      <View style={styles.qtyBtn}>
+                        <Text style={[styles.qtyBtnText, { color: theme.text2 }]}>−</Text>
+                      </View>
+                    </PressScale>
+                    <Text style={[styles.qtyValue, { color: theme.text }]}>{s.qty}</Text>
+                    <PressScale onPress={() => changeQty(s.id, 1)}>
+                      <View style={styles.qtyBtn}>
+                        <Text style={[styles.qtyBtnText, { color: theme.text2 }]}>+</Text>
+                      </View>
+                    </PressScale>
+                  </View>
+                  <Text style={[styles.serviceCost, { color: brand.primary }]}>{inr(s.cost * s.qty)}</Text>
                 </View>
               ))
             )}
@@ -376,6 +465,22 @@ export default function EstimatorScreen({ onBack }: Props) {
                 </View>
               </PressScale>
             </View>
+
+            {pdfUrl ? (
+              <PressScale onPress={() => Linking.openURL(pdfUrl)} style={{ marginTop: spacing(2.5) }}>
+                <View style={[styles.pdfBtn, { borderColor: brand.primary }]}>
+                  <Icon name="receipt" size={14} color={brand.primary} />
+                  <Text style={[styles.pdfBtnText, { color: brand.primary }]}>View PDF</Text>
+                </View>
+              </PressScale>
+            ) : (
+              <PressScale onPress={handleGeneratePdf} disabled={generatingPdf} style={{ marginTop: spacing(2.5) }}>
+                <View style={[styles.pdfBtn, { borderColor: theme.line, opacity: generatingPdf ? 0.7 : 1 }]}>
+                  {generatingPdf ? <ActivityIndicator size="small" color={theme.text} /> : <Icon name="receipt" size={14} color={theme.text} />}
+                  <Text style={[styles.pdfBtnText, { color: theme.text }]}>{generatingPdf ? 'Generating…' : 'Generate PDF'}</Text>
+                </View>
+              </PressScale>
+            )}
           </GlassCard>
         </Animated.View>
       </ScrollView>
@@ -384,7 +489,7 @@ export default function EstimatorScreen({ onBack }: Props) {
         <ServicePickerModal
           onDismiss={() => setShowPicker(false)}
           onSelect={(s) => {
-            setServices((prev) => [...prev, s]);
+            addService(s);
             setShowPicker(false);
           }}
         />
@@ -410,8 +515,14 @@ const styles = StyleSheet.create({
   pillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
   pillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1, borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(2) },
-  serviceLabel: { flex: 1, fontFamily: 'Manrope_600SemiBold', fontSize: 12.5 },
-  serviceCost: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12.5 },
+  serviceLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 12.5 },
+  serviceCost: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12.5, minWidth: 64, textAlign: 'right' },
+  qtyStepper: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(1) },
+  qtyBtn: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
+  qtyBtnText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
+  qtyValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12, minWidth: 16, textAlign: 'center' },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.md, borderWidth: 1.5 },
+  pdfBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12.5 },
   addServiceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 44, borderRadius: radius.md, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   addServiceBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
   slip: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginBottom: spacing(3) },
