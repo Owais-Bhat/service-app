@@ -34,7 +34,7 @@ export default function ContactCard() {
           onPress={() => Linking.openURL(WHATSAPP_URL)}
           style={({ pressed }) => [styles.action, { backgroundColor: `${semantic.success}33` }, pressed && styles.pressed]}
         >
-          <Icon name="whatsapp" size={16} color={semantic.success} />
+          <Icon name="whatsapp" size={16} color={semantic.success} filled />
           <Text style={[styles.actionLabel, { color: semantic.success }]}>WhatsApp</Text>
         </Pressable>
       </View>

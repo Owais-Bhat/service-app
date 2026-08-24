@@ -732,7 +732,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                           onPress={() => Linking.openURL(`https://wa.me/?text=${encodeURIComponent('Please use this link to pay for your service: ' + paymentLink)}`)}
                           style={[styles.waBtn, { backgroundColor: '#25D366' }]}
                         >
-                          <Icon name="whatsapp" size={15} color="#fff" />
+                          <Icon name="whatsapp" size={15} color="#fff" filled />
                           <Text style={styles.waBtnText}>Share via WhatsApp</Text>
                         </Pressable>
                         <View style={styles.waitingRow}>
@@ -799,7 +799,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     </PressScale>
                     <PressScale onPress={handleShareBillWhatsApp} style={{ flex: 1 }}>
                       <View style={[styles.pdfBtn, { backgroundColor: '#25D366' }]}>
-                        <Icon name="whatsapp" size={14} color="#fff" />
+                        <Icon name="whatsapp" size={14} color="#fff" filled />
                         <Text style={[styles.pdfBtnText, { color: '#fff' }]}>Send via WhatsApp</Text>
                       </View>
                     </PressScale>
