@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
@@ -32,6 +33,18 @@ import { ApiError } from '../api/client';
 const BUSINESS_NAME = 'Networking Experts';
 
 const DEVICE_TYPE_CHIPS = ['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'];
+
+// Distinct accent per status option (+ the Device Service tile) so the
+// option list reads as a set of colored 3D chips rather than one flat list.
+const OPTION_ACCENT: Record<StatusOption | 'device', string> = {
+  in_progress: '#e08a14',
+  resolved: brand.primary,
+  reschedule: '#2e9bff',
+  issue_not_resolved: semantic.danger,
+  case_closed: '#6d8278',
+  foc: brand.primary,
+  device: '#7c5cfc',
+};
 
 interface Props {
   item: TaskItem;
@@ -380,45 +393,81 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Update Status</Text>
-            <Text style={[styles.modalSub, { color: theme.text3 }]}>{item.fullName} · {item.ticketNo || 'No ticket'}</Text>
-
-            {item.reopened ? (
-              <View style={styles.reopenedBanner}>
-                <Icon name="alert" size={14} color={semantic.warning} />
-                <Text style={styles.reopenedBannerText}>Reopened — complete as free rework (FOC), no new bill.</Text>
+        <Animated.View entering={ZoomIn.duration(360).springify().damping(15).mass(0.85)} style={styles.modalCardWrap}>
+          <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>Update Status</Text>
+                  <Text style={[styles.modalSub, { color: theme.text3 }]}>{item.fullName} · {item.ticketNo || 'No ticket'}</Text>
+                </View>
+                <PressScale onPress={onDismiss}>
+                  <View style={[styles.closeBtn, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+                    <Icon name="close" size={13} color={theme.text3} />
+                  </View>
+                </PressScale>
               </View>
-            ) : null}
 
-            <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(3) }]}>New Status</Text>
-            <View style={styles.optionList}>
-              {options.map((opt) => {
-                const active = mode === 'status' && status === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    onPress={() => { setMode('status'); setStatus(opt.key); }}
-                    style={[styles.optionRow, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}1a` : theme.panel2 }]}
-                  >
-                    <Icon name={opt.icon} size={16} color={active ? brand.primary : theme.text3} />
-                    <Text style={[styles.optionText, { color: active ? brand.primary : theme.text }]}>{opt.label}</Text>
-                    {active ? <Icon name="check" size={15} color={brand.primary} /> : null}
-                  </Pressable>
-                );
-              })}
-              {item.inquiryId ? (
-                <Pressable
-                  onPress={() => setMode('device')}
-                  style={[styles.optionRow, { borderColor: mode === 'device' ? brand.primary : theme.line, backgroundColor: mode === 'device' ? `${brand.primary}1a` : theme.panel2 }]}
-                >
-                  <Icon name="device" size={16} color={mode === 'device' ? brand.primary : theme.text3} />
-                  <Text style={[styles.optionText, { color: mode === 'device' ? brand.primary : theme.text }]}>Device Service</Text>
-                  {mode === 'device' ? <Icon name="check" size={15} color={brand.primary} /> : null}
-                </Pressable>
+              {item.reopened ? (
+                <View style={styles.reopenedBanner}>
+                  <Icon name="alert" size={14} color={semantic.warning} />
+                  <Text style={styles.reopenedBannerText}>Reopened — complete as free rework (FOC), no new bill.</Text>
+                </View>
               ) : null}
-            </View>
+
+              <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(3) }]}>New Status</Text>
+              <View style={styles.optionList}>
+                {options.map((opt, idx) => {
+                  const active = mode === 'status' && status === opt.key;
+                  const accent = OPTION_ACCENT[opt.key];
+                  return (
+                    <Animated.View key={opt.key} entering={FadeInUp.delay(idx * 55).duration(360).springify().damping(15)}>
+                      <PressScale onPress={() => { setMode('status'); setStatus(opt.key); }}>
+                        <View
+                          style={[
+                            styles.optionRow,
+                            active && styles.optionRowActiveShadow,
+                            { borderColor: active ? accent : theme.line, backgroundColor: active ? `${accent}1a` : theme.panel2, shadowColor: accent },
+                          ]}
+                        >
+                          <View style={[styles.optionIconChip, { backgroundColor: active ? accent : `${theme.text3}1f` }]}>
+                            <Icon name={opt.icon} size={15} color={active ? '#fff' : theme.text3} />
+                          </View>
+                          <Text style={[styles.optionText, { color: active ? accent : theme.text }]}>{opt.label}</Text>
+                          {active ? (
+                            <View style={[styles.optionCheckBadge, { backgroundColor: accent }]}>
+                              <Icon name="check" size={11} color="#fff" />
+                            </View>
+                          ) : null}
+                        </View>
+                      </PressScale>
+                    </Animated.View>
+                  );
+                })}
+                {item.inquiryId ? (
+                  <Animated.View entering={FadeInUp.delay(options.length * 55).duration(360).springify().damping(15)}>
+                    <PressScale onPress={() => setMode('device')}>
+                      <View
+                        style={[
+                          styles.optionRow,
+                          mode === 'device' && styles.optionRowActiveShadow,
+                          { borderColor: mode === 'device' ? OPTION_ACCENT.device : theme.line, backgroundColor: mode === 'device' ? `${OPTION_ACCENT.device}1a` : theme.panel2, shadowColor: OPTION_ACCENT.device },
+                        ]}
+                      >
+                        <View style={[styles.optionIconChip, { backgroundColor: mode === 'device' ? OPTION_ACCENT.device : `${theme.text3}1f` }]}>
+                          <Icon name="device" size={15} color={mode === 'device' ? '#fff' : theme.text3} />
+                        </View>
+                        <Text style={[styles.optionText, { color: mode === 'device' ? OPTION_ACCENT.device : theme.text }]}>Device Service</Text>
+                        {mode === 'device' ? (
+                          <View style={[styles.optionCheckBadge, { backgroundColor: OPTION_ACCENT.device }]}>
+                            <Icon name="check" size={11} color="#fff" />
+                          </View>
+                        ) : null}
+                      </View>
+                    </PressScale>
+                  </Animated.View>
+                ) : null}
+              </View>
 
             {mode === 'device' ? (
               alreadyTaken ? (
@@ -791,7 +840,8 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               );
             })()}
           </ScrollView>
-        </GlassSurface>
+          </GlassSurface>
+        </Animated.View>
       </View>
 
       {showPicker && (
@@ -820,14 +870,20 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
-  modalCard: { width: '100%', maxWidth: 440, maxHeight: '86%', padding: spacing(5) },
+  modalCardWrap: { width: '100%', maxWidth: 440, maxHeight: '86%' },
+  modalCard: { width: '100%', maxHeight: '100%', padding: spacing(5) },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2) },
+  closeBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   modalTitle: { ...typography.heading, fontSize: 18 },
   modalSub: { ...typography.caption, marginTop: spacing(0.5) },
   reopenedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), backgroundColor: 'rgba(224,138,20,0.14)', borderRadius: radius.md, padding: spacing(2.5), marginTop: spacing(3) },
   reopenedBannerText: { flex: 1, fontSize: 12, color: semantic.warning, lineHeight: 17 },
   fieldLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(3), marginBottom: spacing(1) },
   optionList: { gap: spacing(2) },
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.75) },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5) },
+  optionRowActiveShadow: { shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.32, shadowRadius: 10, elevation: 5 },
+  optionIconChip: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  optionCheckBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   optionText: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13 },
   input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5), fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
