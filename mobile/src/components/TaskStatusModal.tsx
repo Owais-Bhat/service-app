@@ -487,11 +487,19 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     onChangeText={setDeviceType}
                   />
                   <View style={styles.chipRow}>
-                    {DEVICE_TYPE_CHIPS.map((c) => (
-                      <Pressable key={c} onPress={() => setDeviceType(c)} style={[styles.chip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                        <Text style={[styles.chipText, { color: theme.text2 }]}>{c}</Text>
-                      </Pressable>
-                    ))}
+                    {(DEVICE_TYPE_CHIPS.includes(deviceType) ? [deviceType] : DEVICE_TYPE_CHIPS).map((c) => {
+                      const active = deviceType === c;
+                      return (
+                        <Pressable
+                          key={c}
+                          onPress={() => setDeviceType(active ? '' : c)}
+                          style={[styles.chip, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}1a` : theme.panel2 }]}
+                        >
+                          <Text style={[styles.chipText, { color: active ? brand.primary : theme.text2 }]}>{c}</Text>
+                          {active ? <Icon name="close" size={11} color={brand.primary} /> : null}
+                        </Pressable>
+                      );
+                    })}
                   </View>
 
                   <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Device Serial No</Text>
@@ -923,7 +931,7 @@ const styles = StyleSheet.create({
   receiptTotalLabel: { fontFamily: 'Manrope_800ExtraBold', fontSize: 14 },
   receiptTotalValue: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginTop: spacing(1.5) },
-  chip: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
   chipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
   transportLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   autoKmBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minWidth: 40, justifyContent: 'flex-end' },
