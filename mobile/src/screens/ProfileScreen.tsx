@@ -19,6 +19,7 @@ interface Props {
   onGoJobTools: () => void;
   onGoEarnings: () => void;
   onOpenLeaderboard: () => void;
+  onOpenBonusReviews: () => void;
   onOpenTraining: () => void;
   onOpenTutorials: () => void;
   onOpenNotifications: () => void;
@@ -27,6 +28,7 @@ interface Props {
 
 const MENU: { key: string; label: string; icon?: IconName }[] = [
   { key: 'leaderboard', label: 'Leaderboard', icon: 'leaderboard' },
+  { key: 'bonus-reviews', label: 'Bonus Reviews', icon: 'star' },
   { key: 'training', label: 'Training Courses', icon: 'training' },
   { key: 'tutorials', label: 'Tutorials', icon: 'tutorial' },
   { key: 'notifications', label: 'Notifications', icon: 'notification' },
@@ -39,6 +41,7 @@ export default function ProfileScreen({
   onGoJobTools,
   onGoEarnings,
   onOpenLeaderboard,
+  onOpenBonusReviews,
   onOpenTraining,
   onOpenTutorials,
   onOpenNotifications,
@@ -59,6 +62,7 @@ export default function ProfileScreen({
 
   const openRow = (key: string) => {
     if (key === 'leaderboard') onOpenLeaderboard();
+    else if (key === 'bonus-reviews') onOpenBonusReviews();
     else if (key === 'training') onOpenTraining();
     else if (key === 'tutorials') onOpenTutorials();
     else if (key === 'notifications') onOpenNotifications();

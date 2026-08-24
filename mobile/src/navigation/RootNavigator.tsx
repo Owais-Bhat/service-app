@@ -22,6 +22,7 @@ import EodReportScreen from '../screens/EodReportScreen';
 import EarningsScreen from '../screens/EarningsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
+import BonusReviewsScreen from '../screens/BonusReviewsScreen';
 import TrainingCoursesScreen from '../screens/TrainingCoursesScreen';
 import CoursePlayerScreen from '../screens/CoursePlayerScreen';
 import TutorialsScreen from '../screens/TutorialsScreen';
@@ -61,6 +62,7 @@ type EmployeeStackParams = {
   Earnings: undefined;
   Profile: undefined;
   Leaderboard: undefined;
+  BonusReviews: undefined;
   TrainingCourses: undefined;
   CoursePlayer: { courseId: string };
   Tutorials: undefined;
@@ -208,6 +210,7 @@ function ProfileRoute({ navigation }: any) {
       onGoJobTools={() => navigation.navigate('JobTools')}
       onGoEarnings={() => navigation.navigate('Earnings')}
       onOpenLeaderboard={() => navigation.navigate('Leaderboard')}
+      onOpenBonusReviews={() => navigation.navigate('BonusReviews')}
       onOpenTraining={() => navigation.navigate('TrainingCourses')}
       onOpenTutorials={() => navigation.navigate('Tutorials')}
       onOpenNotifications={() => navigation.navigate('Notifications')}
@@ -218,6 +221,10 @@ function ProfileRoute({ navigation }: any) {
 
 function LeaderboardRoute({ navigation }: any) {
   return <LeaderboardScreen onBack={() => navigation.goBack()} />;
+}
+
+function BonusReviewsRoute({ navigation }: any) {
+  return <BonusReviewsScreen onBack={() => navigation.goBack()} />;
 }
 
 function TrainingCoursesRoute({ navigation }: any) {
@@ -271,6 +278,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ManageTasks" component={ManageTasksRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="BonusReviews" component={BonusReviewsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="CoursePlayer" component={CoursePlayerRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Tutorials" component={TutorialsRoute} options={{ animation: 'slide_from_right' }} />
