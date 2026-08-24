@@ -36,7 +36,7 @@ export default function DeviceFollowUpScreen({ onBack, onOpenDevice }: Props) {
     if (!user) return;
     try {
       const rows = await fetchEmployeeDevices(user.id);
-      setDevices(rows.filter((d) => d.device_service_enabled || d.device_status));
+      setDevices(rows.filter((d) => d.device_status === 'taken'));
       setError(null);
     } catch {
       setError('Could not load devices — pull to retry');
