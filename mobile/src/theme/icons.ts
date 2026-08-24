@@ -47,6 +47,7 @@ export const ICONS = {
   filter: { outline: 'filter-outline', filled: 'filter' },
   calendar: { outline: 'calendar-outline', filled: 'calendar' },
   logout: { outline: 'log-out-outline', filled: 'log-out' },
+  chart: { outline: 'bar-chart-outline', filled: 'bar-chart' },
 } as const;
 
 export type IconName = keyof typeof ICONS;
