@@ -29,6 +29,20 @@ interface LineItem extends PickedService {
   qty: number;
 }
 
+type JobType = 'service' | 'installation';
+
+// Same categories as the public landing page's Installations section —
+// picking one just quick-fills Service/Project, no separate pricing logic
+// (web's own Estimator doesn't distinguish service vs installation either).
+const INSTALLATION_TYPES = [
+  { icon: '📹', label: 'CCTV Camera Installation' },
+  { icon: '🌐', label: 'Networking & LAN Setup' },
+  { icon: '📶', label: 'WiFi / Access Point Setup' },
+  { icon: '🔒', label: 'Biometric & Access Control' },
+  { icon: '🔔', label: 'Video Door Phone / Intercom' },
+  { icon: '🏠', label: 'Smart Home Automation' },
+];
+
 const BUSINESS_NAME = 'Networking Experts';
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
@@ -41,6 +55,7 @@ export default function EstimatorScreen({ onBack }: Props) {
   const { theme } = useTheme();
   const { user } = useAuth();
 
+  const [jobType, setJobType] = useState<JobType>('service');
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [serviceTitle, setServiceTitle] = useState('');
@@ -146,6 +161,7 @@ export default function EstimatorScreen({ onBack }: Props) {
   };
 
   const reset = () => {
+    setJobType('service');
     setClientName(''); setClientPhone(''); setServiceTitle(''); setLocation('');
     setIsOtherCompany(false); setCompanyName(BUSINESS_NAME); setCustomCompany('');
     setServices([]);
@@ -238,12 +254,45 @@ export default function EstimatorScreen({ onBack }: Props) {
               <Icon name="user" size={13} color={brand.primary} />
               <Text style={[styles.sectionLabel, { color: theme.text }]}>Client Details</Text>
             </View>
+            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Job Type</Text>
+            <View style={[styles.jobTypeRow, { marginBottom: spacing(3) }]}>
+              <PressScale onPress={() => setJobType('service')} style={{ flex: 1 }}>
+                <View style={[styles.jobTypePill, jobType === 'service' && styles.pillActiveShadow, { backgroundColor: jobType === 'service' ? brand.primary : theme.panel2, borderColor: jobType === 'service' ? brand.primary : theme.line }]}>
+                  <Icon name="wrench" size={13} color={jobType === 'service' ? '#fff' : theme.text2} />
+                  <Text style={[styles.jobTypeText, { color: jobType === 'service' ? '#fff' : theme.text2 }]}>Service</Text>
+                </View>
+              </PressScale>
+              <PressScale onPress={() => setJobType('installation')} style={{ flex: 1 }}>
+                <View style={[styles.jobTypePill, jobType === 'installation' && styles.pillActiveShadow, { backgroundColor: jobType === 'installation' ? brand.primary : theme.panel2, borderColor: jobType === 'installation' ? brand.primary : theme.line }]}>
+                  <Icon name="box" size={13} color={jobType === 'installation' ? '#fff' : theme.text2} />
+                  <Text style={[styles.jobTypeText, { color: jobType === 'installation' ? '#fff' : theme.text2 }]}>Installation</Text>
+                </View>
+              </PressScale>
+            </View>
+
             <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Client Name</Text>
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="Client name" placeholderTextColor={theme.text3} value={clientName} onChangeText={setClientName} />
             <Text style={[styles.fieldLabel, { color: theme.text3 }]}>WhatsApp Number</Text>
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="10 digit mobile number" placeholderTextColor={theme.text3} value={clientPhone} onChangeText={setClientPhone} keyboardType="phone-pad" />
             <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Service / Project</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="e.g. CCTV service visit" placeholderTextColor={theme.text3} value={serviceTitle} onChangeText={setServiceTitle} />
+            {jobType === 'installation' ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing(2) }}>
+                <View style={styles.pillRow}>
+                  {INSTALLATION_TYPES.map((t) => {
+                    const active = serviceTitle === t.label;
+                    return (
+                      <PressScale key={t.label} onPress={() => setServiceTitle(t.label)}>
+                        <View style={[styles.pill, active && styles.pillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
+                          <Text style={styles.installEmoji}>{t.icon}</Text>
+                          <Text style={[styles.pillText, { color: active ? '#fff' : theme.text2 }]}>{t.label}</Text>
+                        </View>
+                      </PressScale>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            ) : null}
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder={jobType === 'installation' ? 'e.g. CCTV Camera Installation' : 'e.g. CCTV service visit'} placeholderTextColor={theme.text3} value={serviceTitle} onChangeText={setServiceTitle} />
             <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Location</Text>
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="Client location" placeholderTextColor={theme.text3} value={location} onChangeText={setLocation} />
 
@@ -511,9 +560,13 @@ const styles = StyleSheet.create({
   fieldRow: { flexDirection: 'row', gap: spacing(3) },
   input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 44, fontSize: 13, fontFamily: 'Manrope_600SemiBold', marginBottom: spacing(3) },
   pillRow: { flexDirection: 'row', gap: spacing(2) },
-  pill: { paddingHorizontal: spacing(3), paddingVertical: spacing(1.75), borderRadius: radius.full, borderWidth: 1 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(1.75), borderRadius: radius.full, borderWidth: 1 },
   pillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
   pillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  installEmoji: { fontSize: 14 },
+  jobTypeRow: { flexDirection: 'row', gap: spacing(2) },
+  jobTypePill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.md, borderWidth: 1 },
+  jobTypeText: { fontFamily: 'Manrope_700Bold', fontSize: 12.5 },
   serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1, borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(2) },
   serviceLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 12.5 },
   serviceCost: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12.5, minWidth: 64, textAlign: 'right' },
