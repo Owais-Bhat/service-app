@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import MapView, { Marker, Callout } from 'react-native-maps';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import PulseDot from '../components/PulseDot';
@@ -21,7 +21,49 @@ const POLL_MS = 20000;
 const GIG_COLOR = '#7c5cfc';
 // Networking Experts is based in Srinagar — sensible map center when no one
 // is clocked in yet, instead of dropping the admin somewhere off Africa (0,0).
-const FALLBACK_REGION = { latitude: 34.0837, longitude: 74.7973, latitudeDelta: 0.6, longitudeDelta: 0.6 };
+const FALLBACK_CENTER = { latitude: 34.0837, longitude: 74.7973 };
+
+// OpenStreetMap via a WebView, same as web's Live Locations page — no
+// Google Maps API key needed, so it actually renders inside Expo Go (the
+// react-native-maps Google provider needs a key baked into a real native
+// build, which shows as a blank black tile in Expo Go). Markers are pushed
+// in after load via injectJavaScript so polling updates positions in place
+// instead of reloading the whole page and resetting the admin's pan/zoom.
+const MAP_HTML = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>html,body,#map{height:100%;margin:0;padding:0;background:#e5e7eb;}</style></head>
+<body><div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${FALLBACK_CENTER.latitude}, ${FALLBACK_CENTER.longitude}], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+var markers = {};
+var firstLoad = true;
+window.updateMarkers = function(rows) {
+  var seen = {};
+  rows.forEach(function(r) {
+    seen[r.user_id] = true;
+    var color = r.worker_type === 'gig' ? '${GIG_COLOR}' : '${brand.primary}';
+    if (markers[r.user_id]) {
+      markers[r.user_id].setLatLng([r.latitude, r.longitude]);
+    } else {
+      var m = L.circleMarker([r.latitude, r.longitude], { radius: 9, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map);
+      m.bindTooltip(r.full_name, { permanent: false, direction: 'top' });
+      m.on('click', function() {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ lat: r.latitude, lng: r.longitude }));
+      });
+      markers[r.user_id] = m;
+    }
+  });
+  Object.keys(markers).forEach(function(id) {
+    if (!seen[id]) { map.removeLayer(markers[id]); delete markers[id]; }
+  });
+  if (firstLoad && rows.length) {
+    firstLoad = false;
+    map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3));
+  }
+};
+</script></body></html>`;
 
 function timeAgo(iso: string): string {
   const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -38,7 +80,9 @@ export default function LiveLocationsScreen({ onBack }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [webReady, setWebReady] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const webRef = useRef<WebView>(null);
 
   const load = useCallback(async () => {
     try {
@@ -51,17 +95,6 @@ export default function LiveLocationsScreen({ onBack }: Props) {
     }
   }, []);
 
-  // Computed once (on first successful load) and handed to MapView's
-  // uncontrolled initialRegion — recomputing this on every poll would yank
-  // the map back to center under the admin's finger while they're panning.
-  const initialRegion = useMemo(() => {
-    if (rows.length === 0) return FALLBACK_REGION;
-    const lat = rows.reduce((sum, r) => sum + r.latitude, 0) / rows.length;
-    const lng = rows.reduce((sum, r) => sum + r.longitude, 0) / rows.length;
-    return { latitude: lat, longitude: lng, latitudeDelta: 0.15, longitudeDelta: 0.15 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded]);
-
   useEffect(() => {
     load();
     pollRef.current = setInterval(load, POLL_MS);
@@ -70,13 +103,28 @@ export default function LiveLocationsScreen({ onBack }: Props) {
     };
   }, [load]);
 
+  // Pushed in after the page finishes loading, and again on every poll —
+  // updates marker positions in place instead of reloading the WebView.
+  useEffect(() => {
+    if (webReady) webRef.current?.injectJavaScript(`window.updateMarkers(${JSON.stringify(rows)}); true;`);
+  }, [rows, webReady]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
     setRefreshing(false);
   };
 
-  const openMaps = (lat: number, lng: number) => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+  // Directions mode (not just a search pin) — opens Google Maps straight
+  // into guided turn-by-turn navigation to the employee's last position.
+  const openMaps = (lat: number, lng: number) => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`);
+
+  const handleMapMessage = (e: WebViewMessageEvent) => {
+    try {
+      const { lat, lng } = JSON.parse(e.nativeEvent.data);
+      openMaps(lat, lng);
+    } catch { /* ignore malformed messages */ }
+  };
 
   return (
     <View style={styles.root}>
@@ -95,25 +143,15 @@ export default function LiveLocationsScreen({ onBack }: Props) {
 
         {loaded && (
           <View style={[styles.mapWrap, { borderColor: theme.line }]}>
-            <MapView style={StyleSheet.absoluteFill} initialRegion={initialRegion}>
-              {rows.map((r) => (
-                <Marker
-                  key={r.user_id}
-                  coordinate={{ latitude: r.latitude, longitude: r.longitude }}
-                  pinColor={r.worker_type === 'gig' ? GIG_COLOR : brand.primary}
-                >
-                  <Callout onPress={() => openMaps(r.latitude, r.longitude)}>
-                    <View style={{ padding: 4, minWidth: 140 }}>
-                      <Text style={{ fontWeight: '700', fontSize: 13 }}>{r.full_name}</Text>
-                      <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
-                        {(r.worker_type || 'fixed').replace(/^\w/, (c) => c.toUpperCase())} · {timeAgo(r.updated_at)}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: brand.primary, marginTop: 4 }}>Tap for directions →</Text>
-                    </View>
-                  </Callout>
-                </Marker>
-              ))}
-            </MapView>
+            <WebView
+              ref={webRef}
+              style={StyleSheet.absoluteFill}
+              originWhitelist={['*']}
+              source={{ html: MAP_HTML }}
+              scrollEnabled={false}
+              onLoadEnd={() => setWebReady(true)}
+              onMessage={handleMapMessage}
+            />
           </View>
         )}
 

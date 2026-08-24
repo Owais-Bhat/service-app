@@ -1,6 +1,6 @@
 import React from 'react';
 import { Linking, Modal, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
@@ -23,12 +23,31 @@ export default function LocationMapModal({ location, lat, lng, onDismiss }: Prop
   const { theme } = useTheme();
   const hasCoords = typeof lat === 'number' && typeof lng === 'number';
 
+  // Turn-by-turn "Start" navigation (not just a search pin) — dir mode with
+  // travelmode=driving opens Google Maps straight into guided navigation.
   const openGoogleMaps = () => {
     const url = hasCoords
-      ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || '')}`;
+      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`
+      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location || '')}&travelmode=driving`;
     Linking.openURL(url);
   };
+
+  // OpenStreetMap via a WebView — react-native-maps' Google provider needs a
+  // native API key baked into a real build, which Expo Go can't do (renders
+  // as a blank black tile). This needs no key and works in Expo Go, same
+  // approach the web admin's Live Locations page already uses (Leaflet).
+  const mapHtml = hasCoords
+    ? `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>html,body,#map{height:100%;margin:0;padding:0;background:#e5e7eb;}</style></head>
+<body><div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${lat}, ${lng}], 16);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+L.marker([${lat}, ${lng}]).addTo(map);
+</script></body></html>`
+    : '';
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
@@ -51,12 +70,7 @@ export default function LocationMapModal({ location, lat, lng, onDismiss }: Prop
 
             {hasCoords ? (
               <View style={[styles.mapWrap, { borderColor: theme.line }]}>
-                <MapView
-                  style={StyleSheet.absoluteFill}
-                  initialRegion={{ latitude: lat!, longitude: lng!, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-                >
-                  <Marker coordinate={{ latitude: lat!, longitude: lng! }} pinColor={brand.primary} />
-                </MapView>
+                <WebView style={StyleSheet.absoluteFill} originWhitelist={['*']} source={{ html: mapHtml }} scrollEnabled={false} />
               </View>
             ) : (
               <View style={[styles.noCoordsBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
