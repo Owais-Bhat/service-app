@@ -1,4 +1,4 @@
-import { dataGet, api } from './client';
+import { dataGet, dataPost, api } from './client';
 
 export interface CourseSummary {
   id: string;
@@ -44,6 +44,13 @@ export interface WatchProgress {
   duration_seconds: number;
 }
 
+export interface TrainingCompletion {
+  id: string;
+  item_id: string;
+  employee_id: string;
+  completed_at: string;
+}
+
 export async function fetchMyCourses(): Promise<CourseSummary[]> {
   return api.get<CourseSummary[]>('/training/my');
 }
@@ -68,4 +75,19 @@ export async function fetchTrainingItems(): Promise<TrainingItem[]> {
 // whatever progress already exists (e.g. from web usage) — read-only.
 export async function fetchWatchProgress(): Promise<WatchProgress[]> {
   return api.get<WatchProgress[]>('/training/watch-progress/mine');
+}
+
+export async function fetchMyCompletions(userId: string): Promise<TrainingCompletion[]> {
+  return dataGet<TrainingCompletion[]>('training_completions', {
+    select: '*',
+    eq: [`employee_id:${userId}`],
+  });
+}
+
+export async function markTutorialComplete(itemId: string, userId: string): Promise<void> {
+  await dataPost('training_completions', {
+    item_id: itemId,
+    employee_id: userId,
+    completed_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+  });
 }
