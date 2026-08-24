@@ -88,12 +88,28 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                   {questions.map((q, idx) => {
                     const r = result.results.find((x) => x.id === q.id);
                     const ok = !!r?.correct;
+                    const chosenText = r && r.chosen !== null && r.chosen !== undefined ? q.options[r.chosen] : null;
+                    const correctText = r ? q.options[r.correct_index] : null;
                     return (
-                      <Animated.View key={q.id} entering={FadeInUp.delay(idx * 60).duration(350).springify().damping(15)} style={styles.resultRow}>
-                        <View style={[styles.resultIconChip, { backgroundColor: ok ? 'rgba(21,160,90,0.16)' : 'rgba(240,85,109,0.16)' }]}>
-                          <Icon name={ok ? 'check' : 'close'} size={12} color={ok ? brand.primary : semantic.danger} />
-                        </View>
-                        <Text style={[styles.resultQuestion, { color: theme.text2 }]} numberOfLines={2}>{q.question}</Text>
+                      <Animated.View key={q.id} entering={FadeInUp.delay(idx * 60).duration(350).springify().damping(15)} style={{ width: '100%' }}>
+                        <GlassCard style={{ ...styles.resultCard, borderColor: ok ? 'rgba(21,160,90,0.35)' : 'rgba(240,85,109,0.35)', borderWidth: 1 }}>
+                          <View style={styles.resultRow}>
+                            <View style={[styles.resultIconChip, { backgroundColor: ok ? 'rgba(21,160,90,0.16)' : 'rgba(240,85,109,0.16)' }]}>
+                              <Icon name={ok ? 'check' : 'close'} size={12} color={ok ? brand.primary : semantic.danger} />
+                            </View>
+                            <Text style={[styles.resultQuestion, { color: theme.text }]}>{q.question}</Text>
+                          </View>
+                          {!ok ? (
+                            <View style={styles.resultAnswers}>
+                              <Text style={[styles.resultAnswerLine, { color: semantic.danger }]}>
+                                Your answer: {chosenText || 'No answer'}
+                              </Text>
+                              <Text style={[styles.resultAnswerLine, { color: brand.primary }]}>
+                                Correct answer: {correctText}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </GlassCard>
                       </Animated.View>
                     );
                   })}
@@ -184,7 +200,10 @@ const styles = StyleSheet.create({
   resultWrap: { alignItems: 'center', paddingBottom: spacing(2) },
   passBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), paddingHorizontal: spacing(3.5), paddingVertical: spacing(2), borderRadius: radius.full, marginTop: spacing(3), marginBottom: spacing(4) },
   passBannerText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), width: '100%', marginBottom: spacing(2.5) },
-  resultIconChip: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  resultQuestion: { flex: 1, fontFamily: 'Manrope_600SemiBold', fontSize: 12.5, lineHeight: 17 },
+  resultCard: { width: '100%', marginBottom: spacing(2.5) },
+  resultRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2.5) },
+  resultIconChip: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: spacing(0.5) },
+  resultQuestion: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13, lineHeight: 18 },
+  resultAnswers: { marginTop: spacing(2.5), paddingTop: spacing(2.5), borderTopWidth: 1, borderTopColor: 'rgba(128,128,128,0.18)', gap: spacing(1) },
+  resultAnswerLine: { fontFamily: 'Manrope_600SemiBold', fontSize: 12, lineHeight: 17 },
 });
