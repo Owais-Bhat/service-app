@@ -490,6 +490,19 @@ function uploadSingle(field) {
     };
 }
 
+function uploadFields(fields) {
+    return (req, res, next) => {
+        upload.fields(fields)(req, res, (err) => {
+            if (!err) return next();
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({ error: `File too large. Max ${Math.round(UPLOAD_MAX_BYTES / (1024 * 1024))} MB.` });
+            }
+            console.error('[upload] multer error:', err);
+            return res.status(400).json({ error: err.message || 'Upload error' });
+        });
+    };
+}
+
 // --- Video normalization ---------------------------------------------------
 // Phone / WhatsApp videos are usually variable-frame-rate (VFR) and are not
 // web-optimized, which is exactly why a sponsor clip plays back "slow and
@@ -1336,6 +1349,7 @@ const requiredColumns = {
         { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
         { name: 'worker_type', definition: "VARCHAR(20) DEFAULT 'fixed' COMMENT 'fixed = permanent employee, gig = public-pool competitive worker'" },
         { name: 'installations_enabled', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee see/receive the Installations tab'" },
+        { name: 'allow_foc', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Admin-controlled: can this employee mark a reopened ticket FOC (free of cost, no bill)'" },
         { name: 'face_descriptor', definition: "TEXT COMMENT 'JSON array of 128 floats — reference face captured on the first photo clock-in'" },
         { name: 'face_registered_at', definition: 'DATETIME DEFAULT NULL' },
         { name: 'photo_clockin_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee skips selfie/face verification at clock-in even when the global setting requires it'" },
@@ -1458,6 +1472,10 @@ const requiredColumns = {
     discount_presets: [
         { name: 'description', definition: 'TEXT' },
         { name: 'active', definition: 'TINYINT(1) DEFAULT 1' },
+    ],
+    review_submissions: [
+        { name: 'claimed_customer_name', definition: "VARCHAR(150) DEFAULT NULL COMMENT 'Customer name the employee typed by hand — admin compares it against the real ticket name as a lightweight fraud check'" },
+        { name: 'claimed_address', definition: "TEXT COMMENT 'Employee-entered address for installation claims, which have no linked ticket'" },
     ],
 };
 
@@ -1795,6 +1813,30 @@ const requiredTables = [
         UNIQUE KEY uniq_month (month),
         FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE SET NULL
     )`,
+    // Bonus-points review claims that feed the leaderboard's totalScore.
+    // 'google' and 'job_card' are employee-submitted (photo + policy
+    // checkbox); 'sms' is auto-created when a customer's feedback-link
+    // reply comes in for a service-type job — see /api/feedback/submit.
+    `CREATE TABLE IF NOT EXISTS review_submissions (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        employee_id VARCHAR(36) NOT NULL,
+        review_type VARCHAR(20) NOT NULL COMMENT "'google' | 'job_card' | 'sms'",
+        photo_url TEXT,
+        star_rating INT,
+        policy_agreed TINYINT(1) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT "'pending' | 'approved' | 'rejected'",
+        points INT,
+        admin_note TEXT,
+        reviewed_by VARCHAR(36),
+        reviewed_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_review_submissions_inquiry (inquiry_id),
+        INDEX idx_review_submissions_employee (employee_id),
+        INDEX idx_review_submissions_status (status),
+        FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE CASCADE
+    )`,
     // One row per user, overwritten on every ping — this is a "where are they
     // right now" table, not a location history log. Foreground-only pings from
     // the mobile app while clocked in (see /api/live-location/ping).
@@ -1861,6 +1903,22 @@ async function ensureRequiredColumns(connection) {
                 `ALTER TABLE ?? ADD COLUMN ?? ${column.definition}`,
                 [table, column.name]
             );
+        }
+    }
+
+    // One-time migration: installation Bonus Review claims have no linked
+    // ticket at all (employee types the customer's name/address by hand
+    // instead of picking one), so inquiry_id can no longer be mandatory.
+    // NULL FK values are exempt from the FK check, so no need to touch the
+    // constraint itself — just the column's nullability.
+    {
+        const [[col]] = await connection.query(
+            `SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'review_submissions' AND COLUMN_NAME = 'inquiry_id'`
+        );
+        if (col && col.IS_NULLABLE === 'NO') {
+            console.log('[Schema] Making review_submissions.inquiry_id nullable');
+            await connection.query('ALTER TABLE review_submissions MODIFY inquiry_id VARCHAR(36) NULL');
         }
     }
 
@@ -2591,7 +2649,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled', 'allow_foc']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -3009,8 +3067,26 @@ app.post('/api/feedback/submit', rateLimit({ windowMs: 60_000, max: 10, key: 'fe
             return res.status(409).json({ error: 'Feedback already submitted' });
         }
         const [freshRows] = await connection.execute('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [row.id]);
-        connection.release();
         const fresh = freshRows[0] || { id: row.id, feedback_rating: rating };
+
+        // Service-type jobs earn their leaderboard review bonus from this
+        // SMS feedback link directly (no employee submission needed) —
+        // installation-type jobs use the Job Card review claim instead.
+        // policy_agreed is 1 here since this is a system-generated row, not
+        // a user-submitted claim requiring consent.
+        if (fresh.job_card_type === 'service' && fresh.assigned_employee_id) {
+            try {
+                await connection.query(
+                    `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, star_rating, policy_agreed, status)
+                     VALUES (?, ?, ?, 'sms', ?, 1, 'pending')`,
+                    [uuidv4(), row.id, fresh.assigned_employee_id, rating]
+                );
+            } catch (err) {
+                console.error('[feedback/submit] could not auto-create sms review submission:', err);
+            }
+        }
+
+        connection.release();
         broadcastChange('UPDATE', 'inquiries', fresh);
         broadcastNotify({
             subject: 'feedback_received',
@@ -3564,10 +3640,10 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type, installations_enabled FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type, installations_enabled, allow_foc FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
-        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1 };
+        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1, allow_foc: 1 };
 
         // Block client logins — clients use the public landing page, not the dashboard.
         if (profile.role !== 'admin' && profile.role !== 'employee') {
@@ -3581,7 +3657,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled, allow_foc: profile.allow_foc === undefined ? 1 : profile.allow_foc }
         });
     } catch (error) {
         console.error('Signin error:', error);
@@ -3623,7 +3699,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType, installationsEnabled } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType, installationsEnabled, allowFoc } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -3656,7 +3732,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type, installations_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -3669,7 +3745,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     can_update_profile ? 1 : 0,
                     alwaysAssign ? 1 : 0,
                     workerType === 'gig' ? 'gig' : 'fixed',
-                    installationsEnabled === false ? 0 : 1
+                    installationsEnabled === false ? 0 : 1,
+                    allowFoc === false ? 0 : 1
                 ]
             );
 
@@ -3704,7 +3781,8 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         alwaysAssign,
         allowed_tabs,
         workerType,
-        installationsEnabled
+        installationsEnabled,
+        allowFoc
     } = req.body;
 
     try {
@@ -3810,6 +3888,10 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (installationsEnabled !== undefined) {
                 profileUpdates.push('installations_enabled = ?');
                 profileParams.push(installationsEnabled ? 1 : 0);
+            }
+            if (allowFoc !== undefined) {
+                profileUpdates.push('allow_foc = ?');
+                profileParams.push(allowFoc ? 1 : 0);
             }
             if (allowed_tabs !== undefined) {
                 // null/empty array => full access (store NULL). Otherwise store a JSON array of tab ids.
@@ -5523,6 +5605,23 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
             );
         }
 
+        // Approved Google Review claims carry a real customer star rating
+        // too (set by admin off the screenshot) — fold them into the same
+        // review-count/avg-rating/5-stars stats as SMS feedback. Job Card
+        // claims have no star rating so they're left out here; SMS claims
+        // are skipped since they're already counted via inquiries.feedback_rating
+        // above and would otherwise be double-counted.
+        const [googleReviewRows] = await connection.execute(
+            `SELECT employee_id, star_rating, reviewed_at FROM review_submissions
+              WHERE status = 'approved' AND review_type = 'google' AND star_rating IS NOT NULL`
+        );
+        fbRows = fbRows.concat(googleReviewRows.map(r => ({
+            feedback_employee_id: r.employee_id,
+            feedback_rating: r.star_rating,
+            feedback_at: r.reviewed_at,
+            created_at: r.reviewed_at,
+        })));
+
         connection.release();
         connection = null;
 
@@ -5556,6 +5655,29 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
         const monthly = monthKey
             ? agg(fbRows.filter(r => monthOf(r.feedback_at || r.created_at) === monthKey))
             : allTime;
+
+        // Bonus Reviews points (approved Google/Job Card/SMS claims) so an
+        // employee can see the same bonus total admin sees on the Job Cards
+        // leaderboard, without having to leave their own Leaderboard tab.
+        let bonusConn;
+        try {
+            bonusConn = await getConn();
+            const [allTimeBonusRows] = await bonusConn.query(
+                `SELECT employee_id, SUM(points) AS points FROM review_submissions
+                  WHERE status = 'approved' GROUP BY employee_id`
+            );
+            const allTimeBonus = {};
+            for (const row of allTimeBonusRows) allTimeBonus[row.employee_id] = Number(row.points) || 0;
+            const monthlyBonus = monthKey ? await fetchApprovedBonusPointsForMonth(bonusConn, monthKey) : null;
+            allTime.forEach(e => { e.bonusPoints = allTimeBonus[e.id] || 0; });
+            monthly.forEach(e => { e.bonusPoints = monthKey ? (monthlyBonus[e.id]?.points || 0) : (allTimeBonus[e.id] || 0); });
+        } catch (err) {
+            console.error('[leaderboard] bonus points lookup failed:', err.message);
+            allTime.forEach(e => { e.bonusPoints = 0; });
+            monthly.forEach(e => { e.bonusPoints = 0; });
+        } finally {
+            if (bonusConn) bonusConn.release();
+        }
 
         res.json({ monthly, allTime });
     } catch (error) {
@@ -5915,6 +6037,242 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
     }
 });
 
+// Points awarded per review type. Google is conditional (set at admin
+// verification time based on the star rating admin reads off the
+// screenshot); job_card and sms are flat on approval.
+const REVIEW_TYPE_POINTS = { google: 30, job_card: 10, sms: 10 };
+
+// Service claims are linked to a real ticket, picked from a dropdown of the
+// employee's own completed jobs — no free-text ticket entry (that kept
+// coming up empty or typo-prone). "Completed" here means resolved/case_closed/
+// foc, not job_card_filled_at, which is often still unset at claim time.
+app.get('/api/review-submissions/resolved-jobs', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, ticket_no, full_name FROM inquiries
+              WHERE (assigned_employee_id = ? OR secondary_employee_id = ?)
+                AND status IN ('resolved', 'case_closed', 'foc')
+              ORDER BY created_at DESC
+              LIMIT 200`,
+            [req.user.id, req.user.id]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[review-submissions] resolved-jobs failed:', err);
+        res.status(500).json({ error: 'Could not load your completed jobs' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/review-submissions/mine', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT rs.*, i.ticket_no, i.full_name AS customer_name
+               FROM review_submissions rs
+               LEFT JOIN inquiries i ON i.id = rs.inquiry_id
+              WHERE rs.employee_id = ?
+              ORDER BY rs.created_at DESC
+              LIMIT 100`,
+            [req.user.id]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[review-submissions] mine failed:', err);
+        res.status(500).json({ error: 'Could not load your review submissions' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Service claims: one Google Review photo against a picked ticket.
+app.post('/api/review-submissions/service', authenticateToken, uploadSingle('photo'), async (req, res) => {
+    if (req.user.role !== 'employee') return res.sendStatus(403);
+    const inquiryId = req.body?.inquiry_id;
+    const policyAgreed = req.body?.policy_agreed === 'true' || req.body?.policy_agreed === '1';
+    if (!inquiryId) return res.status(400).json({ error: 'inquiry_id is required' });
+    if (!policyAgreed) return res.status(400).json({ error: 'You must agree to the policy before submitting' });
+    if (!req.file) return res.status(400).json({ error: 'A photo is required' });
+
+    let connection;
+    try {
+        connection = await getConn();
+
+        // Re-resolve ownership server-side — never trust that the client's
+        // dropdown selection alone proves this ticket belongs to them.
+        const [[job]] = await connection.query(
+            `SELECT id, ticket_no, full_name FROM inquiries
+              WHERE id = ? AND (assigned_employee_id = ? OR secondary_employee_id = ?)
+                AND status IN ('resolved', 'case_closed', 'foc')
+              LIMIT 1`,
+            [inquiryId, req.user.id, req.user.id]
+        );
+        if (!job) return res.status(404).json({ error: 'That job is not yours or is not completed yet' });
+
+        const [dupes] = await connection.query(
+            `SELECT id FROM review_submissions
+              WHERE inquiry_id = ? AND review_type = 'google' AND status IN ('pending', 'approved')
+              LIMIT 1`,
+            [inquiryId]
+        );
+        if (dupes.length) return res.status(400).json({ error: 'A Google Review claim for this job already exists' });
+
+        const ext = path.extname(req.file.originalname || '') || '.jpg';
+        const mime = req.file.mimetype || 'image/jpeg';
+        const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+        await connection.query('INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)', [fileId, mime, req.file.buffer]);
+        const photoUrl = `/uploads/${fileId}`;
+
+        const id = uuidv4();
+        await connection.query(
+            `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, photo_url, claimed_customer_name, policy_agreed, status)
+             VALUES (?, ?, ?, 'google', ?, ?, 1, 'pending')`,
+            [id, inquiryId, req.user.id, photoUrl, job.full_name]
+        );
+
+        const [[row]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
+        res.json(row);
+    } catch (err) {
+        console.error('[review-submissions] service create failed:', err);
+        res.status(500).json({ error: 'Could not submit review' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Installation claims: no ticket link — the employee hand-types the
+// customer's name/address and can attach a Google Review photo, a Job Card
+// photo, or both in one go. Each attached photo becomes its own
+// review_submissions row (unlinked, inquiry_id NULL) so admin verifies and
+// scores them independently.
+app.post(
+    '/api/review-submissions/installation',
+    authenticateToken,
+    uploadFields([{ name: 'google_photo', maxCount: 1 }, { name: 'job_card_photo', maxCount: 1 }]),
+    async (req, res) => {
+        if (req.user.role !== 'employee') return res.sendStatus(403);
+        const claimedCustomerName = String(req.body?.customer_name || '').trim();
+        const claimedAddress = String(req.body?.address || '').trim();
+        const policyAgreed = req.body?.policy_agreed === 'true' || req.body?.policy_agreed === '1';
+        const googlePhoto = req.files?.google_photo?.[0];
+        const jobCardPhoto = req.files?.job_card_photo?.[0];
+        if (!claimedCustomerName) return res.status(400).json({ error: 'customer_name is required' });
+        if (!claimedAddress) return res.status(400).json({ error: 'address is required' });
+        if (!policyAgreed) return res.status(400).json({ error: 'You must agree to the policy before submitting' });
+        if (!googlePhoto && !jobCardPhoto) return res.status(400).json({ error: 'Attach at least one photo' });
+
+        let connection;
+        try {
+            connection = await getConn();
+            const saved = [];
+            for (const [reviewType, file] of [['google', googlePhoto], ['job_card', jobCardPhoto]]) {
+                if (!file) continue;
+                const ext = path.extname(file.originalname || '') || '.jpg';
+                const mime = file.mimetype || 'image/jpeg';
+                const fileId = `${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+                await connection.query('INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)', [fileId, mime, file.buffer]);
+                const id = uuidv4();
+                await connection.query(
+                    `INSERT INTO review_submissions (id, inquiry_id, employee_id, review_type, photo_url, claimed_customer_name, claimed_address, policy_agreed, status)
+                     VALUES (?, NULL, ?, ?, ?, ?, ?, 1, 'pending')`,
+                    [id, req.user.id, reviewType, `/uploads/${fileId}`, claimedCustomerName, claimedAddress]
+                );
+                saved.push(id);
+            }
+            const [rows] = await connection.query('SELECT * FROM review_submissions WHERE id IN (?)', [saved]);
+            res.json(rows);
+        } catch (err) {
+            console.error('[review-submissions] installation create failed:', err);
+            res.status(500).json({ error: 'Could not submit review' });
+        } finally {
+            if (connection) connection.release();
+        }
+    }
+);
+
+app.get('/api/review-submissions', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT rs.*, i.ticket_no, i.full_name AS customer_name, i.job_card_type,
+                    p.full_name AS employee_name
+               FROM review_submissions rs
+               LEFT JOIN inquiries i ON i.id = rs.inquiry_id
+               LEFT JOIN profiles p ON p.id = rs.employee_id
+              WHERE rs.status = ?
+              ORDER BY rs.created_at DESC
+              LIMIT 200`,
+            [status]
+        );
+        // rs.* already carries claimed_customer_name/claimed_address. For
+        // service claims those mirror the real ticket (i.ticket_no,
+        // i.full_name); for installation claims there's no ticket at all, so
+        // ticket_no/customer_name come back NULL and claimed_* is all admin has.
+        res.json(rows);
+    } catch (err) {
+        console.error('[review-submissions] list failed:', err);
+        res.status(500).json({ error: 'Could not load review submissions' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/review-submissions/:id/verify', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    const status = req.body?.status;
+    const starRating = req.body?.star_rating != null ? Number(req.body.star_rating) : null;
+    const adminNote = req.body?.admin_note || null;
+    if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: 'status must be approved or rejected' });
+    }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [[submission]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
+        if (!submission) return res.status(404).json({ error: 'Review submission not found' });
+        if (submission.status !== 'pending') return res.status(400).json({ error: 'This submission was already reviewed' });
+
+        let points = 0;
+        if (status === 'approved') {
+            if (submission.review_type === 'google') {
+                if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
+                    return res.status(400).json({ error: 'star_rating (1-5) is required to approve a Google review' });
+                }
+                points = starRating === 5 ? REVIEW_TYPE_POINTS.google : 0;
+            } else {
+                points = REVIEW_TYPE_POINTS[submission.review_type] || 0;
+            }
+        }
+
+        await connection.query(
+            `UPDATE review_submissions
+                SET status = ?, points = ?, star_rating = COALESCE(?, star_rating),
+                    admin_note = ?, reviewed_by = ?, reviewed_at = NOW()
+              WHERE id = ?`,
+            [status, points, starRating, adminNote, req.user.id, id]
+        );
+
+        const [[row]] = await connection.query('SELECT * FROM review_submissions WHERE id = ? LIMIT 1', [id]);
+        res.json(row);
+    } catch (err) {
+        console.error('[review-submissions] verify failed:', err);
+        res.status(500).json({ error: 'Could not save review verification' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Shared by GET /api/admin/leaderboard and POST /api/admin/leaderboard/:month/award
 // so both routes always score the exact same set of verified jobs for a month —
 // the award endpoint must never diverge from what the displayed leaderboard shows,
@@ -5935,9 +6293,33 @@ async function fetchVerifiedJobsForMonth(connection, month) {
     return rows;
 }
 
+// Same reasoning as fetchVerifiedJobsForMonth: shared by both leaderboard
+// routes so the award endpoint's bonus totals can never drift from what's
+// displayed. Scoped to the month admin approved the claim (reviewed_at), not
+// the job's job_card_filled_at — that field is frequently never set (job
+// cards get transcribed on a separate, often-skipped timeline), which left
+// approved points stuck off the leaderboard forever.
+async function fetchApprovedBonusPointsForMonth(connection, month) {
+    const [rows] = await connection.query(
+        `SELECT rs.employee_id, p.full_name AS name, SUM(rs.points) AS points
+           FROM review_submissions rs
+           LEFT JOIN profiles p ON p.id = rs.employee_id
+          WHERE rs.status = 'approved'
+            AND DATE_FORMAT(rs.reviewed_at, '%Y-%m') = ?
+          GROUP BY rs.employee_id, p.full_name`,
+        [month]
+    );
+    const byEmployee = {};
+    for (const row of rows) {
+        byEmployee[row.employee_id] = { name: row.name, points: Number(row.points) || 0 };
+    }
+    return byEmployee;
+}
+
 // Employee-facing leaderboard — same computation as the admin endpoint
-// below, without the admin gate or award-lookup, so a technician can see
-// their own standing (design spec §2).
+// below (including approved bonus points, so a technician's standing here
+// never drifts from what admins see), without the admin gate or
+// award-lookup (design spec §2).
 app.get('/api/leaderboard', authenticateToken, async (req, res) => {
     if (req.user.role !== 'employee') return res.sendStatus(403);
     const month = String(req.query.month || '').trim();
@@ -5949,7 +6331,8 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
     try {
         connection = await getConn();
         const rows = await fetchVerifiedJobsForMonth(connection, month);
-        const board = computeLeaderboard(rows);
+        const bonusByEmployee = await fetchApprovedBonusPointsForMonth(connection, month);
+        const board = computeLeaderboard(rows, bonusByEmployee);
         res.json({ month, leaderboard: board });
     } catch (err) {
         console.error('[leaderboard] employee leaderboard fetch failed:', err);
@@ -5970,7 +6353,8 @@ app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     try {
         connection = await getConn();
         const rows = await fetchVerifiedJobsForMonth(connection, month);
-        const board = computeLeaderboard(rows);
+        const bonusByEmployee = await fetchApprovedBonusPointsForMonth(connection, month);
+        const board = computeLeaderboard(rows, bonusByEmployee);
 
         const [[existingAward]] = await connection.query(
             'SELECT employee_id, amount FROM technician_awards WHERE month = ? LIMIT 1',
@@ -5997,7 +6381,8 @@ app.post('/api/admin/leaderboard/:month/award', authenticateToken, async (req, r
     try {
         connection = await getConn();
         const rows = await fetchVerifiedJobsForMonth(connection, month);
-        const board = computeLeaderboard(rows);
+        const bonusByEmployee = await fetchApprovedBonusPointsForMonth(connection, month);
+        const board = computeLeaderboard(rows, bonusByEmployee);
         const winner = board.find(r => r.employeeId === employee_id);
         if (!winner) return res.status(400).json({ error: 'This technician has no verified jobs for that month' });
 

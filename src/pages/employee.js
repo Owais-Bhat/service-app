@@ -2256,6 +2256,11 @@ export async function renderEmployeeLeaderboard(container) {
           <div class="lb-my-stat-val">${myMonthly?.fiveStars ?? 0}</div>
           <div class="lb-my-stat-label">5-Stars</div>
         </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val" style="color:var(--primary);">+${myMonthly?.bonusPoints ?? 0}</div>
+          <div class="lb-my-stat-label">Bonus Points</div>
+        </div>
       </div>
     </div>
 
@@ -2287,6 +2292,11 @@ export async function renderEmployeeLeaderboard(container) {
         <div class="lb-my-stat">
           <div class="lb-my-stat-val">${myAllTime?.fiveStars ?? 0}</div>
           <div class="lb-my-stat-label">5-Stars</div>
+        </div>
+        <div class="lb-my-stat-div"></div>
+        <div class="lb-my-stat">
+          <div class="lb-my-stat-val" style="color:var(--primary);">+${myAllTime?.bonusPoints ?? 0}</div>
+          <div class="lb-my-stat-label">Bonus Points</div>
         </div>
       </div>
     </div>
@@ -3439,8 +3449,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
   return (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
     const { data: discountPresets } = await supabase.from('discount_presets').select('*').eq('active', 1).order('created_at', { ascending: false });
-    const { data: deviceTypes } = await supabase.from('device_types').select('name').order('name');
-    const deviceTypeList = Array.isArray(deviceTypes) ? deviceTypes : [];
     const { data: companies } = await supabase.from('companies').select('*').order('name');
     const companyList = Array.isArray(companies) ? companies : [];
     const discountPresetList = Array.isArray(discountPresets) ? discountPresets : [];
@@ -3495,6 +3503,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const normalizedCurrentStatus = displayStatus(currentStatus);
     const isResolvedReadOnly = isLocked(normalizedCurrentStatus);
     const isResolving = normalizedCurrentStatus === 'resolved';
+    // Admin-controlled: can this employee mark a reopened ticket FOC at all.
+    const focAllowed = !empProfile || empProfile.allow_foc === undefined || empProfile.allow_foc === null || Number(empProfile.allow_foc) === 1;
+    const isReopened = Number(inquiryRow?.reopened) === 1;
     // Device tracking feature flag (master) + per-ticket flag.
     await loadDeviceTrackingEnabled();
     const deviceFeatureOn = deviceTrackingEnabled;
@@ -3584,7 +3595,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         <div class="modal-body" style="padding-top:14px;">
           <div class="mst-tabs" role="tablist">
             <button type="button" class="mst-tab active" data-tab="status">${ICONS.pin}<span>Status</span></button>
-            <button type="button" class="mst-tab" data-tab="device">${ICONS.wrench}<span>Device</span></button>
             <button type="button" class="mst-tab" data-tab="bill">${ICONS.receipt}<span>Bill</span></button>
           </div>
 
@@ -3694,16 +3704,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           <!-- TAB 1: STATUS -->
           <div class="mst-pane active" data-pane="status">
-            ${Number(inquiryRow?.reopened) === 1 ? `
+            ${isReopened ? `
               <div style="padding:12px 14px;border-radius:12px;background:rgba(245,158,11,0.12);border:1px solid var(--warning);margin-bottom:14px;font-size:0.85rem;line-height:1.5;">
-                🔁 <b>Reopened ticket — issue not resolved.</b> The customer already paid for this service, so complete the rework as <b>FOC (Free of Cost)</b> — no new bill will be generated.
+                🔁 <b>Reopened ticket — issue not resolved.</b> The customer already paid for this service, so complete the rework as <b>FOC (Free of Cost)</b>${focAllowed ? ' — no new bill will be generated.' : '. Ask admin — you don\'t have FOC permission on your account, so this ticket will need to be resolved normally.'}
               </div>` : ''}
             <div class="form-group">
               <label>New Status</label>
               <select id="new-status" ${isResolvedReadOnly ? 'disabled' : ''}>
-                ${Number(inquiryRow?.reopened) === 1 ? `
+                ${isReopened ? `
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
-                  <option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>
+                  ${focAllowed ? `<option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>` : ''}
                 ` : `
                   <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
@@ -3742,38 +3752,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 ${ICONS.whatsapp}<span>Share Feedback Link via WhatsApp</span>
               </button>
             </div>
-          </div>
-
-          <!-- TAB 2: DEVICE INFO -->
-          <div class="mst-pane" data-pane="device">
-            <div class="form-group">
-              <label>Company Name <span style="color:var(--danger)">*</span></label>
-              <select id="resolve-company" style="margin-bottom:8px;" ${isResolvedReadOnly ? 'disabled' : ''}>
-                <option value="">Select Company...</option>
-                ${companyList.map(c => {
-                  const isSel = (inquiryRow?.company_name || 'networking experts').toLowerCase() === c.name.toLowerCase();
-                  return `<option value="${c.name.replace(/"/g,'&quot;')}" ${isSel ? 'selected' : ''}>${c.name}</option>`;
-                }).join('')}
-                <option value="Other">Other (Type manually)</option>
-              </select>
-              <input type="text" id="resolve-company-custom" placeholder="Type custom company name (Mandatory)" style="display:none;" ${isResolvedReadOnly ? 'disabled' : ''}/>
-            </div>
-            <div class="form-group">
-              <label>Device Type</label>
-              <input type="text" id="device-type" list="emp-device-types" placeholder="${deviceTypeList.length ? 'Start typing or pick...' : 'e.g. Video Door Phone'}" value="${(inquiryRow?.device_type || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
-              <datalist id="emp-device-types">
-                ${deviceTypeList.map(d => `<option value="${(d.name || '').replace(/"/g,'&quot;')}"></option>`).join('')}
-              </datalist>
-              ${!isResolvedReadOnly ? `<div class="dt-chip-row">
-                ${['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'].map(t => `<button type="button" class="dt-chip" data-target="device-type" data-mode="replace" data-fill="${t}">${t}</button>`).join('')}
-              </div>` : ''}
-              ${deviceTypeList.length === 0 ? '<small style="display:block; margin-top:6px; color:var(--text-dim); font-size:0.75rem;">Tip: ask admin to add device types so this becomes a quick-pick list.</small>' : ''}
-            </div>
-            <div class="form-group">
-              <label>Device Serial No</label>
-              <input type="text" id="device-serial" placeholder="e.g. SN-12345" value="${(inquiryRow?.device_serial_no || '').replace(/"/g,'&quot;')}" ${isResolvedReadOnly ? 'disabled' : ''}/>
-            </div>
-            <small style="display:block; color:var(--text-dim); font-size:0.78rem; margin-top:-4px;">These are saved on the inquiry whenever you press Save Changes - and they appear on the bill template.</small>
           </div>
 
           ${deviceFeatureOn ? `
@@ -3863,6 +3841,11 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           <!-- TAB 3: BILL -->
           <div class="mst-pane" data-pane="bill">
+            ${isReopened && focAllowed ? `
+            <label style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:12px;background:rgba(245,158,11,0.08);border:1px solid var(--warning);margin-bottom:14px;cursor:pointer;font-weight:600;">
+              <input type="checkbox" id="foc-no-bill" ${normalizedCurrentStatus==='foc' ? 'checked' : ''} style="width:16px;height:16px;margin:0;cursor:pointer;"/>
+              No Bill — FOC (Free of Cost)
+            </label>` : ''}
             <div id="bill-locked-hint" style="display:${isResolving ? 'none' : 'block'}; padding:14px; border-radius:12px; background:var(--bg-soft); border:1px dashed var(--border); margin-bottom:14px; font-size:0.85rem; color:var(--text-soft);">
               ℹ️ Set status to <b>Resolved</b> on the Status tab to enable billing.
             </div>
@@ -4033,7 +4016,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     }
 
     // Tab switcher - also drives the footer button label (Next → on intermediate tabs, Save on the last).
-    const TAB_ORDER = ['status', 'device', 'bill'];
+    const TAB_ORDER = ['status', 'bill'];
     const getActiveTab = () => overlay.querySelector('.mst-tab.active')?.dataset.tab || TAB_ORDER[0];
     const isLastTab = () => getActiveTab() === TAB_ORDER[TAB_ORDER.length - 1];
     const goToTab = (target) => {
@@ -4086,10 +4069,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       servicePane.classList.remove('mst-pane');
       servicePane.removeAttribute('data-pane');
       servicePane.style.display = 'block';
-      // Pull the serial number into the expanded device section (with the photos).
-      const serialGroup = overlay.querySelector('#device-serial')?.closest('.form-group');
-      const body = servicePane.querySelector('#device-service-body');
-      if (serialGroup && body) body.insertBefore(serialGroup, body.firstChild);
       const hr = document.createElement('hr');
       hr.style.cssText = 'border:none;border-top:1px solid var(--border);margin:18px 0 14px;';
       statusPane.appendChild(hr);
@@ -4118,15 +4097,9 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     const GST_RATE = 0.18;
     const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
-    const getSelectedCompany = () => {
-      const selectEl = overlay.querySelector('#resolve-company');
-      const customEl = overlay.querySelector('#resolve-company-custom');
-      if (!selectEl) return '';
-      if (selectEl.value === 'Other') {
-        return customEl?.value.trim() || '';
-      }
-      return selectEl.value;
-    };
+    // Company is always "networking experts" now — there's no per-ticket
+    // company picker for the employee to fill in anymore.
+    const getSelectedCompany = () => inquiryRow?.company_name || 'networking experts';
 
     const getPlatformFee = () => {
       const companyName = getSelectedCompany();
@@ -4368,40 +4341,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     if (progressDetailInput) {
       progressDetailInput.oninput = () => { renderPayStatus(); };
     }
-    const companySelect = overlay.querySelector('#resolve-company');
-    const companyCustom = overlay.querySelector('#resolve-company-custom');
-
-    const toggleCustomCompany = () => {
-      if (companySelect.value === 'Other') {
-        companyCustom.style.display = 'block';
-      } else {
-        companyCustom.style.display = 'none';
-        companyCustom.value = '';
-      }
-      calcTotal();
-      renderPayStatus();
-    };
-
-    if (companySelect) {
-      companySelect.onchange = toggleCustomCompany;
-      
-      // Initialize state: if the current company name is not in the list, set to 'Other' and prefill custom field
-      const initialCompany = inquiryRow?.company_name || 'networking experts';
-      const isInList = companyList.some(c => c.name.toLowerCase() === initialCompany.toLowerCase());
-      if (isInList) {
-        companySelect.value = companyList.find(c => c.name.toLowerCase() === initialCompany.toLowerCase())?.name || initialCompany;
-        companyCustom.style.display = 'none';
-        companyCustom.value = '';
-      } else {
-        companySelect.value = 'Other';
-        companyCustom.style.display = 'block';
-        companyCustom.value = initialCompany;
-      }
-    }
-    if (companyCustom) {
-      companyCustom.oninput = () => { calcTotal(); renderPayStatus(); };
-    }
-
     // ── Keyword search picker ────────────────────────────────────────────
     const svcSelectedBox = overlay.querySelector('#svc-selected');
     const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -4510,7 +4449,15 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const returnBanner = overlay.querySelector('#device-return-banner');
       if (returnBanner) returnBanner.style.display = (deviceTicketOn && !deviceReturned) ? 'block' : 'none';
 
-      if (paid) {
+      if (statusSel.value === 'foc') {
+        payStatusBox.style.borderColor = 'var(--primary)';
+        payStatusBox.style.background = 'rgba(16,185,129,0.06)';
+        payStatusIcon.innerHTML = ICONS.check;
+        payStatusIcon.style.color = 'var(--primary)';
+        payStatusTitle.textContent = 'FOC — Free of Cost';
+        payStatusTitle.style.color = 'var(--primary)';
+        payStatusSub.textContent = 'No bill will be generated for this ticket — you can submit directly.';
+      } else if (paid) {
         payStatusBox.style.borderColor = 'var(--success)';
         payStatusBox.style.background = 'rgba(16,185,129,0.08)';
         payStatusIcon.innerHTML = ICONS.check;
@@ -4541,10 +4488,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       }
 
       const progressDetail = overlay.querySelector('#progress-detail')?.value.trim() || '';
-      const companyName = getSelectedCompany();
-      
       const isStatusTabValid = progressDetail.length > 0;
-      const isDeviceTabValid = companyName.length > 0;
 
       if (isResolvedReadOnly) {
         saveBtn.disabled = true;
@@ -4601,9 +4545,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         if (currentTab === 'status') {
           tabValid = isStatusTabValid;
           missingFieldMsg = 'Please fill out the Work Details / Progress Update first.';
-        } else if (currentTab === 'device') {
-          tabValid = isDeviceTabValid;
-          missingFieldMsg = 'Please fill out the Company Name first.';
         }
         
         if (!tabValid) {
@@ -4619,12 +4560,12 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
           saveBtn.style.cursor = 'pointer';
           saveBtn.title = '';
         }
-      } else if (!isStatusTabValid || !isDeviceTabValid) {
+      } else if (!isStatusTabValid) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Save Changes';
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
-        saveBtn.title = 'Please fill out all mandatory fields in previous tabs (Status and Device Info).';
+        saveBtn.title = 'Please fill out all mandatory fields on the Status tab.';
       } else if (deviceTicketOn && !deviceReturned) {
         // Can't complete the service while the customer's device is still at the
         // service center. The employee must mark it returned first.
@@ -4656,6 +4597,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       // FOC: no bill generated, but the client's bill number is mandatory.
       const focGroup = overlay.querySelector('#foc-billno-group');
       if (focGroup) focGroup.style.display = statusSel.value === 'foc' ? 'block' : 'none';
+      // Keep the Bill tab's "No Bill — FOC" checkbox in sync when the Status
+      // tab's dropdown is the one that changed.
+      const focCheckbox = overlay.querySelector('#foc-no-bill');
+      if (focCheckbox) focCheckbox.checked = statusSel.value === 'foc';
       // Reschedule: show the date/time picker.
       const reschedGroup = overlay.querySelector('#reschedule-group');
       if (reschedGroup) reschedGroup.style.display = statusSel.value === 'reschedule' ? 'block' : 'none';
@@ -4669,6 +4614,13 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         : 'Work Details / Progress Update <span style="color:var(--danger)">*</span>';
       renderPayStatus();
     };
+    // Bill tab's "No Bill — FOC" checkbox is just another way to set the same
+    // status value the Status tab's dropdown drives — reuse its onchange so
+    // both entry points stay in sync and behave identically.
+    overlay.querySelector('#foc-no-bill')?.addEventListener('change', (e) => {
+      statusSel.value = e.target.checked ? 'foc' : 'resolved';
+      statusSel.onchange();
+    });
     // Re-evaluate the save gate as the FOC bill number is typed.
     overlay.querySelector('#foc-bill-no')?.addEventListener('input', () => renderPayStatus());
     // Re-evaluate the save gate as the reschedule date/time is picked.
@@ -5003,11 +4955,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         el.style.opacity = '0.6';
         el.style.cursor = 'not-allowed';
       });
-      overlay.querySelectorAll('.mst-pane[data-pane="device"] input, .mst-pane[data-pane="device"] select').forEach(el => {
-        el.disabled = true;
-        el.style.opacity = '0.6';
-        el.style.cursor = 'not-allowed';
-      });
     }
 
     // Payment link generation + QR
@@ -5315,7 +5262,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         if (deviceTicketOn && !deviceReturned) { toast('Mark the device as returned before closing this service', 'warning'); return; }
       }
       if (resolving) {
-        if (!companyName) { toast('Please provide the company name', 'warning'); return; }
         if (!validateDiscount()) return;
       }
 

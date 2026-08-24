@@ -3855,6 +3855,32 @@ body:has(.tut-viewer) {
 .srf-input-action svg { width: 18px; height: 18px; }
 .srf-input-action:hover { color: var(--accent, var(--primary)); background: var(--accent-soft); }
 
+/* Premium animated "detect my location" button — gradient pill with a
+   continuous radar-ping ring so it invites a tap instead of sitting inert. */
+.srf-detect-btn {
+  position: relative;
+  color: #fff;
+  background: var(--accent, var(--gradient));
+  box-shadow: 0 4px 14px -4px var(--accent-glow);
+}
+.srf-detect-btn:hover { color: #fff; background: var(--accent, var(--gradient)); transform: scale(1.06); }
+.srf-detect-btn svg { position: relative; z-index: 1; }
+.srf-detect-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: var(--accent, var(--primary));
+  animation: srf-detect-pulse 2s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes srf-detect-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .srf-detect-ping { animation: none; display: none; }
+}
+
 /* Segmented (location mode) */
 .srf-segmented {
   display: grid;
@@ -3922,6 +3948,14 @@ body:has(.tut-viewer) {
   color: var(--text);
 }
 .srf-btn-secondary:hover { border-color: var(--accent, var(--primary)); color: var(--accent, var(--primary)); }
+.srf-btn-sm {
+  width: auto;
+  margin: 14px auto 0;
+  padding: 9px 18px;
+  font-size: 0.85rem;
+}
+.srf-btn-sm-icon { display: inline-flex; width: 16px; height: 16px; }
+.srf-btn-sm-icon svg { width: 100%; height: 100%; }
 .srf-btn-link {
   display: block;
   margin: 14px auto 0;
