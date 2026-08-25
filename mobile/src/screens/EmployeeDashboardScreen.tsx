@@ -10,6 +10,7 @@ import AppHeaderBar from '../components/AppHeaderBar';
 import PulseDot from '../components/PulseDot';
 import Icon from '../components/Icon';
 import PendingAssignments from '../components/PendingAssignments';
+import ClockOutConfirmModal from '../components/ClockOutConfirmModal';
 import { useAuth } from '../context/AuthContext';
 import { useAttendanceStatus } from '../context/AttendanceContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -113,6 +114,7 @@ export default function EmployeeDashboardScreen({
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [clocking, setClocking] = useState(false);
+  const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
 
@@ -197,6 +199,13 @@ export default function EmployeeDashboardScreen({
     }
   };
 
+  // Clock-in fires immediately; clock-out is a one-way action for the day
+  // (ends the shift), so it's guarded behind a confirmation instead.
+  const onClockPress = () => {
+    if (clockedIn) setShowClockOutConfirm(true);
+    else handleClock();
+  };
+
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 110;
 
   return (
@@ -258,7 +267,7 @@ export default function EmployeeDashboardScreen({
             )}
 
             <Pressable
-              onPress={handleClock}
+              onPress={onClockPress}
               disabled={clocking}
               style={({ pressed }) => [
                 styles.clockButton,
@@ -382,6 +391,16 @@ export default function EmployeeDashboardScreen({
       />
 
       {selectedNotice && <NoticeDetail notice={selectedNotice} onDismiss={() => setSelectedNotice(null)} />}
+
+      {showClockOutConfirm && (
+        <ClockOutConfirmModal
+          onCancel={() => setShowClockOutConfirm(false)}
+          onConfirm={() => {
+            setShowClockOutConfirm(false);
+            handleClock();
+          }}
+        />
+      )}
     </View>
   );
 }
