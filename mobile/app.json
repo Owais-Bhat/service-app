@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.owais_07.networkingexperts",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 5
+      "versionCode": 6
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -43,6 +43,16 @@
         {
           "icon": "./assets/android-icon-monochrome.png",
           "color": "#15a05a"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "reactNativeArchitectures": ["armeabi-v7a", "arm64-v8a"]
+          }
         }
       ]
     ],
