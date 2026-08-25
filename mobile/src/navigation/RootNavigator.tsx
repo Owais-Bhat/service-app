@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
@@ -7,6 +6,7 @@ import { resolveNotificationRoute } from '../notifications';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { brand } from '../theme/tokens';
+import AnimatedSplash from '../components/AnimatedSplash';
 import LandingScreen from '../screens/LandingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ClientSubmitTicketScreen from '../screens/ClientSubmitTicketScreen';
@@ -368,11 +368,7 @@ export default function RootNavigator() {
   };
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={brand.primary} size="large" />
-      </View>
-    );
+    return <AnimatedSplash />;
   }
 
   return (
