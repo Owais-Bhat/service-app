@@ -15,10 +15,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
+export interface PushRegistrationResult {
+  token: string | null;
+  reason: string | null; // set whenever token is null, explains why
+}
+
+export async function registerForPushNotificationsAsync(): Promise<PushRegistrationResult> {
   if (!Device.isDevice) {
-    console.warn('[push] skipped — not a physical device (simulator/emulator)');
-    return null;
+    return { token: null, reason: 'Not a physical device (simulator/emulator)' };
   }
 
   if (Platform.OS === 'android') {
@@ -37,23 +41,19 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     status = requested.status;
   }
   if (status !== 'granted') {
-    console.warn('[push] permission not granted, status:', status);
-    return null;
+    return { token: null, reason: `Permission not granted (status: ${status})` };
   }
 
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   if (!projectId) {
-    console.warn('[push] no EAS projectId found in Constants.expoConfig.extra.eas');
-    return null;
+    return { token: null, reason: 'No EAS projectId in Constants.expoConfig.extra.eas' };
   }
 
   try {
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
-    console.log('[push] got Expo push token:', data);
-    return data;
+    return { token: data, reason: null };
   } catch (e) {
-    console.warn('[push] getExpoPushTokenAsync failed:', e);
-    return null;
+    return { token: null, reason: `getExpoPushTokenAsync failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 

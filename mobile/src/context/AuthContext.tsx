@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Alert } from 'react-native';
 import { getToken, setToken as persistToken, ApiError } from '../api/client';
 import { signin as apiSignin, fetchMe, AuthUser } from '../api/auth';
 import { registerPushToken } from '../api/push';
@@ -56,15 +57,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     (async () => {
       try {
-        const token = await registerForPushNotificationsAsync();
-        if (token) {
-          await registerPushToken(token);
-          console.log('[push] token registered with server');
+        const { token, reason } = await registerForPushNotificationsAsync();
+        if (!token) {
+          // TEMPORARY diagnostic — standalone builds have no attached console,
+          // so this is the only way to see why registration didn't happen.
+          Alert.alert('Push setup', reason || 'Unknown reason (no token)');
+          return;
         }
+        await registerPushToken(token);
+        Alert.alert('Push setup', 'Token registered successfully.');
       } catch (e) {
-        // non-fatal — push is a bonus, not a login requirement — but log it
-        // so a silent failure (server unreachable, endpoint error) is visible.
-        console.warn('[push] registerPushToken failed:', e);
+        Alert.alert('Push setup', `Server registration failed: ${e instanceof Error ? e.message : String(e)}`);
       }
     })();
   }, [user]);
