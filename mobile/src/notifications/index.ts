@@ -16,7 +16,10 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (!Device.isDevice) return null; // simulators/emulators have no push token
+  if (!Device.isDevice) {
+    console.warn('[push] skipped — not a physical device (simulator/emulator)');
+    return null;
+  }
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -33,15 +36,23 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     const requested = await Notifications.requestPermissionsAsync();
     status = requested.status;
   }
-  if (status !== 'granted') return null;
+  if (status !== 'granted') {
+    console.warn('[push] permission not granted, status:', status);
+    return null;
+  }
 
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  if (!projectId) return null;
+  if (!projectId) {
+    console.warn('[push] no EAS projectId found in Constants.expoConfig.extra.eas');
+    return null;
+  }
 
   try {
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
+    console.log('[push] got Expo push token:', data);
     return data;
-  } catch {
+  } catch (e) {
+    console.warn('[push] getExpoPushTokenAsync failed:', e);
     return null;
   }
 }

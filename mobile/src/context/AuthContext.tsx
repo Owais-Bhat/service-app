@@ -57,9 +57,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const token = await registerForPushNotificationsAsync();
-        if (token) await registerPushToken(token);
-      } catch {
-        // ignore — push registration is best-effort
+        if (token) {
+          await registerPushToken(token);
+          console.log('[push] token registered with server');
+        }
+      } catch (e) {
+        // non-fatal — push is a bonus, not a login requirement — but log it
+        // so a silent failure (server unreachable, endpoint error) is visible.
+        console.warn('[push] registerPushToken failed:', e);
       }
     })();
   }, [user]);
