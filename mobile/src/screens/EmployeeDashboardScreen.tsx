@@ -20,8 +20,7 @@ import { ApiError } from '../api/client';
 import {
   fetchTodayAttendance,
   fetchAttendanceHistory,
-  clockInGig,
-  clockInFixed,
+  clockIn,
   clockOut,
   AttendanceRow,
 } from '../api/attendance';
@@ -180,20 +179,13 @@ export default function EmployeeDashboardScreen({
     try {
       if (clockedIn && attendance) {
         await clockOut(attendance.id);
-      } else if (user.worker_type === 'gig') {
-        await clockInGig(user.id);
       } else {
-        await clockInFixed();
+        await clockIn(user.id);
       }
       await load();
       refreshHeaderAttendance();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Could not update attendance';
-      setError(
-        message.toLowerCase().includes('photo')
-          ? "Photo clock-in isn't supported in the mobile app yet — use the web app."
-          : message,
-      );
+      setError(err instanceof ApiError ? err.message : 'Could not update attendance');
     } finally {
       setClocking(false);
     }

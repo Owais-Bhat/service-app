@@ -1,5 +1,7 @@
 import * as Location from 'expo-location';
-import { dataGet, dataPatch, dataPost, postForm } from './client';
+import * as ImagePicker from 'expo-image-picker';
+import { api, ApiError, dataGet, dataPatch, dataPost, postForm } from './client';
+import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../location/backgroundLocationTask';
 
 export interface AttendanceRow {
   id: string;
@@ -57,36 +59,102 @@ async function getCoordsIfAvailable(): Promise<Coords | null> {
   }
 }
 
-export async function clockInGig(userId: string): Promise<AttendanceRow> {
-  const coords = await getCoordsIfAvailable();
-  return dataPost<AttendanceRow>('attendance', {
-    user_id: userId,
-    date: todayStr(),
-    clock_in: new Date().toISOString(),
-    status: 'present',
-    ...(coords ? { latitude: coords.lat, longitude: coords.lng } : {}),
-  });
+interface ClockInRequirements {
+  photoRequired: boolean;
+  geofenceRequired: boolean;
 }
 
-// Fixed employees always go through the photo-capable endpoint even though
-// this build never attaches a photo — the server (not this client) knows
-// per-employee exemptions and decides whether one was actually required,
-// rejecting with a specific error if so. See design spec §2: real
-// photo/face-match clock-in isn't built; the honest cases (not required,
-// or this employee is exempted) still work for real through this same call.
-export async function clockInFixed(): Promise<AttendanceRow> {
-  const coords = await getCoordsIfAvailable();
+// Public, no-auth setting (mirrors src/pages/employee.js's loadClockInRequirements)
+// so the app can decide whether to open the camera before submitting.
+async function loadClockInRequirements(): Promise<ClockInRequirements> {
+  try {
+    return await api.get<ClockInRequirements>('/settings/clockin-requirements');
+  } catch {
+    return { photoRequired: false, geofenceRequired: false };
+  }
+}
+
+interface ExemptionRow {
+  photo_clockin_exempt?: boolean | number;
+  geofence_clockin_exempt?: boolean | number;
+}
+
+async function loadExemptions(userId: string): Promise<ExemptionRow> {
+  try {
+    const rows = await dataGet<ExemptionRow[]>('profiles', {
+      select: 'photo_clockin_exempt,geofence_clockin_exempt',
+      eq: [`id:${userId}`],
+    });
+    return rows[0] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+// No on-device face-recognition model on mobile (unlike web's face-api.js
+// descriptor extraction) — the selfie is captured and uploaded for admin
+// visual review only. Omitting the `faceDescriptor` field entirely tells the
+// server to skip automatic face-matching for this submission (see
+// server/index.cjs's clock-in-photo handler).
+async function captureSelfie(): Promise<{ uri: string; name: string; type: string } | null> {
+  const perm = await ImagePicker.requestCameraPermissionsAsync();
+  if (!perm.granted) return null;
+  const result = await ImagePicker.launchCameraAsync({
+    quality: 0.6,
+    allowsEditing: false,
+    cameraType: ImagePicker.CameraType.front,
+  });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const ext = (asset.uri.split('.').pop() || 'jpg').toLowerCase();
+  return { uri: asset.uri, name: `selfie.${ext}`, type: asset.mimeType || `image/${ext}` };
+}
+
+// Shared by both fixed and gig employees — the server applies the same
+// global photo/geofence settings and per-employee exemptions to everyone
+// (see server/index.cjs's clock-in-photo handler), so there's no longer a
+// worker-type-specific clock-in path.
+export async function clockIn(userId: string): Promise<AttendanceRow> {
+  const [requirements, exemptions, coords] = await Promise.all([
+    loadClockInRequirements(),
+    loadExemptions(userId),
+    getCoordsIfAvailable(),
+  ]);
+  const photoRequired = requirements.photoRequired && !exemptions.photo_clockin_exempt;
+  const geofenceRequired = requirements.geofenceRequired && !exemptions.geofence_clockin_exempt;
+
+  if (geofenceRequired && !coords) {
+    throw new ApiError('Could not get your location. Enable location access and try again.', 400);
+  }
+
+  let selfie: { uri: string; name: string; type: string } | null = null;
+  if (photoRequired) {
+    selfie = await captureSelfie();
+    if (!selfie) {
+      throw new ApiError('A clock-in photo is required — grant camera permission and try again.', 400);
+    }
+  }
+
   const form = new FormData();
+  if (selfie) {
+    // React Native's FormData accepts { uri, name, type } file parts —
+    // not the DOM File/Blob shape TypeScript's lib.dom.d.ts expects here.
+    form.append('photo', selfie as unknown as Blob);
+  }
   if (coords) {
     form.append('lat', String(coords.lat));
     form.append('lng', String(coords.lng));
     form.append('accuracy', String(coords.accuracy));
   }
-  return postForm<AttendanceRow>('/attendance/clock-in-photo', form);
+
+  const row = await postForm<AttendanceRow>('/attendance/clock-in-photo', form);
+  startBackgroundLocationTracking().catch(() => {});
+  return row;
 }
 
 export async function clockOut(attendanceId: string): Promise<void> {
   await dataPatch('attendance', `id:${attendanceId}`, { clock_out: new Date().toISOString() });
+  stopBackgroundLocationTracking().catch(() => {});
 }
 
 export async function fetchLeaveRequests(userId: string): Promise<LeaveRequest[]> {

@@ -5,7 +5,7 @@ import Icon from './Icon';
 import PressScale from './PressScale';
 import { useAuth } from '../context/AuthContext';
 import { useAttendanceStatus } from '../context/AttendanceContext';
-import { clockInGig, clockInFixed } from '../api/attendance';
+import { clockIn } from '../api/attendance';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
@@ -34,16 +34,10 @@ export default function ClockInGateModal() {
     setClocking(true);
     setError(null);
     try {
-      if (user.worker_type === 'gig') await clockInGig(user.id);
-      else await clockInFixed();
+      await clockIn(user.id);
       await refresh();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Could not clock in — check your connection';
-      setError(
-        message.toLowerCase().includes('photo')
-          ? "Photo clock-in isn't supported in the mobile app yet — use the web app."
-          : message,
-      );
+      setError(err instanceof ApiError ? err.message : 'Could not clock in — check your connection');
     } finally {
       setClocking(false);
     }

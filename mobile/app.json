@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.owais_07.networkingexperts",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 6
+      "versionCode": 8
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,6 +39,14 @@
       "expo-secure-store",
       "expo-status-bar",
       [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "NEST needs your location while you're clocked in so dispatch can see field employees on the live map, including while the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/android-icon-monochrome.png",
@@ -51,7 +59,10 @@
           "android": {
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "reactNativeArchitectures": ["armeabi-v7a", "arm64-v8a"]
+            "reactNativeArchitectures": [
+              "armeabi-v7a",
+              "arm64-v8a"
+            ]
           }
         }
       ]

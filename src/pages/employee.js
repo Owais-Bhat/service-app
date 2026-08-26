@@ -63,12 +63,6 @@ function getHighAccuracyPosition({ maxWaitMs = 8000 } = {}) {
   });
 }
 
-async function reverseGeocode(lat, lng) {
-  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
-  const data = await res.json();
-  return data.display_name || '';
-}
-
 function mapLink(lat, lng) {
   return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
 }
@@ -1108,7 +1102,7 @@ export async function renderEmployeeDashboard(container) {
   const today = new Date().toLocaleDateString('en-CA');
   const clockOutSetting = await loadEmployeeClockOutTime();
   const isGigWorker = user.worker_type === 'gig';
-  const clockInRequirements = isGigWorker ? null : await loadClockInRequirements();
+  const clockInRequirements = await loadClockInRequirements();
   let attendance, attendanceHistory = [], eodHistory = [], tasks, eodReport, pendingInquiries = [], acceptedInquiries = [], notices = [], feedbackRows = [], allProfiles = [], eodExempt = false, poolJobs = [], needsPhotoClockIn = false, needsGeofenceClockIn = false;
 
   try {
@@ -1130,8 +1124,8 @@ export async function renderEmployeeDashboard(container) {
     attendance = res[0].data; tasks = res[1].data; eodReport = res[2].data;
     poolJobs = res[10]?.data || [];
     eodExempt = Boolean(res[9]?.data?.eod_exempt);
-    needsPhotoClockIn = !isGigWorker && !!clockInRequirements?.photoRequired && !res[9]?.data?.photo_clockin_exempt;
-    needsGeofenceClockIn = !isGigWorker && !!clockInRequirements?.geofenceRequired && !res[9]?.data?.geofence_clockin_exempt;
+    needsPhotoClockIn = !!clockInRequirements?.photoRequired && !res[9]?.data?.photo_clockin_exempt;
+    needsGeofenceClockIn = !!clockInRequirements?.geofenceRequired && !res[9]?.data?.geofence_clockin_exempt;
     feedbackRows = (res[7]?.data || []).filter(r => r.feedback_rating != null);
     allProfiles = res[8]?.data || [];
     attendanceHistory = res[4].data || [];
@@ -1480,35 +1474,12 @@ export async function renderEmployeeDashboard(container) {
     input.click();
   });
 
-  // Gig workers: unchanged plain clock-in, no photo/geofence requirement.
-  const plainClockIn = async () => {
-    const btn = container.querySelector('#btn-clock-toggle');
-    btn.disabled = true; btn.innerHTML = `${ICONS.crosshair}<span>Getting location…</span>`;
-    let locationStr = 'Unknown';
-    let coords = { lat: null, lng: null, accuracy: null };
-    try {
-      const pos = await getHighAccuracyPosition();
-      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-      coords = { lat, lng, accuracy };
-      try {
-        locationStr = await reverseGeocode(lat, lng) || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      } catch (err) {
-        locationStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      }
-    } catch (_) {}
-    const { error } = await supabase.from('attendance').insert({
-      user_id: user.id, clock_in: new Date().toISOString(), date: today, location: locationStr,
-      latitude: coords.lat, longitude: coords.lng, status: 'present'
-    });
-    if (error) { toast(error.message, 'error'); btn.disabled = false; btn.innerHTML = `${ICONS.play}<span>Clock In</span>`; }
-    else { toast('Clocked in!', 'success'); renderEmployeeDashboard(container); }
-  };
-
-  // Fixed employees: photo/face verification and/or the geofence check via
-  // the dedicated endpoint, each only when currently required for this
-  // employee (needsPhotoClockIn / needsGeofenceClockIn — admin-controlled,
-  // globally and per-employee). The endpoint itself independently re-checks
-  // both server-side, so this only decides what UI steps to run.
+  // Photo/face verification and/or the geofence check via the dedicated
+  // endpoint, each only when currently required for this employee
+  // (needsPhotoClockIn / needsGeofenceClockIn — admin-controlled, globally
+  // and per-employee). Applies to gig and fixed employees alike — the
+  // endpoint itself independently re-checks both server-side, so this only
+  // decides what UI steps to run.
   const smartClockIn = async () => {
     const btn = container.querySelector('#btn-clock-toggle');
     btn.disabled = true; btn.innerHTML = `${ICONS.crosshair}<span>Getting location…</span>`;
@@ -1602,11 +1573,7 @@ export async function renderEmployeeDashboard(container) {
       toast(`Clock-in is closed after ${parseClockOutTime().label}. Please contact admin.`, 'error');
       return;
     }
-    if (isGigWorker) {
-      await plainClockIn();
-    } else {
-      await smartClockIn();
-    }
+    await smartClockIn();
   });
 
   // Clock Out — EOD report popup appears first; clock-out happens after submit.

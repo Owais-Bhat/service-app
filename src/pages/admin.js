@@ -2187,7 +2187,7 @@ export async function renderUsers(container) {
   // Photo/geofence exempt only makes sense for fixed employees — gig workers
   // never use the photo/geofence clock-in system at all.
   const photoExemptCell = (u) =>
-    u.role === "employee" && u.worker_type !== "gig"
+    u.role === "employee"
       ? `
     <div style="display:flex;align-items:center;gap:8px;">
       <div class="switch-outer photo-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.photo_clockin_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
@@ -2200,7 +2200,7 @@ export async function renderUsers(container) {
       : '<span style="color:var(--text-dim)">-</span>';
 
   const geofenceExemptCell = (u) =>
-    u.role === "employee" && u.worker_type !== "gig"
+    u.role === "employee"
       ? `
     <div style="display:flex;align-items:center;gap:8px;">
       <div class="switch-outer geofence-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.geofence_clockin_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">

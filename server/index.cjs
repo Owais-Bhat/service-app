@@ -603,9 +603,6 @@ app.post('/api/upload', authenticateToken, uploadSingle('file'), async (req, res
 
 app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('photo'), async (req, res) => {
     if (req.user.role !== 'employee') return res.sendStatus(403);
-    if (req.user.worker_type === 'gig') {
-        return res.status(400).json({ error: 'Gig workers use the standard clock-in, not this endpoint.' });
-    }
 
     const today = new Date().toLocaleDateString('en-CA');
     let connection;
@@ -635,29 +632,37 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
         if (photoRequired) {
             if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
 
-            let faceDescriptor;
-            try {
-                faceDescriptor = JSON.parse(req.body?.faceDescriptor || 'null');
-            } catch {
-                faceDescriptor = null;
-            }
-            if (!isValidFaceDescriptor(faceDescriptor)) {
-                return res.status(400).json({ error: 'Face not detected clearly — retake the photo facing the camera in good light.' });
-            }
-
-            if (profile?.face_descriptor) {
-                const reference = JSON.parse(profile.face_descriptor);
-                faceMatchDistance = euclideanDistance(reference, faceDescriptor);
-                if (faceMatchDistance > FACE_MATCH_THRESHOLD) {
-                    return res.status(400).json({
-                        error: `Face did not match your registered profile (distance ${faceMatchDistance.toFixed(2)}). If this is really you, contact admin to reset your face ID.`,
-                    });
+            // The web client always sends a faceDescriptor (it refuses to submit
+            // otherwise — see employee.js's smartClockIn). Mobile has no
+            // on-device face-recognition model yet and omits the field
+            // entirely, in which case the selfie is stored for admin visual
+            // review only — no automatic match, no reference-face update.
+            const descriptorProvided = req.body?.faceDescriptor !== undefined;
+            if (descriptorProvided) {
+                let faceDescriptor;
+                try {
+                    faceDescriptor = JSON.parse(req.body.faceDescriptor || 'null');
+                } catch {
+                    faceDescriptor = null;
                 }
-            } else {
-                await connection.query(
-                    'UPDATE profiles SET face_descriptor = ?, face_registered_at = NOW() WHERE id = ?',
-                    [JSON.stringify(faceDescriptor), req.user.id]
-                );
+                if (!isValidFaceDescriptor(faceDescriptor)) {
+                    return res.status(400).json({ error: 'Face not detected clearly — retake the photo facing the camera in good light.' });
+                }
+
+                if (profile?.face_descriptor) {
+                    const reference = JSON.parse(profile.face_descriptor);
+                    faceMatchDistance = euclideanDistance(reference, faceDescriptor);
+                    if (faceMatchDistance > FACE_MATCH_THRESHOLD) {
+                        return res.status(400).json({
+                            error: `Face did not match your registered profile (distance ${faceMatchDistance.toFixed(2)}). If this is really you, contact admin to reset your face ID.`,
+                        });
+                    }
+                } else {
+                    await connection.query(
+                        'UPDATE profiles SET face_descriptor = ?, face_registered_at = NOW() WHERE id = ?',
+                        [JSON.stringify(faceDescriptor), req.user.id]
+                    );
+                }
             }
 
             const ext = path.extname(req.file.originalname || '') || '.jpg';
@@ -5365,10 +5370,12 @@ app.get('/api/device-tracking/employee/:employeeId', authenticateToken, async (r
     }
 });
 
-// Foreground-only location ping from the mobile app while an employee is
-// clocked in — see mobile/src/api/liveLocation.ts. One row per user,
-// overwritten every ping (employee_live_locations has user_id as its PK).
-app.post('/api/live-location/ping', rateLimit({ windowMs: 60_000, max: 10, key: 'live-location-ping' }), authenticateToken, async (req, res) => {
+// Background+foreground location ping from the mobile app while an employee
+// is clocked in — see mobile/src/location/backgroundLocationTask.ts. Fires
+// roughly every 10s, so the limit leaves headroom for retries/catch-up
+// bursts after a connectivity gap. One row per user, overwritten every ping
+// (employee_live_locations has user_id as its PK).
+app.post('/api/live-location/ping', rateLimit({ windowMs: 60_000, max: 30, key: 'live-location-ping' }), authenticateToken, async (req, res) => {
     if (req.user.role !== 'employee') return res.sendStatus(403);
     const { lat, lng, accuracy } = req.body;
     const latitude = Number(lat);

@@ -34,7 +34,6 @@ import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
-import { useLiveLocationPing } from '../hooks/useLiveLocationPing';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
 
@@ -260,8 +259,6 @@ function SettingsRoute({ navigation }: any) {
 // Every other screen is a genuine drill-down push with a slide
 // transition and no tab bar.
 function EmployeeNavigator() {
-  const { user } = useAuth();
-  useLiveLocationPing(user?.id);
   return (
     <AttendanceProvider>
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>

@@ -17,7 +17,7 @@ interface Props {
   onBack: () => void;
 }
 
-const POLL_MS = 20000;
+const POLL_MS = 10000;
 const GIG_COLOR = '#7c5cfc';
 // Networking Experts is based in Srinagar — sensible map center when no one
 // is clocked in yet, instead of dropping the admin somewhere off Africa (0,0).
@@ -158,8 +158,8 @@ export default function LiveLocationsScreen({ onBack }: Props) {
         {rows.length === 0 ? (
           <Text style={[styles.caption, { color: theme.text3, textAlign: 'center', marginTop: spacing(8) }]}>
             No one is currently clocked in with a reported location.{'\n\n'}
-            Locations only appear while an employee is clocked in and has the app open — this is foreground-only,
-            it pauses once they lock their phone or switch apps.
+            Locations only appear while an employee is clocked in — tracking continues in the background
+            once they clock in, even if the app isn't open.
           </Text>
         ) : (
           rows.map((r, idx) => (

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { fetchTodayAttendance, AttendanceRow } from '../api/attendance';
+import { startBackgroundLocationTracking } from '../location/backgroundLocationTask';
 import { useAuth } from './AuthContext';
 
 interface AttendanceContextValue {
@@ -31,8 +32,13 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
   const refresh = useCallback(async () => {
     if (!user) return;
     try {
-      setAttendance(await fetchTodayAttendance(user.id));
+      const row = await fetchTodayAttendance(user.id);
+      setAttendance(row);
       setLoaded(true);
+      // Re-arm background tracking if the app relaunched (OS process kill,
+      // phone reboot, etc.) while the employee was still clocked in —
+      // startBackgroundLocationTracking() is a no-op if already running.
+      if (row?.clock_in && !row.clock_out) startBackgroundLocationTracking().catch(() => {});
     } catch {
       // Best-effort — keep showing the last known value, don't flip `loaded`.
     }
