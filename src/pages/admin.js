@@ -2308,8 +2308,7 @@ export async function renderUsers(container) {
               <div class="form-group">
                 <label>Role</label>
                 <select id="usr-role">
-                  <option value="client" ${isEdit && user.role === "client" ? "selected" : ""}>Client</option>
-                  <option value="employee" ${isEdit && user.role === "employee" ? "selected" : ""}>Staff</option>
+                  <option value="employee" ${!isEdit || user.role === "employee" || user.role === "client" ? "selected" : ""}>Staff</option>
                   <option value="admin" ${isEdit && user.role === "admin" ? "selected" : ""}>Admin</option>
                 </select>
               </div>
