@@ -9,6 +9,7 @@ import { renderLandingPage } from './pages/landing.js';
 import { renderInstallPage } from './pages/install.js';
 import { initTheme, toast, ensureNotifyPermission, showNotification } from './utils.js';
 import { initPush } from './push.js';
+import { startLiveLocationPing, stopLiveLocationPing } from './live-location-ping.js';
 import { speak as speakNotification, openNotificationDetail, primeVoice } from './notify-center.js';
 import { ICONS } from './icons.js';
 import { registerSW } from 'virtual:pwa-register';
@@ -353,6 +354,7 @@ window.addEventListener('popstate', (e) => {
 });
 
 function goToLanding() {
+  stopLiveLocationPing();
   renderLandingPage(app, showAuth);
   showPWAInstallBtn();
 }
@@ -445,7 +447,7 @@ function showAuth() {
       currentUser = user;
       currentRole = role;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
-      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); installationsEnabled = readInstallationsEnabled(user); }
+      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); installationsEnabled = readInstallationsEnabled(user); startLiveLocationPing(user.id); }
       watchMyProfile(user.id);
       navigate('dashboard');
     },
@@ -533,7 +535,7 @@ async function boot() {
       }
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
-      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); installationsEnabled = readInstallationsEnabled(currentUser); }
+      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); installationsEnabled = readInstallationsEnabled(currentUser); startLiveLocationPing(currentUser.id); }
       watchMyProfile(currentUser.id);
       navigate('dashboard');
     } catch (err) {
