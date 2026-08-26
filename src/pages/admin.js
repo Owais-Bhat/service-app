@@ -2274,6 +2274,12 @@ export async function renderUsers(container) {
         if (Array.isArray(a)) allowedSet = new Set(a.map(String));
       }
     } catch { /* treat unparseable as full access */ }
+    // Every setting is a real toggle switch, not a plain checkbox.
+    const toggleRow = (id, label, checked, extraAttrs = "") => `
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;cursor:pointer;">
+        <span style="font-size:.88rem;">${label}</span>
+        <span class="switch"><input type="checkbox" id="${id}" ${extraAttrs} ${checked ? "checked" : ""}/><span class="switch-slider"></span></span>
+      </label>`;
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.innerHTML = `
@@ -2324,14 +2330,8 @@ export async function renderUsers(container) {
                 <option value="fixed" ${!isEdit || user.worker_type !== "gig" ? "selected" : ""}>Fixed Employee</option>
                 <option value="gig" ${isEdit && user.worker_type === "gig" ? "selected" : ""}>Gig Worker (public pool, competes for released jobs, online-only payment)</option>
               </select>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px;">
-                <input type="checkbox" id="usr-installations-enabled" ${!isEdit || user.installations_enabled === undefined || user.installations_enabled === null || Number(user.installations_enabled) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Allow Installations tab (uncheck to hide it for this staff member — useful for Gig Workers)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px;">
-                <input type="checkbox" id="usr-allow-foc" ${!isEdit || user.allow_foc === undefined || user.allow_foc === null || Number(user.allow_foc) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Allow FOC (uncheck to hide the free-of-cost / no-bill option for this staff member on reopened tickets)
-              </label>
+              ${toggleRow("usr-installations-enabled", "Allow Installations tab (useful to turn off for Gig Workers)", !isEdit || user.installations_enabled === undefined || user.installations_enabled === null || Number(user.installations_enabled) === 1)}
+              ${toggleRow("usr-allow-foc", "Allow FOC (free-of-cost / no-bill option on reopened tickets)", !isEdit || user.allow_foc === undefined || user.allow_foc === null || Number(user.allow_foc) === 1)}
             </div>
             <div class="form-group">
               <label>Company / Building Name</label>
@@ -2341,46 +2341,21 @@ export async function renderUsers(container) {
               <label>Address</label>
               <textarea id="usr-address" rows="2" placeholder="Full Address">${isEdit ? escapeHtml(user.address || "") : ""}</textarea>
             </div>
-            
-            <div style="display:flex;gap:18px;margin-top:8px;flex-wrap:wrap;">
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-add-service" ${isEdit && user.can_add_service ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Add Service Access (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-edit-profile" ${isEdit && user.can_update_profile ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Profile Edit Access (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-always-assign" ${isEdit && user.always_assign ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Always Auto-Assign Service (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-eod-exempt" ${isEdit && user.eod_exempt ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                EOD Exempt (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-photo-exempt" ${isEdit && user.photo_clockin_exempt ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Photo Clock-In Exempt (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-geofence-exempt" ${isEdit && user.geofence_clockin_exempt ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Location Clock-In Exempt (Staff only)
-              </label>
+
+            <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">
+              ${toggleRow("usr-add-service", "Add Service Access (Staff only)", isEdit && user.can_add_service)}
+              ${toggleRow("usr-edit-profile", "Profile Edit Access (Staff only)", isEdit && user.can_update_profile)}
+              ${toggleRow("usr-always-assign", "Always Auto-Assign Service (Staff only)", isEdit && user.always_assign)}
+              ${toggleRow("usr-eod-exempt", "EOD Exempt (Staff only)", isEdit && user.eod_exempt)}
+              ${toggleRow("usr-photo-exempt", "Photo Clock-In Exempt (Staff only)", isEdit && user.photo_clockin_exempt)}
+              ${toggleRow("usr-geofence-exempt", "Location Clock-In Exempt (Staff only)", isEdit && user.geofence_clockin_exempt)}
             </div>
 
             <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
-              <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;">
-                <input type="checkbox" id="usr-limit-tabs" ${isEdit && allowedSet ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Limit which tabs this staff can see
-              </label>
-              <p style="font-size:.78rem;color:var(--text-dim);margin:6px 0 0;">Leave unchecked for full access. Dashboard, Notifications and Profile are always visible.</p>
-              <div id="usr-tabs-list" style="display:${isEdit && allowedSet ? "grid" : "none"};grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
-                ${EMP_TABS.map(t => `
-                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:.86rem;cursor:pointer;">
-                    <input type="checkbox" class="usr-tab-chk" value="${t.id}" ${(allowedSet ? allowedSet.has(t.id) : true) ? "checked" : ""} style="cursor:pointer;width:15px;height:15px;margin:0;"/>
-                    ${escapeHtml(t.label)}
-                  </label>`).join("")}
+              <label style="font-weight:700;">Which tabs can this staff member see</label>
+              <p style="font-size:.78rem;color:var(--text-dim);margin:4px 0 12px;">Dashboard, Notifications and Profile are always visible regardless of these switches.</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">
+                ${EMP_TABS.map(t => toggleRow(`usr-tab-${t.id}`, escapeHtml(t.label), allowedSet ? allowedSet.has(t.id) : true, `class="usr-tab-chk" value="${t.id}"`)).join("")}
               </div>
             </div>
           </form>
@@ -2400,13 +2375,6 @@ export async function renderUsers(container) {
     overlay.onclick = (e) => {
       if (e.target === overlay) close();
     };
-
-    // Show/hide the tab checklist with the "Limit tabs" switch.
-    const limitChk = overlay.querySelector("#usr-limit-tabs");
-    const tabsList = overlay.querySelector("#usr-tabs-list");
-    if (limitChk && tabsList) {
-      limitChk.onchange = () => { tabsList.style.display = limitChk.checked ? "grid" : "none"; };
-    }
 
     const phoneInput = overlay.querySelector("#usr-phone");
     phoneInput.oninput = () => {
@@ -2467,12 +2435,11 @@ export async function renderUsers(container) {
         allowFoc,
       };
 
-      // Tab access: unchecked "limit" = full access (null). Otherwise the
-      // explicit list of tab ids this staff member may see.
-      const limitTabs = overlay.querySelector("#usr-limit-tabs")?.checked;
-      payload.allowed_tabs = limitTabs
-        ? [...overlay.querySelectorAll(".usr-tab-chk:checked")].map((c) => c.value)
-        : null;
+      // Every tab has its own switch now — if they're all on, that's full
+      // access (store null); otherwise store just the ones left on.
+      const allTabChks = [...overlay.querySelectorAll(".usr-tab-chk")];
+      const checkedTabs = allTabChks.filter((c) => c.checked).map((c) => c.value);
+      payload.allowed_tabs = checkedTabs.length === allTabChks.length ? null : checkedTabs;
 
       if (password) payload.password = password;
 
