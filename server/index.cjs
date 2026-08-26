@@ -3775,7 +3775,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, workerType, installationsEnabled, allowFoc } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, eodExempt, photoClockinExempt, geofenceClockinExempt, workerType, installationsEnabled, allowFoc } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -3808,7 +3808,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, eod_exempt, photo_clockin_exempt, geofence_clockin_exempt, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -3820,6 +3820,9 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     can_add_service ? 1 : 0,
                     can_update_profile ? 1 : 0,
                     alwaysAssign ? 1 : 0,
+                    eodExempt ? 1 : 0,
+                    photoClockinExempt ? 1 : 0,
+                    geofenceClockinExempt ? 1 : 0,
                     workerType === 'gig' ? 'gig' : 'fixed',
                     installationsEnabled === false ? 0 : 1,
                     allowFoc === false ? 0 : 1
@@ -3855,6 +3858,9 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         can_add_service,
         can_update_profile,
         alwaysAssign,
+        eodExempt,
+        photoClockinExempt,
+        geofenceClockinExempt,
         allowed_tabs,
         workerType,
         installationsEnabled,
@@ -3956,6 +3962,18 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (alwaysAssign !== undefined) {
                 profileUpdates.push('always_assign = ?');
                 profileParams.push(alwaysAssign ? 1 : 0);
+            }
+            if (eodExempt !== undefined) {
+                profileUpdates.push('eod_exempt = ?');
+                profileParams.push(eodExempt ? 1 : 0);
+            }
+            if (photoClockinExempt !== undefined) {
+                profileUpdates.push('photo_clockin_exempt = ?');
+                profileParams.push(photoClockinExempt ? 1 : 0);
+            }
+            if (geofenceClockinExempt !== undefined) {
+                profileUpdates.push('geofence_clockin_exempt = ?');
+                profileParams.push(geofenceClockinExempt ? 1 : 0);
             }
             if (workerType !== undefined) {
                 profileUpdates.push('worker_type = ?');

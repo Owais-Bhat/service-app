@@ -3680,14 +3680,16 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               <select id="new-status" ${isResolvedReadOnly ? 'disabled' : ''}>
                 ${isReopened ? `
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
-                  ${focAllowed ? `<option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>` : ''}
                 ` : `
                   <option value="in_progress" ${normalizedCurrentStatus==='in_progress'?'selected':''}>In Progress</option>
                   <option value="resolved" ${normalizedCurrentStatus==='resolved'?'selected':''}>Resolved</option>
+                `}
+                ${focAllowed ? `<option value="foc" ${normalizedCurrentStatus==='foc'?'selected':''}>FOC — Free of Cost (no bill generated)</option>` : ''}
+                ${!isReopened ? `
                   <option value="reschedule">📅 Reschedule (set new visit time)</option>
                   <option value="issue_not_resolved" ${normalizedCurrentStatus==='issue_not_resolved'?'selected':''}>Issue Not Resolved</option>
                   <option value="case_closed" ${normalizedCurrentStatus==='case_closed'?'selected':''}>Case Closed — customer didn't cooperate / no fee</option>
-                `}
+                ` : ''}
               </select>
               <small id="case-closed-hint" style="display:${normalizedCurrentStatus==='case_closed'?'block':'none'}; margin-top:6px; color:var(--danger); font-size:0.75rem;">⚠️ Case Closed is final — the ticket will be locked and cannot be reopened.</small>
             </div>
@@ -3808,7 +3810,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
           <!-- TAB 3: BILL -->
           <div class="mst-pane" data-pane="bill">
-            ${isReopened && focAllowed ? `
+            ${focAllowed ? `
             <label style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:12px;background:rgba(245,158,11,0.08);border:1px solid var(--warning);margin-bottom:14px;cursor:pointer;font-weight:600;">
               <input type="checkbox" id="foc-no-bill" ${normalizedCurrentStatus==='foc' ? 'checked' : ''} style="width:16px;height:16px;margin:0;cursor:pointer;"/>
               No Bill — FOC (Free of Cost)

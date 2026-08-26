@@ -2138,113 +2138,6 @@ export async function renderUsers(container) {
 
   const rows = users || [];
 
-  const accessCell = (u) =>
-    u.role === "employee"
-      ? `
-    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
-      <input type="checkbox" class="can-add-service-chk" data-uid="${u.id}" ${u.can_add_service ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-      Add Service
-    </label>
-  `
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  const profileCell = (u) =>
-    u.role === "employee"
-      ? `
-    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
-      <input type="checkbox" class="can-update-profile-chk" data-uid="${u.id}" ${u.can_update_profile ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-      Profile Edit
-    </label>
-  `
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  const alwaysAssignCell = (u) =>
-    u.role === "employee"
-      ? `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="switch-outer always-assign-switch-outer" style="position:relative;width:38px;height:20px;background:${u.always_assign ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
-        <div class="switch-inner" style="position:absolute;top:2px;left:${u.always_assign ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-      </div>
-      <span class="always-assign-status-text" style="font-size:0.8rem;font-weight:700;color:${u.always_assign ? "var(--primary)" : "var(--text-dim)"};">${u.always_assign ? "ON" : "OFF"}</span>
-      <input type="checkbox" class="always-assign-chk" data-uid="${u.id}" ${u.always_assign ? "checked" : ""} style="display:none;" />
-    </div>
-  `
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  const eodExemptCell = (u) =>
-    u.role === "employee"
-      ? `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="switch-outer eod-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.eod_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
-        <div class="switch-inner" style="position:absolute;top:2px;left:${u.eod_exempt ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-      </div>
-      <span class="eod-exempt-status-text" style="font-size:0.8rem;font-weight:700;color:${u.eod_exempt ? "var(--primary)" : "var(--text-dim)"};">${u.eod_exempt ? "ON" : "OFF"}</span>
-      <input type="checkbox" class="eod-exempt-chk" data-uid="${u.id}" ${u.eod_exempt ? "checked" : ""} style="display:none;" />
-    </div>
-  `
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  // Photo/geofence exempt only makes sense for fixed employees — gig workers
-  // never use the photo/geofence clock-in system at all.
-  const photoExemptCell = (u) =>
-    u.role === "employee"
-      ? `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="switch-outer photo-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.photo_clockin_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
-        <div class="switch-inner" style="position:absolute;top:2px;left:${u.photo_clockin_exempt ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-      </div>
-      <span class="photo-exempt-status-text" style="font-size:0.8rem;font-weight:700;color:${u.photo_clockin_exempt ? "var(--primary)" : "var(--text-dim)"};">${u.photo_clockin_exempt ? "ON" : "OFF"}</span>
-      <input type="checkbox" class="photo-exempt-chk" data-uid="${u.id}" ${u.photo_clockin_exempt ? "checked" : ""} style="display:none;" />
-    </div>
-  `
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  const geofenceExemptCell = (u) =>
-    u.role === "employee"
-      ? `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="switch-outer geofence-exempt-switch-outer" style="position:relative;width:38px;height:20px;background:${u.geofence_clockin_exempt ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
-        <div class="switch-inner" style="position:absolute;top:2px;left:${u.geofence_clockin_exempt ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-      </div>
-      <span class="geofence-exempt-status-text" style="font-size:0.8rem;font-weight:700;color:${u.geofence_clockin_exempt ? "var(--primary)" : "var(--text-dim)"};">${u.geofence_clockin_exempt ? "ON" : "OFF"}</span>
-      <input type="checkbox" class="geofence-exempt-chk" data-uid="${u.id}" ${u.geofence_clockin_exempt ? "checked" : ""} style="display:none;" />
-    </div>
-  `
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  // Per-employee tab ids (must match getNavItems('employee') in main.js).
-  const EMPLOYEE_TAB_IDS = ["all-tickets","my-installations","my-attendance","my-leaves","my-eod","my-cash","my-collections","my-salary","leaderboard","my-reviews","employee-training","my-training-courses","device-followup","estimator","service-pricing"];
-  const parseAllowedTabs = (u) => {
-    try {
-      if (u.allowed_tabs) {
-        const a = typeof u.allowed_tabs === "string" ? JSON.parse(u.allowed_tabs) : u.allowed_tabs;
-        if (Array.isArray(a)) return a.map(String);
-      }
-    } catch { /* unparseable = full access */ }
-    return null; // null = all tabs visible
-  };
-  const canSeeCollections = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-collections"); };
-  const canSeeAttendance  = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-attendance"); };
-  const canSeeLeaves      = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-leaves"); };
-  const canSeeStats       = (u) => { const a = parseAllowedTabs(u); return a === null || a.includes("my-stats"); };
-
-  const makeTabSwitch = (u, tabId, cssPrefix, canSee) =>
-    u.role === "employee"
-      ? `<div style="display:flex;align-items:center;gap:8px;">
-          <div class="switch-outer ${cssPrefix}-switch-outer" data-uid="${u.id}" style="position:relative;width:38px;height:20px;background:${canSee ? "var(--primary)" : "var(--border)"};border-radius:100px;transition:0.3s;box-shadow:inset 0 1px 3px rgba(0,0,0,0.15);cursor:pointer;">
-            <div class="switch-inner" style="position:absolute;top:2px;left:${canSee ? "20px" : "2px"};width:16px;height:16px;background:#ffffff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-          </div>
-          <span class="${cssPrefix}-status-text" style="font-size:0.8rem;font-weight:700;color:${canSee ? "var(--primary)" : "var(--text-dim)"};">${canSee ? "ON" : "OFF"}</span>
-          <input type="checkbox" class="${cssPrefix}-access-chk" data-uid="${u.id}" data-tab="${tabId}" ${canSee ? "checked" : ""} style="display:none;" />
-        </div>`
-      : '<span style="color:var(--text-dim)">-</span>';
-
-  // Inline tab access toggles in the Users table.
-  const collectionsCell = (u) => makeTabSwitch(u, "my-collections", "coll",   canSeeCollections(u));
-  const attendanceCell  = (u) => makeTabSwitch(u, "my-attendance",  "att",    canSeeAttendance(u));
-  const leavesCell      = (u) => makeTabSwitch(u, "my-leaves",      "leaves", canSeeLeaves(u));
-  const statsCell       = (u) => makeTabSwitch(u, "my-stats",       "stats",  canSeeStats(u));
-
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div>
@@ -2261,16 +2154,6 @@ export async function renderUsers(container) {
               <th>Name / Email</th>
               <th>Current Role</th>
               <th>SMS Phone</th>
-              <th>Service Access</th>
-              <th>Profile Access</th>
-              <th>Always Assign</th>
-              <th>EOD Exempt</th>
-              <th>Photo Clock-In Exempt</th>
-              <th>Location Clock-In Exempt</th>
-              <th>Attendance Tab</th>
-              <th>Leave Tab</th>
-              <th>Collections Tab</th>
-              <th>Stats Tab</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -2280,7 +2163,7 @@ export async function renderUsers(container) {
                 ? rows
                     .map(
                       (u) => `
-              <tr>
+              <tr class="user-row" data-uid="${u.id}" style="cursor:pointer;">
                 <td>
                   <b>${escapeHtml(u.full_name || "-")}</b>
                   <div style="font-size:0.78rem;color:var(--text-dim);margin-top:2px;">${escapeHtml(u.email || "-")}</div>
@@ -2289,19 +2172,9 @@ export async function renderUsers(container) {
                 <td>
                   ${u.phone ? `<b>${escapeHtml(u.phone)}</b>` : '<span style="color:var(--text-dim)">—</span>'}
                 </td>
-                <td>${accessCell(u)}</td>
-                <td>${profileCell(u)}</td>
-                <td>${alwaysAssignCell(u)}</td>
-                <td>${eodExemptCell(u)}</td>
-                <td>${photoExemptCell(u)}</td>
-                <td>${geofenceExemptCell(u)}</td>
-                <td>${attendanceCell(u)}</td>
-                <td>${leavesCell(u)}</td>
-                <td>${collectionsCell(u)}</td>
-                <td>${statsCell(u)}</td>
                 <td>
                   <div style="display:flex;gap:8px;">
-                    <button class="btn btn-secondary btn-sm edit-user-btn" data-uid="${u.id}">${ICONS.edit || "📝"}<span>Edit</span></button>
+                    <button class="btn btn-secondary btn-sm edit-user-btn" data-uid="${u.id}">${ICONS.edit || "📝"}<span>Settings</span></button>
                     <button class="btn btn-danger btn-sm delete-user-btn" data-uid="${u.id}">${ICONS.close || "🗑️"}</button>
                   </div>
                 </td>
@@ -2309,7 +2182,7 @@ export async function renderUsers(container) {
             `,
                     )
                     .join("")
-                : '<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
+                : '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">No users found</td></tr>'
             }
           </tbody>
         </table>
@@ -2317,155 +2190,9 @@ export async function renderUsers(container) {
     </div>
   `;
 
-  const bindAccessToggle = (selector, column, label) => {
-    container.querySelectorAll(selector).forEach((chk) => {
-      chk.addEventListener("change", async () => {
-        const { error } = await supabase
-          .from("profiles")
-          .update({ [column]: chk.checked ? 1 : 0 })
-          .eq("id", chk.dataset.uid);
-        if (error) {
-          toast(`Failed to update ${label}: ` + (error.message || ""), "error");
-          chk.checked = !chk.checked;
-          return;
-        }
-        toast(`${label} updated`, "success");
-        const SWITCH_PREFIXES = {
-          always_assign: "always-assign",
-          eod_exempt: "eod-exempt",
-          photo_clockin_exempt: "photo-exempt",
-          geofence_clockin_exempt: "geofence-exempt",
-        };
-        if (SWITCH_PREFIXES[column]) {
-          const prefix = SWITCH_PREFIXES[column];
-          const outer = chk.parentElement.querySelector(`.${prefix}-switch-outer`);
-          const inner = chk.parentElement.querySelector(".switch-inner");
-          const text = chk.parentElement.querySelector(`.${prefix}-status-text`);
-          if (outer && inner && text) {
-            outer.style.background = chk.checked ? "var(--primary)" : "var(--border)";
-            inner.style.left = chk.checked ? "20px" : "2px";
-            text.style.color = chk.checked ? "var(--primary)" : "var(--text-dim)";
-            text.textContent = chk.checked ? "ON" : "OFF";
-          }
-        }
-      });
-    });
-  };
-  bindAccessToggle(".can-add-service-chk", "can_add_service", "Service access");
-  bindAccessToggle(
-    ".can-update-profile-chk",
-    "can_update_profile",
-    "Profile edit access",
-  );
-  bindAccessToggle(
-    ".always-assign-chk",
-    "always_assign",
-    "Always Assign priority",
-  );
-  bindAccessToggle(
-    ".eod-exempt-chk",
-    "eod_exempt",
-    "No-restriction EOD exemption",
-  );
-  bindAccessToggle(
-    ".photo-exempt-chk",
-    "photo_clockin_exempt",
-    "Photo clock-in exemption",
-  );
-  bindAccessToggle(
-    ".geofence-exempt-chk",
-    "geofence_clockin_exempt",
-    "Location clock-in exemption",
-  );
-
-  container.querySelectorAll(".always-assign-switch-outer").forEach((div) => {
-    div.onclick = () => {
-      const chk = div.parentElement.querySelector(".always-assign-chk");
-      if (chk) {
-        chk.checked = !chk.checked;
-        chk.dispatchEvent(new Event("change"));
-      }
-    };
-  });
-
-  container.querySelectorAll(".eod-exempt-switch-outer").forEach((div) => {
-    div.onclick = () => {
-      const chk = div.parentElement.querySelector(".eod-exempt-chk");
-      if (chk) {
-        chk.checked = !chk.checked;
-        chk.dispatchEvent(new Event("change"));
-      }
-    };
-  });
-
-  container.querySelectorAll(".photo-exempt-switch-outer").forEach((div) => {
-    div.onclick = () => {
-      const chk = div.parentElement.querySelector(".photo-exempt-chk");
-      if (chk) {
-        chk.checked = !chk.checked;
-        chk.dispatchEvent(new Event("change"));
-      }
-    };
-  });
-
-  container.querySelectorAll(".geofence-exempt-switch-outer").forEach((div) => {
-    div.onclick = () => {
-      const chk = div.parentElement.querySelector(".geofence-exempt-chk");
-      if (chk) {
-        chk.checked = !chk.checked;
-        chk.dispatchEvent(new Event("change"));
-      }
-    };
-  });
-
-  // Generic tab-access toggle — flips a single tab id in the user's allowed_tabs array.
-  const bindTabSwitch = (chkSelector, outerSelector, statusSelector, tabLabel) => {
-    container.querySelectorAll(chkSelector).forEach((chk) => {
-      chk.addEventListener("change", async () => {
-        const uid = chk.dataset.uid;
-        const tabId = chk.dataset.tab;
-        const user = rows.find((u) => u.id === uid);
-        if (!user) return;
-        let a = parseAllowedTabs(user);
-        let newVal;
-        if (chk.checked) {
-          if (a === null) newVal = null;
-          else { if (!a.includes(tabId)) a.push(tabId); newVal = a; }
-        } else {
-          if (a === null) newVal = EMPLOYEE_TAB_IDS.filter((id) => id !== tabId);
-          else newVal = a.filter((id) => id !== tabId);
-        }
-        const stored = newVal === null ? null : JSON.stringify(newVal);
-        const { error } = await supabase.from("profiles").update({ allowed_tabs: stored }).eq("id", uid);
-        if (error) { toast(`Failed to update ${tabLabel}: ` + (error.message || ""), "error"); chk.checked = !chk.checked; return; }
-        user.allowed_tabs = stored;
-        const wrap = chk.parentElement;
-        const outer = wrap.querySelector(outerSelector);
-        const inner = wrap.querySelector(".switch-inner");
-        const text = wrap.querySelector(statusSelector);
-        if (outer && inner && text) {
-          outer.style.background = chk.checked ? "var(--primary)" : "var(--border)";
-          inner.style.left = chk.checked ? "20px" : "2px";
-          text.style.color = chk.checked ? "var(--primary)" : "var(--text-dim)";
-          text.textContent = chk.checked ? "ON" : "OFF";
-        }
-        toast(`${tabLabel} ${chk.checked ? "enabled" : "hidden"} for ${user.full_name || "staff"}`, "success");
-      });
-    });
-    container.querySelectorAll(outerSelector).forEach((div) => {
-      div.onclick = () => {
-        const chk = div.parentElement.querySelector(chkSelector);
-        if (chk) { chk.checked = !chk.checked; chk.dispatchEvent(new Event("change")); }
-      };
-    });
-  };
-  bindTabSwitch(".att-access-chk",    ".att-switch-outer",    ".att-status-text",    "Attendance tab");
-  bindTabSwitch(".leaves-access-chk", ".leaves-switch-outer", ".leaves-status-text", "Leave tab");
-  bindTabSwitch(".coll-access-chk",   ".coll-switch-outer",   ".coll-status-text",   "Collections tab");
-  bindTabSwitch(".stats-access-chk",  ".stats-switch-outer",  ".stats-status-text",  "Stats tab");
-
   container.querySelectorAll(".delete-user-btn").forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
       const uid = btn.dataset.uid;
       const user = rows.find((u) => u.id === uid);
       if (!user) return;
@@ -2495,8 +2222,19 @@ export async function renderUsers(container) {
   });
 
   container.querySelectorAll(".edit-user-btn").forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
       const uid = btn.dataset.uid;
+      const user = rows.find((u) => u.id === uid);
+      if (user) openUserModal(user, () => renderUsers(container));
+    };
+  });
+
+  // Clicking anywhere on a row (outside the action buttons) opens the same
+  // settings popup — no more hunting for the small Edit button.
+  container.querySelectorAll(".user-row").forEach((tr) => {
+    tr.onclick = () => {
+      const uid = tr.dataset.uid;
       const user = rows.find((u) => u.id === uid);
       if (user) openUserModal(user, () => renderUsers(container));
     };
@@ -2520,6 +2258,7 @@ export async function renderUsers(container) {
       { id: "my-cash", label: "My Cash" },
       { id: "my-collections", label: "Collections" },
       { id: "my-salary", label: "Salary" },
+      { id: "my-stats", label: "Stats" },
       { id: "leaderboard", label: "Leaderboard" },
       { id: "my-reviews", label: "Bonus Reviews" },
       { id: "employee-training", label: "Tutorials" },
@@ -2535,6 +2274,12 @@ export async function renderUsers(container) {
         if (Array.isArray(a)) allowedSet = new Set(a.map(String));
       }
     } catch { /* treat unparseable as full access */ }
+    // Every setting is a real toggle switch, not a plain checkbox.
+    const toggleRow = (id, label, checked, extraAttrs = "") => `
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;cursor:pointer;">
+        <span style="font-size:.88rem;">${label}</span>
+        <span class="switch"><input type="checkbox" id="${id}" ${extraAttrs} ${checked ? "checked" : ""}/><span class="switch-slider"></span></span>
+      </label>`;
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.innerHTML = `
@@ -2563,8 +2308,7 @@ export async function renderUsers(container) {
               <div class="form-group">
                 <label>Role</label>
                 <select id="usr-role">
-                  <option value="client" ${isEdit && user.role === "client" ? "selected" : ""}>Client</option>
-                  <option value="employee" ${isEdit && user.role === "employee" ? "selected" : ""}>Staff</option>
+                  <option value="employee" ${!isEdit || user.role === "employee" || user.role === "client" ? "selected" : ""}>Staff</option>
                   <option value="admin" ${isEdit && user.role === "admin" ? "selected" : ""}>Admin</option>
                 </select>
               </div>
@@ -2572,7 +2316,7 @@ export async function renderUsers(container) {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
               <div class="form-group">
                 <label>Phone Number (10 digits)</label>
-                <input id="usr-phone" type="tel" placeholder="9876543210" value="${isEdit ? escapeHtml((user.phone || "").replace(/^\\+91\\s*/, "")) : ""}" />
+                <input id="usr-phone" type="tel" placeholder="9876543210" value="${isEdit ? escapeHtml((user.phone || "").replace(/^\+91\s*/, "")) : ""}" />
               </div>
               <div class="form-group">
                 <label>Salary (Staff only)</label>
@@ -2585,14 +2329,8 @@ export async function renderUsers(container) {
                 <option value="fixed" ${!isEdit || user.worker_type !== "gig" ? "selected" : ""}>Fixed Employee</option>
                 <option value="gig" ${isEdit && user.worker_type === "gig" ? "selected" : ""}>Gig Worker (public pool, competes for released jobs, online-only payment)</option>
               </select>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px;">
-                <input type="checkbox" id="usr-installations-enabled" ${!isEdit || user.installations_enabled === undefined || user.installations_enabled === null || Number(user.installations_enabled) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Allow Installations tab (uncheck to hide it for this staff member — useful for Gig Workers)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px;">
-                <input type="checkbox" id="usr-allow-foc" ${!isEdit || user.allow_foc === undefined || user.allow_foc === null || Number(user.allow_foc) === 1 ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Allow FOC (uncheck to hide the free-of-cost / no-bill option for this staff member on reopened tickets)
-              </label>
+              ${toggleRow("usr-installations-enabled", "Allow Installations tab (useful to turn off for Gig Workers)", !isEdit || user.installations_enabled === undefined || user.installations_enabled === null || Number(user.installations_enabled) === 1)}
+              ${toggleRow("usr-allow-foc", "Allow FOC (free-of-cost / no-bill option on reopened tickets)", !isEdit || user.allow_foc === undefined || user.allow_foc === null || Number(user.allow_foc) === 1)}
             </div>
             <div class="form-group">
               <label>Company / Building Name</label>
@@ -2602,34 +2340,21 @@ export async function renderUsers(container) {
               <label>Address</label>
               <textarea id="usr-address" rows="2" placeholder="Full Address">${isEdit ? escapeHtml(user.address || "") : ""}</textarea>
             </div>
-            
-            <div style="display:flex;gap:18px;margin-top:8px;flex-wrap:wrap;">
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-add-service" ${isEdit && user.can_add_service ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Add Service Access (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-edit-profile" ${isEdit && user.can_update_profile ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Profile Edit Access (Staff only)
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="usr-always-assign" ${isEdit && user.always_assign ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Always Auto-Assign Service (Staff only)
-              </label>
+
+            <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">
+              ${toggleRow("usr-add-service", "Add Service Access (Staff only)", isEdit && user.can_add_service)}
+              ${toggleRow("usr-edit-profile", "Profile Edit Access (Staff only)", isEdit && user.can_update_profile)}
+              ${toggleRow("usr-always-assign", "Always Auto-Assign Service (Staff only)", isEdit && user.always_assign)}
+              ${toggleRow("usr-eod-exempt", "EOD Exempt (Staff only)", isEdit && user.eod_exempt)}
+              ${toggleRow("usr-photo-exempt", "Photo Clock-In Exempt (Staff only)", isEdit && user.photo_clockin_exempt)}
+              ${toggleRow("usr-geofence-exempt", "Location Clock-In Exempt (Staff only)", isEdit && user.geofence_clockin_exempt)}
             </div>
 
             <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
-              <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;">
-                <input type="checkbox" id="usr-limit-tabs" ${isEdit && allowedSet ? "checked" : ""} style="cursor:pointer;width:16px;height:16px;margin:0;"/>
-                Limit which tabs this staff can see
-              </label>
-              <p style="font-size:.78rem;color:var(--text-dim);margin:6px 0 0;">Leave unchecked for full access. Dashboard, Notifications and Profile are always visible.</p>
-              <div id="usr-tabs-list" style="display:${isEdit && allowedSet ? "grid" : "none"};grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
-                ${EMP_TABS.map(t => `
-                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:.86rem;cursor:pointer;">
-                    <input type="checkbox" class="usr-tab-chk" value="${t.id}" ${(allowedSet ? allowedSet.has(t.id) : true) ? "checked" : ""} style="cursor:pointer;width:15px;height:15px;margin:0;"/>
-                    ${escapeHtml(t.label)}
-                  </label>`).join("")}
+              <label style="font-weight:700;">Which tabs can this staff member see</label>
+              <p style="font-size:.78rem;color:var(--text-dim);margin:4px 0 12px;">Dashboard, Notifications and Profile are always visible regardless of these switches.</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">
+                ${EMP_TABS.map(t => toggleRow(`usr-tab-${t.id}`, escapeHtml(t.label), allowedSet ? allowedSet.has(t.id) : true, `class="usr-tab-chk" value="${t.id}"`)).join("")}
               </div>
             </div>
           </form>
@@ -2650,16 +2375,9 @@ export async function renderUsers(container) {
       if (e.target === overlay) close();
     };
 
-    // Show/hide the tab checklist with the "Limit tabs" switch.
-    const limitChk = overlay.querySelector("#usr-limit-tabs");
-    const tabsList = overlay.querySelector("#usr-tabs-list");
-    if (limitChk && tabsList) {
-      limitChk.onchange = () => { tabsList.style.display = limitChk.checked ? "grid" : "none"; };
-    }
-
     const phoneInput = overlay.querySelector("#usr-phone");
     phoneInput.oninput = () => {
-      let v = phoneInput.value.replace(/\\D/g, "");
+      let v = phoneInput.value.replace(/\D/g, "");
       if (v.length > 10 && v.startsWith("91")) v = v.slice(2);
       else if (v.length === 11 && v.startsWith("0")) v = v.slice(1);
       phoneInput.value = v.slice(0, 10);
@@ -2681,6 +2399,9 @@ export async function renderUsers(container) {
       const can_update_profile =
         overlay.querySelector("#usr-edit-profile").checked;
       const alwaysAssign = overlay.querySelector("#usr-always-assign").checked;
+      const eodExempt = overlay.querySelector("#usr-eod-exempt").checked;
+      const photoClockinExempt = overlay.querySelector("#usr-photo-exempt").checked;
+      const geofenceClockinExempt = overlay.querySelector("#usr-geofence-exempt").checked;
       const workerType = overlay.querySelector("#usr-worker-type").value;
       const installationsEnabled = overlay.querySelector("#usr-installations-enabled").checked;
       const allowFoc = overlay.querySelector("#usr-allow-foc").checked;
@@ -2705,17 +2426,19 @@ export async function renderUsers(container) {
         can_add_service: can_add_service ? 1 : 0,
         can_update_profile: can_update_profile ? 1 : 0,
         alwaysAssign: alwaysAssign ? 1 : 0,
+        eodExempt: eodExempt ? 1 : 0,
+        photoClockinExempt: photoClockinExempt ? 1 : 0,
+        geofenceClockinExempt: geofenceClockinExempt ? 1 : 0,
         workerType,
         installationsEnabled,
         allowFoc,
       };
 
-      // Tab access: unchecked "limit" = full access (null). Otherwise the
-      // explicit list of tab ids this staff member may see.
-      const limitTabs = overlay.querySelector("#usr-limit-tabs")?.checked;
-      payload.allowed_tabs = limitTabs
-        ? [...overlay.querySelectorAll(".usr-tab-chk:checked")].map((c) => c.value)
-        : null;
+      // Every tab has its own switch now — if they're all on, that's full
+      // access (store null); otherwise store just the ones left on.
+      const allTabChks = [...overlay.querySelectorAll(".usr-tab-chk")];
+      const checkedTabs = allTabChks.filter((c) => c.checked).map((c) => c.value);
+      payload.allowed_tabs = checkedTabs.length === allTabChks.length ? null : checkedTabs;
 
       if (password) payload.password = password;
 
