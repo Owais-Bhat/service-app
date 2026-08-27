@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -27,11 +28,13 @@ interface Props {
 // fill instead of an inset shadow for the active icon (design spec §5.3).
 export default function GlassTabBar({ items, activeKey, onSelect }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <View
       style={[
         styles.wrapper,
         {
+          bottom: spacing(3.5) + insets.bottom,
           backgroundColor: theme.bg,
           shadowColor: theme.neuDark,
           shadowOffset: { width: 0, height: 10 },
@@ -73,7 +76,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: spacing(3),
     right: spacing(3),
-    bottom: spacing(3.5),
     borderRadius: radius.xl,
   },
   row: {
