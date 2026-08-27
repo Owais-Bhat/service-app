@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { api, ApiError, dataGet, dataPatch, dataPost, postForm } from './client';
@@ -110,11 +111,25 @@ async function captureSelfie(): Promise<{ uri: string; name: string; type: strin
   return { uri: asset.uri, name: `selfie.${ext}`, type: asset.mimeType || `image/${ext}` };
 }
 
+// Mirrors src/pages/employee.js's CLOCKIN_POPUP_START_HOUR/MIN gate — no
+// clock-in before 8:30 AM local time, matching the web app's behavior.
+const CLOCK_IN_WINDOW_START_HOUR = 8;
+const CLOCK_IN_WINDOW_START_MINUTE = 30;
+function isBeforeClockInWindow(now: Date = new Date()): boolean {
+  const start = new Date(now);
+  start.setHours(CLOCK_IN_WINDOW_START_HOUR, CLOCK_IN_WINDOW_START_MINUTE, 0, 0);
+  return now < start;
+}
+
 // Shared by both fixed and gig employees — the server applies the same
 // global photo/geofence settings and per-employee exemptions to everyone
 // (see server/index.cjs's clock-in-photo handler), so there's no longer a
 // worker-type-specific clock-in path.
 export async function clockIn(userId: string): Promise<AttendanceRow> {
+  if (isBeforeClockInWindow()) {
+    throw new ApiError('Clock-in is not allowed before 8:30 AM.', 400);
+  }
+
   const [requirements, exemptions, coords] = await Promise.all([
     loadClockInRequirements(),
     loadExemptions(userId),
@@ -122,6 +137,15 @@ export async function clockIn(userId: string): Promise<AttendanceRow> {
   ]);
   const photoRequired = requirements.photoRequired && !exemptions.photo_clockin_exempt;
   const geofenceRequired = requirements.geofenceRequired && !exemptions.geofence_clockin_exempt;
+
+  // TEMPORARY diagnostic — standalone builds have no attached console, so
+  // this is the only way to see why photo/geofence enforcement isn't
+  // kicking in when the admin has it turned on. Remove once confirmed fixed.
+  const debugSummary = `requirements=${JSON.stringify(requirements)} exemptions=${JSON.stringify(exemptions)} photoRequired=${photoRequired} geofenceRequired=${geofenceRequired} hasCoords=${!!coords}`;
+  console.log('[clock-in debug]', debugSummary);
+  if (!__DEV__) {
+    Alert.alert('Clock-in debug', debugSummary);
+  }
 
   if (geofenceRequired && !coords) {
     throw new ApiError('Could not get your location. Enable location access and try again.', 400);

@@ -1876,6 +1876,20 @@ const requiredTables = [
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
     )`,
+    // Every ping, kept forever (unlike employee_live_locations' single
+    // overwritten row) — this is the "everywhere they've been today" trail
+    // admin can pull up per employee/date. See /api/live-location/ping and
+    // /api/live-location/history.
+    `CREATE TABLE IF NOT EXISTS employee_location_history (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        latitude DECIMAL(10, 7) NOT NULL,
+        longitude DECIMAL(10, 7) NOT NULL,
+        accuracy DECIMAL(10, 2),
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_location_history_user_time (user_id, recorded_at),
+        FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
+    )`,
 ];
 
 const videoDoorPhoneServices = [
@@ -5403,12 +5417,17 @@ app.post('/api/live-location/ping', rateLimit({ windowMs: 60_000, max: 30, key: 
     }
     let connection;
     try {
+        const acc = Number.isFinite(Number(accuracy)) ? Number(accuracy) : null;
         connection = await getConn();
         await connection.execute(
             `INSERT INTO employee_live_locations (user_id, latitude, longitude, accuracy)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE latitude = VALUES(latitude), longitude = VALUES(longitude), accuracy = VALUES(accuracy)`,
-            [req.user.id, latitude, longitude, Number.isFinite(Number(accuracy)) ? Number(accuracy) : null]
+            [req.user.id, latitude, longitude, acc]
+        );
+        await connection.execute(
+            `INSERT INTO employee_location_history (user_id, latitude, longitude, accuracy) VALUES (?, ?, ?, ?)`,
+            [req.user.id, latitude, longitude, acc]
         );
         res.json({ ok: true });
     } catch (error) {
@@ -5440,6 +5459,33 @@ app.get('/api/live-location', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('live-location list error:', error);
         res.status(500).json({ error: 'Could not fetch locations' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Admin's full-day movement trail for one employee — every ping recorded
+// that day, oldest first, for drawing a path on the map. `date` defaults to
+// today; expects YYYY-MM-DD (matches attendance.date's format elsewhere).
+app.get('/api/live-location/history', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const userId = req.query.user_id;
+    if (!userId) return res.status(400).json({ error: 'user_id required' });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : new Date().toLocaleDateString('en-CA');
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(
+            `SELECT latitude, longitude, accuracy, recorded_at
+             FROM employee_location_history
+             WHERE user_id = ? AND recorded_at >= ? AND recorded_at < DATE_ADD(?, INTERVAL 1 DAY)
+             ORDER BY recorded_at ASC`,
+            [userId, date, date]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('live-location history error:', error);
+        res.status(500).json({ error: 'Could not fetch location history' });
     } finally {
         if (connection) connection.release();
     }

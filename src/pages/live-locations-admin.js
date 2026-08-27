@@ -49,6 +49,9 @@ function ensureStyles() {
     .ll-fit-btn:active { transform: scale(0.96); }
     .ll-fit-btn svg { width:14px; height:14px; }
     .ll-live-badge { display:inline-flex; align-items:center; gap:6px; font-size:0.72rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--success,#10b981); }
+    .ll-trail-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 16px; }
+    .ll-trail-bar select, .ll-trail-bar input[type="date"] { padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface,#fff); color:var(--text); font-size:0.85rem; }
+    .ll-trail-summary { font-size:0.8rem; color:var(--text-dim); padding:0 16px 14px; }
   `;
   document.head.appendChild(style);
 }
@@ -60,6 +63,18 @@ function escapeHtml(s) {
 async function fetchLiveLocations() {
   const res = await fetch(`${API_BASE}/live-location`, { headers: authHeaders() });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load locations');
+  return res.json();
+}
+
+async function fetchEmployeeList() {
+  const res = await fetch(`${API_BASE}/data/profiles?select=id,full_name,worker_type&eq=role:employee&order=full_name:asc`, { headers: authHeaders() });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load employees');
+  return res.json();
+}
+
+async function fetchLocationHistory(userId, date) {
+  const res = await fetch(`${API_BASE}/live-location/history?user_id=${encodeURIComponent(userId)}&date=${encodeURIComponent(date)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load location history');
   return res.json();
 }
 
@@ -141,6 +156,85 @@ function applySelection(container) {
   });
 }
 
+function formatClockLabel(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function clearTrail(container) {
+  if (container._llTrailLayer) {
+    container._llMap?.removeLayer(container._llTrailLayer);
+    container._llTrailLayer = null;
+  }
+  const summary = container.querySelector('#ll-trail-summary');
+  if (summary) summary.textContent = "Pick an employee and date to see everywhere they've been that day.";
+  const clearBtn = container.querySelector('#ll-trail-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+}
+
+// Populates the employee picker and wires Show/Clear Trail — a full day's
+// path for one employee, independent of the live "who's clocked in now"
+// markers (drawn as its own layer group so both can coexist on the map).
+async function setupDayTrail(container) {
+  const employeeSelect = container.querySelector('#ll-trail-employee');
+  const dateInput = container.querySelector('#ll-trail-date');
+  const showBtn = container.querySelector('#ll-trail-show');
+  const clearBtn = container.querySelector('#ll-trail-clear');
+  const summary = container.querySelector('#ll-trail-summary');
+
+  try {
+    const employees = await fetchEmployeeList();
+    employeeSelect.innerHTML = employees.length
+      ? employees.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name || 'Unknown')} (${e.worker_type === 'gig' ? 'Gig' : 'Fixed'})</option>`).join('')
+      : '<option value="">No employees found</option>';
+  } catch (err) {
+    employeeSelect.innerHTML = '<option value="">Could not load employees</option>';
+  }
+
+  showBtn.addEventListener('click', async () => {
+    const userId = employeeSelect.value;
+    const date = dateInput.value;
+    if (!userId || !date || !container._llMap) return;
+
+    showBtn.disabled = true;
+    const originalLabel = showBtn.innerHTML;
+    showBtn.innerHTML = 'Loading…';
+    try {
+      const points = await fetchLocationHistory(userId, date);
+      if (container._llTrailLayer) container._llMap.removeLayer(container._llTrailLayer);
+
+      if (points.length === 0) {
+        summary.textContent = `No location data recorded for ${employeeSelect.options[employeeSelect.selectedIndex]?.text || 'this employee'} on ${date}.`;
+        clearBtn.style.display = 'none';
+        container._llTrailLayer = null;
+        return;
+      }
+
+      const latlngs = points.map((p) => [Number(p.latitude), Number(p.longitude)]);
+      const layerGroup = L.layerGroup();
+      L.polyline(latlngs, { color: '#7c5cfc', weight: 4, opacity: 0.75 }).addTo(layerGroup);
+      L.circleMarker(latlngs[0], { radius: 7, color: '#fff', weight: 2, fillColor: '#15a05a', fillOpacity: 1 })
+        .bindTooltip(`Start · ${formatClockLabel(points[0].recorded_at)}`)
+        .addTo(layerGroup);
+      L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#fff', weight: 2, fillColor: '#e0384a', fillOpacity: 1 })
+        .bindTooltip(`Last seen · ${formatClockLabel(points[points.length - 1].recorded_at)}`)
+        .addTo(layerGroup);
+      layerGroup.addTo(container._llMap);
+      container._llTrailLayer = layerGroup;
+
+      container._llMap.flyToBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16, duration: 0.9 });
+      summary.textContent = `${points.length} points recorded · ${formatClockLabel(points[0].recorded_at)} → ${formatClockLabel(points[points.length - 1].recorded_at)}`;
+      clearBtn.style.display = 'inline-flex';
+    } catch (err) {
+      toast(err.message || 'Could not load location history', 'error');
+    } finally {
+      showBtn.disabled = false;
+      showBtn.innerHTML = originalLabel;
+    }
+  });
+
+  clearBtn.addEventListener('click', () => clearTrail(container));
+}
+
 export async function renderLiveLocationsTab(container) {
   ensureStyles();
 
@@ -151,6 +245,7 @@ export async function renderLiveLocationsTab(container) {
   container._llMap = null;
   container._llMarkers = new Map();
   container._selectedUserId = null;
+  container._llTrailLayer = null;
 
   container.innerHTML = `
     <div class="page-header">
@@ -167,6 +262,19 @@ export async function renderLiveLocationsTab(container) {
     <div style="position:relative;margin-bottom:20px;">
       <div id="ll-map" style="height:440px;width:100%;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--bg-soft);"></div>
       <button type="button" class="ll-fit-btn" id="ll-fit-all" title="Fit all on screen">${ICONS.crosshair}<span>Fit all</span></button>
+    </div>
+
+    <div class="card ll-card" style="margin-bottom:20px;">
+      <div class="card-header">
+        <span class="card-title">Day Trail</span>
+      </div>
+      <div class="ll-trail-bar">
+        <select id="ll-trail-employee"><option value="">Loading employees…</option></select>
+        <input type="date" id="ll-trail-date" value="${new Date().toLocaleDateString('en-CA')}" max="${new Date().toLocaleDateString('en-CA')}" />
+        <button type="button" class="btn btn-primary btn-sm" id="ll-trail-show">${ICONS.pin} Show Trail</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="ll-trail-clear" style="display:none;">Clear Trail</button>
+      </div>
+      <div class="ll-trail-summary" id="ll-trail-summary">Pick an employee and date to see everywhere they've been that day.</div>
     </div>
 
     <div id="ll-content"></div>
@@ -192,6 +300,8 @@ export async function renderLiveLocationsTab(container) {
     const bounds = L.latLngBounds([...container._llMarkers.values()].map((e) => e.marker.getLatLng()));
     map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 15, duration: 0.9 });
   });
+
+  setupDayTrail(container);
 
   // Event delegation — renderTable() replaces contentEl's innerHTML on every
   // poll, so rows are (re)bound implicitly here instead of per-render.
