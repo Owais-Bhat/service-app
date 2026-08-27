@@ -90,6 +90,18 @@ export function resolveUploadUrl(url: string): string {
   return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
+// Converts a local file:// URI (from expo-image-picker) into a real Blob
+// for FormData.append() — newer React Native's FormData implementation
+// throws "Unsupported FormDataPart implementation" for the older
+// { uri, name, type } object shape, so this is the version-safe way to
+// attach a local file. `type` forces the Blob's MIME type explicitly,
+// since fetch() on a file:// URI doesn't always infer it correctly.
+export async function localUriToBlob(uri: string, type: string): Promise<Blob> {
+  const res = await fetch(uri);
+  const blob = await res.blob();
+  return new Blob([blob], { type });
+}
+
 export async function postForm<T>(path: string, form: FormData): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {};

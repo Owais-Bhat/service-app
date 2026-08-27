@@ -1,4 +1,4 @@
-import { api, postForm } from './client';
+import { api, localUriToBlob, postForm } from './client';
 
 export type ReviewType = 'google' | 'job_card' | 'sms';
 export type ReviewStatus = 'pending' | 'approved' | 'rejected';
@@ -26,11 +26,12 @@ export interface ResolvedJob {
   full_name: string;
 }
 
-function photoField(uri: string) {
+async function appendPhotoField(form: FormData, field: string, uri: string): Promise<void> {
   const filename = uri.split('/').pop() || `photo-${Date.now()}.jpg`;
   const ext = filename.split('.').pop()?.toLowerCase();
   const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
-  return { uri, name: filename, type: mime } as unknown as Blob;
+  const blob = await localUriToBlob(uri, mime);
+  form.append(field, blob, filename);
 }
 
 export async function fetchMyReviewSubmissions(): Promise<ReviewSubmission[]> {
@@ -50,7 +51,7 @@ export async function submitServiceReview(inquiryId: string, photoUri: string): 
   const form = new FormData();
   form.append('inquiry_id', inquiryId);
   form.append('policy_agreed', 'true');
-  form.append('photo', photoField(photoUri));
+  await appendPhotoField(form, 'photo', photoUri);
   return postForm<ReviewSubmission>('/review-submissions/service', form);
 }
 
@@ -67,7 +68,7 @@ export async function submitInstallationReview(
   form.append('customer_name', customerName);
   form.append('address', address);
   form.append('policy_agreed', 'true');
-  if (googlePhotoUri) form.append('google_photo', photoField(googlePhotoUri));
-  if (jobCardPhotoUri) form.append('job_card_photo', photoField(jobCardPhotoUri));
+  if (googlePhotoUri) await appendPhotoField(form, 'google_photo', googlePhotoUri);
+  if (jobCardPhotoUri) await appendPhotoField(form, 'job_card_photo', jobCardPhotoUri);
   return postForm<ReviewSubmission[]>('/review-submissions/installation', form);
 }

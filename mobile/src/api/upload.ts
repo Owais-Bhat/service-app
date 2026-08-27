@@ -1,4 +1,4 @@
-import { postForm, resolveUploadUrl } from './client';
+import { localUriToBlob, postForm, resolveUploadUrl } from './client';
 
 // Uploads a local image (a file:// URI from expo-image-picker) to the
 // generic /api/upload endpoint and returns the absolute, RN-<Image>-safe
@@ -9,7 +9,8 @@ export async function uploadImage(uri: string): Promise<string> {
   const filename = uri.split('/').pop() || `photo-${Date.now()}.jpg`;
   const ext = filename.split('.').pop()?.toLowerCase();
   const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
-  form.append('file', { uri, name: filename, type: mime } as unknown as Blob);
+  const blob = await localUriToBlob(uri, mime);
+  form.append('file', blob, filename);
   const res = await postForm<{ url: string }>('/upload', form);
   return resolveUploadUrl(res.url);
 }

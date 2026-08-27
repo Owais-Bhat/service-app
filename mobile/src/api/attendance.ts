@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { api, ApiError, dataGet, dataPatch, dataPost, postForm } from './client';
+import { api, ApiError, dataGet, dataPatch, dataPost, localUriToBlob, postForm } from './client';
 import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../location/backgroundLocationTask';
 
 export interface AttendanceRow {
@@ -161,9 +161,8 @@ export async function clockIn(userId: string): Promise<AttendanceRow> {
 
   const form = new FormData();
   if (selfie) {
-    // React Native's FormData accepts { uri, name, type } file parts —
-    // not the DOM File/Blob shape TypeScript's lib.dom.d.ts expects here.
-    form.append('photo', selfie as unknown as Blob);
+    const blob = await localUriToBlob(selfie.uri, selfie.type);
+    form.append('photo', blob, selfie.name);
   }
   if (coords) {
     form.append('lat', String(coords.lat));
