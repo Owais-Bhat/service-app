@@ -4682,8 +4682,8 @@ export async function renderSettingsTab(container) {
         <div class="settings-card-head">
           <span class="settings-card-icon">${ICONS.crosshair}</span>
           <div>
-            <h3>Fixed-Employee Clock-In Requirements</h3>
-            <p>Turn photo verification and the precise-location check on or off independently. Per-employee exceptions are set in User Management.</p>
+            <h3>Employee Clock-In Requirements</h3>
+            <p>Turn photo verification and the precise-location check on or off independently — applies to fixed and gig employees alike. Per-employee exceptions are set in User Management.</p>
           </div>
         </div>
 
