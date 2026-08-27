@@ -52,6 +52,18 @@ function ensureStyles() {
     .ll-trail-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 16px; }
     .ll-trail-bar select, .ll-trail-bar input[type="date"] { padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface,#fff); color:var(--text); font-size:0.85rem; }
     .ll-trail-summary { font-size:0.8rem; color:var(--text-dim); padding:0 16px 14px; }
+    .ll-playback-bar { display:flex; align-items:center; gap:12px; padding:4px 16px 16px; border-top:1px solid var(--border); margin-top:2px; padding-top:14px; }
+    .ll-play-btn { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; border:none; background:#7c5cfc; color:#fff; cursor:pointer; flex-shrink:0; transition: background .15s ease, transform .1s ease; }
+    .ll-play-btn svg { width:16px; height:16px; }
+    .ll-play-btn:hover { background:#6c4de8; }
+    .ll-play-btn:active { transform: scale(0.92); }
+    .ll-playback-time { font-family:monospace; font-size:0.82rem; font-weight:700; color:var(--text); min-width:78px; }
+    .ll-playback-scrub { flex:1; accent-color:#7c5cfc; cursor:pointer; }
+    .ll-playback-speed { padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface,#fff); color:var(--text); font-size:0.78rem; flex-shrink:0; }
+    @keyframes llTravelPulse { 0% { transform:scale(0.6); opacity:0.7; } 70% { opacity:0; } 100% { transform:scale(2.6); opacity:0; } }
+    .ll-travel-marker { position:relative; width:18px; height:18px; }
+    .ll-travel-marker-ring { position:absolute; inset:-4px; border-radius:50%; background:#7c5cfc; animation: llTravelPulse 1.1s ease-out infinite; }
+    .ll-travel-marker-dot { position:absolute; inset:0; border-radius:50%; background:#7c5cfc; border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.5); }
   `;
   document.head.appendChild(style);
 }
@@ -160,26 +172,132 @@ function formatClockLabel(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-function clearTrail(container) {
-  if (container._llTrailLayer) {
-    container._llMap?.removeLayer(container._llTrailLayer);
-    container._llTrailLayer = null;
+function formatClockLabelFromMs(ms) {
+  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+}
+
+function travelIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div class="ll-travel-marker"><div class="ll-travel-marker-ring"></div><div class="ll-travel-marker-dot"></div></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
+
+// Finds the position along the recorded points at `targetMs` (epoch ms),
+// linearly interpolating between the two bracketing pings so the dot glides
+// smoothly instead of hopping point-to-point. Returns the index of the last
+// point at-or-before targetMs too, so the caller can slice the "traveled so
+// far" portion of the path.
+function interpolateTrailPosition(points, targetMs) {
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (targetMs <= first.t) return { lat: first.lat, lng: first.lng, idx: 0 };
+  if (targetMs >= last.t) return { lat: last.lat, lng: last.lng, idx: points.length - 1 };
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (targetMs >= a.t && targetMs <= b.t) {
+      const frac = b.t === a.t ? 0 : (targetMs - a.t) / (b.t - a.t);
+      return { lat: a.lat + (b.lat - a.lat) * frac, lng: a.lng + (b.lng - a.lng) * frac, idx: i };
+    }
   }
+  return { lat: last.lat, lng: last.lng, idx: points.length - 1 };
+}
+
+function stopPlayback(container) {
+  const anim = container._llTrailAnim;
+  if (!anim) return;
+  anim.playing = false;
+  if (anim.rafId) cancelAnimationFrame(anim.rafId);
+  anim.rafId = null;
+  const playBtn = container.querySelector('#ll-play-toggle');
+  if (playBtn) playBtn.innerHTML = ICONS.play || '▶';
+}
+
+// Moves the traveling marker + redraws the "traveled so far" bold segment
+// of the path to match `trailMs` (ms elapsed since the first recorded ping).
+function setPlaybackPosition(container, trailMs) {
+  const anim = container._llTrailAnim;
+  if (!anim) return;
+  const clamped = Math.max(0, Math.min(trailMs, anim.totalMs));
+  anim.currentMs = clamped;
+
+  const pos = interpolateTrailPosition(anim.points, anim.startMs + clamped);
+  anim.marker.setLatLng([pos.lat, pos.lng]);
+  const traveled = anim.points.slice(0, pos.idx + 1).map((p) => [p.lat, p.lng]);
+  traveled.push([pos.lat, pos.lng]);
+  anim.traveledLine.setLatLngs(traveled);
+
+  const scrub = container.querySelector('#ll-playback-scrub');
+  if (scrub && document.activeElement !== scrub) scrub.value = String(Math.round((clamped / anim.totalMs) * 1000));
+  const timeLabel = container.querySelector('#ll-playback-time');
+  if (timeLabel) timeLabel.textContent = formatClockLabelFromMs(anim.startMs + clamped);
+}
+
+function startPlayback(container) {
+  const anim = container._llTrailAnim;
+  if (!anim || anim.playing) return;
+  if (anim.currentMs >= anim.totalMs) anim.currentMs = 0; // replay from the start once finished
+  anim.playing = true;
+  anim.wallClockAtPlay = performance.now();
+  anim.msAtPlay = anim.currentMs;
+  const playBtn = container.querySelector('#ll-play-toggle');
+  if (playBtn) playBtn.innerHTML = ICONS.pause || '⏸';
+
+  const tick = (now) => {
+    // Bail if a fresh render replaced this trail (e.g. left and returned to
+    // the tab mid-playback) — container._llTrailAnim would now point to a
+    // different object or be null, since renderLiveLocationsTab() reuses
+    // the same container element rather than removing it from the DOM.
+    if (!anim.playing || container._llTrailAnim !== anim) return;
+    const elapsedWall = now - anim.wallClockAtPlay;
+    const nextMs = anim.msAtPlay + elapsedWall * anim.speedFactor;
+    if (nextMs >= anim.totalMs) {
+      setPlaybackPosition(container, anim.totalMs);
+      stopPlayback(container);
+      return;
+    }
+    setPlaybackPosition(container, nextMs);
+    anim.rafId = requestAnimationFrame(tick);
+  };
+  anim.rafId = requestAnimationFrame(tick);
+}
+
+function clearTrail(container) {
+  stopPlayback(container);
+  const anim = container._llTrailAnim;
+  if (anim) {
+    container._llMap?.removeLayer(anim.fullLine);
+    container._llMap?.removeLayer(anim.traveledLine);
+    container._llMap?.removeLayer(anim.marker);
+    container._llMap?.removeLayer(anim.startMarker);
+    container._llMap?.removeLayer(anim.endMarker);
+  }
+  container._llTrailAnim = null;
+
   const summary = container.querySelector('#ll-trail-summary');
   if (summary) summary.textContent = "Pick an employee and date to see everywhere they've been that day.";
   const clearBtn = container.querySelector('#ll-trail-clear');
   if (clearBtn) clearBtn.style.display = 'none';
+  const playbackBar = container.querySelector('#ll-playback-bar');
+  if (playbackBar) playbackBar.style.display = 'none';
 }
 
-// Populates the employee picker and wires Show/Clear Trail — a full day's
-// path for one employee, independent of the live "who's clocked in now"
-// markers (drawn as its own layer group so both can coexist on the map).
+// Populates the employee picker and wires Show/Clear Trail plus the
+// animated playback controls — a full day's path replayed like a scrubbable
+// video, independent of the live "who's clocked in now" markers.
 async function setupDayTrail(container) {
   const employeeSelect = container.querySelector('#ll-trail-employee');
   const dateInput = container.querySelector('#ll-trail-date');
   const showBtn = container.querySelector('#ll-trail-show');
   const clearBtn = container.querySelector('#ll-trail-clear');
   const summary = container.querySelector('#ll-trail-summary');
+  const playbackBar = container.querySelector('#ll-playback-bar');
+  const playBtn = container.querySelector('#ll-play-toggle');
+  const scrub = container.querySelector('#ll-playback-scrub');
+  const speedSelect = container.querySelector('#ll-playback-speed');
 
   try {
     const employees = await fetchEmployeeList();
@@ -199,31 +317,40 @@ async function setupDayTrail(container) {
     const originalLabel = showBtn.innerHTML;
     showBtn.innerHTML = 'Loading…';
     try {
-      const points = await fetchLocationHistory(userId, date);
-      if (container._llTrailLayer) container._llMap.removeLayer(container._llTrailLayer);
+      const rawPoints = await fetchLocationHistory(userId, date);
+      clearTrail(container);
 
-      if (points.length === 0) {
+      if (rawPoints.length === 0) {
         summary.textContent = `No location data recorded for ${employeeSelect.options[employeeSelect.selectedIndex]?.text || 'this employee'} on ${date}.`;
-        clearBtn.style.display = 'none';
-        container._llTrailLayer = null;
         return;
       }
 
-      const latlngs = points.map((p) => [Number(p.latitude), Number(p.longitude)]);
-      const layerGroup = L.layerGroup();
-      L.polyline(latlngs, { color: '#7c5cfc', weight: 4, opacity: 0.75 }).addTo(layerGroup);
-      L.circleMarker(latlngs[0], { radius: 7, color: '#fff', weight: 2, fillColor: '#15a05a', fillOpacity: 1 })
-        .bindTooltip(`Start · ${formatClockLabel(points[0].recorded_at)}`)
-        .addTo(layerGroup);
-      L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#fff', weight: 2, fillColor: '#e0384a', fillOpacity: 1 })
-        .bindTooltip(`Last seen · ${formatClockLabel(points[points.length - 1].recorded_at)}`)
-        .addTo(layerGroup);
-      layerGroup.addTo(container._llMap);
-      container._llTrailLayer = layerGroup;
+      const points = rawPoints.map((p) => ({ lat: Number(p.latitude), lng: Number(p.longitude), t: new Date(p.recorded_at).getTime() }));
+      const latlngs = points.map((p) => [p.lat, p.lng]);
+      const startMs = points[0].t;
+      const totalMs = Math.max(1, points[points.length - 1].t - startMs);
+      const speedFactor = totalMs / Number(speedSelect.value);
+
+      const fullLine = L.polyline(latlngs, { color: '#7c5cfc', weight: 3, opacity: 0.28 }).addTo(container._llMap);
+      const traveledLine = L.polyline([latlngs[0]], { color: '#7c5cfc', weight: 4, opacity: 0.9 }).addTo(container._llMap);
+      const marker = L.marker(latlngs[0], { icon: travelIcon() }).addTo(container._llMap);
+      const startMarker = L.circleMarker(latlngs[0], { radius: 6, color: '#fff', weight: 2, fillColor: '#15a05a', fillOpacity: 1 })
+        .bindTooltip(`Start · ${formatClockLabel(rawPoints[0].recorded_at)}`).addTo(container._llMap);
+      const endMarker = L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: '#fff', weight: 2, fillColor: '#e0384a', fillOpacity: 1 })
+        .bindTooltip(`Last seen · ${formatClockLabel(rawPoints[rawPoints.length - 1].recorded_at)}`).addTo(container._llMap);
+
+      container._llTrailAnim = {
+        points, startMs, totalMs, speedFactor,
+        currentMs: 0, playing: false, rafId: null,
+        wallClockAtPlay: 0, msAtPlay: 0,
+        fullLine, traveledLine, marker, startMarker, endMarker,
+      };
 
       container._llMap.flyToBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16, duration: 0.9 });
-      summary.textContent = `${points.length} points recorded · ${formatClockLabel(points[0].recorded_at)} → ${formatClockLabel(points[points.length - 1].recorded_at)}`;
+      summary.textContent = `${points.length} points recorded · ${formatClockLabel(rawPoints[0].recorded_at)} → ${formatClockLabel(rawPoints[rawPoints.length - 1].recorded_at)}`;
       clearBtn.style.display = 'inline-flex';
+      playbackBar.style.display = 'flex';
+      setPlaybackPosition(container, 0);
     } catch (err) {
       toast(err.message || 'Could not load location history', 'error');
     } finally {
@@ -233,6 +360,27 @@ async function setupDayTrail(container) {
   });
 
   clearBtn.addEventListener('click', () => clearTrail(container));
+
+  playBtn.addEventListener('click', () => {
+    const anim = container._llTrailAnim;
+    if (!anim) return;
+    if (anim.playing) stopPlayback(container);
+    else startPlayback(container);
+  });
+
+  scrub.addEventListener('input', () => {
+    const anim = container._llTrailAnim;
+    if (!anim) return;
+    stopPlayback(container);
+    setPlaybackPosition(container, (Number(scrub.value) / 1000) * anim.totalMs);
+  });
+
+  speedSelect.addEventListener('change', () => {
+    const anim = container._llTrailAnim;
+    if (!anim) return;
+    anim.speedFactor = anim.totalMs / Number(speedSelect.value);
+    if (anim.playing) { stopPlayback(container); startPlayback(container); }
+  });
 }
 
 export async function renderLiveLocationsTab(container) {
@@ -245,7 +393,7 @@ export async function renderLiveLocationsTab(container) {
   container._llMap = null;
   container._llMarkers = new Map();
   container._selectedUserId = null;
-  container._llTrailLayer = null;
+  container._llTrailAnim = null;
 
   container.innerHTML = `
     <div class="page-header">
@@ -275,6 +423,16 @@ export async function renderLiveLocationsTab(container) {
         <button type="button" class="btn btn-secondary btn-sm" id="ll-trail-clear" style="display:none;">Clear Trail</button>
       </div>
       <div class="ll-trail-summary" id="ll-trail-summary">Pick an employee and date to see everywhere they've been that day.</div>
+      <div class="ll-playback-bar" id="ll-playback-bar" style="display:none;">
+        <button type="button" class="ll-play-btn" id="ll-play-toggle" title="Play">${ICONS.play || '▶'}</button>
+        <span class="ll-playback-time" id="ll-playback-time">--:--</span>
+        <input type="range" id="ll-playback-scrub" class="ll-playback-scrub" min="0" max="1000" value="0" />
+        <select id="ll-playback-speed" class="ll-playback-speed">
+          <option value="20000">Fast (20s)</option>
+          <option value="45000" selected>Normal (45s)</option>
+          <option value="90000">Slow (90s)</option>
+        </select>
+      </div>
     </div>
 
     <div id="ll-content"></div>
