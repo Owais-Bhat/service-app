@@ -4990,14 +4990,20 @@ export async function renderSettingsTab(container) {
     const btn = container.querySelector("#save-photo-clockin-toggle");
     const restore = setButtonLoading(btn, "Saving");
     try {
+      // Reads the geofence checkbox's CURRENT on-screen state, not the
+      // last-saved geofenceClockInRequired variable — otherwise checking
+      // both boxes and saving just this one would silently revert the
+      // other back to whatever it was when the page loaded.
+      const geofenceToggle = container.querySelector("#geofence-clockin-toggle");
       const res = await fetch(`${settingsApiBase}/settings/clockin-requirements`, {
         method: "PUT",
         headers: authHeaders(),
-        body: JSON.stringify({ photoRequired: enabled, geofenceRequired: geofenceClockInRequired }),
+        body: JSON.stringify({ photoRequired: enabled, geofenceRequired: geofenceToggle.checked }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Could not save photo verification setting");
       photoClockInRequired = data.photoRequired;
+      geofenceClockInRequired = data.geofenceRequired;
       toggle.checked = photoClockInRequired;
       const span = toggle.parentElement?.querySelector("span");
       if (span) span.textContent = photoClockInRequired ? "Photo Verification Required" : "Photo Verification Off";
@@ -5016,13 +5022,18 @@ export async function renderSettingsTab(container) {
     const btn = container.querySelector("#save-geofence-clockin-toggle");
     const restore = setButtonLoading(btn, "Saving");
     try {
+      // Same reasoning as the photo toggle's save handler — read the photo
+      // checkbox's CURRENT state directly rather than a possibly-stale
+      // cached variable.
+      const photoToggle = container.querySelector("#photo-clockin-toggle");
       const res = await fetch(`${settingsApiBase}/settings/clockin-requirements`, {
         method: "PUT",
         headers: authHeaders(),
-        body: JSON.stringify({ photoRequired: photoClockInRequired, geofenceRequired: enabled }),
+        body: JSON.stringify({ photoRequired: photoToggle.checked, geofenceRequired: enabled }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Could not save precise location setting");
+      photoClockInRequired = data.photoRequired;
       geofenceClockInRequired = data.geofenceRequired;
       toggle.checked = geofenceClockInRequired;
       const span = toggle.parentElement?.querySelector("span");
