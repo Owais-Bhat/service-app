@@ -171,7 +171,18 @@ export async function clockIn(userId: string): Promise<AttendanceRow> {
     form.append('accuracy', String(coords.accuracy));
   }
 
-  const row = await postForm<AttendanceRow>('/attendance/clock-in-photo', form);
+  console.log('[clock-in debug] submitting form, hasSelfie=', !!selfie, 'hasCoords=', !!coords);
+  let row: AttendanceRow;
+  try {
+    row = await postForm<AttendanceRow>('/attendance/clock-in-photo', form);
+  } catch (e) {
+    // TEMPORARY diagnostic — the UI layer collapses any non-ApiError into a
+    // generic "check your connection" message, hiding the real cause.
+    const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    console.log('[clock-in debug] postForm FAILED:', raw);
+    if (!__DEV__) Alert.alert('Clock-in submit failed', raw);
+    throw e;
+  }
   startBackgroundLocationTracking().catch(() => {});
   return row;
 }
