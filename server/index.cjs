@@ -9,6 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 const { computeLeaderboard } = require('./job-card-scoring.cjs');
 const { haversineDistanceMeters } = require('./geo-distance.cjs');
 const { FACE_MATCH_THRESHOLD, isValidFaceDescriptor, euclideanDistance } = require('./face-match.cjs');
+const { verifySamePerson } = require('./vision-verify.cjs');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -618,7 +619,7 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
         }
 
         const [[profile]] = await connection.query(
-            'SELECT face_descriptor, photo_clockin_exempt, geofence_clockin_exempt FROM profiles WHERE id = ? LIMIT 1',
+            'SELECT face_descriptor, photo_clockin_exempt, geofence_clockin_exempt, mobile_reference_selfie_url FROM profiles WHERE id = ? LIMIT 1',
             [req.user.id]
         );
         // Each requirement is on only when the global switch is on AND this
@@ -634,9 +635,9 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
 
             // The web client always sends a faceDescriptor (it refuses to submit
             // otherwise — see employee.js's smartClockIn). Mobile has no
-            // on-device face-recognition model yet and omits the field
-            // entirely, in which case the selfie is stored for admin visual
-            // review only — no automatic match, no reference-face update.
+            // on-device face-recognition model, so it omits the field entirely
+            // and instead gets verified server-side against a stored reference
+            // selfie via an NVIDIA vision-model comparison (vision-verify.cjs).
             const descriptorProvided = req.body?.faceDescriptor !== undefined;
             if (descriptorProvided) {
                 let faceDescriptor;
@@ -663,6 +664,33 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
                         [JSON.stringify(faceDescriptor), req.user.id]
                     );
                 }
+            } else if (profile?.mobile_reference_selfie_url) {
+                // Not the first mobile clock-in — compare against the stored
+                // reference. Fails closed: any API error/timeout/ambiguous
+                // result rejects the clock-in rather than silently allowing it.
+                const refFileId = profile.mobile_reference_selfie_url.replace(/^\/uploads\//, '');
+                const [[refFile]] = await connection.query(
+                    'SELECT mime, data FROM uploaded_files WHERE id = ? LIMIT 1',
+                    [refFileId]
+                );
+                if (!refFile) {
+                    return res.status(400).json({ error: 'Reference photo missing — contact admin to reset your face ID.' });
+                }
+                try {
+                    const { verdict, reason } = await verifySamePerson(
+                        refFile.data, refFile.mime,
+                        req.file.buffer, req.file.mimetype || 'image/jpeg'
+                    );
+                    if (verdict !== 'match') {
+                        console.log(`[attendance] vision verification ${verdict} for user ${req.user.id}: ${reason}`);
+                        return res.status(400).json({
+                            error: `Photo did not verify as you (${verdict === 'unclear' ? 'face not clearly visible' : 'different person detected'}). If this is really you, contact admin to reset your face ID.`,
+                        });
+                    }
+                } catch (err) {
+                    console.error('[attendance] vision verification failed:', err.message);
+                    return res.status(503).json({ error: 'Could not verify your photo right now — try again in a moment.' });
+                }
             }
 
             const ext = path.extname(req.file.originalname || '') || '.jpg';
@@ -673,6 +701,15 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
                 [fileId, mime, req.file.buffer]
             );
             selfieUrl = `/uploads/${fileId}`;
+
+            // First mobile photo clock-in with no reference yet — register
+            // this one, mirroring the web/face-descriptor registration above.
+            if (!descriptorProvided && !profile?.mobile_reference_selfie_url) {
+                await connection.query(
+                    'UPDATE profiles SET mobile_reference_selfie_url = ? WHERE id = ?',
+                    [selfieUrl, req.user.id]
+                );
+            }
         }
 
         // --- Geofence (only enforced when required) ------------------------
@@ -742,10 +779,11 @@ app.post('/api/attendance/clock-in-photo', authenticateToken, uploadSingle('phot
     }
 });
 
-// Clears an employee's registered reference face so their next photo
-// clock-in re-registers it. For legitimate lockouts: a bad first-registration
-// photo, or a real appearance change (beard, glasses) pushing every
-// subsequent match past the threshold.
+// Clears an employee's registered reference face (both web's face-descriptor
+// and mobile's reference selfie) so their next photo clock-in re-registers
+// it. For legitimate lockouts: a bad first-registration photo, or a real
+// appearance change (beard, glasses) pushing every subsequent match past
+// the threshold.
 app.post('/api/attendance/face-reset', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const userId = req.body?.userId;
@@ -754,7 +792,7 @@ app.post('/api/attendance/face-reset', authenticateToken, async (req, res) => {
     try {
         connection = await getConn();
         await connection.query(
-            'UPDATE profiles SET face_descriptor = NULL, face_registered_at = NULL WHERE id = ?',
+            'UPDATE profiles SET face_descriptor = NULL, face_registered_at = NULL, mobile_reference_selfie_url = NULL WHERE id = ?',
             [userId]
         );
         res.json({ ok: true });
@@ -1369,6 +1407,7 @@ const requiredColumns = {
         { name: 'face_registered_at', definition: 'DATETIME DEFAULT NULL' },
         { name: 'photo_clockin_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee skips selfie/face verification at clock-in even when the global setting requires it'" },
         { name: 'geofence_clockin_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee skips the office-radius check at clock-in even when the global setting requires it'" },
+        { name: 'mobile_reference_selfie_url', definition: "VARCHAR(255) DEFAULT NULL COMMENT 'Reference clock-in selfie captured on mobile (no on-device face model there, unlike web) — later selfies are compared against this via the vision-model verification'" },
     ],
     inquiries: [
         { name: 'company_name', definition: 'VARCHAR(150)' },

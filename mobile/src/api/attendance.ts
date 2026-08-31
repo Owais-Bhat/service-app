@@ -93,10 +93,11 @@ async function loadExemptions(userId: string): Promise<ExemptionRow> {
 }
 
 // No on-device face-recognition model on mobile (unlike web's face-api.js
-// descriptor extraction) — the selfie is captured and uploaded for admin
-// visual review only. Omitting the `faceDescriptor` field entirely tells the
-// server to skip automatic face-matching for this submission (see
-// server/index.cjs's clock-in-photo handler).
+// descriptor extraction) — the selfie is captured and uploaded, and the
+// server verifies it against a stored reference selfie via an NVIDIA
+// vision-model comparison instead (see server/vision-verify.cjs and
+// server/index.cjs's clock-in-photo handler). Omitting the `faceDescriptor`
+// field entirely is what tells the server to use that path.
 async function captureSelfie(): Promise<{ uri: string; name: string; type: string } | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) return null;
