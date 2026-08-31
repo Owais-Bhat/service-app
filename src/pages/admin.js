@@ -4079,7 +4079,7 @@ export async function renderFeedbackTab(container) {
                     <td>${escapeHtml(empName)}</td>
                     <td>${starsHtml(r.feedback_rating)} <b style="margin-left:4px">${r.feedback_rating}</b></td>
                     <td>${empStars}</td>
-                    <td style="max-width:340px;white-space:normal;font-size:.85rem;line-height:1.45;color:var(--text-soft)">${r.feedback_comment || '<span style="color:var(--text-dim)">—</span>'}</td>
+                    <td style="max-width:340px;white-space:normal;font-size:.85rem;line-height:1.45;color:var(--text-soft)">${r.feedback_comment ? escapeHtml(r.feedback_comment) : '<span style="color:var(--text-dim)">—</span>'}</td>
                   </tr>`;
                 }).join("")}
           </tbody>

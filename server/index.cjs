@@ -35,7 +35,7 @@ const {
 
 // Fail fast if required env is missing — better than 500s at request time.
 const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME'];
-const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+const missingEnv = REQUIRED_ENV.filter(k => k === 'DB_PASS' ? process.env[k] === undefined : !process.env[k]);
 if (missingEnv.length) {
     console.error(`❌ Missing required env vars: ${missingEnv.join(', ')}`);
     console.error('   Set them in server/.env before starting.');
@@ -8131,7 +8131,22 @@ app.get('/assets/{*asset}', (req, res) => {
 
 app.get('/{*splat}', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(path.join(distPath, 'index.html'));
+    // Explicit error callback — without one, a missing dist/index.html (e.g.
+    // a build that hasn't run yet) falls through to Express's default error
+    // handler, which leaks a full stack trace including the server's
+    // filesystem path in non-production NODE_ENV.
+    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+        if (err) res.status(404).type('text/plain').send('Not found');
+    });
+});
+
+// Last-resort error handler — catches anything an individual route didn't
+// handle itself. Never leaks a stack trace or filesystem path to the
+// client regardless of NODE_ENV; the real detail goes to the server log.
+app.use((err, req, res, next) => {
+    console.error('[unhandled]', err);
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).json({ error: 'Internal server error' });
 });
 
 // --- START SERVER ---

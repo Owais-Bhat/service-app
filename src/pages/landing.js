@@ -1147,7 +1147,7 @@ export function renderLandingPage(container, onPortalClick) {
           <div class="srf-fb-done-ring">${ICONS.star}</div>
           <h3 style="font-weight:800;font-size:1.1rem;color:var(--text);margin:0 0 6px;">Thank you for your feedback!</h3>
           <p style="font-size:0.9rem;color:var(--text-soft);margin:0 0 8px;">You rated us <strong style="color:var(--warning)">${r.feedback_rating}/5 ★</strong></p>
-          ${r.feedback_comment ? `<p style="font-size:0.85rem;color:var(--text-soft);font-style:italic;margin:0;">"${r.feedback_comment}"</p>` : ''}
+          ${r.feedback_comment ? `<p style="font-size:0.85rem;color:var(--text-soft);font-style:italic;margin:0;">"${escapeHTML(r.feedback_comment)}"</p>` : ''}
         </div>
       ` : ''}
     `;
