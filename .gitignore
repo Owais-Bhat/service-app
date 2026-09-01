@@ -59,3 +59,6 @@ Screenshot*.png
 
 # Superpowers brainstorming-companion session files
 .superpowers/
+
+# Strix security-scan run output (local scans only, never commit)
+strix_runs/
