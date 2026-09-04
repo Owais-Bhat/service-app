@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
@@ -392,7 +392,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View entering={ZoomIn.duration(360).springify().damping(15).mass(0.85)} style={styles.modalCardWrap}>
           <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
             <View style={[styles.modalHeaderRow, { borderBottomColor: theme.line }]}>
@@ -849,7 +849,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
           </ScrollView>
           </GlassSurface>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
 
       {showPicker && (
         <ServicePickerModal

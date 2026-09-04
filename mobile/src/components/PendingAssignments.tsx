@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import GlassCard from './GlassCard';
 import GlassSurface from './GlassSurface';
@@ -25,7 +25,7 @@ function DeclineModal({ onDismiss, onConfirm }: { onDismiss: () => void; onConfi
   const [reason, setReason] = useState('');
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <View style={styles.reasonBackdrop}>
+      <KeyboardAvoidingView style={styles.reasonBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <GlassSurface style={styles.reasonCard} borderRadius={radius.lg}>
           <Text style={[styles.modalTitle, { color: theme.text }]}>Decline Assignment</Text>
           <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(2) }]}>Reason (required)</Text>
@@ -48,7 +48,7 @@ function DeclineModal({ onDismiss, onConfirm }: { onDismiss: () => void; onConfi
             </PressScale>
           </View>
         </GlassSurface>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
