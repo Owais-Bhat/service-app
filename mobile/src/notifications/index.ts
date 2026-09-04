@@ -15,6 +15,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Syncs the phone's home-screen app icon badge to the real unread count.
+// shouldSetBadge:false above means nothing else touches the badge, so this
+// is the single source of truth — call it whenever the unread count is
+// known (dashboard load, notifications list load, mark-as-read/mark-all).
+export function syncAppBadge(unreadCount: number): void {
+  Notifications.setBadgeCountAsync(Math.max(0, unreadCount)).catch(() => {});
+}
+
 export interface PushRegistrationResult {
   token: string | null;
   reason: string | null; // set whenever token is null, explains why
