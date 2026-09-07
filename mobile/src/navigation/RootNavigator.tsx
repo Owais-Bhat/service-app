@@ -34,6 +34,7 @@ import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
+import AdminServiceRequestsScreen from '../screens/AdminServiceRequestsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
 
@@ -48,6 +49,7 @@ type AdminStackParams = {
   Dashboard: undefined;
   Notifications: undefined;
   LiveLocations: undefined;
+  ServiceRequests: undefined;
 };
 
 type EmployeeStackParams = {
@@ -294,6 +296,7 @@ function AdminDashboardRoute({ navigation }: any) {
     <AdminDashboardScreen
       onOpenNotifications={() => navigation.navigate('Notifications')}
       onOpenLiveLocations={() => navigation.navigate('LiveLocations')}
+      onOpenServiceRequests={() => navigation.navigate('ServiceRequests')}
     />
   );
 }
@@ -306,8 +309,12 @@ function AdminLiveLocationsRoute({ navigation }: any) {
   return <LiveLocationsScreen onBack={() => navigation.goBack()} />;
 }
 
-// Only Dashboard + Notifications + Live Locations for now — the rest of
-// admin (Job Cards, Finance, Device Tracking, etc.) is still the
+function AdminServiceRequestsRoute({ navigation }: any) {
+  return <AdminServiceRequestsScreen onBack={() => navigation.goBack()} />;
+}
+
+// Dashboard + Notifications + Live Locations + Service Requests so far —
+// the rest of admin (Job Cards, Finance, Device Tracking, etc.) is still the
 // MoreSheet's "Coming soon" placeholder list (AdminDashboardScreen's
 // MORE_SECTIONS), each becoming a real route here as it's built.
 function AdminNavigator() {
@@ -316,6 +323,7 @@ function AdminNavigator() {
       <AdminStack.Screen name="Dashboard" component={AdminDashboardRoute} options={{ animation: 'none' }} />
       <AdminStack.Screen name="Notifications" component={AdminNotificationsRoute} options={{ animation: 'slide_from_right' }} />
       <AdminStack.Screen name="LiveLocations" component={AdminLiveLocationsRoute} options={{ animation: 'slide_from_right' }} />
+      <AdminStack.Screen name="ServiceRequests" component={AdminServiceRequestsRoute} options={{ animation: 'slide_from_right' }} />
     </AdminStack.Navigator>
   );
 }

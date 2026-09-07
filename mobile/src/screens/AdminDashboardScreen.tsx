@@ -20,14 +20,16 @@ const TABS = [
 interface Props {
   onOpenNotifications: () => void;
   onOpenLiveLocations: () => void;
+  onOpenServiceRequests: () => void;
 }
 
-export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLocations }: Props) {
+export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLocations, onOpenServiceRequests }: Props) {
   // The web app's admin sections not yet ported to mobile — see design
-  // spec §5/§8. Each becomes a real route in a later phase; Notifications
-  // and Live Locations are the first to move out of "Coming soon" and
-  // into real screens.
+  // spec §5/§8. Each becomes a real route in a later phase; Notifications,
+  // Live Locations, and Service Requests are the first to move out of
+  // "Coming soon" and into real screens.
   const MORE_SECTIONS = [
+    { label: 'Service Requests', onPress: onOpenServiceRequests },
     { label: 'Job Cards' },
     { label: 'Finance' },
     { label: 'Discounts' },
