@@ -33,6 +33,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
+import MyStatsScreen from '../screens/MyStatsScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
@@ -155,12 +156,17 @@ function JobToolsRoute({ navigation }: any) {
       onOpenInstallations={() => navigation.navigate('Installations')}
       onOpenGigPool={() => navigation.navigate('GigPool')}
       onOpenManageTasks={() => navigation.navigate('ManageTasks')}
+      onOpenMyStats={() => navigation.navigate('MyStats')}
     />
   );
 }
 
 function ManageTasksRoute({ navigation }: any) {
   return <ManageTasksScreen onBack={() => navigation.goBack()} />;
+}
+
+function MyStatsRoute({ navigation }: any) {
+  return <MyStatsScreen onBack={() => navigation.goBack()} />;
 }
 
 function InstallationsRoute({ navigation }: any) {
@@ -276,6 +282,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Installations" component={InstallationsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ManageTasks" component={ManageTasksRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="MyStats" component={MyStatsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="BonusReviews" component={BonusReviewsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />
