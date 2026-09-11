@@ -310,9 +310,12 @@ export default function ManageTasksScreen({ onBack }: Props) {
         <TaskStatusModal
           item={statusItem}
           onDismiss={() => setStatusItem(null)}
-          onSaved={() => {
+          onSaved={(savedStatus) => {
             setStatusItem(null);
             load();
+            if (savedStatus === 'resolved' || savedStatus === 'case_closed' || savedStatus === 'foc') {
+              setFilter('resolved');
+            }
           }}
         />
       )}

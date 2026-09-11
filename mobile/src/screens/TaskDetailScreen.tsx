@@ -13,7 +13,7 @@ import LocationMapModal from '../components/LocationMapModal';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
-import { fetchTaskByTicketId, TaskItem } from '../api/tasks';
+import { fetchTaskByTicketId, TaskItem, acceptAssignment, declineAssignment } from '../api/tasks';
 
 interface Props {
   ticketId: string;
@@ -74,6 +74,52 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Ticket not found'}</Text>
           <BackLink onPress={onBack} />
+        </View>
+      </View>
+    );
+  }
+
+  if (item.assignmentStatus === 'pending') {
+    return (
+      <View style={styles.root}>
+        <MeshBackground />
+        <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: spacing(5) }]}>
+          <Text style={[styles.heading, { color: theme.text, marginBottom: spacing(3) }]}>New Assignment</Text>
+          <GlassCard style={{ width: '100%', marginBottom: spacing(4) }}>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Customer</Text>
+            <Text style={[styles.body, { color: theme.text }]}>{item.fullName}</Text>
+            {item.serviceItem ? (
+              <>
+                <Text style={[styles.label, { color: theme.textSecondary, marginTop: spacing(3) }]}>Service</Text>
+                <Text style={[styles.body, { color: theme.text }]}>{item.serviceItem}</Text>
+              </>
+            ) : null}
+            {item.location ? (
+              <>
+                <Text style={[styles.label, { color: theme.textSecondary, marginTop: spacing(3) }]}>Location</Text>
+                <Text style={[styles.body, { color: theme.text }]}>{item.location}</Text>
+              </>
+            ) : null}
+          </GlassCard>
+          <PressScale
+            style={[styles.acceptBtn]}
+            onPress={async () => {
+              await acceptAssignment(item);
+              load();
+            }}
+          >
+            <Text style={styles.acceptBtnText}>Accept</Text>
+          </PressScale>
+          <PressScale
+            style={[styles.declineBtn, { marginTop: spacing(3) }]}
+            onPress={async () => {
+              if (item.inquiryId) await declineAssignment(item.inquiryId, 'declined by employee');
+              onBack();
+            }}
+          >
+            <Text style={[styles.body, { color: theme.text }]}>Decline</Text>
+          </PressScale>
+          <BackLink onPress={onBack} style={{ marginTop: spacing(4) }} />
         </View>
       </View>
     );
@@ -216,4 +262,9 @@ const styles = StyleSheet.create({
   doneBannerText: { ...typography.body, fontSize: 13 },
   updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.primary, height: 52, borderRadius: radius.md },
   updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  heading: { fontFamily: 'Manrope_700Bold', fontSize: 20 },
+  label: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  acceptBtn: { width: '100%', backgroundColor: brand.primary, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  acceptBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  declineBtn: { width: '100%', height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(128,128,128,0.3)' },
 });

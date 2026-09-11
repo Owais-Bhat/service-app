@@ -42,6 +42,7 @@ export interface TaskItem {
   ticketId: string | null;
   inquiryId: string | null;
   status: string;
+  assignmentStatus: string | null;
   reopened: boolean;
   createdAt: string;
   fullName: string;
@@ -66,6 +67,7 @@ function fromTicketOnly(t: RawTicket): TaskItem {
     ticketId: t.id,
     inquiryId: null,
     status: t.status,
+    assignmentStatus: null,
     reopened: false,
     createdAt: t.created_at,
     fullName: t.title,
@@ -96,6 +98,7 @@ function fromInquiry(inq: RawInquiry, ticketId: string | null): TaskItem {
     ticketId,
     inquiryId: inq.id,
     status: inq.status,
+    assignmentStatus: inq.assignment_status,
     reopened: Number(inq.reopened) === 1,
     createdAt: inq.created_at,
     fullName: inq.full_name,
@@ -129,9 +132,17 @@ export async function fetchMyTasks(userId: string): Promise<{ pending: TaskItem[
   ]);
 
   const linkedInquiryIds = new Set<string>();
+  const coveredTicketIds = new Set<string>();
   const items: TaskItem[] = [];
   tickets.forEach((t) => {
-    if (t.inquiries?.[0]) linkedInquiryIds.add(t.inquiries[0].id);
+    // Track ALL nested inquiry IDs (not just the first) to prevent duplicates
+    // when a ticket has multiple linked inquiries.
+    if (Array.isArray(t.inquiries)) {
+      t.inquiries.forEach((inq: { id: string }) => { if (inq?.id) linkedInquiryIds.add(inq.id); });
+    } else if (t.inquiries?.[0]) {
+      linkedInquiryIds.add(t.inquiries[0].id);
+    }
+    coveredTicketIds.add(t.id);
     items.push(ticketToTaskItem(t));
   });
 
@@ -140,7 +151,12 @@ export async function fetchMyTasks(userId: string): Promise<{ pending: TaskItem[
     .map((i) => fromInquiry(i, i.ticket_id));
 
   inquiries
-    .filter((i) => i.assignment_status === 'accepted' && !linkedInquiryIds.has(i.id))
+    .filter((i) =>
+      i.assignment_status === 'accepted' &&
+      !linkedInquiryIds.has(i.id) &&
+      // Also skip inquiries whose ticket is already shown via the tickets query.
+      !(i.ticket_id && coveredTicketIds.has(i.ticket_id))
+    )
     .forEach((i) => items.push(fromInquiry(i, i.ticket_id)));
 
   items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
