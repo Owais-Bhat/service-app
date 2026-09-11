@@ -17,6 +17,8 @@ import EmployeePanelScreen from './EmployeePanelScreen';
 import LeaveAdminScreen from './LeaveAdminScreen';
 import AssignmentQueueScreen from './AssignmentQueueScreen';
 import ServicePricingScreen from './ServicePricingScreen';
+import ContactsScreen from './ContactsScreen';
+import FinanceSummaryScreen from './FinanceSummaryScreen';
 
 interface EmployeePickRow {
   id: string;
@@ -49,6 +51,10 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   const [showAssignmentQueue, setShowAssignmentQueue] = useState(false);
   // Service pricing state
   const [showServicePricing, setShowServicePricing] = useState(false);
+  // Contacts state
+  const [showContacts, setShowContacts] = useState(false);
+  // Finance state
+  const [showFinance, setShowFinance] = useState(false);
 
   // Employee Panel state
   const [employeePickerVisible, setEmployeePickerVisible] = useState(false);
@@ -61,7 +67,8 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
     { label: 'Leave Requests', onPress: () => setShowLeaveAdmin(true) },
     { label: 'Assignment Queue', onPress: () => setShowAssignmentQueue(true) },
     { label: 'Service Pricing', onPress: () => setShowServicePricing(true) },
-    { label: 'Finance' },
+    { label: 'Contacts', onPress: () => setShowContacts(true) },
+    { label: 'Finance', onPress: () => setShowFinance(true) },
     { label: 'Discounts' },
     { label: 'Device Tracking' },
     { label: 'Live Locations', onPress: onOpenLiveLocations },
@@ -124,6 +131,12 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   }
   if (showServicePricing) {
     return <ServicePricingScreen onBack={() => setShowServicePricing(false)} />;
+  }
+  if (showContacts) {
+    return <ContactsScreen onBack={() => setShowContacts(false)} />;
+  }
+  if (showFinance) {
+    return <FinanceSummaryScreen onBack={() => setShowFinance(false)} />;
   }
 
   // Show EmployeePanelScreen inline when an employee is selected
