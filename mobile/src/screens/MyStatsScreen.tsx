@@ -67,7 +67,6 @@ export default function MyStatsScreen({ onBack }: Props) {
 
   const totalCash = cash.reduce((sum, c) => sum + cashAmount(c), 0);
 
-  // SLA: tasks resolved vs SLA breach (>3 days open when resolved)
   const slaBreached = allTasks.filter((t) => {
     if (!t.createdAt) return false;
     const ageDays = (Date.now() - new Date(t.createdAt).getTime()) / 86400000;

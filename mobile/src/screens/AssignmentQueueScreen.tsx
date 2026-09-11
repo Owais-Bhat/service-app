@@ -62,7 +62,6 @@ export default function AssignmentQueueScreen({ onBack }: Props) {
         contentContainerStyle={{ paddingTop: insets.top + spacing(16), paddingBottom: spacing(8), paddingHorizontal: spacing(4) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={semantic.success} />}
       >
-        {/* Filter pills */}
         <View style={styles.pills}>
           {FILTERS.map((f) => (
             <Text

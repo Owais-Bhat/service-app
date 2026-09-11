@@ -38,7 +38,6 @@ export default function ContactsScreen({ onBack }: Props) {
         select: 'id,full_name,phone,location,service_item,created_at',
         order: 'full_name:asc',
       });
-      // Deduplicate by phone (keep most recent per phone)
       const seen = new Set<string>();
       const deduped: Contact[] = [];
       for (const c of data) {

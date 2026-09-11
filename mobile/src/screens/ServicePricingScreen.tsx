@@ -56,7 +56,6 @@ export default function ServicePricingScreen({ onBack }: Props) {
     !q || i.name.toLowerCase().includes(q) || (i.category ?? '').toLowerCase().includes(q) || (i.sub_category ?? '').toLowerCase().includes(q),
   );
 
-  // Group by category
   const groups: Record<string, ServicePrice[]> = {};
   for (const item of filtered) {
     const cat = item.category ?? 'Uncategorized';

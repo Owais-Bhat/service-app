@@ -63,8 +63,6 @@ export default function JobToolsScreen({
   const { user } = useAuth();
   const [headerHeight, setHeaderHeight] = useState(0);
 
-  // installations_enabled defaults to visible (server treats undefined as 1)
-  // — only explicit 0/false hides it, matching web's default-on behavior.
   const installationsOn = user?.installations_enabled !== 0 && user?.installations_enabled !== false;
   const isGigWorker = user?.worker_type === 'gig';
 
