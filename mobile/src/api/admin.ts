@@ -20,3 +20,22 @@ export function fetchAllUsers() {
 export function fetchOpenInquiries() {
   return dataGet<InquiryRow[]>('inquiries', { select: 'id,status,assignment_status' });
 }
+
+export interface AssignmentQueueRow {
+  id: string;
+  ticket_no: string;
+  full_name: string;
+  service_item: string | null;
+  assignment_status: string;
+  status: string;
+  created_at: string;
+  employee_name: string | null;
+}
+
+export async function fetchAssignmentQueue(): Promise<AssignmentQueueRow[]> {
+  const rows = await dataGet<(AssignmentQueueRow & { profiles?: { full_name?: string } })[]>('inquiries', {
+    select: 'id,ticket_no,full_name,service_item,assignment_status,status,created_at,profiles(full_name)',
+    order: 'created_at:desc',
+  });
+  return rows.map((r) => ({ ...r, employee_name: r.profiles?.full_name ?? null }));
+}

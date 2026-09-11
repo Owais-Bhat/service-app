@@ -138,7 +138,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
         onLayout={setHeaderHeight}
       />
       <ScrollView
-        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(24), paddingHorizontal: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
@@ -245,6 +245,16 @@ export default function ManageTasksScreen({ onBack }: Props) {
                           <Text style={[styles.metaChipText, { color: theme.text2 }]}>{timeAgo(item.createdAt)}</Text>
                         </View>
                       </View>
+                      {(groupOf(item.status) === 'in_progress' || groupOf(item.status) === 'issue_not_resolved') && (() => {
+                        const ageDays = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 86400000);
+                        const slaColor = ageDays < 1 ? semantic.success : ageDays <= 3 ? semantic.warning : semantic.danger;
+                        const slaLabel = ageDays < 1 ? '🟢 Fresh' : ageDays <= 3 ? `🟡 ${ageDays}d` : `🔴 ${ageDays}d overdue`;
+                        return (
+                          <View style={[styles.slaChip, { backgroundColor: `${slaColor}18`, borderColor: `${slaColor}40` }]}>
+                            <Text style={[styles.slaChipText, { color: slaColor }]}>{slaLabel}</Text>
+                          </View>
+                        );
+                      })()}
                       {item.serviceItem ? (
                         <View style={[styles.serviceChip, { backgroundColor: `${brand.primary}14` }]}>
                           <Icon name="wrench" size={12} color={brand.primary} />
@@ -344,6 +354,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginBottom: spacing(2) },
   metaChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.full, borderWidth: 1 },
   metaChipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 10.5 },
+  slaChip: { alignSelf: 'flex-start', paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.full, borderWidth: 1, marginBottom: spacing(2) },
+  slaChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
   serviceChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), alignSelf: 'flex-start', paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.25), borderRadius: radius.sm, marginBottom: spacing(2.5), maxWidth: '100%' },
   serviceChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11.5, flexShrink: 1 },
   fieldLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(3), marginBottom: spacing(1) },

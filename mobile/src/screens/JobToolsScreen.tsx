@@ -23,6 +23,8 @@ interface Props {
   onOpenInstallations: () => void;
   onOpenGigPool: () => void;
   onOpenManageTasks: () => void;
+  onOpenMyStats: () => void;
+  onOpenServicePricing: () => void;
 }
 
 interface Tool {
@@ -38,6 +40,8 @@ const BASE_TOOLS: Tool[] = [
   { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', color: '#15a05a', icon: 'estimator' },
   { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5', icon: 'device' },
   { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
+  { key: 'mystats', label: 'My Stats', desc: 'Personal KPIs: tasks, attendance & collections', color: '#7c5cfc', icon: 'star' },
+  { key: 'pricing', label: 'Service Pricing', desc: 'Browse service rates on-site', color: '#0ea5a5', icon: 'estimator' },
 ];
 
 export default function JobToolsScreen({
@@ -51,14 +55,14 @@ export default function JobToolsScreen({
   onOpenInstallations,
   onOpenGigPool,
   onOpenManageTasks,
+  onOpenMyStats,
+  onOpenServicePricing,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
   const [headerHeight, setHeaderHeight] = useState(0);
 
-  // installations_enabled defaults to visible (server treats undefined as 1)
-  // — only explicit 0/false hides it, matching web's default-on behavior.
   const installationsOn = user?.installations_enabled !== 0 && user?.installations_enabled !== false;
   const isGigWorker = user?.worker_type === 'gig';
 
@@ -79,6 +83,8 @@ export default function JobToolsScreen({
     else if (key === 'eod') onOpenEodReport();
     else if (key === 'installations') onOpenInstallations();
     else if (key === 'gigpool') onOpenGigPool();
+    else if (key === 'mystats') onOpenMyStats();
+    else if (key === 'pricing') onOpenServicePricing();
   };
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;

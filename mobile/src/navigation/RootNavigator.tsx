@@ -33,6 +33,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
+import MyStatsScreen from '../screens/MyStatsScreen';
+import ServicePricingScreen from '../screens/ServicePricingScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
@@ -72,6 +74,8 @@ type EmployeeStackParams = {
   Installations: undefined;
   GigPool: undefined;
   ManageTasks: undefined;
+  MyStats: undefined;
+  ServicePricing: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -94,9 +98,6 @@ function TrackTicketRoute({ navigation }: any) {
   return <ClientTrackTicketScreen onBack={() => navigation.goBack()} />;
 }
 
-// Guest side (unauthenticated) gets a real stack — land on the public
-// Landing screen, then staff sign-in, submit a request, or track a
-// request, with native slide transitions between them.
 function GuestNavigator() {
   return (
     <GuestStack.Navigator screenOptions={{ headerShown: false }}>
@@ -155,12 +156,22 @@ function JobToolsRoute({ navigation }: any) {
       onOpenInstallations={() => navigation.navigate('Installations')}
       onOpenGigPool={() => navigation.navigate('GigPool')}
       onOpenManageTasks={() => navigation.navigate('ManageTasks')}
+      onOpenMyStats={() => navigation.navigate('MyStats')}
+      onOpenServicePricing={() => navigation.navigate('ServicePricing')}
     />
   );
 }
 
 function ManageTasksRoute({ navigation }: any) {
   return <ManageTasksScreen onBack={() => navigation.goBack()} />;
+}
+
+function MyStatsRoute({ navigation }: any) {
+  return <MyStatsScreen onBack={() => navigation.goBack()} />;
+}
+
+function ServicePricingRoute({ navigation }: any) {
+  return <ServicePricingScreen onBack={() => navigation.goBack()} />;
 }
 
 function InstallationsRoute({ navigation }: any) {
@@ -175,7 +186,7 @@ function EstimatorRoute({ navigation }: any) {
   return <EstimatorScreen onBack={() => navigation.goBack()} />;
 }
 
-function DeviceFollowUpRoute({ navigation }: any) {
+function DeviceFollowUpRoute({ navigation, route }: any) {
   return (
     <DeviceFollowUpScreen
       onBack={() => navigation.goBack()}
@@ -253,11 +264,6 @@ function SettingsRoute({ navigation }: any) {
   return <SettingsScreen onBack={() => navigation.goBack()} />;
 }
 
-// Dashboard, Attendance, JobTools, Earnings, and Profile are siblings
-// switched with no transition (an instant-swap approximation of tab
-// behavior — design spec §3, same pattern established since phase 3b).
-// Every other screen is a genuine drill-down push with a slide
-// transition and no tab bar.
 function EmployeeNavigator() {
   return (
     <AttendanceProvider>
@@ -276,6 +282,8 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Installations" component={InstallationsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ManageTasks" component={ManageTasksRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="MyStats" component={MyStatsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="ServicePricing" component={ServicePricingRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="BonusReviews" component={BonusReviewsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />
@@ -306,10 +314,6 @@ function AdminLiveLocationsRoute({ navigation }: any) {
   return <LiveLocationsScreen onBack={() => navigation.goBack()} />;
 }
 
-// Only Dashboard + Notifications + Live Locations for now — the rest of
-// admin (Job Cards, Finance, Device Tracking, etc.) is still the
-// MoreSheet's "Coming soon" placeholder list (AdminDashboardScreen's
-// MORE_SECTIONS), each becoming a real route here as it's built.
 function AdminNavigator() {
   return (
     <AdminStack.Navigator screenOptions={{ headerShown: false }}>
@@ -320,11 +324,6 @@ function AdminNavigator() {
   );
 }
 
-// Ref-based navigation so a notification tap can jump straight to the
-// relevant screen regardless of which stack (Guest/Employee/Admin) is
-// currently mounted. Cold-start taps (app was killed) race the container's
-// first render, so a route that arrives before it's ready is queued and
-// flushed from onReady below.
 const navigationRef = createNavigationContainerRef<any>();
 let pendingNotificationRoute: { name: string; params?: Record<string, unknown> } | null = null;
 
