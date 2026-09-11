@@ -24,6 +24,7 @@ interface Props {
   onOpenGigPool: () => void;
   onOpenManageTasks: () => void;
   onOpenMyStats: () => void;
+  onOpenServicePricing: () => void;
 }
 
 interface Tool {
@@ -40,6 +41,7 @@ const BASE_TOOLS: Tool[] = [
   { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5', icon: 'device' },
   { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
   { key: 'mystats', label: 'My Stats', desc: 'Personal KPIs: tasks, attendance & collections', color: '#7c5cfc', icon: 'star' },
+  { key: 'pricing', label: 'Service Pricing', desc: 'Browse service rates on-site', color: '#0ea5a5', icon: 'estimator' },
 ];
 
 export default function JobToolsScreen({
@@ -54,6 +56,7 @@ export default function JobToolsScreen({
   onOpenGigPool,
   onOpenManageTasks,
   onOpenMyStats,
+  onOpenServicePricing,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -83,6 +86,7 @@ export default function JobToolsScreen({
     else if (key === 'installations') onOpenInstallations();
     else if (key === 'gigpool') onOpenGigPool();
     else if (key === 'mystats') onOpenMyStats();
+    else if (key === 'pricing') onOpenServicePricing();
   };
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;

@@ -34,6 +34,7 @@ import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
 import MyStatsScreen from '../screens/MyStatsScreen';
+import ServicePricingScreen from '../screens/ServicePricingScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
@@ -157,6 +158,7 @@ function JobToolsRoute({ navigation }: any) {
       onOpenGigPool={() => navigation.navigate('GigPool')}
       onOpenManageTasks={() => navigation.navigate('ManageTasks')}
       onOpenMyStats={() => navigation.navigate('MyStats')}
+      onOpenServicePricing={() => navigation.navigate('ServicePricing')}
     />
   );
 }
@@ -167,6 +169,10 @@ function ManageTasksRoute({ navigation }: any) {
 
 function MyStatsRoute({ navigation }: any) {
   return <MyStatsScreen onBack={() => navigation.goBack()} />;
+}
+
+function ServicePricingRoute({ navigation }: any) {
+  return <ServicePricingScreen onBack={() => navigation.goBack()} />;
 }
 
 function InstallationsRoute({ navigation }: any) {
@@ -283,6 +289,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ManageTasks" component={ManageTasksRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="MyStats" component={MyStatsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="ServicePricing" component={ServicePricingRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="BonusReviews" component={BonusReviewsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="TrainingCourses" component={TrainingCoursesRoute} options={{ animation: 'slide_from_right' }} />

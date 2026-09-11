@@ -15,6 +15,8 @@ import { fetchAllUsers, fetchOpenInquiries, AdminUserRow, InquiryRow } from '../
 import { dataGet } from '../api/client';
 import EmployeePanelScreen from './EmployeePanelScreen';
 import LeaveAdminScreen from './LeaveAdminScreen';
+import AssignmentQueueScreen from './AssignmentQueueScreen';
+import ServicePricingScreen from './ServicePricingScreen';
 
 interface EmployeePickRow {
   id: string;
@@ -43,6 +45,10 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
 
   // Leave admin state
   const [showLeaveAdmin, setShowLeaveAdmin] = useState(false);
+  // Assignment queue state
+  const [showAssignmentQueue, setShowAssignmentQueue] = useState(false);
+  // Service pricing state
+  const [showServicePricing, setShowServicePricing] = useState(false);
 
   // Employee Panel state
   const [employeePickerVisible, setEmployeePickerVisible] = useState(false);
@@ -53,6 +59,8 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   const MORE_SECTIONS = [
     { label: 'Job Cards' },
     { label: 'Leave Requests', onPress: () => setShowLeaveAdmin(true) },
+    { label: 'Assignment Queue', onPress: () => setShowAssignmentQueue(true) },
+    { label: 'Service Pricing', onPress: () => setShowServicePricing(true) },
     { label: 'Finance' },
     { label: 'Discounts' },
     { label: 'Device Tracking' },
@@ -110,6 +118,12 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
 
   if (showLeaveAdmin) {
     return <LeaveAdminScreen onBack={() => setShowLeaveAdmin(false)} />;
+  }
+  if (showAssignmentQueue) {
+    return <AssignmentQueueScreen onBack={() => setShowAssignmentQueue(false)} />;
+  }
+  if (showServicePricing) {
+    return <ServicePricingScreen onBack={() => setShowServicePricing(false)} />;
   }
 
   // Show EmployeePanelScreen inline when an employee is selected
