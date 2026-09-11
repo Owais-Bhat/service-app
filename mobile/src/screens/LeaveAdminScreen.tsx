@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   dim: { ...typography.body, textAlign: 'center', marginTop: spacing(8) },
   card: { marginBottom: spacing(3) },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(1) },
-  name: { ...typography.bodyBold, flex: 1 },
+  name: { ...typography.body, fontWeight: '700' as const, flex: 1 },
   badge: { borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: 3 },
   badgeText: { ...typography.caption, fontSize: 11, fontWeight: '600' },
   dates: { ...typography.caption, marginBottom: spacing(1) },

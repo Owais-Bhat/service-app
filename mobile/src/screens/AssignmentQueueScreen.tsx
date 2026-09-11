@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   ticket: { ...typography.caption, fontWeight: '700' },
   badge: { borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: 3 },
   badgeText: { ...typography.caption, fontSize: 11, fontWeight: '600' },
-  name: { ...typography.bodyBold, marginBottom: 2 },
+  name: { ...typography.body, fontWeight: '700' as const, marginBottom: 2 },
   sub: { ...typography.caption, marginBottom: spacing(1) },
   employee: { ...typography.caption, fontWeight: '600', marginTop: spacing(1) },
   date: { ...typography.caption, marginTop: spacing(1) },

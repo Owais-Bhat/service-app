@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: spacing(2) },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing(2) },
   name: { ...typography.body, fontWeight: '600', flex: 1 },
-  price: { ...typography.bodyBold, fontWeight: '700' },
+  price: { ...typography.body, fontWeight: '700' as const },
   sub: { ...typography.caption, marginTop: 2 },
   desc: { ...typography.caption, marginTop: spacing(1) },
 });

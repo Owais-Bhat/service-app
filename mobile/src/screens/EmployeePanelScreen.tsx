@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   avatarText: { fontSize: 16, fontWeight: '700' },
-  name: { ...typography.bodyBold },
+  name: { ...typography.body, fontWeight: '700' as const },
   caption: { ...typography.caption },
   statusBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.sm },
   statusBadgeText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
