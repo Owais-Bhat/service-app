@@ -14,6 +14,7 @@ import { brand, semantic } from '../theme/tokens';
 import { fetchAllUsers, fetchOpenInquiries, AdminUserRow, InquiryRow } from '../api/admin';
 import { dataGet } from '../api/client';
 import EmployeePanelScreen from './EmployeePanelScreen';
+import LeaveAdminScreen from './LeaveAdminScreen';
 
 interface EmployeePickRow {
   id: string;
@@ -40,6 +41,9 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   const [error, setError] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
 
+  // Leave admin state
+  const [showLeaveAdmin, setShowLeaveAdmin] = useState(false);
+
   // Employee Panel state
   const [employeePickerVisible, setEmployeePickerVisible] = useState(false);
   const [employeeList, setEmployeeList] = useState<EmployeePickRow[]>([]);
@@ -48,6 +52,7 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
 
   const MORE_SECTIONS = [
     { label: 'Job Cards' },
+    { label: 'Leave Requests', onPress: () => setShowLeaveAdmin(true) },
     { label: 'Finance' },
     { label: 'Discounts' },
     { label: 'Device Tracking' },
@@ -102,6 +107,10 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   const employeeCount = users.filter((u) => u.role === 'employee').length;
   const openCount = inquiries.filter((i) => i.status !== 'resolved' && i.status !== 'case_closed').length;
   const unassignedCount = inquiries.filter((i) => i.assignment_status === 'none' || i.assignment_status === 'pending').length;
+
+  if (showLeaveAdmin) {
+    return <LeaveAdminScreen onBack={() => setShowLeaveAdmin(false)} />;
+  }
 
   // Show EmployeePanelScreen inline when an employee is selected
   if (selectedEmployee) {
