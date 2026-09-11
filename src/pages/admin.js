@@ -2175,6 +2175,7 @@ export async function renderUsers(container) {
                 <td>
                   <div style="display:flex;gap:8px;">
                     <button class="btn btn-secondary btn-sm edit-user-btn" data-uid="${u.id}">${ICONS.edit || "📝"}<span>Settings</span></button>
+                    ${u.role === "employee" ? `<button class="btn btn-secondary btn-sm panel-user-btn" data-uid="${u.id}" onclick="event.stopPropagation();window._employeePanelId='${u.id}';document.querySelector('[data-page=employee-panel]')&&document.querySelector('[data-page=employee-panel]').click();">${ICONS.user || "👤"}<span>Panel</span></button>` : ""}
                     <button class="btn btn-danger btn-sm delete-user-btn" data-uid="${u.id}">${ICONS.close || "🗑️"}</button>
                   </div>
                 </td>
