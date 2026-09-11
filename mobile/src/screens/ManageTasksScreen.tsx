@@ -138,7 +138,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
         onLayout={setHeaderHeight}
       />
       <ScrollView
-        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(24), paddingHorizontal: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
