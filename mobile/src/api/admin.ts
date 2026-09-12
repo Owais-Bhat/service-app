@@ -1,5 +1,4 @@
-import { api } from './client';
-import { dataGet } from './client';
+import { api, dataGet } from './client';
 
 export interface AdminUserRow {
   id: string;
@@ -30,6 +29,25 @@ export interface AssignmentQueueRow {
   status: string;
   created_at: string;
   employee_name: string | null;
+}
+
+export function patchUser(userId: string, body: { role?: string }): Promise<void> {
+  return api.patch<void>(`/admin/users/${userId}`, body);
+}
+
+export interface EmployeePickRow {
+  id: string;
+  full_name: string;
+}
+
+export function fetchEmployees(): Promise<EmployeePickRow[]> {
+  return api.get<EmployeePickRow[]>('/admin/users').then((rows: any[]) =>
+    rows.filter((r) => r.role === 'employee' || r.role === 'team_lead').map((r) => ({ id: r.id, full_name: r.full_name }))
+  );
+}
+
+export function assignTicket(inquiryId: string, employeeId: string): Promise<void> {
+  return api.patch<void>(`/admin/assign/${inquiryId}`, { employeeId });
 }
 
 export async function fetchAssignmentQueue(): Promise<AssignmentQueueRow[]> {

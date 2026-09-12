@@ -11,10 +11,12 @@ import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { dataGet } from '../api/client';
+import { patchUser } from '../api/admin';
 
 interface Props {
   employeeId: string;
   employeeName: string;
+  employeeRole?: string;
   onBack: () => void;
 }
 
@@ -63,7 +65,7 @@ function statusLabel(status: string | null): string {
   return s;
 }
 
-export default function EmployeePanelScreen({ employeeId, employeeName, onBack }: Props) {
+export default function EmployeePanelScreen({ employeeId, employeeName, employeeRole, onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [inquiries, setInquiries] = useState<RawInquiry[]>([]);
@@ -71,6 +73,8 @@ export default function EmployeePanelScreen({ employeeId, employeeName, onBack }
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [currentRole, setCurrentRole] = useState(employeeRole ?? 'employee');
+  const [roleUpdating, setRoleUpdating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +101,19 @@ export default function EmployeePanelScreen({ employeeId, employeeName, onBack }
     setRefreshing(false);
   };
 
+  const toggleRole = async () => {
+    const newRole = currentRole === 'team_lead' ? 'employee' : 'team_lead';
+    setRoleUpdating(true);
+    try {
+      await patchUser(employeeId, { role: newRole });
+      setCurrentRole(newRole);
+    } catch {
+      // silent — user can retry
+    } finally {
+      setRoleUpdating(false);
+    }
+  };
+
   const total = inquiries.length;
   const inProgressCount = inquiries.filter((i) => isInProgress(i.status)).length;
   const resolvedCount = inquiries.filter((i) => isResolved(i.status)).length;
@@ -117,6 +134,18 @@ export default function EmployeePanelScreen({ employeeId, employeeName, onBack }
         contentContainerStyle={{ paddingTop: spacing(4), paddingBottom: spacing(16), paddingHorizontal: spacing(4) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand.primary} />}
       >
+        {/* Role toggle */}
+        <PressScale onPress={toggleRole} style={{ marginBottom: spacing(4) }}>
+          <View style={[styles.roleBtn, {
+            backgroundColor: currentRole === 'team_lead' ? `${semantic.warning}22` : `${brand.primary}18`,
+            borderColor: currentRole === 'team_lead' ? semantic.warning : brand.primary,
+          }]}>
+            <Text style={[styles.roleBtnText, { color: currentRole === 'team_lead' ? semantic.warning : brand.primary }]}>
+              {roleUpdating ? 'Updating…' : currentRole === 'team_lead' ? '★ Team Lead — Tap to revert to Employee' : 'Promote to Team Lead'}
+            </Text>
+          </View>
+        </PressScale>
+
         {/* Stat tiles */}
         <View style={styles.statRow}>
           <AnimatedStatCard label="Total" value={total} accentColor={brand.primary} delayMs={0} />
@@ -192,6 +221,8 @@ export default function EmployeePanelScreen({ employeeId, employeeName, onBack }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  roleBtn: { borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(3), paddingHorizontal: spacing(4), alignItems: 'center' },
+  roleBtnText: { ...typography.body, fontWeight: '700' as const },
   statRow: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(4) },
   pillRow: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(3), flexWrap: 'wrap' },
   pill: { paddingHorizontal: spacing(3), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },

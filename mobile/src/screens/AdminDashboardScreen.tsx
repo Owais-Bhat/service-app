@@ -22,7 +22,8 @@ import FinanceSummaryScreen from './FinanceSummaryScreen';
 
 interface EmployeePickRow {
   id: string;
-  name: string;
+  full_name: string;
+  role?: string;
 }
 
 const TABS = [
@@ -45,18 +46,12 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   const [error, setError] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
 
-  // Leave admin state
   const [showLeaveAdmin, setShowLeaveAdmin] = useState(false);
-  // Assignment queue state
   const [showAssignmentQueue, setShowAssignmentQueue] = useState(false);
-  // Service pricing state
   const [showServicePricing, setShowServicePricing] = useState(false);
-  // Contacts state
   const [showContacts, setShowContacts] = useState(false);
-  // Finance state
   const [showFinance, setShowFinance] = useState(false);
 
-  // Employee Panel state
   const [employeePickerVisible, setEmployeePickerVisible] = useState(false);
   const [employeeList, setEmployeeList] = useState<EmployeePickRow[]>([]);
   const [employeeListLoading, setEmployeeListLoading] = useState(false);
@@ -87,7 +82,7 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
         setEmployeePickerVisible(true);
         setEmployeeListLoading(true);
         try {
-          const data = await dataGet<EmployeePickRow[]>('profiles', { order: 'name:asc' });
+          const data = await dataGet<EmployeePickRow[]>('profiles', { select: 'id,full_name,role', order: 'full_name:asc' });
           setEmployeeList(data);
         } catch {
           setEmployeeList([]);
@@ -123,28 +118,18 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
   const openCount = inquiries.filter((i) => i.status !== 'resolved' && i.status !== 'case_closed').length;
   const unassignedCount = inquiries.filter((i) => i.assignment_status === 'none' || i.assignment_status === 'pending').length;
 
-  if (showLeaveAdmin) {
-    return <LeaveAdminScreen onBack={() => setShowLeaveAdmin(false)} />;
-  }
-  if (showAssignmentQueue) {
-    return <AssignmentQueueScreen onBack={() => setShowAssignmentQueue(false)} />;
-  }
-  if (showServicePricing) {
-    return <ServicePricingScreen onBack={() => setShowServicePricing(false)} />;
-  }
-  if (showContacts) {
-    return <ContactsScreen onBack={() => setShowContacts(false)} />;
-  }
-  if (showFinance) {
-    return <FinanceSummaryScreen onBack={() => setShowFinance(false)} />;
-  }
+  if (showLeaveAdmin) return <LeaveAdminScreen onBack={() => setShowLeaveAdmin(false)} />;
+  if (showAssignmentQueue) return <AssignmentQueueScreen onBack={() => setShowAssignmentQueue(false)} />;
+  if (showServicePricing) return <ServicePricingScreen onBack={() => setShowServicePricing(false)} />;
+  if (showContacts) return <ContactsScreen onBack={() => setShowContacts(false)} />;
+  if (showFinance) return <FinanceSummaryScreen onBack={() => setShowFinance(false)} />;
 
-  // Show EmployeePanelScreen inline when an employee is selected
   if (selectedEmployee) {
     return (
       <EmployeePanelScreen
         employeeId={selectedEmployee.id}
-        employeeName={selectedEmployee.name}
+        employeeName={selectedEmployee.full_name}
+        employeeRole={selectedEmployee.role}
         onBack={() => setSelectedEmployee(null)}
       />
     );
@@ -180,7 +165,6 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
       />
       <MoreSheet visible={moreVisible} sections={MORE_SECTIONS} onClose={() => setMoreVisible(false)} />
 
-      {/* Employee Picker Modal */}
       <Modal visible={employeePickerVisible} transparent animationType="slide" onRequestClose={() => setEmployeePickerVisible(false)}>
         <View style={styles.modalScrim}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setEmployeePickerVisible(false)} />
@@ -196,18 +180,18 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
                 employeeList.map((emp) => (
                   <Pressable
                     key={emp.id}
-                    onPress={() => {
-                      setEmployeePickerVisible(false);
-                      setSelectedEmployee(emp);
-                    }}
+                    onPress={() => { setEmployeePickerVisible(false); setSelectedEmployee(emp); }}
                     style={({ pressed }) => [styles.empRow, { borderBottomColor: theme.line, opacity: pressed ? 0.6 : 1 }]}
                   >
                     <View style={[styles.empAvatar, { backgroundColor: `${brand.primary}20` }]}>
                       <Text style={[styles.empAvatarText, { color: brand.primary }]}>
-                        {(emp.name || '?').trim().charAt(0).toUpperCase()}
+                        {(emp.full_name || '?').trim().charAt(0).toUpperCase()}
                       </Text>
                     </View>
-                    <Text style={[styles.empName, { color: theme.text }]}>{emp.name}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.empName, { color: theme.text }]}>{emp.full_name}</Text>
+                      {emp.role === 'team_lead' ? <Text style={[styles.empRole, { color: semantic.warning }]}>★ Team Lead</Text> : null}
+                    </View>
                   </Pressable>
                 ))
               )}
@@ -232,4 +216,5 @@ const styles = StyleSheet.create({
   empAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   empAvatarText: { fontSize: 15, fontWeight: '700' },
   empName: { ...typography.body },
+  empRole: { ...typography.caption, fontWeight: '600' },
 });
