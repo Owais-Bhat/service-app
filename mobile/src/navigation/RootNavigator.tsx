@@ -35,6 +35,7 @@ import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
 import MyStatsScreen from '../screens/MyStatsScreen';
 import ServicePricingScreen from '../screens/ServicePricingScreen';
+import TeamLeadDashboardScreen from '../screens/TeamLeadDashboardScreen';
 import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
@@ -378,7 +379,7 @@ export default function RootNavigator() {
         }
       }}
     >
-      {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminNavigator /> : <EmployeeNavigator />}
+      {!user ? <GuestNavigator /> : user.role === 'admin' ? <AdminNavigator /> : user.role === 'team_lead' ? <TeamLeadDashboardScreen /> : <EmployeeNavigator />}
     </NavigationContainer>
   );
 }
