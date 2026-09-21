@@ -49,7 +49,7 @@ const OPTION_ACCENT: Record<StatusOption | 'device', string> = {
 interface Props {
   item: TaskItem;
   onDismiss: () => void;
-  onSaved: () => void;
+  onSaved: (resolvedStatus?: string) => void;
 }
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
@@ -284,7 +284,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         setPaymentConfirmed(true);
         try {
           await updateTaskStatus(item, { status: 'resolved', detail: detail.trim(), bill: buildResolveBill() });
-          onSaved();
+          onSaved('resolved');
         } catch {
           // Payment landed but the final resolve write failed — leave
           // paymentConfirmed true so the (now-enabled) Save button lets the
@@ -339,7 +339,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     try {
       await markDeviceTaken(item.inquiryId, deviceDesc.trim(), devicePhoto);
       await saveDeviceInfo(item.inquiryId, deviceType, deviceSerialNo);
-      onSaved();
+      onSaved('device_taken');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save — check your connection');
     } finally {
@@ -382,7 +382,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         billNo: status === 'foc' ? billNo.trim() : undefined,
         bill: status === 'resolved' ? buildResolveBill() : undefined,
       });
-      onSaved();
+      onSaved(status);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save — check your connection');
     } finally {

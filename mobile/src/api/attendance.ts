@@ -214,3 +214,19 @@ export async function submitLeaveRequest(
     status: 'pending',
   });
 }
+
+export interface LeaveRequestWithProfile extends LeaveRequest {
+  employee_name: string | null;
+}
+
+export async function fetchAllLeaveRequests(): Promise<LeaveRequestWithProfile[]> {
+  const rows = await dataGet<(LeaveRequest & { profiles?: { full_name?: string } })[]>('leave_requests', {
+    select: '*,profiles(full_name)',
+    order: 'start_date:desc',
+  });
+  return rows.map((r) => ({ ...r, employee_name: r.profiles?.full_name ?? null }));
+}
+
+export async function updateLeaveStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
+  await dataPatch('leave_requests', `id:${id}`, { status });
+}

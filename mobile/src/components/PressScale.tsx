@@ -1,12 +1,12 @@
 import React, { ReactNode } from 'react';
-import { Pressable, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 interface Props {
   children: ReactNode;
   onPress: () => void;
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 // Shared "3D" tactile press feedback — springs down on press-in, back up on

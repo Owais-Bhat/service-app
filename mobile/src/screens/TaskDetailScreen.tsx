@@ -13,7 +13,7 @@ import LocationMapModal from '../components/LocationMapModal';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
-import { fetchTaskByTicketId, TaskItem } from '../api/tasks';
+import { fetchTaskByTicketId, TaskItem, acceptAssignment, declineAssignment } from '../api/tasks';
 import { useAttendanceStatus } from '../context/AttendanceContext';
 
 interface Props {
@@ -76,6 +76,61 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Ticket not found'}</Text>
           <BackLink onPress={onBack} />
+        </View>
+      </View>
+    );
+  }
+
+  if (item.assignmentStatus === 'pending') {
+    return (
+      <View style={styles.root}>
+        <MeshBackground />
+        <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: spacing(5) }]}>
+          <Text style={[styles.heading, { color: theme.text, marginBottom: spacing(3) }]}>New Assignment</Text>
+          <GlassCard style={{ width: '100%', marginBottom: spacing(4) }}>
+            <Text style={[styles.label, { color: theme.text3 }]}>Customer</Text>
+            <Text style={[styles.body, { color: theme.text }]}>{item.fullName}</Text>
+            {item.serviceItem ? (
+              <>
+                <Text style={[styles.label, { color: theme.text3, marginTop: spacing(3) }]}>Service</Text>
+                <Text style={[styles.body, { color: theme.text }]}>{item.serviceItem}</Text>
+              </>
+            ) : null}
+            {item.location ? (
+              <>
+                <Text style={[styles.label, { color: theme.text3, marginTop: spacing(3) }]}>Location</Text>
+                <Text style={[styles.body, { color: theme.text }]}>{item.location}</Text>
+              </>
+            ) : null}
+          </GlassCard>
+          <PressScale
+            style={[styles.acceptBtn, !clockedIn && styles.updateBtnDisabled]}
+            onPress={async () => {
+              if (!clockedIn) return void (!attendance?.clock_in && showGate());
+              await acceptAssignment(item);
+              load();
+            }}
+          >
+            <Text style={styles.acceptBtnText}>Accept</Text>
+          </PressScale>
+          <PressScale
+            style={[styles.declineBtn, { marginTop: spacing(3) }, !clockedIn && styles.updateBtnDisabled]}
+            onPress={async () => {
+              if (!clockedIn) return void (!attendance?.clock_in && showGate());
+              if (item.inquiryId) await declineAssignment(item.inquiryId, 'declined by employee');
+              onBack();
+            }}
+          >
+            <Text style={[styles.body, { color: theme.text }]}>Decline</Text>
+          </PressScale>
+          {!clockedIn ? (
+            <Text style={[styles.clockHint, { color: theme.text3 }]}>
+              {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to accept or decline.'}
+            </Text>
+          ) : null}
+          <View style={{ marginTop: spacing(4) }}>
+            <BackLink onPress={onBack} />
+          </View>
         </View>
       </View>
     );
@@ -227,4 +282,9 @@ const styles = StyleSheet.create({
   updateBtnDisabled: { opacity: 0.45 },
   clockHint: { ...typography.caption, textAlign: 'center', marginTop: spacing(2) },
   updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  heading: { fontFamily: 'Manrope_700Bold', fontSize: 20 },
+  label: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  acceptBtn: { width: '100%', backgroundColor: brand.primary, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  acceptBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  declineBtn: { width: '100%', height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(128,128,128,0.3)' },
 });

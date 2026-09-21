@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type Role = 'admin' | 'employee';
+export type Role = 'admin' | 'employee' | 'team_lead';
 export type WorkerType = 'fixed' | 'gig';
 
 export interface AuthUser {
