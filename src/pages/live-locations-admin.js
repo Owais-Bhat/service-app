@@ -445,8 +445,15 @@ export async function renderLiveLocationsTab(container) {
   if (typeof L === 'undefined') {
     mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);">Map failed to load</div>';
   } else {
-    container._llMap = L.map(mapEl, { attributionControl: false }).setView(FALLBACK_CENTER, 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(container._llMap);
+    container._llMap = L.map(mapEl).setView(FALLBACK_CENTER, 12);
+    // OSM blocks tile requests with no Referer — the server's
+    // Referrer-Policy: same-origin strips it for cross-origin requests, so
+    // override it per tile. Attribution is also required by OSM's policy.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(container._llMap);
     setTimeout(() => container._llMap.invalidateSize(), 50);
   }
 

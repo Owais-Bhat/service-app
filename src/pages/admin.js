@@ -1433,9 +1433,13 @@ function openLocationMapModal(lat, lng, label) {
   };
   if (typeof L !== "undefined") {
     const mapEl = overlay.querySelector("#loc-map-el");
-    const map = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 16);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const map = L.map(mapEl).setView([lat, lng], 16);
+    // Send a Referer (and attribution) or OSM blocks the tiles — see
+    // live-locations-admin.js.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      referrerPolicy: "strict-origin-when-cross-origin",
+      attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
     L.marker([lat, lng]).addTo(map);
     setTimeout(() => map.invalidateSize(), 50);
