@@ -3,6 +3,7 @@ import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import { SITE_BASE_URL } from '../api/client';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import PulseDot from '../components/PulseDot';
@@ -35,8 +36,8 @@ const MAP_HTML = `<!DOCTYPE html><html><head><meta name="viewport" content="widt
 <body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${FALLBACK_CENTER.latitude}, ${FALLBACK_CENTER.longitude}], 11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+var map = L.map('map', { zoomControl: false }).setView([${FALLBACK_CENTER.latitude}, ${FALLBACK_CENTER.longitude}], 11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 var markers = {};
 var firstLoad = true;
 window.updateMarkers = function(rows) {
@@ -147,7 +148,7 @@ export default function LiveLocationsScreen({ onBack }: Props) {
               ref={webRef}
               style={StyleSheet.absoluteFill}
               originWhitelist={['*']}
-              source={{ html: MAP_HTML }}
+              source={{ html: MAP_HTML, baseUrl: SITE_BASE_URL }}
               scrollEnabled={false}
               onLoadEnd={() => setWebReady(true)}
               onMessage={handleMapMessage}
