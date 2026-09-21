@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { fetchTaskByTicketId, TaskItem } from '../api/tasks';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 
 interface Props {
   ticketId: string;
@@ -36,6 +37,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showStatus, setShowStatus] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const { clockedIn, attendance, showGate } = useAttendanceStatus();
 
   const load = useCallback(async () => {
     try {
@@ -158,12 +160,19 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
               <Text style={[styles.doneBannerText, { color: theme.text2 }]}>This service is completed and locked.</Text>
             </View>
           ) : (
-            <PressScale onPress={() => setShowStatus(true)}>
-              <View style={styles.updateBtn}>
-                <Icon name="edit" size={16} color="#fff" />
-                <Text style={styles.updateBtnText}>Update Status</Text>
-              </View>
-            </PressScale>
+            <>
+              <PressScale onPress={() => (clockedIn ? setShowStatus(true) : !attendance?.clock_in && showGate())}>
+                <View style={[styles.updateBtn, !clockedIn && styles.updateBtnDisabled]}>
+                  <Icon name={clockedIn ? 'edit' : 'lock'} size={16} color="#fff" />
+                  <Text style={styles.updateBtnText}>Update Status</Text>
+                </View>
+              </PressScale>
+              {!clockedIn ? (
+                <Text style={[styles.clockHint, { color: theme.text3 }]}>
+                  {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to update this task.'}
+                </Text>
+              ) : null}
+            </>
           )}
         </Animated.View>
       </ScrollView>
@@ -215,5 +224,7 @@ const styles = StyleSheet.create({
   doneBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5) },
   doneBannerText: { ...typography.body, fontSize: 13 },
   updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.primary, height: 52, borderRadius: radius.md },
+  updateBtnDisabled: { opacity: 0.45 },
+  clockHint: { ...typography.caption, textAlign: 'center', marginTop: spacing(2) },
   updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
 });

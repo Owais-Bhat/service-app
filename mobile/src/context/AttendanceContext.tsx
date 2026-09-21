@@ -7,9 +7,25 @@ interface AttendanceContextValue {
   attendance: AttendanceRow | null;
   loaded: boolean;
   refresh: () => Promise<void>;
+  // Clocked in and not yet clocked out — gates task status updates.
+  clockedIn: boolean;
+  // The clock-in gate can be closed (X) so the employee can still browse
+  // task details; showGate() brings it back (e.g. tapping a disabled
+  // Update Status button).
+  gateDismissed: boolean;
+  dismissGate: () => void;
+  showGate: () => void;
 }
 
-const AttendanceContext = createContext<AttendanceContextValue>({ attendance: null, loaded: false, refresh: async () => {} });
+const AttendanceContext = createContext<AttendanceContextValue>({
+  attendance: null,
+  loaded: false,
+  refresh: async () => {},
+  clockedIn: false,
+  gateDismissed: false,
+  dismissGate: () => {},
+  showGate: () => {},
+});
 
 const POLL_MS = 60000;
 
@@ -28,6 +44,10 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
   const { user } = useAuth();
   const [attendance, setAttendance] = useState<AttendanceRow | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [gateDismissed, setGateDismissed] = useState(false);
+  const dismissGate = useCallback(() => setGateDismissed(true), []);
+  const showGate = useCallback(() => setGateDismissed(false), []);
+  const clockedIn = !!attendance?.clock_in && !attendance?.clock_out;
 
   const refresh = useCallback(async () => {
     if (!user) return;
@@ -50,7 +70,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     return () => clearInterval(id);
   }, [refresh]);
 
-  return <AttendanceContext.Provider value={{ attendance, loaded, refresh }}>{children}</AttendanceContext.Provider>;
+  return <AttendanceContext.Provider value={{ attendance, loaded, refresh, clockedIn, gateDismissed, dismissGate, showGate }}>{children}</AttendanceContext.Provider>;
 }
 
 export function useAttendanceStatus(): AttendanceContextValue {

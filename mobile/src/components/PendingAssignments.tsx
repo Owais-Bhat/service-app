@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import { acceptAssignment, declineAssignment, TaskItem } from '../api/tasks';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 
 interface Props {
   pending: TaskItem[];
@@ -107,6 +108,7 @@ function AssignmentCard({ item, width }: { item: TaskItem; width: number }) {
 // Manage Tasks (same stack).
 export default function PendingAssignments({ pending, onChanged }: Props) {
   const { width } = useWindowDimensions();
+  const { clockedIn, attendance, showGate } = useAttendanceStatus();
   const [stack, setStack] = useState<TaskItem[]>(pending);
   const [dismissed, setDismissed] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -160,6 +162,14 @@ export default function PendingAssignments({ pending, onChanged }: Props) {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Not clocked in — close this popup (two native Modals don't stack
+  // reliably) and bring the clock-in gate back instead.
+  const promptClockIn = () => {
+    if (attendance?.clock_in) return;
+    setDismissed(true);
+    showGate();
   };
 
   if (total === 0 && !dismissed) return null;
@@ -221,18 +231,23 @@ export default function PendingAssignments({ pending, onChanged }: Props) {
 
           {active && (
             <View style={styles.popupActions}>
-              <PressScale onPress={() => setDeclineTarget(active)} disabled={busy} style={{ flex: 1 }}>
-                <View style={[styles.declineCircle, busy && styles.disabled]}>
-                  <Icon name="close" size={22} color="#fff" />
+              <PressScale onPress={() => (clockedIn ? setDeclineTarget(active) : promptClockIn())} disabled={busy} style={{ flex: 1 }}>
+                <View style={[styles.declineCircle, (busy || !clockedIn) && styles.disabled]}>
+                  <Icon name={clockedIn ? 'close' : 'lock'} size={22} color="#fff" />
                 </View>
               </PressScale>
-              <PressScale onPress={() => handleAccept(active)} disabled={busy} style={{ flex: 1 }}>
-                <View style={[styles.acceptCircle, busy && styles.disabled]}>
-                  <Icon name="check" size={22} color="#fff" />
+              <PressScale onPress={() => (clockedIn ? handleAccept(active) : promptClockIn())} disabled={busy} style={{ flex: 1 }}>
+                <View style={[styles.acceptCircle, (busy || !clockedIn) && styles.disabled]}>
+                  <Icon name={clockedIn ? 'check' : 'lock'} size={22} color="#fff" />
                 </View>
               </PressScale>
             </View>
           )}
+          {active && !clockedIn ? (
+            <Text style={styles.clockHint}>
+              {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to accept or decline.'}
+            </Text>
+          ) : null}
         </View>
       </Modal>
 
@@ -242,7 +257,8 @@ export default function PendingAssignments({ pending, onChanged }: Props) {
 }
 
 const styles = StyleSheet.create({
-  disabled: { opacity: 0.6 },
+  disabled: { opacity: 0.4 },
+  clockHint: { fontSize: 12, color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginTop: spacing(3) },
   reopenPill: {
     flexDirection: 'row',
     alignItems: 'center',

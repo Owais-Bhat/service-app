@@ -13,6 +13,7 @@ import TaskStatusModal from '../components/TaskStatusModal';
 import LocationMapModal from '../components/LocationMapModal';
 import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
@@ -67,6 +68,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { clockedIn, attendance, showGate } = useAttendanceStatus();
   const [pending, setPending] = useState<TaskItem[]>([]);
   const [items, setItems] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,6 +150,12 @@ export default function ManageTasksScreen({ onBack }: Props) {
         </ScrollView>
 
         {error ? <Text style={[styles.caption, { color: semantic.danger, marginTop: spacing(3) }]}>{error}</Text> : null}
+
+        {!clockedIn && !loading ? (
+          <Text style={[styles.caption, { color: semantic.warning, marginTop: spacing(3) }]}>
+            {attendance?.clock_in ? 'You have clocked out — task updates are locked for today.' : 'Clock in to update tasks.'}
+          </Text>
+        ) : null}
 
         <PendingAssignments pending={pending} onChanged={load} />
 
@@ -268,9 +276,12 @@ export default function ManageTasksScreen({ onBack }: Props) {
 
                       <View style={styles.actionRow}>
                         {!locked && (
-                          <PressScale onPress={() => setStatusItem(item)} style={{ flex: 1, minWidth: 130 }}>
-                            <View style={[styles.actionBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
-                              <Icon name="edit" size={15} color="#fff" />
+                          <PressScale
+                            onPress={() => (clockedIn ? setStatusItem(item) : !attendance?.clock_in && showGate())}
+                            style={{ flex: 1, minWidth: 130 }}
+                          >
+                            <View style={[styles.actionBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }, !clockedIn && styles.actionBtnDisabled]}>
+                              <Icon name={clockedIn ? 'edit' : 'lock'} size={15} color="#fff" />
                               <Text style={styles.actionBtnTextFilled}>Update Status</Text>
                             </View>
                           </PressScale>
@@ -371,6 +382,7 @@ const styles = StyleSheet.create({
   updateBox: { borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(3) },
   actionRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(1), flexWrap: 'wrap' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 40, borderRadius: radius.sm, paddingHorizontal: spacing(2), shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 3 },
+  actionBtnDisabled: { opacity: 0.45, shadowOpacity: 0, elevation: 0 },
   actionBtnTextFilled: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
   iconAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   iconActionShadow: { borderWidth: 0, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 3 },
