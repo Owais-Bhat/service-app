@@ -3134,6 +3134,9 @@ export async function renderEmployeeTasks(container) {
         </h1>
         <p>All your assigned tasks, service jobs, and pending assignments</p>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" id="emp-tasks-export">${ICONS.clipboard}<span>Export Tasks</span></button>
+      </div>
     </div>
 
     ${pendingInquiries.length > 0 ? `
@@ -3410,6 +3413,24 @@ export async function renderEmployeeTasks(container) {
       })();
     };
   });
+
+  const exportBtn = container.querySelector("#emp-tasks-export");
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      exportToCSV(
+        "my-tasks.csv",
+        allServiceItems.map((x) => ({
+          ticket: x.ticket_no || x.id,
+          created_at: x.created_at,
+          title: x.title || x.service_item || "Task",
+          customer: x.full_name || x.inquiries?.[0]?.full_name || "-",
+          phone: x.phone || x.inquiries?.[0]?.phone || "-",
+          status: displayStatus(x.status),
+          location: x.location || x.inquiries?.[0]?.location || "-"
+        }))
+      );
+    };
+  }
 }
 
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
