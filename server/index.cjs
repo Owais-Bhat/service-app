@@ -1860,6 +1860,16 @@ const requiredTables = [
         INDEX idx_inst_status (status),
         INDEX idx_inst_phone (phone)
     )`,
+    `CREATE TABLE IF NOT EXISTS queries (
+        id VARCHAR(36) PRIMARY KEY,
+        full_name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        address TEXT,
+        query_details TEXT NOT NULL,
+        estimate_sent BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_query_phone (phone)
+    )`,
     `CREATE TABLE IF NOT EXISTS job_card_items (
         id VARCHAR(36) PRIMARY KEY,
         inquiry_id VARCHAR(36) NOT NULL,
@@ -2799,7 +2809,7 @@ const ALLOWED_DATA_TABLES = new Set([
     'service_pricing', 'inquiry_services', 'leave_requests', 'eod_reports',
     'device_types', 'feedback', 'stocks', 'contacts', 'cash_collections',
     'payments', 'bills', 'complaints', 'ads', 'companies', 'notices', 'discount_presets',
-    'coupons', 'training_items', 'training_completions', 'installations',
+    'coupons', 'training_items', 'training_completions', 'installations', 'queries',
 ]);
 
 // Columns that non-admins must never write through the generic data endpoint.
@@ -2813,7 +2823,7 @@ const ADMIN_ONLY_WRITE_COLUMNS = {
 const EMPLOYEE_READ_TABLES = new Set([
     'profiles', 'attendance', 'tickets', 'inquiries', 'eod_reports', 'leave_requests',
     'ticket_comments', 'inquiry_services', 'service_pricing', 'device_types', 'companies',
-    'notices', 'discount_presets', 'ads', 'training_items', 'training_completions', 'installations',
+    'notices', 'discount_presets', 'ads', 'training_items', 'training_completions', 'installations', 'queries'
 ]);
 const EMPLOYEE_WRITE_FIELDS = {
     profiles: new Set(['id', 'full_name', 'phone', 'company', 'address']),
