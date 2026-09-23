@@ -2348,6 +2348,7 @@ export async function renderUsers(container) {
 
             <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">
               ${toggleRow("usr-add-service", "Add Service Access (Staff only)", isEdit && user.can_add_service)}
+              ${toggleRow("usr-assign-tickets", "Assign Service Requests (Staff only)", isEdit && user.can_assign_tickets)}
               ${toggleRow("usr-edit-profile", "Profile Edit Access (Staff only)", isEdit && user.can_update_profile)}
               ${toggleRow("usr-always-assign", "Always Auto-Assign Service (Staff only)", isEdit && user.always_assign)}
               ${toggleRow("usr-eod-exempt", "EOD Exempt (Staff only)", isEdit && user.eod_exempt)}
@@ -2401,6 +2402,7 @@ export async function renderUsers(container) {
       const company = overlay.querySelector("#usr-company").value.trim();
       const address = overlay.querySelector("#usr-address").value.trim();
       const can_add_service = overlay.querySelector("#usr-add-service").checked;
+      const can_assign_tickets = overlay.querySelector("#usr-assign-tickets").checked;
       const can_update_profile =
         overlay.querySelector("#usr-edit-profile").checked;
       const alwaysAssign = overlay.querySelector("#usr-always-assign").checked;
@@ -2429,6 +2431,7 @@ export async function renderUsers(container) {
         company: company || null,
         address: address || null,
         can_add_service: can_add_service ? 1 : 0,
+        can_assign_tickets: can_assign_tickets ? 1 : 0,
         can_update_profile: can_update_profile ? 1 : 0,
         alwaysAssign: alwaysAssign ? 1 : 0,
         eodExempt: eodExempt ? 1 : 0,

@@ -79,6 +79,7 @@ type EmployeeStackParams = {
   ManageTasks: undefined;
   MyStats: undefined;
   ServicePricing: undefined;
+  AssignRequests: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
@@ -161,6 +162,7 @@ function JobToolsRoute({ navigation }: any) {
       onOpenManageTasks={() => navigation.navigate('ManageTasks')}
       onOpenMyStats={() => navigation.navigate('MyStats')}
       onOpenServicePricing={() => navigation.navigate('ServicePricing')}
+      onOpenAssignRequests={() => navigation.navigate('AssignRequests')}
     />
   );
 }
@@ -286,6 +288,9 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="GigPool" component={GigPoolRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ManageTasks" component={ManageTasksRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="MyStats" component={MyStatsRoute} options={{ animation: 'slide_from_right' }} />
+      {/* Only reachable from Job Tools when the employee has can_assign_tickets;
+          the server enforces the permission on every read/write regardless. */}
+      <EmployeeStack.Screen name="AssignRequests" component={AdminServiceRequestsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ServicePricing" component={ServicePricingRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="BonusReviews" component={BonusReviewsRoute} options={{ animation: 'slide_from_right' }} />

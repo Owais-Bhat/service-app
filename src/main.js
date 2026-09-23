@@ -118,6 +118,10 @@ function getNavItems(role) {
       { id: 'my-training-courses', icon: ICONS.shield, label: 'Training' },
     ];
     items.push({ id: 'device-followup', icon: ICONS.wrench, label: 'Device Follow-up' });
+    if (canAssignTickets) {
+      items.push({ type: 'section', label: 'Operations' });
+      items.push({ id: 'assign-requests', icon: ICONS.inbox, label: 'Assign Requests' });
+    }
     items.push({ type: 'section', label: 'Services' });
     items.push({ id: 'estimator', icon: ICONS.receipt, label: 'Estimator' });
     if (canAddService) {
@@ -198,6 +202,7 @@ const PAGE_LOADERS = {
     estimator: () => import('./pages/employee.js').then(m => m.renderEmployeeEstimatorTab),
     'service-pricing': () => import('./pages/employee.js').then(m => m.renderEmployeePricingTab),
     'device-followup': () => import('./pages/employee.js').then(m => m.renderEmployeeFollowUp),
+    'assign-requests': () => import('./pages/assign-requests.js').then(m => m.renderAssignRequestsTab),
     notifications: () => import('./pages/notifications.js').then(m => m.renderNotificationsTab),
     'my-training-courses': () => import('./pages/training.js').then(m => m.renderEmployeeCourses),
     profile: () => import('./pages/profile.js').then(m => m.renderProfile),
@@ -399,6 +404,11 @@ function isFeedbackRoute() {
 // needed on the login / boot critical path.
 const readCanAddService = (u) => (u?.can_add_service === 1 || u?.can_add_service === true);
 
+// Admin-granted: this employee may see every service request and assign it to
+// a technician (server enforces it via profiles.can_assign_tickets).
+let canAssignTickets = false;
+const readCanAssignTickets = (u) => (u?.can_assign_tickets === 1 || u?.can_assign_tickets === true);
+
 // Gig workers get an extra "Public Jobs" tab fixed employees never see.
 let isGigWorker = false;
 const readIsGigWorker = (u) => u?.worker_type === 'gig';
@@ -427,7 +437,7 @@ function watchMyProfile(userId) {
       const fresh = payload.new;
       if (!fresh) return;
       if (currentRole === 'employee') {
-        canAddService = readCanAddService(fresh);
+        canAddService = readCanAddService(fresh); canAssignTickets = readCanAssignTickets(fresh);
         allowedTabs = readAllowedTabs(fresh);
         isGigWorker = readIsGigWorker(fresh);
         installationsEnabled = readInstallationsEnabled(fresh);
@@ -451,7 +461,7 @@ function showAuth() {
       currentUser = user;
       currentRole = role;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
-      if (role === 'employee') { canAddService = readCanAddService(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); installationsEnabled = readInstallationsEnabled(user); startLiveLocationPing(user.id); }
+      if (role === 'employee') { canAddService = readCanAddService(user); canAssignTickets = readCanAssignTickets(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); installationsEnabled = readInstallationsEnabled(user); startLiveLocationPing(user.id); }
       watchMyProfile(user.id);
       navigate('dashboard');
     },
@@ -539,7 +549,7 @@ async function boot() {
       }
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
 
-      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); installationsEnabled = readInstallationsEnabled(currentUser); startLiveLocationPing(currentUser.id); }
+      if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); canAssignTickets = readCanAssignTickets(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); installationsEnabled = readInstallationsEnabled(currentUser); startLiveLocationPing(currentUser.id); }
       watchMyProfile(currentUser.id);
       navigate('dashboard');
     } catch (err) {

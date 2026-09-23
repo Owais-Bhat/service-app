@@ -1396,6 +1396,7 @@ const requiredColumns = {
         { name: 'phone', definition: 'VARCHAR(20)' },
         { name: 'company', definition: 'VARCHAR(100)' },
         { name: 'can_add_service', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'can_assign_tickets', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee may see every service request and assign it to a technician'" },
         { name: 'can_update_profile', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'always_assign', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'allowed_tabs', definition: 'TEXT COMMENT \'JSON array of tab ids this employee may see; null = all\'' },
@@ -2804,7 +2805,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled', 'allow_foc']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_assign_tickets', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled', 'allow_foc']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -2863,6 +2864,42 @@ function assertAllowedFields(table, data, allowed) {
     return blocked.length ? `Not allowed to write: ${blocked.join(', ')}` : null;
 }
 
+// An employee with profiles.can_assign_tickets is a "ticket assigner": they see
+// every service request and may hand it to a technician, but nothing else about
+// their account changes. The flag lives in the DB rather than the JWT so it can
+// be revoked without waiting for the 30-day token to expire; the short cache
+// keeps the app's inquiry polling from adding a query per request.
+const ASSIGNER_CACHE_MS = 30000;
+const assignerCache = new Map();
+
+async function isTicketAssigner(user) {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    if (user.role !== 'employee') return false;
+    const cached = assignerCache.get(user.id);
+    if (cached && cached.until > Date.now()) return cached.value;
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.execute(
+            'SELECT can_assign_tickets FROM profiles WHERE id = ? LIMIT 1',
+            [user.id]
+        );
+        const value = rows[0] ? Number(rows[0].can_assign_tickets) === 1 : false;
+        assignerCache.set(user.id, { value, until: Date.now() + ASSIGNER_CACHE_MS });
+        return value;
+    } catch (err) {
+        console.error('[assigner] permission check failed:', err.message);
+        return false;
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+// Columns a ticket assigner may PATCH on inquiries, on top of the normal
+// employee set — assignment only, never billing or status.
+const ASSIGNER_WRITE_FIELDS = new Set(['assigned_employee_id', 'assignment_status', 'decline_reason']);
+
 function appendRoleScope({ table, user, method, whereClauses, params }) {
     if (!user || user.role === 'admin' || user.role === 'public') return null;
     if (user.role !== 'employee' && user.role !== 'client') {
@@ -2884,6 +2921,8 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
             params.push('assigned_to', id, 'client_id', id);
             break;
         case 'inquiries':
+            // Ticket assigners work the whole queue, so no ownership filter.
+            if (user.can_assign_tickets) break;
             // Gig workers additionally see unclaimed public-pool jobs (assigned_employee_id
             // IS NULL there, so it can never collide with the normal ownership scope below).
             if (user.worker_type === 'gig') {
@@ -3795,10 +3834,10 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, allowed_tabs, worker_type, installations_enabled, allow_foc FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, can_assign_tickets, allowed_tabs, worker_type, installations_enabled, allow_foc FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
-        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1, allow_foc: 1 };
+        const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, can_assign_tickets: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1, allow_foc: 1 };
 
         // Block client logins — clients use the public landing page, not the dashboard.
         if (profile.role !== 'admin' && profile.role !== 'employee') {
@@ -3812,7 +3851,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled, allow_foc: profile.allow_foc === undefined ? 1 : profile.allow_foc }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, can_assign_tickets: profile.can_assign_tickets || 0, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled, allow_foc: profile.allow_foc === undefined ? 1 : profile.allow_foc }
         });
     } catch (error) {
         console.error('Signin error:', error);
@@ -3854,7 +3893,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_update_profile, alwaysAssign, eodExempt, photoClockinExempt, geofenceClockinExempt, workerType, installationsEnabled, allowFoc } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_assign_tickets, can_update_profile, alwaysAssign, eodExempt, photoClockinExempt, geofenceClockinExempt, workerType, installationsEnabled, allowFoc } = req.body;
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -3887,7 +3926,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_update_profile, always_assign, eod_exempt, photo_clockin_exempt, geofence_clockin_exempt, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_assign_tickets, can_update_profile, always_assign, eod_exempt, photo_clockin_exempt, geofence_clockin_exempt, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -3897,6 +3936,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     address || null,
                     company || null,
                     can_add_service ? 1 : 0,
+                    can_assign_tickets ? 1 : 0,
                     can_update_profile ? 1 : 0,
                     alwaysAssign ? 1 : 0,
                     eodExempt ? 1 : 0,
@@ -3935,6 +3975,7 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         address,
         company,
         can_add_service,
+        can_assign_tickets,
         can_update_profile,
         alwaysAssign,
         eodExempt,
@@ -4029,6 +4070,11 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (company !== undefined) {
                 profileUpdates.push('company = ?');
                 profileParams.push(company || null);
+            }
+            if (can_assign_tickets !== undefined) {
+                profileUpdates.push('can_assign_tickets = ?');
+                profileParams.push(can_assign_tickets ? 1 : 0);
+                assignerCache.delete(req.params.id);
             }
             if (can_add_service !== undefined) {
                 profileUpdates.push('can_add_service = ?');
@@ -5938,7 +5984,7 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
 // queries with one scoped response and computes technician availability on the
 // server, close to the database.
 app.get('/api/admin/inquiries/:id/manage-context', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
+    if (!(await isTicketAssigner(req.user))) return res.sendStatus(403);
     let connection;
     try {
         connection = await getConn();
@@ -6859,6 +6905,9 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
             whereClauses.push(`?? IN (${values.map(() => '?').join(', ')})`);
             params.push(field, ...values);
         }
+        if (table === 'inquiries' && req.user.role === 'employee') {
+            req.user.can_assign_tickets = await isTicketAssigner(req.user);
+        }
         const scopeErr = appendRoleScope({ table, user: req.user, method: 'GET', whereClauses, params });
         if (scopeErr?.error) {
             connection.release();
@@ -6998,6 +7047,15 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                 return res.status(500).json({ error: 'Access check failed' });
             }
             allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);
+            if (allowedErr) return res.status(403).json({ error: allowedErr });
+        } else if (table === 'inquiries' && req.user.role === 'employee' && await isTicketAssigner(req.user)) {
+            // The wider row scope is granted ONLY for a pure assignment patch —
+            // billing/status columns stay limited to the assigner's own jobs,
+            // exactly as for any other employee.
+            const patchKeys = Object.keys(data || {});
+            const assignmentOnly = patchKeys.length > 0 && patchKeys.every(k => ASSIGNER_WRITE_FIELDS.has(k));
+            req.user.can_assign_tickets = assignmentOnly;
+            allowedErr = assertAllowedFields(table, data, assignmentOnly ? ASSIGNER_WRITE_FIELDS : EMPLOYEE_WRITE_FIELDS[table]);
             if (allowedErr) return res.status(403).json({ error: allowedErr });
         } else {
             allowedErr = assertAllowedFields(table, data, EMPLOYEE_WRITE_FIELDS[table]);

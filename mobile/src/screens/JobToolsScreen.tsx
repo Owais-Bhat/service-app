@@ -25,6 +25,7 @@ interface Props {
   onOpenManageTasks: () => void;
   onOpenMyStats: () => void;
   onOpenServicePricing: () => void;
+  onOpenAssignRequests: () => void;
 }
 
 interface Tool {
@@ -57,6 +58,7 @@ export default function JobToolsScreen({
   onOpenManageTasks,
   onOpenMyStats,
   onOpenServicePricing,
+  onOpenAssignRequests,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -65,6 +67,7 @@ export default function JobToolsScreen({
 
   const installationsOn = user?.installations_enabled !== 0 && user?.installations_enabled !== false;
   const isGigWorker = user?.worker_type === 'gig';
+  const canAssignTickets = user?.can_assign_tickets === 1 || user?.can_assign_tickets === true;
 
   const tools: Tool[] = [
     ...BASE_TOOLS,
@@ -73,6 +76,9 @@ export default function JobToolsScreen({
       : []),
     ...(isGigWorker
       ? [{ key: 'gigpool', label: 'Public Jobs', desc: 'Unclaimed jobs open to any gig worker', color: '#7c5cfc', icon: 'star' as IconName }]
+      : []),
+    ...(canAssignTickets
+      ? [{ key: 'assign', label: 'Assign Requests', desc: 'Hand incoming service requests to technicians', color: '#6366f1', icon: 'tasks' as IconName }]
       : []),
   ];
 
@@ -85,6 +91,7 @@ export default function JobToolsScreen({
     else if (key === 'gigpool') onOpenGigPool();
     else if (key === 'mystats') onOpenMyStats();
     else if (key === 'pricing') onOpenServicePricing();
+    else if (key === 'assign') onOpenAssignRequests();
   };
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
