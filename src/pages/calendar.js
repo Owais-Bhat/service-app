@@ -87,7 +87,7 @@ export async function renderCalendarTab(container) {
           <div style="text-align:right; font-weight:${isToday ? '800' : '600'}; color:${isToday ? 'var(--primary)' : 'var(--text)'}; font-size:1.1rem; margin-bottom:4px;">${day}</div>
           ${dayEvents.map(ev => {
               const empName = profiles.find(p => p.id === ev.assigned_employee_id)?.full_name || 'Unassigned';
-              return `<div style="background:var(--bg-soft); border-left:3px solid var(--warning); padding:6px; border-radius:4px; font-size:0.75rem; box-shadow:var(--neu-sm); cursor:pointer;" title="${ev.full_name} - ${ev.installation_type}">
+              return `<div class="cal-event-item" data-id="${ev.id}" style="background:var(--bg-soft); border-left:3px solid var(--warning); padding:6px; border-radius:4px; font-size:0.75rem; box-shadow:var(--neu-sm); cursor:pointer;" title="${ev.full_name} - ${ev.installation_type}">
                 <div style="font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ev.full_name}</div>
                 <div style="color:var(--text-dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ev.installation_type} (${empName})</div>
                 ${ev.preferred_time ? `<div style="color:var(--warning); font-weight:600; margin-top:2px;">🕒 ${ev.preferred_time}</div>` : ''}
@@ -163,6 +163,21 @@ export async function renderCalendarTab(container) {
             </div>
         </div>
       </div>
+      
+      <!-- Modal for Viewing Installation Details -->
+      <div id="view-inst-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+        <div class="card" style="width:100%; max-width:500px; margin:20px; max-height:90vh; overflow-y:auto;">
+            <div class="card-body">
+                <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:10px;">Installation Details</h3>
+                <div id="view-inst-content" style="display:flex; flex-direction:column; gap:10px; font-size:0.9rem;">
+                    <!-- Content injected via JS -->
+                </div>
+                <div style="margin-top:20px; display:flex; justify-content:flex-end;">
+                    <button type="button" id="close-view-modal" class="btn btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+      </div>
     `;
 
     container.innerHTML = html;
@@ -188,6 +203,33 @@ export async function renderCalendarTab(container) {
     };
     container.querySelector('#close-inst-modal').onclick = () => {
         modal.style.display = 'none';
+    };
+    
+    container.querySelectorAll('.cal-event-item').forEach(el => {
+        el.onclick = () => {
+            const evId = el.getAttribute('data-id');
+            const ev = installations.find(i => i.id === evId);
+            if (!ev) return;
+            const empName = profiles.find(p => p.id === ev.assigned_employee_id)?.full_name || 'Unassigned';
+            
+            container.querySelector('#view-inst-content').innerHTML = `
+                <div><strong>Ticket No:</strong> ${ev.ticket_no || 'N/A'}</div>
+                <div><strong>Customer:</strong> ${ev.full_name}</div>
+                <div><strong>Phone:</strong> ${ev.phone}</div>
+                <div><strong>Location:</strong> ${ev.location}</div>
+                <div><strong>Address:</strong> ${ev.address}</div>
+                <div><strong>Type:</strong> ${ev.installation_type}</div>
+                <div><strong>Date/Time:</strong> ${ev.preferred_date} ${ev.preferred_time ? ` at ${ev.preferred_time}` : ''}</div>
+                <div><strong>Assigned To:</strong> ${empName}</div>
+                <div><strong>Status:</strong> <span class="badge ${ev.status === 'completed' ? 'badge-success' : 'badge-warning'}">${ev.status}</span></div>
+                ${ev.description ? `<div><strong>Description:</strong><br><span style="color:var(--text-dim); white-space:pre-wrap;">${ev.description}</span></div>` : ''}
+            `;
+            container.querySelector('#view-inst-modal').style.display = 'flex';
+        };
+    });
+
+    container.querySelector('#close-view-modal').onclick = () => {
+        container.querySelector('#view-inst-modal').style.display = 'none';
     };
     
     container.querySelector('#add-inst-form').onsubmit = async (e) => {
