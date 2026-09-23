@@ -79,10 +79,12 @@ let activePage = 'dashboard';
 // Keep only tabs the admin granted this employee. Always-on tabs can never be
 // hidden, and section headers with no visible items beneath them are dropped.
 const ALWAYS_ON_TABS = new Set(['dashboard', 'notifications', 'profile']);
-// Gig workers' access to this tab is governed by worker_type (see isGigWorker),
-// not the per-user tab-limit list — it was never offered as a checkbox there,
-// so a restricted employee who becomes a gig worker must still see it.
-const WORKER_TYPE_GOVERNED_TABS = new Set(['public-jobs']);
+// Tabs whose visibility comes from a permission flag, not the per-user
+// tab-limit list: gig workers' Public Jobs (worker_type) and Assign Requests
+// (can_assign_tickets). Neither is offered as a checkbox in the Users screen,
+// so an employee with a restricted tab list must still see them once the
+// matching flag is on.
+const WORKER_TYPE_GOVERNED_TABS = new Set(['public-jobs', 'assign-requests']);
 function filterTabs(items) {
   if (!allowedTabs) return items;
   const kept = items.filter(it => it.type === 'section' || ALWAYS_ON_TABS.has(it.id) || WORKER_TYPE_GOVERNED_TABS.has(it.id) || allowedTabs.has(String(it.id)));
