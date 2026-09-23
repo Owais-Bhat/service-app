@@ -109,6 +109,7 @@ function getNavItems(role) {
       { type: 'section', label: 'Work' },
       { id: 'my-attendance', icon: ICONS.clock, label: 'Attendance Records' },
       { id: 'my-leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
+      { id: 'calendar', icon: ICONS.clock, label: 'Calendar' },
       { id: 'my-eod', icon: ICONS.clipboard, label: 'EOD Reports' },
       { id: 'my-cash', icon: ICONS.rupee, label: 'My Cash' },
       { id: 'my-collections', icon: ICONS.card, label: 'Collections' },
@@ -139,6 +140,7 @@ function getNavItems(role) {
     { id: 'job-cards', icon: ICONS.clipboard, label: 'Job Cards' },
     { id: 'reviews', icon: ICONS.star, label: 'Bonus Reviews' },
     { id: 'auto-assignment', icon: ICONS.refresh, label: 'Auto Assignment' },
+    { id: 'calendar', icon: ICONS.clock, label: 'Calendar' },
     { id: 'device-tracking', icon: ICONS.wrench, label: 'Device Follow-up' },
     { id: 'live-locations', icon: ICONS.pin, label: 'Live Locations' },
     { type: 'section', label: 'Management' },
@@ -198,6 +200,7 @@ const PAGE_LOADERS = {
     'device-followup': () => import('./pages/employee.js').then(m => m.renderEmployeeFollowUp),
     notifications: () => import('./pages/notifications.js').then(m => m.renderNotificationsTab),
     'my-training-courses': () => import('./pages/training.js').then(m => m.renderEmployeeCourses),
+    calendar: () => import('./pages/calendar.js').then(m => m.renderCalendarTab),
     profile: () => import('./pages/profile.js').then(m => m.renderProfile),
   },
   admin: {
@@ -237,6 +240,7 @@ const PAGE_LOADERS = {
     finance: () => import('./pages/finance.js').then(m => m.renderFinanceReportTab),
     notifications: () => import('./pages/notifications.js').then(m => m.renderNotificationsTab),
     'training-courses': () => import('./pages/training.js').then(m => m.renderTrainingCoursesAdmin),
+    calendar: () => import('./pages/calendar.js').then(m => m.renderCalendarTab),
   },
 };
 
