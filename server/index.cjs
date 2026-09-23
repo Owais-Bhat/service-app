@@ -10,8 +10,8 @@ const { computeLeaderboard } = require('./job-card-scoring.cjs');
 const { haversineDistanceMeters } = require('./geo-distance.cjs');
 const { FACE_MATCH_THRESHOLD, isValidFaceDescriptor, euclideanDistance } = require('./face-match.cjs');
 const { verifySamePerson } = require('./vision-verify.cjs');
-const { initializeWhatsApp } = require('./whatsapp.cjs');
-const { initCronJobs } = require('./cron.cjs');
+// const { initializeWhatsApp } = require('./whatsapp.cjs');
+// const { initCronJobs } = require('./cron.cjs');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -8374,8 +8374,8 @@ async function startServer() {
         startVerificationReminderJob();
         
         // Initialize WhatsApp & Daily Notifications
-        initializeWhatsApp();
-        initCronJobs(pool);
+        // initializeWhatsApp();
+        // initCronJobs(pool);
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
