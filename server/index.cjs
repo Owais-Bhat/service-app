@@ -3073,6 +3073,9 @@ const dataAuth = (req, res, next) => {
         return res.status(404).json({ error: 'Unknown table' });
     }
     if (req.params.table === 'installations') {
+        if (req.method === 'POST' && req.headers.authorization) {
+            return authenticateToken(req, res, next);
+        }
         if (req.method === 'POST') {
             req.user = { role: 'public' };
             return next();
@@ -3105,6 +3108,9 @@ const dataAuth = (req, res, next) => {
         }
     }
     if (req.params.table === 'complaints' && req.method === 'POST') {
+        if (req.headers.authorization) {
+            return authenticateToken(req, res, next);
+        }
         // POST handler verifies the ticket_no/phone pair against inquiries
         // before inserting. GET/PATCH/DELETE still require staff auth.
         req.user = { role: 'public' };
