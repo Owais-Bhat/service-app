@@ -1,6 +1,7 @@
 import React from 'react';
 import { Linking, Modal, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { SITE_BASE_URL } from '../api/client';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
@@ -43,8 +44,8 @@ export default function LocationMapModal({ location, lat, lng, onDismiss }: Prop
 <body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${lat}, ${lng}], 16);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+var map = L.map('map', { zoomControl: false }).setView([${lat}, ${lng}], 16);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 L.marker([${lat}, ${lng}]).addTo(map);
 </script></body></html>`
     : '';
@@ -70,7 +71,7 @@ L.marker([${lat}, ${lng}]).addTo(map);
 
             {hasCoords ? (
               <View style={[styles.mapWrap, { borderColor: theme.line }]}>
-                <WebView style={StyleSheet.absoluteFill} originWhitelist={['*']} source={{ html: mapHtml }} scrollEnabled={false} />
+                <WebView style={StyleSheet.absoluteFill} originWhitelist={['*']} source={{ html: mapHtml, baseUrl: SITE_BASE_URL }} scrollEnabled={false} />
               </View>
             ) : (
               <View style={[styles.noCoordsBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>

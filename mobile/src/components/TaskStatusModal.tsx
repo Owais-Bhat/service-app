@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
@@ -49,7 +49,7 @@ const OPTION_ACCENT: Record<StatusOption | 'device', string> = {
 interface Props {
   item: TaskItem;
   onDismiss: () => void;
-  onSaved: () => void;
+  onSaved: (resolvedStatus?: string) => void;
 }
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
@@ -284,7 +284,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         setPaymentConfirmed(true);
         try {
           await updateTaskStatus(item, { status: 'resolved', detail: detail.trim(), bill: buildResolveBill() });
-          onSaved();
+          onSaved('resolved');
         } catch {
           // Payment landed but the final resolve write failed — leave
           // paymentConfirmed true so the (now-enabled) Save button lets the
@@ -339,7 +339,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     try {
       await markDeviceTaken(item.inquiryId, deviceDesc.trim(), devicePhoto);
       await saveDeviceInfo(item.inquiryId, deviceType, deviceSerialNo);
-      onSaved();
+      onSaved('device_taken');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save — check your connection');
     } finally {
@@ -382,7 +382,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         billNo: status === 'foc' ? billNo.trim() : undefined,
         bill: status === 'resolved' ? buildResolveBill() : undefined,
       });
-      onSaved();
+      onSaved(status);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save — check your connection');
     } finally {
@@ -392,7 +392,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View entering={ZoomIn.duration(360).springify().damping(15).mass(0.85)} style={styles.modalCardWrap}>
           <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
             <View style={[styles.modalHeaderRow, { borderBottomColor: theme.line }]}>
@@ -849,7 +849,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
           </ScrollView>
           </GlassSurface>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
 
       {showPicker && (
         <ServicePickerModal

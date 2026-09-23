@@ -27,6 +27,7 @@ import {
 import { fetchMyTickets, TicketRow } from '../api/employee';
 import { fetchActiveNotices, Notice } from '../api/notices';
 import { fetchNotifications } from '../api/notifications';
+import { syncAppBadge } from '../notifications';
 import { fetchEodReports, EodReport } from '../api/eod';
 import { fetchMyTasks, TaskItem } from '../api/tasks';
 
@@ -147,6 +148,12 @@ export default function EmployeeDashboardScreen({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Keeps the phone's home-screen app icon badge in sync with the real
+  // unread count every time this (usually first-opened) screen loads.
+  useEffect(() => {
+    syncAppBadge(unread);
+  }, [unread]);
 
   // Keeps this screen's own attendance state in sync when clock-in happens
   // elsewhere — e.g. the blocking ClockInGateModal — instead of only

@@ -1433,9 +1433,13 @@ function openLocationMapModal(lat, lng, label) {
   };
   if (typeof L !== "undefined") {
     const mapEl = overlay.querySelector("#loc-map-el");
-    const map = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 16);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const map = L.map(mapEl).setView([lat, lng], 16);
+    // Send a Referer (and attribution) or OSM blocks the tiles — see
+    // live-locations-admin.js.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      referrerPolicy: "strict-origin-when-cross-origin",
+      attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
     L.marker([lat, lng]).addTo(map);
     setTimeout(() => map.invalidateSize(), 50);
@@ -2175,6 +2179,7 @@ export async function renderUsers(container) {
                 <td>
                   <div style="display:flex;gap:8px;">
                     <button class="btn btn-secondary btn-sm edit-user-btn" data-uid="${u.id}">${ICONS.edit || "📝"}<span>Settings</span></button>
+                    ${u.role === "employee" ? `<button class="btn btn-secondary btn-sm panel-user-btn" data-uid="${u.id}" onclick="event.stopPropagation();window._employeePanelId='${u.id}';document.querySelector('[data-page=employee-panel]')&&document.querySelector('[data-page=employee-panel]').click();">${ICONS.user || "👤"}<span>Panel</span></button>` : ""}
                     <button class="btn btn-danger btn-sm delete-user-btn" data-uid="${u.id}">${ICONS.close || "🗑️"}</button>
                   </div>
                 </td>
@@ -5796,4 +5801,163 @@ async function openInstallationDetail(id, employees, onDone) {
       if (typeof onDone === "function") onDone();
     }
   };
+}
+
+export async function renderEmployeePanel(container, employeeId) {
+  const id = employeeId || window._employeePanelId;
+
+  if (!id) {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:48px;">
+        <h2 style="margin-bottom:12px;">No employee selected</h2>
+        <p style="color:var(--text-dim);margin-bottom:24px;">Navigate here from the Users tab by clicking the Panel button on an employee row.</p>
+        <button class="btn btn-secondary" id="ep-back-btn">← Back to Users</button>
+      </div>
+    `;
+    container.querySelector("#ep-back-btn").onclick = () => renderUsers(container);
+    return;
+  }
+
+  showLoader(container);
+
+  try {
+    const [profileRes, { data: inquiries, error: inqErr }] = await Promise.all([
+      fetch(`${API_BASE}/profiles/${id}`, { headers: authHeaders() }),
+      supabase.from("inquiries").select("*").eq("assigned_employee_id", id).order("created_at", { ascending: false }),
+    ]);
+
+    if (!profileRes.ok) {
+      const d = await profileRes.json().catch(() => ({}));
+      throw new Error(d.error || "Failed to load employee profile");
+    }
+    if (inqErr) throw new Error(inqErr.message || "Failed to load inquiries");
+
+    const emp = await profileRes.json();
+    const all = inquiries || [];
+
+    const total = all.length;
+    const inProgress = all.filter((i) => i.status === "in_progress").length;
+    const resolved = all.filter((i) => i.status === "resolved").length;
+    const pending = all.filter((i) => i.status === "pending" || i.status === "assigned").length;
+
+    const statusBadge = (s) => {
+      const map = {
+        pending: "badge-open",
+        assigned: "badge-assigned",
+        in_progress: "badge-in_progress",
+        resolved: "badge-resolved",
+        reopened: "badge-warning",
+        issue: "badge-danger",
+      };
+      return `<span class="badge ${map[s] || "badge-open"}">${s || "pending"}</span>`;
+    };
+
+    const formatDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+    container.innerHTML = `
+      <div class="page-header" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:24px;">
+        <button class="btn btn-secondary btn-sm" id="ep-back">${ICONS.back || "←"} Back to Users</button>
+        <div style="flex:1;min-width:0;">
+          <h1 style="margin:0;">${escapeHtml(emp.full_name || "Employee")}</h1>
+          <div style="color:var(--text-dim);font-size:0.85rem;margin-top:4px;display:flex;gap:16px;flex-wrap:wrap;">
+            <span><b>Role:</b> ${escapeHtml(emp.role || "employee")}</span>
+            ${emp.phone ? `<span><b>Phone:</b> ${escapeHtml(emp.phone)}</span>` : ""}
+            ${emp.email ? `<span><b>Email:</b> ${escapeHtml(emp.email)}</span>` : ""}
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px;">
+        <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--primary)">${inProgress}</div><div class="stat-label">In Progress</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--success)">${resolved}</div><div class="stat-label">Resolved</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${pending}</div><div class="stat-label">Pending / Assigned</div></div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="ep-filter-pills">
+        <button class="btn btn-primary btn-sm ep-pill active" data-filter="all">All (${total})</button>
+        <button class="btn btn-secondary btn-sm ep-pill" data-filter="in_progress">In Progress (${inProgress})</button>
+        <button class="btn btn-secondary btn-sm ep-pill" data-filter="resolved">Resolved (${resolved})</button>
+        <button class="btn btn-secondary btn-sm ep-pill" data-filter="reopened">Reopened (${all.filter(i=>i.status==="reopened").length})</button>
+        <button class="btn btn-secondary btn-sm ep-pill" data-filter="issue">Issues (${all.filter(i=>i.status==="issue").length})</button>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-wrap">
+          <table id="ep-table">
+            <thead>
+              <tr>
+                <th>Ticket #</th>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Location</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ep-tbody">
+              ${renderRows(all)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    function renderRows(list) {
+      if (!list.length) return `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim);">No inquiries found</td></tr>`;
+      return list.map((inq) => `
+        <tr>
+          <td><b>${escapeHtml(inq.ticket_no || inq.id?.slice(0,8) || "—")}</b></td>
+          <td>${escapeHtml(inq.full_name || "—")}</td>
+          <td>${escapeHtml(inq.service_item || "—")}</td>
+          <td>${statusBadge(inq.status)}</td>
+          <td>${formatDate(inq.created_at)}</td>
+          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(inq.location || "—")}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm ep-open-btn" data-id="${inq.id}">Open</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    container.querySelector("#ep-back").onclick = () => renderUsers(container);
+
+    container.querySelectorAll(".ep-pill").forEach((pill) => {
+      pill.onclick = () => {
+        container.querySelectorAll(".ep-pill").forEach((p) => { p.classList.remove("active", "btn-primary"); p.classList.add("btn-secondary"); });
+        pill.classList.add("active", "btn-primary"); pill.classList.remove("btn-secondary");
+        const f = pill.dataset.filter;
+        const filtered = f === "all" ? all : all.filter((i) => i.status === f);
+        container.querySelector("#ep-tbody").innerHTML = renderRows(filtered);
+        attachOpenBtns();
+      };
+    });
+
+    function attachOpenBtns() {
+      container.querySelectorAll(".ep-open-btn").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          if (typeof openInquiryDetailWithLoader === "function") {
+            openInquiryDetailWithLoader(btn, btn.dataset.id, () => renderEmployeePanel(container, id));
+          }
+        };
+      });
+    }
+    attachOpenBtns();
+
+  } catch (err) {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:40px;">
+        <h2 style="color:var(--danger);">Error loading employee panel</h2>
+        <p>${escapeHtml(err.message)}</p>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:16px;">
+          <button class="btn btn-secondary" id="ep-back-err">← Back to Users</button>
+          <button class="btn btn-primary" id="ep-retry">Retry</button>
+        </div>
+      </div>
+    `;
+    container.querySelector("#ep-back-err").onclick = () => renderUsers(container);
+    container.querySelector("#ep-retry").onclick = () => renderEmployeePanel(container, id);
+  }
 }

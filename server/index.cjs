@@ -10,6 +10,8 @@ const { computeLeaderboard } = require('./job-card-scoring.cjs');
 const { haversineDistanceMeters } = require('./geo-distance.cjs');
 const { FACE_MATCH_THRESHOLD, isValidFaceDescriptor, euclideanDistance } = require('./face-match.cjs');
 const { verifySamePerson } = require('./vision-verify.cjs');
+const { initializeWhatsApp } = require('./whatsapp.cjs');
+const { initCronJobs } = require('./cron.cjs');
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -1919,6 +1921,32 @@ const requiredTables = [
     // overwritten row) — this is the "everywhere they've been today" trail
     // admin can pull up per employee/date. See /api/live-location/ping and
     // /api/live-location/history.
+    // Admin's manual service register (replaces the Service_Log.xlsx sheet).
+    // Ticket/technician are optional links to real records; the *_name /
+    // customer columns are copied in so a log row still reads correctly if
+    // the ticket or employee is later deleted. Amount is entered by hand.
+    `CREATE TABLE IF NOT EXISTS service_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        log_date DATE NOT NULL,
+        inquiry_id VARCHAR(36),
+        ticket_no VARCHAR(50),
+        technician_id VARCHAR(36),
+        technician_name VARCHAR(255),
+        customer_name VARCHAR(255) NOT NULL,
+        customer_phone VARCHAR(30),
+        service_type VARCHAR(255),
+        problem TEXT,
+        items_used TEXT,
+        amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        payment_status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT "'paid' | 'pending' | 'unpaid'",
+        created_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_service_logs_date (log_date),
+        INDEX idx_service_logs_tech (technician_id),
+        FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE SET NULL,
+        FOREIGN KEY (technician_id) REFERENCES profiles(id) ON DELETE SET NULL
+    )`,
     `CREATE TABLE IF NOT EXISTS employee_location_history (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
@@ -6151,6 +6179,182 @@ app.post('/api/inquiries/:id/job-card', authenticateToken, async (req, res) => {
     }
 });
 
+// ── Service Log ──────────────────────────────────────
+// Admin's hand-kept service register (see the service_logs table). Rows can
+// link to a real ticket and technician, but every field stays editable and
+// the amount is always typed in manually.
+const SERVICE_LOG_STATUSES = ['paid', 'pending', 'unpaid'];
+
+function serviceLogPayload(body) {
+    const b = body || {};
+    const str = (v, max) => {
+        const t = v == null ? '' : String(v).trim();
+        return t ? t.slice(0, max) : null;
+    };
+    const logDate = str(b.log_date, 10);
+    if (!logDate || !/^\d{4}-\d{2}-\d{2}$/.test(logDate)) return { error: 'Date is required (YYYY-MM-DD)' };
+    const customer = str(b.customer_name, 255);
+    if (!customer) return { error: 'Customer name is required' };
+    const amount = b.amount === '' || b.amount == null ? 0 : Number(b.amount);
+    if (!Number.isFinite(amount) || amount < 0) return { error: 'Amount must be a positive number' };
+    const status = String(b.payment_status || 'pending').toLowerCase();
+    if (!SERVICE_LOG_STATUSES.includes(status)) return { error: 'Payment status must be Paid, Pending or Unpaid' };
+    return {
+        row: {
+            log_date: logDate,
+            inquiry_id: str(b.inquiry_id, 36),
+            ticket_no: str(b.ticket_no, 50),
+            technician_id: str(b.technician_id, 36),
+            technician_name: str(b.technician_name, 255),
+            customer_name: customer,
+            customer_phone: str(b.customer_phone, 30),
+            service_type: str(b.service_type, 255),
+            problem: str(b.problem, 5000),
+            items_used: str(b.items_used, 5000),
+            amount: Math.round(amount * 100) / 100,
+            payment_status: status,
+        },
+    };
+}
+
+app.get('/api/service-logs', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { from, to, technician_id: techId, status, q } = req.query;
+    const where = [];
+    const params = [];
+    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push('log_date >= ?'); params.push(from); }
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) { where.push('log_date <= ?'); params.push(to); }
+    if (techId) { where.push('technician_id = ?'); params.push(String(techId)); }
+    if (status && SERVICE_LOG_STATUSES.includes(status)) { where.push('payment_status = ?'); params.push(status); }
+    if (q && String(q).trim()) {
+        const like = `%${String(q).trim()}%`;
+        where.push('(customer_name LIKE ? OR ticket_no LIKE ? OR customer_phone LIKE ? OR technician_name LIKE ? OR service_type LIKE ? OR problem LIKE ?)');
+        params.push(like, like, like, like, like, like);
+    }
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT *, DATE_FORMAT(log_date, '%Y-%m-%d') AS log_date
+               FROM service_logs ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+              ORDER BY service_logs.log_date DESC, created_at DESC
+              LIMIT 2000`,
+            params
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[service-logs] list failed:', err);
+        res.status(500).json({ error: 'Could not load service log' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Ticket picker for the log form — returns enough of the inquiry to
+// pre-fill customer, service, problem and technician.
+app.get('/api/service-logs/tickets', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const q = String(req.query.q || '').trim();
+    let connection;
+    try {
+        connection = await getConn();
+        const like = `%${q}%`;
+        const [rows] = await connection.query(
+            `SELECT i.id, i.ticket_no, i.full_name, i.phone, i.service_item, i.description,
+                    i.employee_update_detail, i.status, i.payment_status, i.created_at,
+                    COALESCE(NULLIF(i.bill_total, 0), i.bill_amount) AS bill_amount,
+                    i.assigned_employee_id, pa.full_name AS assigned_name
+               FROM inquiries i
+               LEFT JOIN profiles pa ON pa.id = i.assigned_employee_id
+              ${q ? 'WHERE (i.ticket_no LIKE ? OR i.full_name LIKE ? OR i.phone LIKE ?)' : ''}
+              ORDER BY i.created_at DESC
+              LIMIT 20`,
+            q ? [like, like, like] : []
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[service-logs] ticket search failed:', err);
+        res.status(500).json({ error: 'Could not search tickets' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/service-logs/technicians', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, full_name FROM profiles WHERE role IN ('employee', 'team_lead') ORDER BY full_name ASC`
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[service-logs] technicians failed:', err);
+        res.status(500).json({ error: 'Could not load technicians' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/service-logs', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { row, error } = serviceLogPayload(req.body);
+    if (error) return res.status(400).json({ error });
+    let connection;
+    try {
+        connection = await getConn();
+        const id = uuidv4();
+        await connection.query('INSERT INTO service_logs SET ?', [{ id, ...row, created_by: req.user.id }]);
+        const [[saved]] = await connection.query(
+            "SELECT *, DATE_FORMAT(log_date, '%Y-%m-%d') AS log_date FROM service_logs WHERE id = ?", [id]
+        );
+        res.status(201).json(saved);
+    } catch (err) {
+        console.error('[service-logs] create failed:', err);
+        res.status(500).json({ error: 'Could not save entry' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.put('/api/service-logs/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { row, error } = serviceLogPayload(req.body);
+    if (error) return res.status(400).json({ error });
+    let connection;
+    try {
+        connection = await getConn();
+        const [result] = await connection.query('UPDATE service_logs SET ? WHERE id = ?', [row, req.params.id]);
+        if (!result.affectedRows) return res.status(404).json({ error: 'Entry not found' });
+        const [[saved]] = await connection.query(
+            "SELECT *, DATE_FORMAT(log_date, '%Y-%m-%d') AS log_date FROM service_logs WHERE id = ?", [req.params.id]
+        );
+        res.json(saved);
+    } catch (err) {
+        console.error('[service-logs] update failed:', err);
+        res.status(500).json({ error: 'Could not update entry' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.delete('/api/service-logs/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [result] = await connection.query('DELETE FROM service_logs WHERE id = ?', [req.params.id]);
+        if (!result.affectedRows) return res.status(404).json({ error: 'Entry not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[service-logs] delete failed:', err);
+        res.status(500).json({ error: 'Could not delete entry' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 const JOB_CARD_ELIGIBLE_STATUSES = ['resolved', 'closed', 'case_closed', 'foc', 'issue_not_resolved'];
 
 // Admin queues for the Job Card workflow: jobs awaiting a job card ("pending"),
@@ -8168,6 +8372,10 @@ async function startServer() {
         startEodReminderJob();
         startPoolReleaseSweepJob();
         startVerificationReminderJob();
+        
+        // Initialize WhatsApp & Daily Notifications
+        initializeWhatsApp();
+        initCronJobs(pool);
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

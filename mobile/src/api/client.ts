@@ -5,6 +5,10 @@ import * as SecureStore from 'expo-secure-store';
 // machine's LAN IP (e.g. http://192.168.1.20:5000) when running `expo start`
 // and testing on a physical device/emulator.
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-domain.example.com/api';
+// Site origin used as the baseUrl of inline-HTML map WebViews. Without it the
+// page's origin is about:blank, so OSM tile requests carry no Referer and
+// OpenStreetMap serves "Access blocked" tiles.
+export const SITE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '/');
 
 const TOKEN_KEY = 'auth_token';
 
@@ -57,6 +61,8 @@ export const api = {
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
 };
 
 // Mirrors the web app's generic /api/data/:table compatibility layer

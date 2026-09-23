@@ -17,6 +17,7 @@ import {
   markAllNotificationsRead,
   NotificationItem,
 } from '../api/notifications';
+import { syncAppBadge } from '../notifications';
 
 interface Props {
   onBack: () => void;
@@ -168,6 +169,12 @@ export default function NotificationsScreen({ onBack }: Props) {
   };
 
   const unreadCount = items.filter((n) => !n.read_at).length;
+  // Keeps the phone's home-screen app icon badge in sync as items load and
+  // as the user reads them (handlePress/handleMarkAllRead above update
+  // `items` optimistically, which flows straight through to this count).
+  useEffect(() => {
+    syncAppBadge(unreadCount);
+  }, [unreadCount]);
   const paymentsCount = items.filter((n) => (n.subject || '').toLowerCase().includes('payment')).length;
   const filterCounts: Record<FilterKey, number> = { all: items.length, unread: unreadCount, payments: paymentsCount };
   const filteredItems = items.filter((n) => {

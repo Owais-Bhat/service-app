@@ -13,6 +13,7 @@ import TaskStatusModal from '../components/TaskStatusModal';
 import LocationMapModal from '../components/LocationMapModal';
 import PendingAssignments from '../components/PendingAssignments';
 import { useAuth } from '../context/AuthContext';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
@@ -67,6 +68,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { clockedIn, attendance, showGate } = useAttendanceStatus();
   const [pending, setPending] = useState<TaskItem[]>([]);
   const [items, setItems] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +140,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
         onLayout={setHeaderHeight}
       />
       <ScrollView
-        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: insets.bottom + spacing(24), paddingHorizontal: spacing(5) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
@@ -148,6 +150,12 @@ export default function ManageTasksScreen({ onBack }: Props) {
         </ScrollView>
 
         {error ? <Text style={[styles.caption, { color: semantic.danger, marginTop: spacing(3) }]}>{error}</Text> : null}
+
+        {!clockedIn && !loading ? (
+          <Text style={[styles.caption, { color: semantic.warning, marginTop: spacing(3) }]}>
+            {attendance?.clock_in ? 'You have clocked out — task updates are locked for today.' : 'Clock in to update tasks.'}
+          </Text>
+        ) : null}
 
         <PendingAssignments pending={pending} onChanged={load} />
 
@@ -245,6 +253,16 @@ export default function ManageTasksScreen({ onBack }: Props) {
                           <Text style={[styles.metaChipText, { color: theme.text2 }]}>{timeAgo(item.createdAt)}</Text>
                         </View>
                       </View>
+                      {(groupOf(item.status) === 'in_progress' || groupOf(item.status) === 'issue_not_resolved') && (() => {
+                        const ageDays = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 86400000);
+                        const slaColor = ageDays < 1 ? semantic.success : ageDays <= 3 ? semantic.warning : semantic.danger;
+                        const slaLabel = ageDays < 1 ? '🟢 Fresh' : ageDays <= 3 ? `🟡 ${ageDays}d` : `🔴 ${ageDays}d overdue`;
+                        return (
+                          <View style={[styles.slaChip, { backgroundColor: `${slaColor}18`, borderColor: `${slaColor}40` }]}>
+                            <Text style={[styles.slaChipText, { color: slaColor }]}>{slaLabel}</Text>
+                          </View>
+                        );
+                      })()}
                       {item.serviceItem ? (
                         <View style={[styles.serviceChip, { backgroundColor: `${brand.primary}14` }]}>
                           <Icon name="wrench" size={12} color={brand.primary} />
@@ -268,9 +286,12 @@ export default function ManageTasksScreen({ onBack }: Props) {
 
                       <View style={styles.actionRow}>
                         {!locked && (
-                          <PressScale onPress={() => setStatusItem(item)} style={{ flex: 1, minWidth: 130 }}>
-                            <View style={[styles.actionBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
-                              <Icon name="edit" size={15} color="#fff" />
+                          <PressScale
+                            onPress={() => (clockedIn ? setStatusItem(item) : !attendance?.clock_in && showGate())}
+                            style={{ flex: 1, minWidth: 130 }}
+                          >
+                            <View style={[styles.actionBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }, !clockedIn && styles.actionBtnDisabled]}>
+                              <Icon name={clockedIn ? 'edit' : 'lock'} size={15} color="#fff" />
                               <Text style={styles.actionBtnTextFilled}>Update Status</Text>
                             </View>
                           </PressScale>
@@ -310,9 +331,12 @@ export default function ManageTasksScreen({ onBack }: Props) {
         <TaskStatusModal
           item={statusItem}
           onDismiss={() => setStatusItem(null)}
-          onSaved={() => {
+          onSaved={(savedStatus) => {
             setStatusItem(null);
             load();
+            if (savedStatus === 'resolved' || savedStatus === 'case_closed' || savedStatus === 'foc') {
+              setFilter('resolved');
+            }
           }}
         />
       )}
@@ -341,6 +365,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginBottom: spacing(2) },
   metaChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.full, borderWidth: 1 },
   metaChipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 10.5 },
+  slaChip: { alignSelf: 'flex-start', paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.full, borderWidth: 1, marginBottom: spacing(2) },
+  slaChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
   serviceChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), alignSelf: 'flex-start', paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.25), borderRadius: radius.sm, marginBottom: spacing(2.5), maxWidth: '100%' },
   serviceChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11.5, flexShrink: 1 },
   fieldLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(3), marginBottom: spacing(1) },
@@ -371,6 +397,7 @@ const styles = StyleSheet.create({
   updateBox: { borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(3) },
   actionRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(1), flexWrap: 'wrap' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 40, borderRadius: radius.sm, paddingHorizontal: spacing(2), shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 3 },
+  actionBtnDisabled: { opacity: 0.45, shadowOpacity: 0, elevation: 0 },
   actionBtnTextFilled: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
   iconAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   iconActionShadow: { borderWidth: 0, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 3 },

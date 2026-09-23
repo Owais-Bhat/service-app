@@ -13,7 +13,8 @@ import LocationMapModal from '../components/LocationMapModal';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
-import { fetchTaskByTicketId, TaskItem } from '../api/tasks';
+import { fetchTaskByTicketId, TaskItem, acceptAssignment, declineAssignment } from '../api/tasks';
+import { useAttendanceStatus } from '../context/AttendanceContext';
 
 interface Props {
   ticketId: string;
@@ -36,6 +37,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showStatus, setShowStatus] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const { clockedIn, attendance, showGate } = useAttendanceStatus();
 
   const load = useCallback(async () => {
     try {
@@ -74,6 +76,61 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Ticket not found'}</Text>
           <BackLink onPress={onBack} />
+        </View>
+      </View>
+    );
+  }
+
+  if (item.assignmentStatus === 'pending') {
+    return (
+      <View style={styles.root}>
+        <MeshBackground />
+        <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: spacing(5) }]}>
+          <Text style={[styles.heading, { color: theme.text, marginBottom: spacing(3) }]}>New Assignment</Text>
+          <GlassCard style={{ width: '100%', marginBottom: spacing(4) }}>
+            <Text style={[styles.label, { color: theme.text3 }]}>Customer</Text>
+            <Text style={[styles.body, { color: theme.text }]}>{item.fullName}</Text>
+            {item.serviceItem ? (
+              <>
+                <Text style={[styles.label, { color: theme.text3, marginTop: spacing(3) }]}>Service</Text>
+                <Text style={[styles.body, { color: theme.text }]}>{item.serviceItem}</Text>
+              </>
+            ) : null}
+            {item.location ? (
+              <>
+                <Text style={[styles.label, { color: theme.text3, marginTop: spacing(3) }]}>Location</Text>
+                <Text style={[styles.body, { color: theme.text }]}>{item.location}</Text>
+              </>
+            ) : null}
+          </GlassCard>
+          <PressScale
+            style={[styles.acceptBtn, !clockedIn && styles.updateBtnDisabled]}
+            onPress={async () => {
+              if (!clockedIn) return void (!attendance?.clock_in && showGate());
+              await acceptAssignment(item);
+              load();
+            }}
+          >
+            <Text style={styles.acceptBtnText}>Accept</Text>
+          </PressScale>
+          <PressScale
+            style={[styles.declineBtn, { marginTop: spacing(3) }, !clockedIn && styles.updateBtnDisabled]}
+            onPress={async () => {
+              if (!clockedIn) return void (!attendance?.clock_in && showGate());
+              if (item.inquiryId) await declineAssignment(item.inquiryId, 'declined by employee');
+              onBack();
+            }}
+          >
+            <Text style={[styles.body, { color: theme.text }]}>Decline</Text>
+          </PressScale>
+          {!clockedIn ? (
+            <Text style={[styles.clockHint, { color: theme.text3 }]}>
+              {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to accept or decline.'}
+            </Text>
+          ) : null}
+          <View style={{ marginTop: spacing(4) }}>
+            <BackLink onPress={onBack} />
+          </View>
         </View>
       </View>
     );
@@ -158,12 +215,19 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
               <Text style={[styles.doneBannerText, { color: theme.text2 }]}>This service is completed and locked.</Text>
             </View>
           ) : (
-            <PressScale onPress={() => setShowStatus(true)}>
-              <View style={styles.updateBtn}>
-                <Icon name="edit" size={16} color="#fff" />
-                <Text style={styles.updateBtnText}>Update Status</Text>
-              </View>
-            </PressScale>
+            <>
+              <PressScale onPress={() => (clockedIn ? setShowStatus(true) : !attendance?.clock_in && showGate())}>
+                <View style={[styles.updateBtn, !clockedIn && styles.updateBtnDisabled]}>
+                  <Icon name={clockedIn ? 'edit' : 'lock'} size={16} color="#fff" />
+                  <Text style={styles.updateBtnText}>Update Status</Text>
+                </View>
+              </PressScale>
+              {!clockedIn ? (
+                <Text style={[styles.clockHint, { color: theme.text3 }]}>
+                  {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to update this task.'}
+                </Text>
+              ) : null}
+            </>
           )}
         </Animated.View>
       </ScrollView>
@@ -215,5 +279,12 @@ const styles = StyleSheet.create({
   doneBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5) },
   doneBannerText: { ...typography.body, fontSize: 13 },
   updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.primary, height: 52, borderRadius: radius.md },
+  updateBtnDisabled: { opacity: 0.45 },
+  clockHint: { ...typography.caption, textAlign: 'center', marginTop: spacing(2) },
   updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  heading: { fontFamily: 'Manrope_700Bold', fontSize: 20 },
+  label: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  acceptBtn: { width: '100%', backgroundColor: brand.primary, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  acceptBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  declineBtn: { width: '100%', height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(128,128,128,0.3)' },
 });
