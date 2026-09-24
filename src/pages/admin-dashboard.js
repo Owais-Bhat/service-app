@@ -128,7 +128,11 @@ function assignedGroupOf(r) {
   const device = String(r.device_status || '').toLowerCase();
   if (device === 'taken' || device === 'in_service') return 'device';
   const settled = ['paid', 'foc'].includes(String(r.payment_status || '').toLowerCase());
-  if (r.employee_update_at && !settled) return 'payment';
+  // Waiting on money: the employee saved their service update, a bill was
+  // generated, or a payment link went out — and it hasn't been settled yet.
+  const billed = Number(r.bill_total) > 0 || Number(r.bill_amount) > 0;
+  const awaitingPayment = !!r.employee_update_at || billed || !!r.payment_link;
+  if (awaitingPayment && !settled) return 'payment';
   return 'ongoing';
 }
 
