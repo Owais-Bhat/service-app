@@ -26,10 +26,10 @@ const OPEN_STATUSES = new Set(['pending', 'open', 'assigned', 'in_progress', 're
 const DONE_STATUSES = new Set(['resolved', 'closed', 'case_closed', 'foc']);
 
 const TABS = [
-  { key: 'requests', label: 'Service Requests', tone: 'primary' },
   { key: 'assigned', label: 'Assigned', tone: 'ok' },
   { key: 'unassigned', label: 'Unassigned', tone: 'warn' },
   { key: 'completed', label: 'Completed', tone: 'ok' },
+  { key: 'requests', label: 'Service Requests', tone: 'primary' },
   { key: 'online', label: 'Online Employees', tone: 'ok' },
   { key: 'installs', label: 'Installations', tone: 'info' },
   { key: 'complaints', label: 'Complaints', tone: 'danger' },
