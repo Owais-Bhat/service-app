@@ -8447,12 +8447,17 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .dash2-list {
   flex: 1; min-height: 0; overflow: auto; padding: 14px;
   /* Masonry-style columns: every card keeps its own height and the spacing
-     between cards stays even, instead of a grid row leaving ragged gaps. */
-  columns: 320px;
+     between cards stays even, instead of a grid row leaving ragged gaps.
+     Five across on a full screen, fewer as the window narrows. */
+  column-count: 5;
   column-gap: 14px;
 }
+@media (max-width: 1400px) { .dash2-list { column-count: 4; } }
+@media (max-width: 1100px) { .dash2-list { column-count: 3; } }
+@media (max-width: 860px)  { .dash2-list { column-count: 2; } }
+@media (max-width: 620px)  { .dash2-list { column-count: 1; } }
 /* The Installations tab paints its own calendar + list split inside here. */
-.dash2-list:has(.dash2-instwrap) { columns: auto; }
+.dash2-list:has(.dash2-instwrap) { column-count: 1; }
 .dash2-empty { column-span: all; }
 .dash2-row {
   width: 100%;
