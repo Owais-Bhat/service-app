@@ -35,7 +35,8 @@ const state = {
   status: '',
   q: '',
   month: new Date(),
-  expanded: new Set(),
+  expanded: null,     // null = all groups open (mockup default)
+  day: '',            // day picked on the calendar
 };
 
 let data = { rows: [], employees: [], eod: [] };
@@ -255,11 +256,12 @@ function paintEmployees(container, body, rows, staff) {
         </div>`).join('') || '<div class="at2-empty">No attendance in this range.</div>'}
     </div>
 
+    <div class="at2-split">
     <div class="card">
       <div class="card-header"><span class="card-title">Employee Attendance Details</span></div>
       <div class="at2-details">
         ${staff.map(e => {
-          const open = state.expanded.has(e.id);
+          const open = !state.expanded || state.expanded.has(e.id);
           return `
             <div class="at2-group">
               <button class="at2-group-head" data-toggle="${esc(e.id)}">
@@ -283,16 +285,119 @@ function paintEmployees(container, body, rows, staff) {
         }).join('')}
       </div>
     </div>
+    ${sidePanel(rows)}
+    </div>
   `;
 
+  bindSidePanel(container, body);
   body.querySelectorAll('[data-toggle]').forEach(btn => {
     btn.onclick = () => {
       const id = btn.dataset.toggle;
+      if (!state.expanded) state.expanded = new Set(staff.map(x => x.id));
       if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
       paint(container);
     };
   });
   bindPhotos(body);
+}
+
+// The right-hand column from the design: a month calendar whose dots show what
+// happened each day, the legend that explains them, and the shortcuts.
+function sidePanel(rows) {
+  const y = state.month.getFullYear();
+  const m = state.month.getMonth();
+  const monthLabel = state.month.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  // Worst state of the day wins the dot: missing EOD → late → present.
+  const byDay = new Map();
+  rows.forEach(r => {
+    const rank = { present: 1, late: 2, missing_eod: 3, absent: 0 };
+    const cur = byDay.get(r.date);
+    if (!cur || rank[r.state] > rank[cur]) byDay.set(r.date, r.state);
+  });
+
+  const firstWeekday = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = ymd(new Date());
+  let cells = '';
+  for (let i = 0; i < firstWeekday; i++) cells += '<div class="at2-day empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const st = byDay.get(key);
+    cells += `
+      <button class="at2-day${key === today ? ' today' : ''}${key === state.day ? ' picked' : ''}" data-day="${key}">
+        <span>${d}</span>
+        <i class="at2-daydot${st ? ' tone-' + st : ''}"></i>
+      </button>`;
+  }
+
+  return `
+    <aside class="at2-side">
+      <section class="card">
+        <div class="at2-calhead">
+          <button class="at2-navbtn" data-month="-1" title="Previous month">‹</button>
+          <b>${esc(monthLabel)}</b>
+          <button class="at2-navbtn" data-month="1" title="Next month">›</button>
+        </div>
+        <div class="at2-calbody">
+          <div class="at2-dow">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<span>${d}</span>`).join('')}</div>
+          <div class="at2-days">${cells}</div>
+        </div>
+        <div class="at2-legend">
+          <div class="at2-legend-head"><b>Status legend</b>${state.day ? '<button class="at2-link" id="at2-clearday">View all</button>' : ''}</div>
+          <div class="at2-legend-row">
+            <span><i class="at2-daydot tone-present"></i>Present</span>
+            <span><i class="at2-daydot tone-absent"></i>Absent</span>
+            <span><i class="at2-daydot tone-late"></i>Late</span>
+            <span><i class="at2-daydot tone-missing_eod"></i>Missing EOD</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><span class="card-title">Quick actions</span></div>
+        <div class="at2-actions">
+          <button class="at2-action" data-action="report">${ICONS.clipboard || ''}<span>Generate report</span></button>
+          <button class="at2-action" data-action="logs">${ICONS.clock || ''}<span>Attendance logs</span></button>
+          <button class="at2-action" data-action="employees">${ICONS.users || ''}<span>Manage employees</span></button>
+          <button class="at2-action" data-action="locations">${ICONS.pin || ''}<span>Device locations</span></button>
+        </div>
+      </section>
+    </aside>`;
+}
+
+function bindSidePanel(container, body) {
+  body.querySelectorAll('[data-month]').forEach(btn => {
+    btn.onclick = () => {
+      state.month = new Date(state.month.getFullYear(), state.month.getMonth() + Number(btn.dataset.month), 1);
+      paint(container);
+    };
+  });
+  body.querySelectorAll('[data-day]').forEach(btn => {
+    btn.onclick = () => {
+      const day = btn.dataset.day;
+      if (state.day === day) { state.day = ''; state.from = ymd(new Date(state.month.getFullYear(), state.month.getMonth(), 1)); state.to = ymd(new Date()); }
+      else { state.day = day; state.from = day; state.to = day; }
+      paint(container);
+    };
+  });
+  const clear = body.querySelector('#at2-clearday');
+  if (clear) clear.onclick = () => {
+    state.day = '';
+    state.from = ymd(new Date(state.month.getFullYear(), state.month.getMonth(), 1));
+    state.to = ymd(new Date());
+    paint(container);
+  };
+  body.querySelectorAll('[data-action]').forEach(btn => {
+    btn.onclick = () => {
+      const go = (navId) => document.querySelector(`#sidebar-nav .nav-item[data-nav="${navId}"]`)?.click();
+      const a = btn.dataset.action;
+      if (a === 'report') { state.tab = 'reports'; paint(container); }
+      else if (a === 'logs') { state.tab = 'logs'; paint(container); }
+      else if (a === 'employees') go('users');
+      else if (a === 'locations') go('live-locations');
+    };
+  });
 }
 
 function rowHtml(r) {

@@ -8915,3 +8915,50 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
   .at2-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .at2-chiprow { display: none; }
 }
+
+/* Attendance: details + right-hand calendar column */
+.at2-split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.at2-side { display: flex; flex-direction: column; gap: 16px; }
+.at2-calhead {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line, var(--border));
+}
+.at2-navbtn {
+  width: 26px; height: 26px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line, var(--border)); background: transparent;
+  color: var(--text-soft); font-weight: 700; line-height: 1;
+}
+.at2-navbtn:hover { border-color: var(--primary); color: var(--primary); }
+.at2-calbody { padding: 12px 14px; }
+.at2-dow, .at2-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.at2-dow span { text-align: center; font-size: 0.66rem; font-weight: 800; color: var(--text-dim); padding-bottom: 6px; }
+.at2-day {
+  height: 36px; border-radius: 9px; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 0.78rem; color: var(--text-soft);
+}
+.at2-day.empty { cursor: default; }
+.at2-day:not(.empty):hover { border-color: var(--primary); color: var(--primary); }
+.at2-day.today { border-color: var(--primary); color: var(--primary); font-weight: 800; }
+.at2-day.picked { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 800; }
+.at2-daydot { width: 5px; height: 5px; border-radius: 50%; background: transparent; display: block; }
+.at2-daydot.tone-present { background: var(--primary); }
+.at2-daydot.tone-late { background: var(--warning); }
+.at2-daydot.tone-missing_eod { background: #ec4899; }
+.at2-daydot.tone-absent { background: var(--danger); }
+.at2-day.picked .at2-daydot { background: #fff; }
+.at2-legend { padding: 12px 16px; border-top: 1px solid var(--line, var(--border)); }
+.at2-legend-head { display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem; margin-bottom: 8px; }
+.at2-link { border: 0; background: none; color: var(--primary); font-weight: 700; font-size: 0.75rem; cursor: pointer; }
+.at2-legend-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; font-size: 0.74rem; color: var(--text-soft); }
+.at2-legend-row span { display: flex; align-items: center; gap: 7px; }
+.at2-actions { display: flex; flex-direction: column; padding: 6px; }
+.at2-action {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 12px; border: 0; background: transparent; cursor: pointer;
+  border-radius: 10px; color: var(--text); font-size: 0.85rem; font-weight: 600; text-align: left;
+}
+.at2-action:hover { background: var(--row-hover); color: var(--primary); }
+.at2-action svg { width: 16px; height: 16px; color: var(--primary); }
+@media (max-width: 1150px) { .at2-split { grid-template-columns: 1fr; } }
