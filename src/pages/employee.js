@@ -4615,6 +4615,10 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     overlay.querySelector('#foc-bill-no')?.addEventListener('input', () => renderPayStatus());
     // Re-evaluate the save gate as the reschedule date/time is picked.
     overlay.querySelector('#reschedule-at')?.addEventListener('input', () => renderPayStatus());
+    // Once this service has been saved at least once, the employee has already
+    // worked through the Status tab — reopening it lands straight on Bill.
+    if (inquiryRow?.employee_update_at) goToTab('bill');
+
     // Reopened tickets only offer Resolved/FOC and default to Resolved — sync the
     // pricing/FOC sections to match that default on open.
     if (Number(inquiryRow?.reopened) === 1) statusSel.onchange();

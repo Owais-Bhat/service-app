@@ -311,7 +311,12 @@ function setupGlobalSearch(onNav, role) {
       input.value = '';
       close();
       if (type === 'page') onNav(btn.dataset.id);
-      else {
+      else if (role === 'admin') {
+        // Admins have no "My Tasks" list — open the request itself.
+        import('./pages/admin.js')
+          .then(m => m.openInquiryDetail(btn.dataset.id, () => {}))
+          .catch(() => onNav('inquiries'));
+      } else {
         // Hand the chosen ticket to the tickets page so it can focus it.
         try { localStorage.setItem('search_focus_ticket', btn.dataset.id); } catch {}
         onNav(ticketsPage);
