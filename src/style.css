@@ -8322,6 +8322,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
   align-content: start;
+  align-items: start;
 }
 .dash2-row-right { display: flex; align-items: center; gap: 10px; }
 .dash2-del {
@@ -8452,6 +8453,9 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
   align-content: start;
+  /* Each card sizes to its own content — stretching them to a shared row
+     height clipped the longer ones against the card's overflow:hidden. */
+  align-items: start;
 }
 /* The Installations tab paints its own calendar + list split inside here. */
 .dash2-list:has(.dash2-instwrap) { display: block; }
