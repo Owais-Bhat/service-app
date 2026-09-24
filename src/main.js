@@ -214,7 +214,7 @@ const PAGE_LOADERS = {
     profile: () => import('./pages/profile.js').then(m => m.renderProfile),
   },
   admin: {
-    dashboard: () => import('./pages/admin.js').then(m => m.renderAdminDashboard),
+    dashboard: () => import('./pages/admin-dashboard.js').then(m => m.renderAdminDashboard),
     stats: () => import('./pages/stats.js').then(m => m.renderAdminStats),
     attendance: () => import('./pages/admin.js').then(m => m.renderAttendance),
     inquiries: () => import('./pages/admin.js').then(m => m.renderInquiries),

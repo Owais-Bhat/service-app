@@ -200,7 +200,7 @@ const STATUS_LABEL = {
 function displayStatus(status) {
   return status === "closed" ? "resolved" : status || "open";
 }
-function statusBadge(status) {
+export function statusBadge(status) {
   const shown = displayStatus(status);
   const cls =
     shown === "resolved"
@@ -965,7 +965,7 @@ export async function renderAdminDashboard(container) {
   }, 5000);
   container._adminDashboardCleanup = checkRemoval;
 }
-async function openInquiryDetail(id, onDone) {
+export async function openInquiryDetail(id, onDone) {
   const contextRes = await fetch(
     `${API_BASE}/admin/inquiries/${encodeURIComponent(id)}/manage-context`,
     { headers: authHeaders() },
@@ -1448,7 +1448,7 @@ function openLocationMapModal(lat, lng, label) {
       '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);">Map failed to load</div>';
   }
 }
-async function openAdminRequestModal(onDone) {
+export async function openAdminRequestModal(onDone) {
   const today = new Date().toLocaleDateString("en-CA");
   const [
     { data: employees },
@@ -5674,7 +5674,7 @@ export async function renderInstallationsTab(container) {
   });
 }
 
-async function openInstallationDetail(id, employees, onDone) {
+export async function openInstallationDetail(id, employees, onDone) {
   const { data: inst, error } = await supabase
     .from("installations")
     .select("*")
