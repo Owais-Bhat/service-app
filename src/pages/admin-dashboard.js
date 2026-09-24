@@ -436,6 +436,22 @@ function showMorningPopup() {
       })).join('') 
     : '<div style="padding:20px;text-align:center;color:var(--text-dim);">No installations scheduled for today.</div>';
 
+  let waText = `*Morning Overview - ${prettyDay(today)}*\n\n`;
+  if (installsToday.length > 0) {
+    waText += `*Today's Installations (${installsToday.length}):*\n`;
+    installsToday.forEach((r, i) => {
+      waText += `${i+1}. ${r.ticket_no || 'N/A'} - ${r.full_name || 'Customer'}\n`;
+      waText += `   Type: ${r.installation_type || 'N/A'}\n`;
+      waText += `   Location: ${r.location || 'N/A'}\n`;
+      if (r.preferred_time) waText += `   Time: ${r.preferred_time}\n`;
+      const tech = nameOf(r.assigned_employee_id);
+      waText += `   Assigned: ${tech ? tech : 'Unassigned'}\n\n`;
+    });
+  } else {
+    waText += `No installations scheduled for today.\n\n`;
+  }
+  const waTextEncoded = encodeURIComponent(waText);
+
   overlay.innerHTML = `
     <div class="modal" style="max-width:480px;">
       <div class="modal-header">
@@ -444,8 +460,17 @@ function showMorningPopup() {
       </div>
       <div class="modal-body" style="background:var(--bg-soft); padding: 16px;">
         <h4 style="margin-top:0;margin-bottom:12px;font-size:0.9rem;color:var(--text-soft);">Today's Installations</h4>
-        <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;flex-direction:column;gap:8px; max-height: 40vh; overflow-y: auto;">
           ${content}
+        </div>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line, var(--border));">
+          <label style="display:block; font-size: 0.8rem; font-weight: 700; margin-bottom: 8px; color: var(--text-soft);">Share to WhatsApp</label>
+          <div style="display:flex; gap: 8px;">
+            <input type="tel" id="mpop-wa-number" placeholder="Enter phone number (e.g. 919876543210)" style="flex:1; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line, var(--border)); outline: none;" />
+            <button class="btn btn-primary" id="mpop-wa-send" style="background:#25D366; border-color:#25D366; color:white; white-space:nowrap; border-radius: 8px; padding: 0 16px; font-weight: 600;">
+              Share
+            </button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -454,6 +479,12 @@ function showMorningPopup() {
   const close = () => overlay.remove();
   overlay.querySelector('#mpop-close').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  
+  overlay.querySelector('#mpop-wa-send').onclick = () => {
+    let num = overlay.querySelector('#mpop-wa-number').value.replace(/\D/g, '');
+    if (!num) return toast('Please enter a WhatsApp number', 'warning');
+    window.open(`https://wa.me/${num}?text=${waTextEncoded}`, '_blank');
+  };
 }
 
 function nameOf(id) {
