@@ -126,10 +126,7 @@ function paint(container) {
         ${trendCard()}
       </div>
 
-      <div class="st2-row st2-row-2">
-        ${revenueCard()}
-        ${customerCard(rows)}
-      </div>
+      ${revenueCard()}
     </div>
   `;
 
@@ -393,45 +390,4 @@ function revenueCard() {
     </section>`;
 }
 
-function customerCard(rows) {
-  const phones = new Map();
-  data.inquiries.forEach(r => {
-    const key = r.phone || r.full_name;
-    if (!key) return;
-    phones.set(key, (phones.get(key) || 0) + 1);
-  });
-  const monthAgo = new Date();
-  monthAgo.setDate(monthAgo.getDate() - 30);
-  const recentKeys = new Set(data.inquiries.filter(r => new Date(r.created_at) >= monthAgo).map(r => r.phone || r.full_name));
-  const firstSeen = new Map();
-  [...data.inquiries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).forEach(r => {
-    const key = r.phone || r.full_name;
-    if (key && !firstSeen.has(key)) firstSeen.set(key, r.created_at);
-  });
-  const newCustomers = [...firstSeen.entries()].filter(([, at]) => new Date(at) >= monthAgo).length;
 
-  const companies = new Map();
-  data.inquiries.forEach(r => {
-    const key = r.company_name || 'Walk-in / Unregistered';
-    companies.set(key, (companies.get(key) || 0) + 1);
-  });
-  const top = [...companies.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-  return `
-    <section class="st2-card">
-      <header class="st2-head">${ICONS.users || ''}<b>Customer Overview</b></header>
-      <div class="st2-custwrap">
-        <div class="st2-quad st2-quad-3">
-          ${quad('Active Customers', recentKeys.size)}
-          ${quad('New Customers', newCustomers, 'green')}
-          ${quad('Service Requests', rows.length)}
-        </div>
-        <div class="st2-top">
-          <div class="st2-top-label">Top customers / companies</div>
-          ${top.map(([name, n]) => `
-            <div class="st2-top-row"><span class="st2-cat-dot" style="background:var(--primary)"></span><span>${esc(name)}</span><b>${n}</b></div>`).join('')
-            || '<div class="st2-empty">No data yet</div>'}
-        </div>
-      </div>
-    </section>`;
-}
