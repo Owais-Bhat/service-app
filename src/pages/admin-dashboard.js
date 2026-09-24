@@ -86,8 +86,12 @@ function filtered() {
     (!tech || r.assigned_employee_id === tech) &&
     matchesText(r, ['ticket_no', 'full_name', 'phone', 'service_item', 'location'])
   );
+  // Installations are booked for a future date, so a "last 30 days" window
+  // would hide the ones that matter most. Unless a specific day is picked,
+  // anything still upcoming stays visible.
+  const upcomingOk = (r) => !state.day && ymd(r.preferred_date || r.created_at) >= todayKey();
   const installations = data.installations.filter(r =>
-    inRange(r.preferred_date || r.created_at) &&
+    (inRange(r.preferred_date || r.created_at) || upcomingOk(r)) &&
     (!tech || r.assigned_employee_id === tech) &&
     matchesText(r, ['ticket_no', 'full_name', 'phone', 'installation_type', 'address'])
   );
@@ -193,7 +197,8 @@ function paintShell(container) {
         <span class="dash2-spacer"></span>
         <span class="dash2-daychip" id="dash2-daychip" hidden></span>
         <button class="btn btn-secondary btn-sm" id="dash2-reset">Reset</button>
-        <button class="btn btn-primary btn-sm" id="dash2-new">${ICONS.plus}<span>Request</span></button>
+        <button class="btn btn-primary btn-sm" id="dash2-new">${ICONS.plus}<span>Service Request</span></button>
+        <button class="btn btn-primary btn-sm" id="dash2-newinst">${ICONS.plus}<span>Installation</span></button>
 
         <div class="dash2-statrow" id="dash2-tabs">
           ${TABS.map(t => `
@@ -244,6 +249,7 @@ function paintShell(container) {
     paintShell(container);
   };
   $('#dash2-new').onclick = () => openAdminRequestModal(() => refresh(container));
+  $('#dash2-newinst').onclick = () => openInstallationCreateModal(employees, () => refresh(container));
   const pop = $('#dash2-calpop');
   $('#dash2-caltoggle').onclick = (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; };
   pop.onclick = (e) => e.stopPropagation();
@@ -281,6 +287,87 @@ function repaint(container) {
   if (label) label.textContent = state.day ? prettyDay(state.day) : 'Calendar';
   paintCalendar(container);
   paintPanel(container);
+}
+
+// Add an installation straight from the dashboard — same row shape the
+// Calendar tab writes, so both places show it immediately.
+function openInstallationCreateModal(employees, onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <span class="modal-title">New Installation Request</span>
+        <button class="modal-close" id="inst-c">${ICONS.close}</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+          <div class="form-group"><label>Customer Name</label><input type="text" id="inst-name" placeholder="Customer name"></div>
+          <div class="form-group"><label>Phone</label><input type="tel" id="inst-phone" placeholder="10 digit mobile number"></div>
+          <div class="form-group"><label>Location (city / area)</label><input type="text" id="inst-location" placeholder="e.g. Rajbagh, Srinagar"></div>
+          <div class="form-group"><label>Installation Type</label><input type="text" id="inst-type" placeholder="e.g. 4 Camera CCTV"></div>
+          <div class="form-group"><label>Date</label><input type="date" id="inst-date"></div>
+          <div class="form-group"><label>Time</label><input type="time" id="inst-time"></div>
+          <div class="form-group">
+            <label>Assign Technician <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
+            <select id="inst-emp">
+              <option value="">— Unassigned —</option>
+              ${employees.map(e => `<option value="${esc(e.id)}">${esc(e.full_name || 'Employee')}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>Address</label><textarea id="inst-address" rows="2" placeholder="Full address / landmark"></textarea></div>
+        <div class="form-group"><label>Details <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label><textarea id="inst-desc" rows="2"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="inst-cancel">Cancel</button>
+        <button class="btn btn-primary" id="inst-save">Save Installation</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = (sel) => overlay.querySelector(sel);
+  const close = () => overlay.remove();
+  $('#inst-c').onclick = close;
+  $('#inst-cancel').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  $('#inst-date').value = todayKey();
+
+  $('#inst-save').onclick = async () => {
+    const name = $('#inst-name').value.trim();
+    const phone = $('#inst-phone').value.trim();
+    const location = $('#inst-location').value.trim();
+    const address = $('#inst-address').value.trim();
+    const type = $('#inst-type').value.trim();
+    const date = $('#inst-date').value;
+    if (!name || !phone || !location || !address || !type || !date) {
+      return toast('Name, phone, location, address, type and date are required', 'warning');
+    }
+    const btn = $('#inst-save');
+    btn.disabled = true;
+    try {
+      const { error } = await supabase.from('installations').insert([{
+        id: crypto.randomUUID(),
+        ticket_no: 'INST-' + Math.floor(100000 + Math.random() * 900000),
+        full_name: name,
+        phone,
+        location,
+        address,
+        installation_type: type,
+        preferred_date: date,
+        preferred_time: $('#inst-time').value || 'Anytime',
+        assigned_employee_id: $('#inst-emp').value || null,
+        description: $('#inst-desc').value.trim() || null,
+        status: 'pending',
+      }]);
+      if (error) throw new Error(error.message);
+      toast('Installation added', 'success');
+      close();
+      onDone?.();
+    } catch (err) {
+      toast(err.message || 'Could not save the installation', 'error');
+      btn.disabled = false;
+    }
+  };
 }
 
 function paintCalendar(container) {
