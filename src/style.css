@@ -8316,7 +8316,13 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   border-radius: 14px;
   overflow: hidden;
 }
-.dash2-instrows { flex: 1; min-height: 0; overflow: auto; padding: 6px; }
+.dash2-instrows {
+  flex: 1; min-height: 0; overflow: auto; padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
 .dash2-row-right { display: flex; align-items: center; gap: 10px; }
 .dash2-del {
   width: 28px; height: 28px; flex-shrink: 0;
@@ -8343,9 +8349,9 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 320px 1fr;
-  align-items: flex-start;
-  gap: 20px;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 12px;
 }
 @media (max-width: 1024px) {
   .dash2-grid {
@@ -8440,7 +8446,16 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 }
 .dash2-tab.on .dash2-tabcount { background: var(--primary); color: #fff; }
 
-.dash2-list { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-content: flex-start; }
+.dash2-list {
+  flex: 1; min-height: 0; overflow: auto; padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+/* The Installations tab paints its own calendar + list split inside here. */
+.dash2-list:has(.dash2-instwrap) { display: block; }
+.dash2-empty { grid-column: 1 / -1; }
 .dash2-row {
   width: 100%;
   display: flex; flex-direction: column; gap: 8px;
