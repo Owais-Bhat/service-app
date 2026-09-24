@@ -8321,8 +8321,8 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
+  grid-auto-rows: max-content;
   align-content: start;
-  align-items: start;
 }
 .dash2-row-right { display: flex; align-items: center; gap: 10px; }
 .dash2-del {
@@ -8454,10 +8454,13 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
      multi-column can't be used here — inside a fixed-height box it spills
      sideways into new columns. */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 4 * 18px) / 5)), 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 4 * 22px) / 5)), 1fr));
+  gap: 22px;
+  /* The panel has a fixed height, so rows must be told to size to their
+     content — otherwise they shrink to share the height and the cards
+     overlap each other. */
+  grid-auto-rows: max-content;
   align-content: start;
-  align-items: start;
   overflow-x: hidden;
   overflow-y: auto;
 }
