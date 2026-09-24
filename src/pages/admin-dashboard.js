@@ -153,17 +153,24 @@ function paintShell(container) {
   paintPanel(container);
 }
 
-function rowHtml({ id, kind, title, sub, meta, badge, tone, canDelete }) {
+function cardHtml({ id, kind, title, badge, tone, name, lines = [], footLeft, footRight, canDelete }) {
   return `
-    <div class="dash2-row" data-id="${esc(id)}" data-kind="${kind}">
-      <span class="dash2-row-main">
-        <span class="dash2-row-top"><b>${esc(title)}</b>${badge ? `<span class="dash2-badge tone-${tone || 'muted'}">${esc(badge)}</span>` : ''}</span>
-        <span class="dash2-row-sub">${esc(sub || '')}</span>
-      </span>
-      <span class="dash2-row-right">
-        <span class="dash2-row-meta">${esc(meta || '')}</span>
-        ${canDelete ? `<button class="dash2-del" data-del="${esc(id)}" title="Delete installation">${ICONS.close}</button>` : ''}
-      </span>
+    <div class="dash2-row dash2-card2" data-id="${esc(id)}" data-kind="${kind}">
+      <div class="dash2-c2-top">
+        <b class="dash2-c2-ticket">${esc(title)}</b>
+        <span class="dash2-c2-tr">
+          ${badge ? `<span class="dash2-badge tone-${tone || 'muted'}">${esc(badge)}</span>` : ''}
+          ${canDelete ? `<button class="dash2-del" data-del="${esc(id)}" title="Delete installation">${ICONS.close}</button>` : ''}
+        </span>
+      </div>
+      ${name ? `<div class="dash2-c2-name">${esc(name)}</div>` : ''}
+      ${lines.filter(l => l && l.text).map(l => `
+        <div class="dash2-c2-line">${l.icon || ''}<span>${esc(l.text)}</span></div>`).join('')}
+      ${footLeft || footRight ? `
+        <div class="dash2-c2-foot">
+          <span class="dash2-c2-date">${ICONS.clock || ''}<span>${esc(footLeft || '')}</span></span>
+          ${footRight || ''}
+        </div>` : ''}
     </div>`;
 }
 
@@ -186,23 +193,21 @@ function inquiryRow(r) {
     : r.assignment_status === 'declined' ? 'Declined'
       : r.assignment_status === 'pending' ? `Sent to ${nameOf(r.assigned_employee_id) || 'technician'}`
         : nameOf(r.assigned_employee_id) || 'Assigned';
-  const tone = !r.assigned_employee_id ? 'warn' : r.assignment_status === 'declined' ? 'danger' : 'ok';
-  const problem = [r.service_item, r.description].filter(Boolean).join(' — ');
-  return `
-    <div class="dash2-row dash2-card2" data-id="${esc(r.id)}" data-kind="inquiry">
-      <div class="dash2-c2-top">
-        <b class="dash2-c2-ticket">${esc(r.ticket_no || 'No ticket')}</b>
-        <span class="dash2-badge tone-${tone}">${esc(badge)}</span>
-      </div>
-      <div class="dash2-c2-name">${esc(r.full_name || 'Customer')}</div>
-      ${problem ? `<div class="dash2-c2-line dash2-c2-problem">${ICONS.wrench || ''}<span>${esc(problem)}</span></div>` : ''}
-      ${r.location ? `<div class="dash2-c2-line">${ICONS.pin || ''}<span>${esc(r.location)}</span></div>` : ''}
-      ${r.phone ? `<div class="dash2-c2-line">${ICONS.phone || ''}<span>${esc(r.phone)}</span></div>` : ''}
-      <div class="dash2-c2-foot">
-        <span class="dash2-c2-date">${ICONS.clock || ''}<span>${esc(prettyDay(r.created_at))} · ${esc(clock(r.created_at))}</span></span>
-        ${slaText(r)}
-      </div>
-    </div>`;
+  return cardHtml({
+    id: r.id,
+    kind: 'inquiry',
+    title: r.ticket_no || 'No ticket',
+    badge,
+    tone: !r.assigned_employee_id ? 'warn' : r.assignment_status === 'declined' ? 'danger' : 'ok',
+    name: r.full_name || 'Customer',
+    lines: [
+      { icon: ICONS.wrench, text: [r.service_item, r.description].filter(Boolean).join(' — ') },
+      { icon: ICONS.pin, text: r.location },
+      { icon: ICONS.phone, text: r.phone },
+    ],
+    footLeft: `${prettyDay(r.created_at)} · ${clock(r.created_at)}`,
+    footRight: slaText(r),
+  });
 }
 
 function paintPanel(container) {
@@ -222,34 +227,46 @@ function paintPanel(container) {
   if (state.tab === 'requests' || state.tab === 'assigned' || state.tab === 'unassigned') {
     rows = b[state.tab].map(inquiryRow).join('');
   } else if (state.tab === 'completed') {
-    rows = b.completed.slice(0, 300).map(r => rowHtml({
+    rows = b.completed.slice(0, 300).map(r => cardHtml({
       id: r.id,
       kind: 'inquiry',
       title: r.ticket_no || 'No ticket',
-      sub: [r.full_name, r.service_item].filter(Boolean).join(' · '),
-      meta: `${prettyDay(r.updated_at || r.created_at)} ${clock(r.updated_at || r.created_at)}`,
       badge: nameOf(r.assigned_employee_id) || 'Completed',
       tone: 'ok',
+      name: r.full_name || 'Customer',
+      lines: [
+        { icon: ICONS.wrench, text: [r.service_item, r.description].filter(Boolean).join(' — ') },
+        { icon: ICONS.pin, text: r.location },
+        { icon: ICONS.phone, text: r.phone },
+      ],
+      footLeft: `${prettyDay(r.updated_at || r.created_at)} · ${clock(r.updated_at || r.created_at)}`,
+      footRight: `<span class="dash2-sla ok">${esc(String(r.status || 'resolved').replace(/_/g, ' '))}</span>`,
     })).join('');
   } else if (state.tab === 'online') {
-    rows = b.online.map(r => rowHtml({
+    rows = b.online.map(r => cardHtml({
       id: r.user_id,
       kind: 'employee',
       title: r.profiles?.full_name || nameOf(r.user_id) || 'Employee',
-      sub: r.location || 'Location not recorded',
-      meta: `Since ${clock(r.clock_in)}`,
       badge: 'Online',
       tone: 'ok',
+      lines: [
+        { icon: ICONS.pin, text: r.location || 'Location not recorded' },
+        { icon: ICONS.phone, text: data.profiles.find(p => p.id === r.user_id)?.phone },
+      ],
+      footLeft: `Clocked in ${clock(r.clock_in)}`,
     })).join('');
   } else if (state.tab === 'complaints') {
-    rows = b.complaints.map(r => rowHtml({
+    rows = b.complaints.map(r => cardHtml({
       id: r.id,
       kind: 'complaint',
       title: r.ticket_no || 'No ticket',
-      sub: r.complaint_text || '',
-      meta: `${prettyDay(r.created_at)} ${clock(r.created_at)}`,
       badge: String(r.status || 'open'),
       tone: 'danger',
+      lines: [
+        { icon: ICONS.alert, text: r.complaint_text },
+        { icon: ICONS.phone, text: r.phone },
+      ],
+      footLeft: `${prettyDay(r.created_at)} · ${clock(r.created_at)}`,
     })).join('');
   }
 
@@ -312,14 +329,19 @@ function paintInstallations(container, list, installations) {
           ${state.day ? '<button class="dash2-today" id="dash2-dayclear">Show whole month</button>' : ''}
         </header>
         <div class="dash2-instrows" id="dash2-instrows">
-          ${shown.map(r => rowHtml({
+          ${shown.map(r => cardHtml({
             id: r.id,
             kind: 'installation',
             title: r.ticket_no || 'No ticket',
-            sub: [r.full_name, r.installation_type, r.address].filter(Boolean).join(' · '),
-            meta: `${r.preferred_date ? prettyDay(r.preferred_date) : '—'}${r.preferred_time ? ' · ' + r.preferred_time : ''}`,
             badge: nameOf(r.assigned_employee_id) || String(r.status || 'pending'),
             tone: r.assigned_employee_id ? 'ok' : 'warn',
+            name: r.full_name || 'Customer',
+            lines: [
+              { icon: ICONS.wrench, text: [r.installation_type, r.description].filter(Boolean).join(' — ') },
+              { icon: ICONS.pin, text: r.address || r.location },
+              { icon: ICONS.phone, text: r.phone },
+            ],
+            footLeft: `${r.preferred_date ? prettyDay(r.preferred_date) : '—'}${r.preferred_time ? ' · ' + r.preferred_time : ''}`,
             canDelete: true,
           })).join('') || '<div class="dash2-empty">No installations here.</div>'}
         </div>
@@ -386,14 +408,19 @@ function showMorningPopup() {
   const reqsToday = data.inquiries.filter(r => ymd(r.created_at) === today && OPEN_STATUSES.has(String(r.status || '').toLowerCase()));
   
   const content = installsToday.length > 0 
-    ? installsToday.map(r => rowHtml({
+    ? installsToday.map(r => cardHtml({
         id: r.id,
         kind: 'installation',
         title: r.ticket_no || 'No ticket',
-        sub: [r.full_name, r.installation_type, r.address].filter(Boolean).join(' · '),
-        meta: r.preferred_time ? r.preferred_time : '',
         badge: nameOf(r.assigned_employee_id) || String(r.status || 'pending'),
         tone: r.assigned_employee_id ? 'ok' : 'warn',
+        name: r.full_name || 'Customer',
+        lines: [
+          { icon: ICONS.wrench, text: r.installation_type },
+          { icon: ICONS.pin, text: r.address || r.location },
+          { icon: ICONS.phone, text: r.phone },
+        ],
+        footLeft: r.preferred_time || 'Anytime',
       })).join('') 
     : '<div style="padding:20px;text-align:center;color:var(--text-dim);">No installations scheduled for today.</div>';
 

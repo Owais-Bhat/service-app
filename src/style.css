@@ -8454,8 +8454,8 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
      multi-column can't be used here — inside a fixed-height box it spills
      sideways into new columns. */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 4 * 14px) / 5)), 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 4 * 18px) / 5)), 1fr));
+  gap: 18px;
   align-content: start;
   align-items: start;
   overflow-x: hidden;
@@ -8556,6 +8556,7 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
 /* Dashboard request card: ticket, customer, problem, location, phone, SLA */
 .dash2-card2 { flex-direction: column; align-items: stretch; gap: 6px; }
 .dash2-c2-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dash2-c2-tr { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .dash2-c2-ticket { font-family: var(--font-mono); font-size: 0.82rem; color: var(--primary); }
 .dash2-c2-name { font-weight: 700; font-size: 0.95rem; color: var(--text); }
 .dash2-c2-line {
