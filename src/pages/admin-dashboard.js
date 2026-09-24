@@ -116,6 +116,14 @@ export async function renderAdminDashboard(container) {
 
   paintShell(container);
 
+  // Morning Admin Popup: Show today's installations (between 8:00 and 10:00)
+  const now = new Date();
+  const currentHour = now.getHours();
+  if (currentHour >= 8 && currentHour < 10 && !sessionStorage.getItem('morning_popup_shown')) {
+    sessionStorage.setItem('morning_popup_shown', '1');
+    showMorningPopup();
+  }
+
   // Keep it live: realtime for the two tables that actually change during the
   // day, plus a slow poll as a safety net if the socket drops.
   container._dashChannel = supabase.channel('admin-dash')
@@ -161,7 +169,7 @@ function paintShell(container) {
     <div class="dash2">
       <div class="dash2-bar">
         <div class="dash2-filter-label" style="font-size: 0.8rem; color: var(--text-soft); font-weight: 500; display: flex; align-items: center; gap: 6px;" title="These filters apply to all numbers and lists below.">
-          ${ICONS.filter || ''} <b>Filter Dashboard:</b>
+          <b>Filter Dashboard:</b>
         </div>
         <div class="dash2-presets">
           ${PRESETS.map(p => `<button class="dash2-chip" data-preset="${p.key}">${p.label}</button>`).join('')}
@@ -171,28 +179,7 @@ function paintShell(container) {
           <span class="dash2-dash">–</span>
           <input type="date" id="dash2-to" value="${esc(state.to)}" title="To">
         </div>
-        <!-- The month calendar lives inside the filter bar: a dropdown whose
-             day dots show where the work sits, and picking a day filters the
-             whole dashboard to it. -->
-        <div class="dash2-calwrap">
-          <button class="dash2-calbtn" id="dash2-caltoggle" title="Pick a day">
-            ${ICONS.calendar || ''}<span id="dash2-callabel">Calendar</span>
-          </button>
-          <div class="dash2-calpop" id="dash2-calpop" hidden>
-            <header class="dash2-head">
-              <button class="dash2-navbtn" id="dash2-prev" title="Previous month">‹</button>
-              <b id="dash2-month"></b>
-              <button class="dash2-navbtn" id="dash2-next" title="Next month">›</button>
-              <span class="dash2-spacer"></span>
-              <button class="dash2-today" id="dash2-today">Today</button>
-            </header>
-            <div class="dash2-calbody" id="dash2-calbody"></div>
-            <footer class="dash2-legend">
-              <span><i class="dot dot-req"></i>Requests</span>
-              <span><i class="dot dot-inst"></i>Installations</span>
-            </footer>
-          </div>
-        </div>
+        <!-- Calendar moved to side panel -->
         <select id="dash2-tech" title="Technician">
           <option value="">All technicians</option>
           ${employees.map(e => `<option value="${esc(e.id)}"${state.tech === e.id ? ' selected' : ''}>${esc(e.full_name || 'Employee')}</option>`).join('')}
@@ -214,6 +201,19 @@ function paintShell(container) {
       </div>
 
       <div class="dash2-grid">
+        <section class="dash2-cal-inline">
+            <header class="dash2-head" style="background: var(--bg-soft);">
+              <button class="dash2-navbtn" id="dash2-prev" title="Previous month">‹</button>
+              <b id="dash2-month" style="flex:1; text-align:center;"></b>
+              <button class="dash2-navbtn" id="dash2-next" title="Next month">›</button>
+              <button class="dash2-today" id="dash2-today">Today</button>
+            </header>
+            <div class="dash2-calbody" id="dash2-calbody"></div>
+            <footer class="dash2-legend" style="justify-content: center;">
+              <span><i class="dot dot-req"></i>Requests</span>
+              <span><i class="dot dot-inst"></i>Installations</span>
+            </footer>
+        </section>
         <section class="dash2-card dash2-panel">
           <div class="dash2-list" id="dash2-list"></div>
         </section>
@@ -254,13 +254,7 @@ function paintShell(container) {
   };
   $('#dash2-new').onclick = () => openAdminRequestModal(() => refresh(container));
   $('#dash2-newinst').onclick = () => openInstallationCreateModal(employees, () => refresh(container));
-  const pop = $('#dash2-calpop');
-  $('#dash2-caltoggle').onclick = (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; };
-  pop.onclick = (e) => e.stopPropagation();
-  // One document-level listener per shell paint, removed when the dashboard goes.
-  if (container._dashOutside) document.removeEventListener('click', container._dashOutside);
-  container._dashOutside = () => { if (pop && !pop.hidden) pop.hidden = true; };
-  document.addEventListener('click', container._dashOutside);
+  // Removed calendar toggle event since it's now inline
   $('#dash2-prev').onclick = () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1); paintCalendar(container); };
   $('#dash2-next').onclick = () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1); paintCalendar(container); };
   $('#dash2-today').onclick = () => {
@@ -287,8 +281,8 @@ function repaint(container) {
     const clear = container.querySelector('#dash2-dayclear');
     if (clear) clear.onclick = () => { state.day = ''; repaint(container); };
   }
-  const label = container.querySelector('#dash2-callabel');
-  if (label) label.textContent = state.day ? prettyDay(state.day) : 'Calendar';
+  // Repaint will update the dashboard lists
+  // Label for day picked is now just shown in the daychip
   paintCalendar(container);
   paintPanel(container);
 }
@@ -416,11 +410,50 @@ function paintCalendar(container) {
   body.querySelectorAll('[data-day]').forEach(btn => {
     btn.onclick = () => {
       state.day = state.day === btn.dataset.day ? '' : btn.dataset.day;
-      const pop = container.querySelector('#dash2-calpop');
-      if (pop) pop.hidden = true;
       repaint(container);
     };
   });
+}
+
+function showMorningPopup() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const today = todayKey();
+  
+  // Get installations strictly for today
+  const installsToday = data.installations.filter(r => ymd(r.preferred_date || r.created_at) === today);
+  const reqsToday = data.inquiries.filter(r => ymd(r.created_at) === today && OPEN_INQUIRY_STATUSES.has(String(r.status || '').toLowerCase()));
+  
+  const content = installsToday.length > 0 
+    ? installsToday.map(r => rowHtml({
+        id: r.id,
+        kind: 'installation',
+        title: r.ticket_no || 'No ticket',
+        sub: [r.full_name, r.installation_type, r.address].filter(Boolean).join(' · '),
+        meta: r.preferred_time ? r.preferred_time : '',
+        badge: nameOf(r.assigned_employee_id) || String(r.status || 'pending'),
+        tone: r.assigned_employee_id ? 'ok' : 'warn',
+      })).join('') 
+    : '<div style="padding:20px;text-align:center;color:var(--text-dim);">No installations scheduled for today.</div>';
+
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <span class="modal-title">Morning Overview - ${prettyDay(today)}</span>
+        <button class="modal-close" id="mpop-close">${ICONS.close}</button>
+      </div>
+      <div class="modal-body" style="background:var(--bg-soft); padding: 16px;">
+        <h4 style="margin-top:0;margin-bottom:12px;font-size:0.9rem;color:var(--text-soft);">Today's Installations</h4>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${content}
+        </div>
+      </div>
+    </div>`;
+  
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#mpop-close').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
 }
 
 function nameOf(id) {

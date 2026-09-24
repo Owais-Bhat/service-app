@@ -8342,11 +8342,24 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
+  grid-template-columns: 320px 1fr;
+  align-items: flex-start;
+  gap: 20px;
+}
+@media (max-width: 1024px) {
+  .dash2-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.dash2-cal-inline {
+  background: var(--bg-white, #fff);
+  border-radius: 12px;
+  border: 1px solid var(--line, var(--border));
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
-/* Calendar lives in the filter bar as a dropdown */
+/* Calendar lives in the filter bar as a dropdown (legacy) or inline */
 .dash2-calwrap { position: relative; }
 .dash2-calbtn {
   display: inline-flex; align-items: center; gap: 7px;
@@ -8517,7 +8530,7 @@ body.nav-collapsed .sidebar-logo-text,
 body.nav-collapsed .nav-section,
 body.nav-collapsed .nav-badge,
 body.nav-collapsed .user-details,
-body.nav-collapsed .logout-btn { display: none; }
+body.nav-collapsed .logout-btn { display: none !important; }
 body.nav-collapsed .user-info { justify-content: center; background: transparent; box-shadow: none; }
 body.nav-collapsed .nav-item {
   justify-content: center;
