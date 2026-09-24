@@ -10,6 +10,7 @@ import { supabase } from '../supabase.js';
 import { ICONS } from '../icons.js';
 import { toast, showLoader, effectiveSLADeadline, isSlaPaused } from '../utils.js';
 import { openInquiryDetail, openAdminRequestModal, openInstallationDetail } from './admin.js';
+import { fetchAssignmentAlerts } from './response-times.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -67,6 +68,8 @@ export async function renderAdminDashboard(container) {
 
   paintShell(container);
 
+  checkAssignmentAlerts(container);
+
   const currentHour = new Date().getHours();
   if (currentHour >= 8 && currentHour < 10 && !sessionStorage.getItem('morning_popup_shown')) {
     sessionStorage.setItem('morning_popup_shown', '1');
@@ -105,6 +108,7 @@ async function refresh(container) {
   } catch { return; }
   if (!document.body.contains(container)) return;
   paintPanel(container);
+  checkAssignmentAlerts(container);
 }
 
 // ── buckets ─────────────────────────────────────────
@@ -512,6 +516,64 @@ function showMorningPopup() {
     if (!num) return toast('Please enter a WhatsApp number', 'warning');
     window.open(`https://wa.me/${num}?text=${waTextEncoded}`, '_blank');
   };
+}
+
+// Requests that blew their 2-working-hour assignment clock and still have
+// nobody on them. The admin is nagged once per ticket per session — closing
+// the popup doesn't clear the record, which lives in Response Times.
+const alertedTickets = new Set();
+
+async function checkAssignmentAlerts(container) {
+  const overdue = await fetchAssignmentAlerts();
+  const fresh = overdue.filter(r => !alertedTickets.has(r.id));
+  if (!fresh.length || document.querySelector('.rt-alert')) return;
+  fresh.forEach(r => alertedTickets.add(r.id));
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay rt-alert';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <span class="modal-title" style="color:var(--danger);">${ICONS.alert || ''} Assign these requests</span>
+        <button class="modal-close" id="rt-a-close">${ICONS.close}</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 14px;color:var(--text-soft);font-size:0.88rem;">
+          ${fresh.length} request${fresh.length > 1 ? 's have' : ' has'} passed the 2 working-hour assignment window and still ${fresh.length > 1 ? 'have' : 'has'} no technician. Please assign or post an update.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;">
+          ${fresh.map(r => `
+            <button class="dash2-row dash2-card2 rt-a-item" data-id="${esc(r.id)}" style="margin:0;">
+              <div class="dash2-c2-top">
+                <b class="dash2-c2-ticket">${esc(r.ticket_no || 'No ticket')}</b>
+                <span class="dash2-badge tone-danger">${esc(lateLabel(r.late_minutes))} late</span>
+              </div>
+              <div class="dash2-c2-name">${esc(r.full_name || 'Customer')}</div>
+              <div class="dash2-c2-line">${ICONS.wrench || ''}<span>${esc(r.service_item || '')}</span></div>
+              <div class="dash2-c2-line">${ICONS.phone || ''}<span>${esc(r.phone || '')}</span></div>
+            </button>`).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="rt-a-dismiss">Later</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#rt-a-close').onclick = close;
+  overlay.querySelector('#rt-a-dismiss').onclick = close;
+  overlay.querySelectorAll('.rt-a-item').forEach(btn => {
+    btn.onclick = () => {
+      close();
+      openInquiryDetail(btn.dataset.id, () => refresh(container));
+    };
+  });
+}
+
+function lateLabel(minutes) {
+  const n = Number(minutes) || 0;
+  const h = Math.floor(n / 60);
+  return h ? `${h}h ${n % 60}m` : `${n}m`;
 }
 
 // Add an installation straight from the dashboard — same row shape the

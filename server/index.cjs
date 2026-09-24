@@ -1958,6 +1958,25 @@ const requiredTables = [
         FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE SET NULL,
         FOREIGN KEY (technician_id) REFERENCES profiles(id) ON DELETE SET NULL
     )`,
+    // Response-time log: one row per missed clock (see sweepResponseSla).
+    // Kept even after the late response finally lands, so the Response Times
+    // report can show who was late and by how much.
+    `CREATE TABLE IF NOT EXISTS response_sla_logs (
+        id VARCHAR(36) PRIMARY KEY,
+        inquiry_id VARCHAR(36) NOT NULL,
+        kind VARCHAR(20) NOT NULL COMMENT "'assignment' | 'employee'",
+        employee_id VARCHAR(36),
+        started_at TIMESTAMP NOT NULL,
+        due_at TIMESTAMP NOT NULL,
+        responded_at TIMESTAMP NULL,
+        response_minutes INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_inquiry_kind (inquiry_id, kind),
+        INDEX idx_response_sla_started (started_at),
+        INDEX idx_response_sla_employee (employee_id),
+        FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE SET NULL
+    )`,
     `CREATE TABLE IF NOT EXISTS employee_location_history (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
@@ -6412,6 +6431,224 @@ app.delete('/api/service-logs/:id', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('[service-logs] delete failed:', err);
         res.status(500).json({ error: 'Could not delete entry' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// ── Response times ───────────────────────────────────
+// Two clocks, both counted in working hours only (09:30–19:00, Sundays off),
+// both two hours long:
+//   • assignment — from the moment a service request arrives until admin hands
+//     it to a technician;
+//   • employee   — from that assignment until the technician posts their first
+//     status update.
+// A request that lands after hours starts its clock at 09:30 the next working
+// day, so a 10pm request is due at 11:30am, not midnight. Rows are written
+// only when a clock runs out, and closed off with the actual response time
+// once the assignment/update finally happens — that history is what the
+// Response Times screen reports on.
+const RESPONSE_SLA_HOURS = 2;
+const RESPONSE_DAY_START_MIN = 9 * 60 + 30;   // 09:30
+const RESPONSE_DAY_END_MIN = 19 * 60;         // 19:00
+
+function minutesOfDay(date) {
+    return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
+}
+
+function startOfWorkday(date) {
+    const d = new Date(date);
+    d.setHours(Math.floor(RESPONSE_DAY_START_MIN / 60), RESPONSE_DAY_START_MIN % 60, 0, 0);
+    return d;
+}
+
+function nextWorkdayStart(date) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + 1);
+    const start = startOfWorkday(d);
+    return start.getDay() === 0 ? nextWorkdayStart(start) : start;
+}
+
+// Deadline `hours` of working time after `from`.
+function addWorkingHours(from, hours = RESPONSE_SLA_HOURS) {
+    let cursor = new Date(from);
+    if (Number.isNaN(cursor.getTime())) return null;
+    let remaining = hours * 60;
+
+    while (remaining > 0) {
+        if (cursor.getDay() === 0) { cursor = nextWorkdayStart(cursor); continue; }
+        const mins = minutesOfDay(cursor);
+        if (mins < RESPONSE_DAY_START_MIN) { cursor = startOfWorkday(cursor); continue; }
+        if (mins >= RESPONSE_DAY_END_MIN) { cursor = nextWorkdayStart(cursor); continue; }
+
+        const leftToday = RESPONSE_DAY_END_MIN - mins;
+        if (remaining <= leftToday) {
+            cursor = new Date(cursor.getTime() + remaining * 60000);
+            remaining = 0;
+        } else {
+            remaining -= leftToday;
+            cursor = nextWorkdayStart(cursor);
+        }
+    }
+    return cursor;
+}
+// Working minutes actually spent between two moments — what the report shows
+// as "responded in".
+function workingMinutesBetween(from, to) {
+    let cursor = new Date(from);
+    const end = new Date(to);
+    if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime()) || end <= cursor) return 0;
+    let total = 0;
+    while (cursor < end) {
+        if (cursor.getDay() === 0) { cursor = nextWorkdayStart(cursor); continue; }
+        const mins = minutesOfDay(cursor);
+        if (mins < RESPONSE_DAY_START_MIN) { cursor = startOfWorkday(cursor); continue; }
+        if (mins >= RESPONSE_DAY_END_MIN) { cursor = nextWorkdayStart(cursor); continue; }
+        const dayEnd = new Date(cursor);
+        dayEnd.setHours(Math.floor(RESPONSE_DAY_END_MIN / 60), RESPONSE_DAY_END_MIN % 60, 0, 0);
+        const slice = Math.min(end.getTime(), dayEnd.getTime()) - cursor.getTime();
+        total += slice / 60000;
+        cursor = slice > 0 && end <= dayEnd ? end : nextWorkdayStart(cursor);
+    }
+    return Math.round(total);
+}
+
+async function upsertResponseBreach(connection, { inquiryId, kind, employeeId, startedAt, dueAt }) {
+    await connection.query(
+        `INSERT INTO response_sla_logs (id, inquiry_id, kind, employee_id, started_at, due_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE employee_id = VALUES(employee_id), due_at = VALUES(due_at)`,
+        [uuidv4(), inquiryId, kind, employeeId || null, sqlDateTime(new Date(startedAt)), sqlDateTime(dueAt)]
+    );
+}
+
+async function closeResponseBreach(connection, { inquiryId, kind, respondedAt }) {
+    const [rows] = await connection.query(
+        'SELECT id, started_at FROM response_sla_logs WHERE inquiry_id = ? AND kind = ? AND responded_at IS NULL LIMIT 1',
+        [inquiryId, kind]
+    );
+    const row = rows[0];
+    if (!row) return;
+    const minutes = workingMinutesBetween(row.started_at, respondedAt);
+    await connection.query(
+        'UPDATE response_sla_logs SET responded_at = ?, response_minutes = ? WHERE id = ?',
+        [sqlDateTime(new Date(respondedAt)), minutes, row.id]
+    );
+}
+
+// Sweep: open the breaches whose clock has run out, close the ones that have
+// since been answered. Cheap enough to run every few minutes.
+async function sweepResponseSla() {
+    let connection;
+    try {
+        connection = await getConn();
+        const now = new Date();
+
+        const [pending] = await connection.query(
+            `SELECT id, created_at, assigned_at, assigned_employee_id, employee_update_at
+               FROM inquiries
+              WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`
+        );
+
+        for (const inq of pending) {
+            // 1. Request arrived → assigned to someone.
+            if (!inq.assigned_employee_id) {
+                const due = addWorkingHours(inq.created_at);
+                if (due && now > due) {
+                    await upsertResponseBreach(connection, {
+                        inquiryId: inq.id, kind: 'assignment', startedAt: inq.created_at, dueAt: due,
+                    });
+                }
+            } else {
+                await closeResponseBreach(connection, {
+                    inquiryId: inq.id, kind: 'assignment', respondedAt: inq.assigned_at || now,
+                });
+
+                // 2. Assigned → technician posts their first status update.
+                if (inq.assigned_at && !inq.employee_update_at) {
+                    const due = addWorkingHours(inq.assigned_at);
+                    if (due && now > due) {
+                        await upsertResponseBreach(connection, {
+                            inquiryId: inq.id, kind: 'employee', employeeId: inq.assigned_employee_id,
+                            startedAt: inq.assigned_at, dueAt: due,
+                        });
+                    }
+                } else if (inq.employee_update_at) {
+                    await closeResponseBreach(connection, {
+                        inquiryId: inq.id, kind: 'employee', respondedAt: inq.employee_update_at,
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[response-sla] sweep failed:', err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+setInterval(() => { sweepResponseSla(); }, 5 * 60 * 1000);
+setTimeout(() => { sweepResponseSla(); }, 20000);
+console.log('[response-sla] 2 working-hour response checks scheduled every 5 minutes');
+
+// The report behind the Response Times screen.
+app.get('/api/response-times', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { from, to, kind } = req.query;
+    const where = [];
+    const params = [];
+    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push('DATE(l.started_at) >= ?'); params.push(from); }
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) { where.push('DATE(l.started_at) <= ?'); params.push(to); }
+    if (kind === 'assignment' || kind === 'employee') { where.push('l.kind = ?'); params.push(kind); }
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT l.id, l.kind, l.started_at, l.due_at, l.responded_at, l.response_minutes,
+                    i.id AS inquiry_id, i.ticket_no, i.full_name, i.phone, i.service_item, i.status,
+                    p.full_name AS employee_name
+               FROM response_sla_logs l
+               JOIN inquiries i ON i.id = l.inquiry_id
+               LEFT JOIN profiles p ON p.id = l.employee_id
+              ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+              ORDER BY l.started_at DESC
+              LIMIT 1000`,
+            params
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[response-sla] report failed:', err.message);
+        res.status(500).json({ error: 'Could not load response times' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Live list for the dashboard popup: requests whose assignment clock has
+// already run out and that still have nobody on them.
+app.get('/api/response-times/alerts', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, ticket_no, full_name, phone, service_item, location, created_at
+               FROM inquiries
+              WHERE (assigned_employee_id IS NULL OR assigned_employee_id = '')
+                AND status NOT IN ('resolved', 'closed', 'case_closed', 'foc')
+                AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+              ORDER BY created_at ASC`
+        );
+        const now = new Date();
+        const overdue = rows
+            .map(r => ({ ...r, due_at: addWorkingHours(r.created_at) }))
+            .filter(r => r.due_at && now > r.due_at)
+            .map(r => ({ ...r, late_minutes: workingMinutesBetween(r.due_at, now) }));
+        res.json(overdue);
+    } catch (err) {
+        console.error('[response-sla] alerts failed:', err.message);
+        res.status(500).json({ error: 'Could not load alerts' });
     } finally {
         if (connection) connection.release();
     }
