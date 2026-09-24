@@ -8317,9 +8317,12 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   overflow: hidden;
 }
 .dash2-instrows {
-  flex: 1; min-height: 0; overflow: auto; padding: 10px;
-  columns: 280px;
-  column-gap: 12px;
+  flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-content: start;
+  align-items: start;
 }
 .dash2-row-right { display: flex; align-items: center; gap: 10px; }
 .dash2-del {
@@ -8446,23 +8449,23 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 
 .dash2-list {
   flex: 1; min-height: 0; overflow: auto; padding: 14px;
-  /* Masonry-style columns: every card keeps its own height and the spacing
-     between cards stays even, instead of a grid row leaving ragged gaps.
-     Five across on a full screen, fewer as the window narrows. */
-  column-count: 5;
-  column-gap: 14px;
+  /* As many cards as the window fits, capped at five: each column is at
+     least a fifth of the row, so the list only scrolls vertically. CSS
+     multi-column can't be used here — inside a fixed-height box it spills
+     sideways into new columns. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 4 * 14px) / 5)), 1fr));
+  gap: 14px;
+  align-content: start;
+  align-items: start;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
-@media (max-width: 1400px) { .dash2-list { column-count: 4; } }
-@media (max-width: 1100px) { .dash2-list { column-count: 3; } }
-@media (max-width: 860px)  { .dash2-list { column-count: 2; } }
-@media (max-width: 620px)  { .dash2-list { column-count: 1; } }
 /* The Installations tab paints its own calendar + list split inside here. */
-.dash2-list:has(.dash2-instwrap) { column-count: 1; }
-.dash2-empty { column-span: all; }
+.dash2-list:has(.dash2-instwrap) { display: block; }
+.dash2-empty { grid-column: 1 / -1; }
 .dash2-row {
   width: 100%;
-  break-inside: avoid;
-  margin-bottom: 14px;
   display: flex; flex-direction: column; gap: 8px;
   text-align: left;
   padding: 16px;
@@ -8562,7 +8565,9 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
 .dash2-c2-line svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 2px; color: var(--text-dim); }
 .dash2-c2-line span {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
 }
+.dash2-c2-name, .dash2-c2-ticket { overflow-wrap: anywhere; }
 .dash2-c2-problem span { color: var(--text); }
 .dash2-c2-foot {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
