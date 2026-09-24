@@ -161,6 +161,28 @@ function paintShell(container) {
           <span class="dash2-dash">–</span>
           <input type="date" id="dash2-to" value="${esc(state.to)}" title="To">
         </div>
+        <!-- The month calendar lives inside the filter bar: a dropdown whose
+             day dots show where the work sits, and picking a day filters the
+             whole dashboard to it. -->
+        <div class="dash2-calwrap">
+          <button class="dash2-calbtn" id="dash2-caltoggle" title="Pick a day">
+            ${ICONS.calendar || ''}<span id="dash2-callabel">Calendar</span>
+          </button>
+          <div class="dash2-calpop" id="dash2-calpop" hidden>
+            <header class="dash2-head">
+              <button class="dash2-navbtn" id="dash2-prev" title="Previous month">‹</button>
+              <b id="dash2-month"></b>
+              <button class="dash2-navbtn" id="dash2-next" title="Next month">›</button>
+              <span class="dash2-spacer"></span>
+              <button class="dash2-today" id="dash2-today">Today</button>
+            </header>
+            <div class="dash2-calbody" id="dash2-calbody"></div>
+            <footer class="dash2-legend">
+              <span><i class="dot dot-req"></i>Requests</span>
+              <span><i class="dot dot-inst"></i>Installations</span>
+            </footer>
+          </div>
+        </div>
         <select id="dash2-tech" title="Technician">
           <option value="">All technicians</option>
           ${employees.map(e => `<option value="${esc(e.id)}"${state.tech === e.id ? ' selected' : ''}>${esc(e.full_name || 'Employee')}</option>`).join('')}
@@ -175,21 +197,6 @@ function paintShell(container) {
       <div class="dash2-kpis" id="dash2-kpis"></div>
 
       <div class="dash2-grid">
-        <section class="dash2-card dash2-cal">
-          <header class="dash2-head">
-            <button class="dash2-navbtn" id="dash2-prev" title="Previous month">‹</button>
-            <b id="dash2-month"></b>
-            <button class="dash2-navbtn" id="dash2-next" title="Next month">›</button>
-            <span class="dash2-spacer"></span>
-            <button class="dash2-today" id="dash2-today">Today</button>
-          </header>
-          <div class="dash2-calbody" id="dash2-calbody"></div>
-          <footer class="dash2-legend">
-            <span><i class="dot dot-req"></i>Requests</span>
-            <span><i class="dot dot-inst"></i>Installations</span>
-          </footer>
-        </section>
-
         <section class="dash2-card dash2-panel">
           <header class="dash2-tabs" id="dash2-tabs">
             ${TABS.map(t => `<button class="dash2-tab" data-tab="${t.key}">${t.label}<span class="dash2-tabcount" data-count="${t.key}"></span></button>`).join('')}
@@ -232,6 +239,13 @@ function paintShell(container) {
     paintShell(container);
   };
   $('#dash2-new').onclick = () => openAdminRequestModal(() => refresh(container));
+  const pop = $('#dash2-calpop');
+  $('#dash2-caltoggle').onclick = (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; };
+  pop.onclick = (e) => e.stopPropagation();
+  // One document-level listener per shell paint, removed when the dashboard goes.
+  if (container._dashOutside) document.removeEventListener('click', container._dashOutside);
+  container._dashOutside = () => { if (pop && !pop.hidden) pop.hidden = true; };
+  document.addEventListener('click', container._dashOutside);
   $('#dash2-prev').onclick = () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1); paintCalendar(container); };
   $('#dash2-next').onclick = () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1); paintCalendar(container); };
   $('#dash2-today').onclick = () => {
@@ -258,6 +272,8 @@ function repaint(container) {
     const clear = container.querySelector('#dash2-dayclear');
     if (clear) clear.onclick = () => { state.day = ''; repaint(container); };
   }
+  const label = container.querySelector('#dash2-callabel');
+  if (label) label.textContent = state.day ? prettyDay(state.day) : 'Calendar';
   paintKpis(container);
   paintCalendar(container);
   paintPanel(container);
@@ -332,6 +348,8 @@ function paintCalendar(container) {
   body.querySelectorAll('[data-day]').forEach(btn => {
     btn.onclick = () => {
       state.day = state.day === btn.dataset.day ? '' : btn.dataset.day;
+      const pop = container.querySelector('#dash2-calpop');
+      if (pop) pop.hidden = true;
       repaint(container);
     };
   });

@@ -8327,9 +8327,33 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(300px, 360px) 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
+
+/* Calendar lives in the filter bar as a dropdown */
+.dash2-calwrap { position: relative; }
+.dash2-calbtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line, var(--border));
+  background: var(--bg-white);
+  color: var(--text-soft);
+  font-size: 0.82rem; font-weight: 700; cursor: pointer;
+}
+.dash2-calbtn svg { width: 15px; height: 15px; }
+.dash2-calbtn:hover { border-color: var(--primary); color: var(--primary); }
+.dash2-calpop {
+  position: absolute; z-index: 40; top: calc(100% + 8px); left: 0;
+  width: 320px;
+  border-radius: var(--r-md, 16px);
+  background: var(--bg-white);
+  border: 1px solid var(--line, var(--border));
+  box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.dash2-calpop[hidden] { display: none; }
 .dash2-card {
   display: flex;
   flex-direction: column;
@@ -8355,7 +8379,7 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 .dash2-today { height: 26px; padding: 0 10px; font-size: 0.75rem; }
 .dash2-navbtn:hover, .dash2-today:hover { border-color: var(--primary); color: var(--primary); }
 
-.dash2-calbody { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; }
+.dash2-calbody { padding: 10px 12px; }
 .dash2-dow, .dash2-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .dash2-dow span { text-align: center; font-size: 0.68rem; font-weight: 800; color: var(--text-dim); padding-bottom: 6px; }
 .dash2-day {
@@ -8448,11 +8472,10 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 @media (max-width: 1100px) {
   .dash2 { height: auto; }
   .dash2-kpis { grid-template-columns: repeat(3, 1fr); }
-  .dash2-grid { grid-template-columns: 1fr; }
-  .dash2-cal { max-height: 420px; }
   .dash2-panel { min-height: 460px; }
 }
 @media (max-width: 640px) {
   .dash2-kpis { grid-template-columns: repeat(2, 1fr); }
   .dash2-bar input[type="search"] { min-width: 140px; }
+  .dash2-calpop { left: auto; right: 0; width: min(320px, calc(100vw - 40px)); }
 }
