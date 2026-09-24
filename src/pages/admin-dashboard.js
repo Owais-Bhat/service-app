@@ -35,8 +35,18 @@ const TABS = [
   { key: 'complaints', label: 'Complaints', tone: 'danger' },
 ];
 
+// Inside the Assigned tab the work splits three ways: the device is with us,
+// the employee has saved their service update and we are waiting on payment,
+// or the job is still running.
+const ASSIGNED_GROUPS = [
+  { key: 'ongoing', label: 'On Going' },
+  { key: 'device', label: 'Device Taken' },
+  { key: 'payment', label: 'Payment Waiting' },
+];
+
 const state = {
   tab: 'requests',
+  assignedGroup: 'ongoing',
   month: new Date(),       // Installations calendar
   day: '',                 // picked installation day
 };
@@ -110,6 +120,16 @@ function buckets() {
     installs: data.installations,
     complaints: data.complaints.filter(c => String(c.status || 'open').toLowerCase() === 'open'),
   };
+}
+
+// 'taken' / 'in_service' both mean the device is off-site with the technician;
+// it only clears once it's marked 'returned'.
+function assignedGroupOf(r) {
+  const device = String(r.device_status || '').toLowerCase();
+  if (device === 'taken' || device === 'in_service') return 'device';
+  const settled = ['paid', 'foc'].includes(String(r.payment_status || '').toLowerCase());
+  if (r.employee_update_at && !settled) return 'payment';
+  return 'ongoing';
 }
 
 function nameOf(id) {
@@ -224,7 +244,19 @@ function paintPanel(container) {
   }
 
   let rows = '';
-  if (state.tab === 'requests' || state.tab === 'assigned' || state.tab === 'unassigned') {
+  if (state.tab === 'assigned') {
+    const counts = { ongoing: 0, device: 0, payment: 0 };
+    b.assigned.forEach(r => { counts[assignedGroupOf(r)]++; });
+    const chips = `
+      <div class="dash2-subfilter">
+        ${ASSIGNED_GROUPS.map(g => `
+          <button class="dash2-chip${state.assignedGroup === g.key ? ' on' : ''}" data-group="${g.key}">
+            ${g.label} <span class="dash2-chipcount">${counts[g.key]}</span>
+          </button>`).join('')}
+      </div>`;
+    const list = b.assigned.filter(r => assignedGroupOf(r) === state.assignedGroup);
+    rows = chips + (list.map(inquiryRow).join('') || '<div class="dash2-empty">Nothing in this category.</div>');
+  } else if (state.tab === 'requests' || state.tab === 'unassigned') {
     rows = b[state.tab].map(inquiryRow).join('');
   } else if (state.tab === 'completed') {
     rows = b.completed.slice(0, 300).map(r => cardHtml({
@@ -271,6 +303,9 @@ function paintPanel(container) {
   }
 
   list.innerHTML = rows || `<div class="dash2-empty">Nothing here right now.</div>`;
+  list.querySelectorAll('[data-group]').forEach(btn => {
+    btn.onclick = () => { state.assignedGroup = btn.dataset.group; paintPanel(container); };
+  });
   bindRows(container, list);
 }
 

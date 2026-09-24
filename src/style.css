@@ -8585,3 +8585,28 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
 .dash2-sla.warn { color: var(--warning); }
 .dash2-sla.danger { color: var(--danger); }
 .dash2-sla.muted { color: var(--text-dim); font-weight: 600; }
+
+/* Assigned tab: the three sub-categories (on going / device taken / payment) */
+.dash2-subfilter {
+  grid-column: 1 / -1;
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.dash2-subfilter .dash2-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line, var(--border));
+  background: var(--bg-white);
+  color: var(--text-soft);
+  border-radius: 100px;
+  padding: 7px 14px;
+  font-size: 0.82rem; font-weight: 700; cursor: pointer;
+  transition: 0.15s var(--ease);
+}
+.dash2-subfilter .dash2-chip:hover { border-color: var(--primary); color: var(--primary); }
+.dash2-subfilter .dash2-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.dash2-chipcount {
+  min-width: 20px; height: 18px; padding: 0 6px;
+  border-radius: 100px; background: var(--panel-2, var(--bg-soft));
+  font-size: 0.7rem; line-height: 18px; text-align: center; color: var(--text-dim);
+}
+.dash2-subfilter .dash2-chip.on .dash2-chipcount { background: #ffffff2e; color: #fff; }
