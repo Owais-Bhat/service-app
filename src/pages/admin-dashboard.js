@@ -8,7 +8,7 @@
 // them, so assigning/billing behaves exactly as it does on the full tabs.
 import { supabase } from '../supabase.js';
 import { ICONS } from '../icons.js';
-import { toast, showLoader } from '../utils.js';
+import { toast, showLoader, effectiveSLADeadline, isSlaPaused } from '../utils.js';
 import { openInquiryDetail, openAdminRequestModal, openInstallationDetail } from './admin.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -167,19 +167,42 @@ function rowHtml({ id, kind, title, sub, meta, badge, tone, canDelete }) {
     </div>`;
 }
 
+// SLA text for a card: the clock only runs once a technician is assigned, and
+// it pauses while the device sits in the service centre.
+function slaText(r) {
+  const deadline = effectiveSLADeadline(r);
+  if (!deadline) return '<span class="dash2-sla muted">SLA starts on assignment</span>';
+  if (isSlaPaused(r)) return '<span class="dash2-sla warn">SLA paused — device in service</span>';
+  const left = deadline.getTime() - Date.now();
+  if (left <= 0) return '<span class="dash2-sla danger">SLA overdue</span>';
+  const hours = Math.floor(left / 3600000);
+  const mins = Math.floor((left % 3600000) / 60000);
+  const tone = hours < 2 ? 'warn' : 'ok';
+  return `<span class="dash2-sla ${tone}">${hours}h ${mins}m left</span>`;
+}
+
 function inquiryRow(r) {
-  return rowHtml({
-    id: r.id,
-    kind: 'inquiry',
-    title: r.ticket_no || 'No ticket',
-    sub: [r.full_name, r.service_item, r.location].filter(Boolean).join(' · '),
-    meta: `${prettyDay(r.created_at)} ${clock(r.created_at)}`,
-    badge: !r.assigned_employee_id ? 'Unassigned'
-      : r.assignment_status === 'declined' ? 'Declined'
-        : r.assignment_status === 'pending' ? `Sent to ${nameOf(r.assigned_employee_id) || 'technician'}`
-          : nameOf(r.assigned_employee_id) || 'Assigned',
-    tone: !r.assigned_employee_id ? 'warn' : r.assignment_status === 'declined' ? 'danger' : 'ok',
-  });
+  const badge = !r.assigned_employee_id ? 'Unassigned'
+    : r.assignment_status === 'declined' ? 'Declined'
+      : r.assignment_status === 'pending' ? `Sent to ${nameOf(r.assigned_employee_id) || 'technician'}`
+        : nameOf(r.assigned_employee_id) || 'Assigned';
+  const tone = !r.assigned_employee_id ? 'warn' : r.assignment_status === 'declined' ? 'danger' : 'ok';
+  const problem = [r.service_item, r.description].filter(Boolean).join(' — ');
+  return `
+    <div class="dash2-row dash2-card2" data-id="${esc(r.id)}" data-kind="inquiry">
+      <div class="dash2-c2-top">
+        <b class="dash2-c2-ticket">${esc(r.ticket_no || 'No ticket')}</b>
+        <span class="dash2-badge tone-${tone}">${esc(badge)}</span>
+      </div>
+      <div class="dash2-c2-name">${esc(r.full_name || 'Customer')}</div>
+      ${problem ? `<div class="dash2-c2-line dash2-c2-problem">${ICONS.wrench || ''}<span>${esc(problem)}</span></div>` : ''}
+      ${r.location ? `<div class="dash2-c2-line">${ICONS.pin || ''}<span>${esc(r.location)}</span></div>` : ''}
+      ${r.phone ? `<div class="dash2-c2-line">${ICONS.phone || ''}<span>${esc(r.phone)}</span></div>` : ''}
+      <div class="dash2-c2-foot">
+        <span class="dash2-c2-date">${ICONS.clock || ''}<span>${esc(prettyDay(r.created_at))} · ${esc(clock(r.created_at))}</span></span>
+        ${slaText(r)}
+      </div>
+    </div>`;
 }
 
 function paintPanel(container) {
