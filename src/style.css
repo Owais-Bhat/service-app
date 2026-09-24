@@ -8350,6 +8350,8 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
   .dash2-grid {
     grid-template-columns: 1fr;
   }
+  .dash2-cal-inline { order: 2; }
+  .dash2-panel { order: 1; }
 }
 .dash2-cal-inline {
   background: var(--bg-white, #fff);

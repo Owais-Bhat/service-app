@@ -40,7 +40,7 @@ const TABS = [
   { key: 'declined', label: 'Declined', tone: 'danger' },
   { key: 'installs', label: 'Installations', tone: 'info' },
   { key: 'complaints', label: 'Complaints', tone: 'danger' },
-  { key: 'team', label: 'On duty', tone: 'ok' },
+  { key: 'team', label: 'Online', tone: 'ok' },
 ];
 
 // Filter state survives a re-render but not a reload — deliberately, so the
@@ -539,7 +539,7 @@ function paintPanel(container) {
       title: r.profiles?.full_name || nameOf(r.user_id) || 'Employee',
       sub: r.location || 'Location not recorded',
       meta: `Since ${clock(r.clock_in)}`,
-      badge: 'On duty',
+      badge: 'Online',
       tone: 'ok',
     })).join('');
     if (missingEod.length) {
