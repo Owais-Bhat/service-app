@@ -8305,23 +8305,38 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 }
 .dash2-daychip button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 0.8rem; }
 
-.dash2-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
-.dash2-kpi {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 14px;
-  border-radius: var(--r-md, 16px);
-  background: var(--glass-bg-strong, var(--bg-white));
+.dash2-statrow {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line, var(--border));
+}
+.dash2-stat {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 8px 12px;
   border: 1px solid var(--line, var(--border));
   border-left: 3px solid var(--primary);
-  box-shadow: var(--neu-sm);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: 0.15s var(--ease);
 }
-.dash2-kpi-v { font-size: 1.5rem; font-weight: 800; line-height: 1.1; color: var(--text); }
-.dash2-kpi-l { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
-.dash2-kpi.tone-warn { border-left-color: var(--warning); }
-.dash2-kpi.tone-danger { border-left-color: var(--danger); }
-.dash2-kpi.tone-info { border-left-color: var(--info); }
-.dash2-kpi.tone-ok { border-left-color: var(--success); }
-.dash2-kpi.tone-muted { border-left-color: var(--line, var(--border)); }
+.dash2-stat:hover { background: var(--row-hover); }
+.dash2-stat.on { background: var(--accent-soft); border-color: var(--primary); }
+.dash2-stat-v { font-size: 1.35rem; font-weight: 800; line-height: 1.1; color: var(--text); }
+.dash2-stat-l {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-dim); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.dash2-stat.tone-warn { border-left-color: var(--warning); }
+.dash2-stat.tone-danger { border-left-color: var(--danger); }
+.dash2-stat.tone-info { border-left-color: var(--info); }
+.dash2-stat.tone-ok { border-left-color: var(--success); }
 
 .dash2-grid {
   flex: 1;
@@ -8471,11 +8486,43 @@ table.tbl .em { font-size: 0.78rem; color: var(--text-3, var(--text-dim)); }
 
 @media (max-width: 1100px) {
   .dash2 { height: auto; }
-  .dash2-kpis { grid-template-columns: repeat(3, 1fr); }
+  .dash2-statrow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dash2-panel { min-height: 460px; }
 }
 @media (max-width: 640px) {
-  .dash2-kpis { grid-template-columns: repeat(2, 1fr); }
+  .dash2-statrow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dash2-bar input[type="search"] { min-width: 140px; }
   .dash2-calpop { left: auto; right: 0; width: min(320px, calc(100vw - 40px)); }
+}
+
+/* ─── COLLAPSIBLE SIDEBAR (desktop icon rail) ─── */
+.nav-collapse-btn { display: none; }
+@media (min-width: 1025px) {
+  .nav-collapse-btn { display: inline-flex; }
+}
+
+body.nav-collapsed .sidebar { width: 76px; }
+body.nav-collapsed .main-content { margin-left: 76px; }
+body.nav-collapsed .sidebar-logo { padding: 18px 0; text-align: center; }
+body.nav-collapsed .sidebar-logo .logo-text,
+body.nav-collapsed .sidebar-logo-text,
+body.nav-collapsed .nav-section,
+body.nav-collapsed .nav-badge,
+body.nav-collapsed .user-details,
+body.nav-collapsed .user-info { display: none; }
+body.nav-collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  gap: 0;
+}
+body.nav-collapsed .nav-item > span:not(.nav-icon) { display: none; }
+body.nav-collapsed .sidebar-footer { padding: 12px 0; }
+body.nav-collapsed .sidebar-footer .user-card,
+body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
+@media (max-width: 1024px) {
+  body.nav-collapsed .main-content { margin-left: 0; }
+  body.nav-collapsed .sidebar { width: 280px; }
+  body.nav-collapsed .nav-item > span:not(.nav-icon),
+  body.nav-collapsed .nav-section,
+  body.nav-collapsed .user-info { display: initial; }
 }

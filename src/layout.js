@@ -107,6 +107,7 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
       <div class="main-content">
         <div class="topbar">
           <button class="menu-toggle icon-btn" id="menu-toggle" aria-label="Toggle navigation">${ICONS.menu}</button>
+          <button class="icon-btn nav-collapse-btn" id="nav-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">${ICONS.menu}</button>
           <div class="topbar-title" id="topbar-title"></div>
           <div id="topbar-actions" class="topbar-actions">
             <div class="global-search-wrap">
@@ -179,6 +180,24 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
   const closeSidebar = () => { sidebar.classList.remove('open'); overlay.classList.remove('active'); };
   toggle.onclick = () => { sidebar.classList.add('open'); overlay.classList.add('active'); };
+
+  // Desktop: shrink the sidebar to an icon rail so a page can use the full
+  // width. Remembered per browser.
+  const collapseBtn = document.getElementById('nav-collapse');
+  if (collapseBtn) {
+    const apply = (on) => {
+      document.body.classList.toggle('nav-collapsed', on);
+      collapseBtn.title = on ? 'Expand sidebar' : 'Collapse sidebar';
+    };
+    let saved = false;
+    try { saved = localStorage.getItem('nav_collapsed') === '1'; } catch {}
+    apply(saved);
+    collapseBtn.onclick = () => {
+      const on = !document.body.classList.contains('nav-collapsed');
+      apply(on);
+      try { localStorage.setItem('nav_collapsed', on ? '1' : '0'); } catch {}
+    };
+  }
   overlay.onclick = closeSidebar;
   document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', closeSidebar));
 

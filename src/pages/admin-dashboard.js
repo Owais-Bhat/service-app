@@ -31,12 +31,15 @@ const PRESETS = [
   { key: 'all', label: 'All', range: () => ['', ''] },
 ];
 
+// Each tab is also the KPI for that number — the count lives on the tab, so
+// the filter bar carries everything and the rest of the screen is just the list.
 const TABS = [
-  { key: 'attention', label: 'Needs Attention' },
-  { key: 'requests', label: 'Service Requests' },
-  { key: 'installs', label: 'Installations' },
-  { key: 'complaints', label: 'Complaints' },
-  { key: 'team', label: 'Team Today' },
+  { key: 'requests', label: 'Open requests', tone: 'primary' },
+  { key: 'unassigned', label: 'Unassigned', tone: 'warn' },
+  { key: 'declined', label: 'Declined', tone: 'danger' },
+  { key: 'installs', label: 'Installations', tone: 'info' },
+  { key: 'complaints', label: 'Complaints', tone: 'danger' },
+  { key: 'team', label: 'On duty', tone: 'ok' },
 ];
 
 // Filter state survives a re-render but not a reload — deliberately, so the
@@ -48,7 +51,7 @@ const state = {
   day: '',          // set by clicking a calendar date; narrows to one day
   tech: '',
   q: '',
-  tab: 'attention',
+  tab: 'requests',
   month: new Date(),
 };
 
@@ -143,7 +146,6 @@ async function refresh(container) {
     await loadData();
   } catch { return; }
   if (!document.body.contains(container)) return;
-  paintKpis(container);
   paintCalendar(container);
   paintPanel(container);
 }
@@ -192,15 +194,18 @@ function paintShell(container) {
         <span class="dash2-daychip" id="dash2-daychip" hidden></span>
         <button class="btn btn-secondary btn-sm" id="dash2-reset">Reset</button>
         <button class="btn btn-primary btn-sm" id="dash2-new">${ICONS.plus}<span>Request</span></button>
-      </div>
 
-      <div class="dash2-kpis" id="dash2-kpis"></div>
+        <div class="dash2-statrow" id="dash2-tabs">
+          ${TABS.map(t => `
+            <button class="dash2-stat tone-${t.tone}" data-tab="${t.key}">
+              <span class="dash2-stat-v" data-count="${t.key}">0</span>
+              <span class="dash2-stat-l">${t.label}</span>
+            </button>`).join('')}
+        </div>
+      </div>
 
       <div class="dash2-grid">
         <section class="dash2-card dash2-panel">
-          <header class="dash2-tabs" id="dash2-tabs">
-            ${TABS.map(t => `<button class="dash2-tab" data-tab="${t.key}">${t.label}<span class="dash2-tabcount" data-count="${t.key}"></span></button>`).join('')}
-          </header>
           <div class="dash2-list" id="dash2-list"></div>
         </section>
       </div>
@@ -253,7 +258,7 @@ function paintShell(container) {
     state.day = todayKey();
     repaint(container);
   };
-  container.querySelectorAll('.dash2-tab').forEach(btn => {
+  container.querySelectorAll('.dash2-stat').forEach(btn => {
     btn.onclick = () => { state.tab = btn.dataset.tab; paintPanel(container); };
   });
 
@@ -274,36 +279,8 @@ function repaint(container) {
   }
   const label = container.querySelector('#dash2-callabel');
   if (label) label.textContent = state.day ? prettyDay(state.day) : 'Calendar';
-  paintKpis(container);
   paintCalendar(container);
   paintPanel(container);
-}
-
-function paintKpis(container) {
-  const el = container.querySelector('#dash2-kpis');
-  if (!el) return;
-  const { inquiries, installations, complaints } = filtered();
-  const open = inquiries.filter(r => OPEN_INQUIRY_STATUSES.has(String(r.status || '').toLowerCase()));
-  const unassigned = open.filter(r => !r.assigned_employee_id);
-  const declined = inquiries.filter(r => r.assignment_status === 'declined');
-  const today = todayKey();
-  const onDuty = data.attendance.filter(r => ymd(r.date || r.clock_in) === today && r.clock_in && !r.clock_out);
-  const pendingInstalls = installations.filter(r => String(r.status || 'pending').toLowerCase() === 'pending');
-  const openComplaints = complaints.filter(r => String(r.status || 'open').toLowerCase() === 'open');
-
-  const tiles = [
-    { label: 'Open requests', value: open.length, tone: 'primary' },
-    { label: 'Unassigned', value: unassigned.length, tone: unassigned.length ? 'warn' : 'muted' },
-    { label: 'Declined', value: declined.length, tone: declined.length ? 'danger' : 'muted' },
-    { label: 'Installations due', value: pendingInstalls.length, tone: 'info' },
-    { label: 'Complaints open', value: openComplaints.length, tone: openComplaints.length ? 'danger' : 'muted' },
-    { label: 'On duty now', value: onDuty.length, tone: 'ok' },
-  ];
-  el.innerHTML = tiles.map(t => `
-    <div class="dash2-kpi tone-${t.tone}">
-      <span class="dash2-kpi-v">${t.value}</span>
-      <span class="dash2-kpi-l">${t.label}</span>
-    </div>`).join('');
 }
 
 function paintCalendar(container) {
@@ -376,23 +353,26 @@ function paintPanel(container) {
   if (!list) return;
   const { inquiries, installations, complaints } = filtered();
   const open = inquiries.filter(r => OPEN_INQUIRY_STATUSES.has(String(r.status || '').toLowerCase()));
-  const attention = open.filter(r => !r.assigned_employee_id || r.assignment_status === 'declined' || r.reopened);
+  const unassigned = open.filter(r => !r.assigned_employee_id);
+  const declined = inquiries.filter(r => r.assignment_status === 'declined');
+  const openComplaints = complaints.filter(c => String(c.status || 'open').toLowerCase() === 'open');
   const today = todayKey();
   const onDuty = data.attendance.filter(r => ymd(r.date || r.clock_in) === today && r.clock_in && !r.clock_out);
 
   const counts = {
-    attention: attention.length,
     requests: open.length,
+    unassigned: unassigned.length,
+    declined: declined.length,
     installs: installations.length,
-    complaints: complaints.filter(c => String(c.status || 'open').toLowerCase() === 'open').length,
+    complaints: openComplaints.length,
     team: onDuty.length,
   };
-  container.querySelectorAll('.dash2-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
-  container.querySelectorAll('.dash2-tabcount').forEach(el => { el.textContent = counts[el.dataset.count] ?? 0; });
+  container.querySelectorAll('.dash2-stat').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
+  container.querySelectorAll('[data-count]').forEach(el => { el.textContent = counts[el.dataset.count] ?? 0; });
 
   let rows = '';
-  if (state.tab === 'attention' || state.tab === 'requests') {
-    const src = state.tab === 'attention' ? attention : open;
+  if (state.tab === 'requests' || state.tab === 'unassigned' || state.tab === 'declined') {
+    const src = state.tab === 'unassigned' ? unassigned : state.tab === 'declined' ? declined : open;
     rows = src.map(r => rowHtml({
       id: r.id,
       kind: 'inquiry',
@@ -416,7 +396,7 @@ function paintPanel(container) {
       tone: r.assigned_employee_id ? 'ok' : 'warn',
     })).join('');
   } else if (state.tab === 'complaints') {
-    rows = complaints.map(r => rowHtml({
+    rows = openComplaints.map(r => rowHtml({
       id: r.id,
       kind: 'complaint',
       title: r.ticket_no || 'No ticket',
