@@ -26,8 +26,9 @@ const OPEN_INQUIRY_STATUSES = new Set(['pending', 'open', 'assigned', 'in_progre
 
 const PRESETS = [
   { key: 'today', label: 'Today', range: () => [todayKey(), todayKey()] },
-  { key: '7d', label: '7 days', range: () => [addDays(todayKey(), -6), todayKey()] },
-  { key: '30d', label: '30 days', range: () => [addDays(todayKey(), -29), todayKey()] },
+  { key: '7d', label: 'Last 7 days', range: () => [addDays(todayKey(), -6), todayKey()] },
+  { key: 'next7d', label: 'Next 7 days', range: () => [todayKey(), addDays(todayKey(), 7)] },
+  { key: '30d', label: 'Last 30 days', range: () => [addDays(todayKey(), -29), todayKey()] },
   { key: 'all', label: 'All', range: () => ['', ''] },
 ];
 
@@ -159,6 +160,9 @@ function paintShell(container) {
   container.innerHTML = `
     <div class="dash2">
       <div class="dash2-bar">
+        <div class="dash2-filter-label" style="font-size: 0.8rem; color: var(--text-soft); font-weight: 500; display: flex; align-items: center; gap: 6px;" title="These filters apply to all numbers and lists below.">
+          ${ICONS.filter || ''} <b>Filter Dashboard:</b>
+        </div>
         <div class="dash2-presets">
           ${PRESETS.map(p => `<button class="dash2-chip" data-preset="${p.key}">${p.label}</button>`).join('')}
         </div>
