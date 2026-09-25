@@ -249,7 +249,7 @@ const PAGE_LOADERS = {
     dashboard: () => import('./pages/admin-dashboard.js').then(m => m.renderAdminDashboard),
     stats: () => import('./pages/stats-admin.js').then(m => m.renderAdminStats),
     attendance: () => import('./pages/attendance-admin.js').then(m => m.renderAttendanceTab),
-    inquiries: () => import('./pages/admin.js').then(m => m.renderInquiries),
+    inquiries: () => import('./pages/service-requests-admin.js').then(m => m.renderServiceRequestsTab),
     queries: () => import('./pages/queries.js').then(m => m.renderQueriesTab),
     installations: () => import('./pages/admin.js').then(m => m.renderInstallationsTab),
     'job-cards': () => import('./pages/job-cards.js').then(m => m.renderJobCardsTab),

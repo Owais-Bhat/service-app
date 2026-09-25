@@ -9007,3 +9007,9 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
   body.nav-collapsed .nav-grouphead { justify-content: flex-start; padding: 10px 14px; gap: 12px; }
   body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: inline; }
 }
+
+/* Service Requests calendar dots reuse the attendance styles */
+.at2-daydot.tone-unassigned { background: var(--danger); }
+.at2-daydot.tone-assigned { background: var(--warning); }
+.at2-daydot.tone-in_progress { background: #8b5cf6; }
+.at2-daydot.tone-completed { background: var(--primary); }
