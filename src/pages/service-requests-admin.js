@@ -63,9 +63,26 @@ export async function renderServiceRequestsTab(container) {
 }
 
 // ── derived ─────────────────────────────────────────
+// Every state the work can actually be in, so nothing hides behind a
+// catch-all "completed": a device sitting with the technician and a closed
+// case are different situations, and each gets its own bucket.
+const STATES = [
+  { key: 'unassigned', label: 'Unassigned', cls: 'danger' },
+  { key: 'assigned', label: 'Assigned', cls: 'warn' },
+  { key: 'in_progress', label: 'In Progress', cls: 'ok' },
+  { key: 'device', label: 'Device Taken', cls: 'warn' },
+  { key: 'resolved', label: 'Resolved', cls: 'ok' },
+  { key: 'case_closed', label: 'Case Closed', cls: 'muted' },
+  { key: 'issue', label: 'Issue Not Resolved', cls: 'danger' },
+];
+
 function stateOf(r) {
   const st = String(r.status || '').toLowerCase();
-  if (DONE_STATUSES.has(st)) return 'completed';
+  const device = String(r.device_status || '').toLowerCase();
+  if (st === 'case_closed') return 'case_closed';
+  if (st === 'issue_not_resolved') return 'issue';
+  if (['resolved', 'closed', 'foc'].includes(st)) return 'resolved';
+  if (device === 'taken' || device === 'in_service') return 'device';
   if (!r.assigned_employee_id || r.assignment_status === 'declined') return 'unassigned';
   if (st === 'in_progress') return 'in_progress';
   return 'assigned';
@@ -103,11 +120,12 @@ function decorated() {
 function perTech(rows) {
   const map = new Map();
   rows.forEach(r => {
-    if (!map.has(r.techId)) map.set(r.techId, { id: r.techId, name: r.tech, rows: [], open: 0, done: 0, overdue: 0, billed: 0 });
+    if (!map.has(r.techId)) map.set(r.techId, { id: r.techId, name: r.tech, rows: [], open: 0, done: 0, overdue: 0, device: 0, billed: 0 });
     const t = map.get(r.techId);
     t.rows.push(r);
     if (OPEN_STATUSES.has(String(r.status || '').toLowerCase())) t.open++;
-    if (r.state === 'completed') t.done++;
+    if (['resolved', 'case_closed'].includes(r.state)) t.done++;
+    if (r.state === 'device') t.device++;
     const dl = effectiveSLADeadline(r);
     if (dl && !DONE_STATUSES.has(String(r.status || '').toLowerCase()) && Date.now() > dl.getTime()) t.overdue++;
     t.billed += r.amount;
@@ -120,10 +138,7 @@ function paint(container) {
   const rows = decorated();
   const techs = perTech(rows);
   const total = rows.length;
-  const unassigned = rows.filter(r => r.state === 'unassigned').length;
-  const assigned = rows.filter(r => r.state === 'assigned').length;
-  const inProgress = rows.filter(r => r.state === 'in_progress').length;
-  const completed = rows.filter(r => r.state === 'completed').length;
+  const count = (key) => rows.filter(r => r.state === key).length;
 
   container.innerHTML = `
     <div class="at2">
@@ -140,10 +155,11 @@ function paint(container) {
 
       <div class="at2-kpis">
         ${kpi(ICONS.inbox, total, 'Total Requests', '', 'muted')}
-        ${kpi(ICONS.alert, unassigned, 'Unassigned', pct(unassigned, total), 'red')}
-        ${kpi(ICONS.user, assigned, 'Assigned', pct(assigned, total), 'amber')}
-        ${kpi(ICONS.wrench, inProgress, 'In Progress', pct(inProgress, total), 'green')}
-        ${kpi(ICONS.check, completed, 'Completed', pct(completed, total), 'green')}
+        ${kpi(ICONS.alert, count('unassigned'), 'Unassigned', pct(count('unassigned'), total), 'red')}
+        ${kpi(ICONS.wrench, count('in_progress'), 'In Progress', pct(count('in_progress'), total), 'green')}
+        ${kpi(ICONS.box, count('device'), 'Device Taken', pct(count('device'), total), 'amber')}
+        ${kpi(ICONS.check, count('resolved'), 'Resolved', pct(count('resolved'), total), 'green')}
+        ${kpi(ICONS.lock || ICONS.shield, count('case_closed'), 'Case Closed', pct(count('case_closed'), total), 'muted')}
       </div>
 
       <div class="at2-tabs">
@@ -162,10 +178,7 @@ function paint(container) {
           <div class="form-group"><label>Status</label>
             <select id="sr2-status">
               <option value="">All</option>
-              <option value="unassigned"${state.status === 'unassigned' ? ' selected' : ''}>Unassigned</option>
-              <option value="assigned"${state.status === 'assigned' ? ' selected' : ''}>Assigned</option>
-              <option value="in_progress"${state.status === 'in_progress' ? ' selected' : ''}>In Progress</option>
-              <option value="completed"${state.status === 'completed' ? ' selected' : ''}>Completed</option>
+              ${STATES.map(st => `<option value="${st.key}"${state.status === st.key ? ' selected' : ''}>${st.label}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label>From</label><input type="date" id="sr2-from" value="${esc(state.from)}"></div>
@@ -208,12 +221,7 @@ function kpi(icon, value, label, note, tone) {
     </div>`;
 }
 
-const STATE_CHIP = {
-  unassigned: { label: 'Unassigned', cls: 'danger' },
-  assigned: { label: 'Assigned', cls: 'warn' },
-  in_progress: { label: 'In Progress', cls: 'ok' },
-  completed: { label: 'Completed', cls: 'ok' },
-};
+const STATE_CHIP = Object.fromEntries(STATES.map(st => [st.key, { label: st.label, cls: st.cls }]));
 
 // ── tab 1: grouped per technician ───────────────────
 function paintRequests(container, body, rows, techs) {
@@ -229,6 +237,7 @@ function paintRequests(container, body, rows, techs) {
             <span><i class="dot tone-warn"></i>Open<b>${t.open}</b></span>
             <span><i class="dot tone-ok"></i>Completed<b>${t.done}</b></span>
             <span><i class="dot tone-danger"></i>Overdue<b>${t.overdue}</b></span>
+            <span><i class="dot tone-warn"></i>Device taken<b>${t.device}</b></span>
             <span><i class="dot tone-pink"></i>Billed<b>${money(t.billed)}</b></span>
           </div>
         </div>`).join('') || '<div class="at2-empty">No requests in this range.</div>'}
@@ -248,6 +257,7 @@ function paintRequests(container, body, rows, techs) {
                   <span class="at2-chiprow">
                     <span class="at2-chip warn">Open ${t.open}</span>
                     <span class="at2-chip ok">Completed ${t.done}</span>
+                    <span class="at2-chip warn">Device ${t.device}</span>
                     <span class="at2-chip danger">Overdue ${t.overdue}</span>
                   </span>
                   <span class="at2-group-hours">${money(t.billed)}</span>
@@ -305,7 +315,7 @@ function sidePanel(rows) {
 
   const byDay = new Map();
   rows.forEach(r => {
-    const rank = { completed: 1, assigned: 2, in_progress: 2, unassigned: 3 };
+    const rank = { resolved: 1, case_closed: 1, assigned: 2, in_progress: 2, device: 3, issue: 4, unassigned: 5 };
     const cur = byDay.get(r.date);
     if (!cur || rank[r.state] > rank[cur]) byDay.set(r.date, r.state);
   });
@@ -343,7 +353,9 @@ function sidePanel(rows) {
             <span><i class="at2-daydot tone-unassigned"></i>Unassigned</span>
             <span><i class="at2-daydot tone-assigned"></i>Assigned</span>
             <span><i class="at2-daydot tone-in_progress"></i>In progress</span>
-            <span><i class="at2-daydot tone-completed"></i>Completed</span>
+            <span><i class="at2-daydot tone-device"></i>Device taken</span>
+            <span><i class="at2-daydot tone-resolved"></i>Resolved</span>
+            <span><i class="at2-daydot tone-issue"></i>Issue</span>
           </div>
         </div>
       </section>

@@ -9013,3 +9013,14 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
 .at2-daydot.tone-assigned { background: var(--warning); }
 .at2-daydot.tone-in_progress { background: #8b5cf6; }
 .at2-daydot.tone-completed { background: var(--primary); }
+
+.at2-daydot.tone-device { background: #0ea5a5; }
+.at2-daydot.tone-resolved { background: var(--primary); }
+.at2-daydot.tone-issue { background: #ec4899; }
+.at2-daydot.tone-case_closed { background: var(--text-dim); }
+
+.at2-daydot.tone-inst-pending { background: var(--danger); }
+.at2-daydot.tone-inst-assigned { background: var(--warning); }
+.at2-daydot.tone-inst-in_progress { background: #8b5cf6; }
+.at2-daydot.tone-inst-completed { background: var(--primary); }
+.at2-daydot.tone-inst-cancelled { background: var(--text-dim); }

@@ -251,7 +251,7 @@ const PAGE_LOADERS = {
     attendance: () => import('./pages/attendance-admin.js').then(m => m.renderAttendanceTab),
     inquiries: () => import('./pages/service-requests-admin.js').then(m => m.renderServiceRequestsTab),
     queries: () => import('./pages/queries.js').then(m => m.renderQueriesTab),
-    installations: () => import('./pages/admin.js').then(m => m.renderInstallationsTab),
+    installations: () => import('./pages/installations-admin.js').then(m => m.renderInstallationsAdminTab),
     'job-cards': () => import('./pages/job-cards.js').then(m => m.renderJobCardsTab),
     'service-log': () => import('./pages/service-log.js').then(m => m.renderServiceLogTab),
     'response-times': () => import('./pages/response-times.js').then(m => m.renderResponseTimesTab),
