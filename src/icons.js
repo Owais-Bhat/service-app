@@ -94,6 +94,10 @@ export const ICONS = {
     <path d="M16.5 6.5a9 9 0 0 1 3 5" stroke="white" stroke-width="1.3" opacity=".5" stroke-linecap="round"/>
   </svg>`,
 
+  chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 9l6 6 6-6"/>
+  </svg>`,
+
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M14 7l5.5 5-5.5 5z" fill="currentColor" opacity=".2" stroke="none"/>
     <path d="M14 7l5.5 5-5.5 5z"/>

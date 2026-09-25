@@ -8962,3 +8962,48 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
 .at2-action:hover { background: var(--row-hover); color: var(--primary); }
 .at2-action svg { width: 16px; height: 16px; color: var(--primary); }
 @media (max-width: 1150px) { .at2-split { grid-template-columns: 1fr; } }
+
+/* Sidebar: collapsible groups with indented children */
+.nav-group { margin-bottom: 2px; }
+.nav-grouphead {
+  width: 100%;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--text-2, var(--text-soft));
+  font-family: inherit; font-size: 0.88rem; font-weight: 600;
+  border-radius: 12px; text-align: left;
+}
+.nav-grouphead:hover { background: var(--row-hover); color: var(--primary); }
+.nav-grouphead .nav-icon { display: inline-flex; width: 18px; height: 18px; }
+.nav-caret {
+  display: inline-flex; width: 14px; height: 14px;
+  color: var(--text-dim); transition: transform 0.2s var(--ease, ease);
+}
+.nav-caret svg { width: 14px; height: 14px; }
+.nav-group.open > .nav-grouphead { color: var(--primary); }
+.nav-group.open .nav-caret { transform: rotate(180deg); }
+.nav-children { display: none; padding: 2px 0 6px; }
+.nav-group.open .nav-children { display: block; }
+.nav-item.nav-child {
+  padding-left: 30px;
+  font-size: 0.83rem;
+}
+.nav-bullet {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--text-dim); flex-shrink: 0; margin-right: 7px;
+  transition: 0.15s var(--ease, ease);
+}
+.nav-item.nav-child:hover .nav-bullet,
+.nav-item.nav-child.active .nav-bullet { background: var(--primary); }
+body.nav-collapsed .nav-children,
+body.nav-collapsed .nav-caret { display: none; }
+body.nav-collapsed .nav-grouphead { justify-content: center; padding: 10px 0; gap: 0; }
+body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
+@media (max-width: 1024px) {
+  body.nav-collapsed .nav-children { display: none; }
+  body.nav-collapsed .nav-group.open .nav-children { display: block; }
+  body.nav-collapsed .nav-caret { display: inline-flex; }
+  body.nav-collapsed .nav-grouphead { justify-content: flex-start; padding: 10px 14px; gap: 12px; }
+  body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: inline; }
+}

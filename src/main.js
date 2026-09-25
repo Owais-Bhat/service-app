@@ -87,99 +87,132 @@ const ALWAYS_ON_TABS = new Set(['dashboard', 'notifications', 'profile']);
 const WORKER_TYPE_GOVERNED_TABS = new Set(['public-jobs', 'assign-requests']);
 function filterTabs(items) {
   if (!allowedTabs) return items;
-  const kept = items.filter(it => it.type === 'section' || ALWAYS_ON_TABS.has(it.id) || WORKER_TYPE_GOVERNED_TABS.has(it.id) || allowedTabs.has(String(it.id)));
-  // Remove section headers that ended up with no items after them.
-  return kept.filter((it, i) => {
-    if (it.type !== 'section') return true;
-    const next = kept[i + 1];
-    return next && next.type !== 'section';
-  });
+  const visible = (it) => ALWAYS_ON_TABS.has(it.id) || WORKER_TYPE_GOVERNED_TABS.has(it.id) || allowedTabs.has(String(it.id));
+  // Groups keep only the children this employee may see, and a group left
+  // with nothing inside it disappears entirely.
+  const kept = items
+    .map(it => it.type === 'group' ? { ...it, children: it.children.filter(visible) } : it)
+    .filter(it => it.type === 'group' ? it.children.length : visible(it));
+  return kept;
 }
 
 function getNavItems(role) {
-  const common = [
-    { type: 'section', label: 'Main' },
-    { id: 'dashboard', icon: ICONS.dashboard, label: 'Dashboard' },
-  ];
   if (role === 'employee') {
-    const items = [...common,
-      { id: 'my-stats', icon: ICONS.star, label: 'My Stats' },
-      { id: 'all-tickets', icon: ICONS.ticket, label: 'My Tasks' },
-      ...(installationsEnabled ? [{ id: 'my-installations', icon: ICONS.plus, label: 'Installations' }] : []),
-      ...(isGigWorker ? [{ id: 'public-jobs', icon: ICONS.inbox, label: 'Public Jobs' }] : []),
+    return filterTabs([
+      { id: 'dashboard', icon: ICONS.dashboard, label: 'Dashboard' },
+      {
+        type: 'group', key: 'work', icon: ICONS.clipboard, label: 'Work',
+        children: [
+          { id: 'all-tickets', label: 'My Tasks' },
+          ...(installationsEnabled ? [{ id: 'my-installations', label: 'Installations' }] : []),
+          ...(isGigWorker ? [{ id: 'public-jobs', label: 'Public Jobs' }] : []),
+          ...(canAssignTickets ? [{ id: 'assign-requests', label: 'Assign Requests' }] : []),
+          { id: 'device-followup', label: 'Device Follow-up' },
+        ],
+      },
+      {
+        type: 'group', key: 'records', icon: ICONS.clock, label: 'My Records',
+        children: [
+          { id: 'my-stats', label: 'My Stats' },
+          { id: 'my-attendance', label: 'Attendance Records' },
+          { id: 'my-leaves', label: 'Leave Requests' },
+          { id: 'my-eod', label: 'EOD Reports' },
+          { id: 'my-cash', label: 'My Cash' },
+          { id: 'my-collections', label: 'Collections' },
+        ],
+      },
+      {
+        type: 'group', key: 'services', icon: ICONS.receipt, label: 'Services',
+        children: [
+          { id: 'estimator', label: 'Estimator' },
+          ...(canAddService ? [{ id: 'service-pricing', label: 'Service Pricing' }] : []),
+        ],
+      },
+      {
+        type: 'group', key: 'growth', icon: ICONS.star, label: 'Growth',
+        children: [
+          { id: 'leaderboard', label: 'Leaderboard' },
+          { id: 'my-reviews', label: 'Bonus Reviews' },
+          { id: 'employee-training', label: 'Tutorials' },
+          { id: 'my-training-courses', label: 'Training' },
+        ],
+      },
       { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
-      { type: 'section', label: 'Work' },
-      { id: 'my-attendance', icon: ICONS.clock, label: 'Attendance Records' },
-      { id: 'my-leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
-      { id: 'my-eod', icon: ICONS.clipboard, label: 'EOD Reports' },
-      { id: 'my-cash', icon: ICONS.rupee, label: 'My Cash' },
-      { id: 'my-collections', icon: ICONS.card, label: 'Collections' },
-      { id: 'leaderboard', icon: ICONS.star, label: 'Leaderboard' },
-      { id: 'my-reviews', icon: ICONS.star, label: 'Bonus Reviews' },
-      { id: 'employee-training', icon: ICONS.play, label: 'Tutorials' },
-      { id: 'my-training-courses', icon: ICONS.shield, label: 'Training' },
-    ];
-    items.push({ id: 'device-followup', icon: ICONS.wrench, label: 'Device Follow-up' });
-    if (canAssignTickets) {
-      items.push({ type: 'section', label: 'Operations' });
-      items.push({ id: 'assign-requests', icon: ICONS.inbox, label: 'Assign Requests' });
-    }
-    items.push({ type: 'section', label: 'Services' });
-    items.push({ id: 'estimator', icon: ICONS.receipt, label: 'Estimator' });
-    if (canAddService) {
-      items.push({ id: 'service-pricing', icon: ICONS.receipt, label: 'Service Pricing' });
-    }
-    items.push(
-      { type: 'section', label: 'Account' },
-      { id: 'profile', icon: ICONS.user, label: 'Profile' }
-    );
-    return filterTabs(items);
+      { id: 'profile', icon: ICONS.user, label: 'Profile' },
+    ]);
   }
-  return [...common,
-    { id: 'stats', icon: ICONS.clipboard, label: 'Stats' },
+
+  return [
+    { id: 'dashboard', icon: ICONS.dashboard, label: 'Dashboard' },
+    {
+      type: 'group', key: 'work', icon: ICONS.clipboard, label: 'Work',
+      children: [
+        { id: 'inquiries', label: 'Service Requests' },
+        { id: 'queries', label: 'Queries & Follow-ups' },
+        { id: 'installations', label: 'Installations' },
+        { id: 'device-tracking', label: 'Device Tracking' },
+      ],
+    },
+    {
+      type: 'group', key: 'customers', icon: ICONS.users, label: 'Customers',
+      children: [
+        { id: 'contacts', label: 'Contacts' },
+        { id: 'complaints', label: 'Complaints' },
+      ],
+    },
+    { id: 'calendar', icon: ICONS.calendar, label: 'Calendar' },
+    {
+      type: 'group', key: 'operations', icon: ICONS.settings || ICONS.refresh, label: 'Operations',
+      children: [
+        { id: 'attendance', label: 'Attendance' },
+        { id: 'job-cards', label: 'Job Cards' },
+        { id: 'service-log', label: 'Service Log' },
+        { id: 'reviews', label: 'Bonus Reviews' },
+        { id: 'auto-assignment', label: 'Auto Assignment' },
+        { id: 'live-locations', label: 'Live Locations' },
+      ],
+    },
+    {
+      type: 'group', key: 'reports', icon: ICONS.chart || ICONS.clipboard, label: 'Reports',
+      children: [
+        { id: 'stats', label: 'Stats' },
+        { id: 'response-times', label: 'Response Time' },
+        { id: 'feedback', label: 'Employee Performance' },
+        { id: 'finance', label: 'Finance' },
+        { id: 'ai-report', label: 'AI Reports' },
+        { id: 'payments', label: 'Payments' },
+        { id: 'bills', label: 'Bills' },
+        { id: 'cash', label: 'Cash Collections' },
+        { id: 'collections', label: 'Collection Reports' },
+        { id: 'salary', label: 'Salary' },
+        { id: 'gig-payouts', label: 'Gig Payouts' },
+        { id: 'leaves', label: 'Leave Requests' },
+        { id: 'eod', label: 'EOD Summaries' },
+      ],
+    },
+    {
+      type: 'group', key: 'management', icon: ICONS.user, label: 'Management',
+      children: [
+        { id: 'employee-panel', label: 'Employees' },
+        { id: 'users', label: 'Users' },
+        { id: 'device-types', label: 'Device Types' },
+        { id: 'pricing', label: 'Pricing' },
+        { id: 'training-admin', label: 'Employee Tutorials' },
+        { id: 'training-courses', label: 'Training Courses' },
+        { id: 'settings', label: 'Settings' },
+      ],
+    },
+    {
+      type: 'group', key: 'marketing', icon: ICONS.box, label: 'Marketing',
+      children: [
+        { id: 'ads', label: 'Landing Ads' },
+        { id: 'popup-ads', label: 'Popup Ads' },
+        { id: 'notices', label: 'Notices' },
+        { id: 'discounts', label: 'Coupons' },
+        { id: 'discount-details', label: 'Discount Details' },
+      ],
+    },
     { id: 'notifications', icon: ICONS.bell, label: 'Notifications' },
-    { type: 'section', label: 'Operations' },
-    { id: 'attendance', icon: ICONS.clock, label: 'Attendance' },
-    { id: 'inquiries', icon: ICONS.inbox, label: 'Service Requests' },
-    { id: 'queries', icon: ICONS.inbox, label: 'Queries / Follow up' },
-    { id: 'installations', icon: ICONS.plus, label: 'Installations' },
-    { id: 'job-cards', icon: ICONS.clipboard, label: 'Job Cards' },
-    { id: 'service-log', icon: ICONS.receipt, label: 'Service Log' },
-    { id: 'response-times', icon: ICONS.clock, label: 'Response Times' },
-    { id: 'reviews', icon: ICONS.star, label: 'Bonus Reviews' },
-    { id: 'auto-assignment', icon: ICONS.refresh, label: 'Auto Assignment' },
-    { id: 'device-tracking', icon: ICONS.wrench, label: 'Device Follow-up' },
-    { id: 'live-locations', icon: ICONS.pin, label: 'Live Locations' },
-    { type: 'section', label: 'Management' },
-    { id: 'contacts', icon: ICONS.phone, label: 'Contacts' },
-    { id: 'users', icon: ICONS.users, label: 'Users' },
-    { id: 'employee-panel', icon: ICONS.user, label: 'Employee Panel' },
-    { id: 'device-types', icon: ICONS.box, label: 'Device Types' },
-    { id: 'training-admin', icon: ICONS.play, label: 'Employee Tutorials' },
-    { id: 'training-courses', icon: ICONS.shield, label: 'Training Courses' },
-    { type: 'section', label: 'Reports' },
-    { id: 'finance', icon: ICONS.rupee, label: 'Finance Report' },
-    { id: 'ai-report', icon: ICONS.star, label: 'AI Report' },
-    { id: 'payments', icon: ICONS.rupee, label: 'Payments' },
-    { id: 'bills', icon: ICONS.receipt, label: 'Bills' },
-    { id: 'cash', icon: ICONS.rupee, label: 'Cash Collections' },
-    { id: 'collections', icon: ICONS.card, label: 'Collection Reports' },
-    { id: 'salary', icon: ICONS.rupee, label: 'Salary' },
-    { id: 'gig-payouts', icon: ICONS.rupee, label: 'Gig Payouts' },
-    { id: 'leaves', icon: ICONS.hourglass, label: 'Leave Requests' },
-    { id: 'eod', icon: ICONS.clipboard, label: 'EOD Summaries' },
-    { id: 'feedback', icon: ICONS.star, label: 'Leaderboard' },
-    { id: 'complaints', icon: ICONS.shield, label: 'Complaints' },
-    { type: 'section', label: 'Marketing' },
-    { id: 'ads', icon: ICONS.box, label: 'Landing Ads' },
-    { id: 'popup-ads', icon: ICONS.box, label: 'Popup Ads' },
-    { id: 'notices', icon: ICONS.clipboard, label: 'Notices' },
-    { id: 'discounts', icon: ICONS.receipt, label: 'Coupons' },
-    { id: 'discount-details', icon: ICONS.receipt, label: 'Discount Details' },
-    { id: 'pricing', icon: ICONS.receipt, label: 'Service Pricing' },
-    { type: 'section', label: 'Config' },
-    { id: 'settings', icon: ICONS.settings || '⚙️', label: 'Settings' },
-    { type: 'section', label: 'Account' },
     { id: 'profile', icon: ICONS.user, label: 'Profile' },
   ];
 }

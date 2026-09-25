@@ -206,16 +206,53 @@ export function renderLayout({ user, role, activePage, navItems, onNav, pageCont
 
 function buildNav(navItems, activePage, onNav) {
   const nav = document.getElementById('sidebar-nav');
-  nav.innerHTML = navItems.map(item => {
-    if (item.type === 'section') return `<div class="nav-section">${item.label}</div>`;
+
+  // Which groups are open is remembered per browser; the group holding the
+  // current page is always forced open so you can see where you are.
+  let openGroups;
+  try { openGroups = new Set(JSON.parse(localStorage.getItem('nav_open_groups') || '[]')); }
+  catch { openGroups = new Set(); }
+  navItems.forEach(it => {
+    if (it.type === 'group' && it.children.some(c => c.id === activePage)) openGroups.add(it.key);
+  });
+  const saveOpen = () => {
+    try { localStorage.setItem('nav_open_groups', JSON.stringify([...openGroups])); } catch {}
+  };
+
+  const leaf = (item, child = false) => {
     const active = item.id === activePage ? 'active' : '';
     const badge = item.badge ? `<span class="nav-badge">${item.badge}</span>` : '';
-    return `<div class="nav-item ${active}" data-nav="${item.id}">
-      <span class="nav-icon">${item.icon}</span>
+    return `<div class="nav-item ${child ? 'nav-child' : ''} ${active}" data-nav="${item.id}">
+      ${child ? '<span class="nav-bullet"></span>' : `<span class="nav-icon">${item.icon || ''}</span>`}
       <span style="flex:1">${item.label}</span>
       ${badge}
     </div>`;
+  };
+
+  nav.innerHTML = navItems.map(item => {
+    if (item.type === 'section') return `<div class="nav-section">${item.label}</div>`;
+    if (item.type !== 'group') return leaf(item);
+    const open = openGroups.has(item.key);
+    return `
+      <div class="nav-group${open ? ' open' : ''}" data-group="${item.key}">
+        <button type="button" class="nav-grouphead" data-grouptoggle="${item.key}">
+          <span class="nav-icon">${item.icon || ''}</span>
+          <span style="flex:1">${item.label}</span>
+          <span class="nav-caret">${ICONS.chevronDown || '▾'}</span>
+        </button>
+        <div class="nav-children">${item.children.map(c => leaf(c, true)).join('')}</div>
+      </div>`;
   }).join('');
+
+  nav.querySelectorAll('[data-grouptoggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.grouptoggle;
+      const group = btn.closest('.nav-group');
+      const open = group.classList.toggle('open');
+      if (open) openGroups.add(key); else openGroups.delete(key);
+      saveOpen();
+    });
+  });
 
   nav.querySelectorAll('[data-nav]').forEach(el => {
     el.addEventListener('click', () => onNav(el.dataset.nav));
