@@ -27,6 +27,7 @@ import {
 import { checkPaymentStatus } from '../api/payments';
 import { validateCoupon } from '../api/coupons';
 import { generateBillPdf, billWhatsAppCaption, BillPdfData } from '../api/bills';
+import { fetchInventoryItems, fetchBillItems, saveBillItems, InventoryItem, BillItemLine } from '../api/inventory';
 import { markDeviceTaken } from '../api/deviceTracking';
 import { ApiError } from '../api/client';
 
@@ -92,6 +93,12 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   const [services, setServices] = useState<PickedService[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [extraCost, setExtraCost] = useState('');
+  // Parts fitted on this job. The catalogue is admin's; the technician only
+  // picks quantities, and stock moves server-side when the bill saves.
+  const [catalogue, setCatalogue] = useState<InventoryItem[]>([]);
+  const [billItems, setBillItems] = useState<BillItemLine[]>([]);
+  const [showItemPicker, setShowItemPicker] = useState(false);
+  const [gstOn, setGstOn] = useState(true);
   const [extraReason, setExtraReason] = useState('');
   const [transportKm, setTransportKm] = useState('');
   const [locatingKm, setLocatingKm] = useState(false);
@@ -126,18 +133,22 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         companyName,
         services,
         extraCost: Number(extraCost) || 0,
+        itemsSubtotal: billItems.reduce((sum, it) => sum + it.quantity * it.rate, 0),
+        gstOn,
         transportKm: Number(transportKm) || 0,
         manualDiscount: Number(discountAmount) || 0,
         couponDiscount: couponApplied?.discount || 0,
         couponLabel: couponApplied?.label,
       }),
-    [companyName, services, extraCost, transportKm, discountAmount, couponApplied],
+    [companyName, services, billItems, gstOn, extraCost, transportKm, discountAmount, couponApplied],
   );
 
   const buildResolveBill = (): ResolveBill => ({
     companyName,
     services,
     extraCost: Number(extraCost) || 0,
+    itemsSubtotal: billItems.reduce((sum, it) => sum + it.quantity * it.rate, 0),
+    gstOn,
     extraReason: extraReason.trim() || undefined,
     transportKm: Number(transportKm) || 0,
     manualDiscount: Number(discountAmount) || 0,
@@ -147,6 +158,39 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     couponCode: couponApplied?.code,
     paymentMethod,
   });
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [cat, existing] = await Promise.all([
+          fetchInventoryItems(),
+          item.inquiryId ? fetchBillItems('inquiry', item.inquiryId) : Promise.resolve([]),
+        ]);
+        if (!alive) return;
+        setCatalogue(cat);
+        setBillItems(existing.map((r) => ({ item_id: r.item_id, name: r.name, quantity: Number(r.quantity), rate: Number(r.rate) })));
+      } catch {
+        // Inventory is optional — a bill without parts still works.
+      }
+    })();
+    return () => { alive = false; };
+  }, [item.inquiryId]);
+
+  const addBillItem = (inv: InventoryItem) => {
+    setBillItems((prev) => {
+      const found = prev.find((it) => it.item_id === inv.id);
+      if (found) return prev.map((it) => (it.item_id === inv.id ? { ...it, quantity: it.quantity + 1 } : it));
+      return [...prev, { item_id: inv.id, name: inv.name, quantity: 1, rate: Number(inv.selling_rate) }];
+    });
+    setShowItemPicker(false);
+  };
+
+  const changeItemQty = (itemId: string | null, delta: number) => {
+    setBillItems((prev) => prev
+      .map((it) => (it.item_id === itemId ? { ...it, quantity: Math.max(0, it.quantity + delta) } : it))
+      .filter((it) => it.quantity > 0));
+  };
 
   const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
 
@@ -283,6 +327,9 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         finalizingRef.current = true;
         setPaymentConfirmed(true);
         try {
+          if (item.inquiryId) {
+            try { await saveBillItems('inquiry', item.inquiryId, billItems); } catch { /* bill still saves */ }
+          }
           await updateTaskStatus(item, { status: 'resolved', detail: detail.trim(), bill: buildResolveBill() });
           onSaved('resolved');
         } catch {
@@ -375,6 +422,13 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     }
     setSaving(true);
     try {
+      if (status === 'resolved' && item.inquiryId) {
+        try {
+          await saveBillItems('inquiry', item.inquiryId, billItems);
+        } catch {
+          // The bill itself still saves; the parts just didn't reach stock.
+        }
+      }
       await updateTaskStatus(item, {
         status,
         detail: detail.trim(),
@@ -606,6 +660,40 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     <Icon name="chevron-right" size={16} color="#ffffff" />
                   </View>
                 </PressScale>
+
+                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Items Used</Text>
+                {billItems.map((it) => (
+                  <View key={it.item_id || it.name} style={[styles.serviceRow, { borderColor: theme.line }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={1}>{it.name}</Text>
+                      <Text style={[styles.serviceCost, { color: theme.text3 }]}>
+                        {it.quantity} × ₹{it.rate} = ₹{Math.round(it.quantity * it.rate)}
+                      </Text>
+                    </View>
+                    <Pressable onPress={() => changeItemQty(it.item_id, -1)} hitSlop={8} style={styles.qtyBtn}>
+                      <Text style={[styles.qtyBtnText, { color: theme.text }]}>−</Text>
+                    </Pressable>
+                    <Pressable onPress={() => changeItemQty(it.item_id, 1)} hitSlop={8} style={styles.qtyBtn}>
+                      <Text style={[styles.qtyBtnText, { color: theme.text }]}>+</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                <PressScale onPress={() => setShowItemPicker(true)}>
+                  <View style={[styles.addServiceBtn, { backgroundColor: brand.primaryDim || brand.primary }]}>
+                    <View style={styles.addServiceBadge}>
+                      <Text style={styles.addServiceBadgeText}>+</Text>
+                    </View>
+                    <Text style={styles.addServiceText}>Add Item</Text>
+                    <Icon name="chevron-right" size={16} color="#ffffff" />
+                  </View>
+                </PressScale>
+
+                <Pressable onPress={() => setGstOn((v) => !v)} style={styles.gstRow}>
+                  <View style={[styles.gstBox, { borderColor: gstOn ? brand.primary : theme.line, backgroundColor: gstOn ? brand.primary : 'transparent' }]}>
+                    {gstOn ? <Icon name="check" size={12} color="#fff" /> : null}
+                  </View>
+                  <Text style={[styles.gstLabel, { color: theme.text2 }]}>Charge GST (18%) on this bill</Text>
+                </Pressable>
 
                 <View style={styles.twoCol}>
                   <View style={{ flex: 1 }}>
@@ -861,6 +949,36 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         />
       )}
 
+      {showItemPicker && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setShowItemPicker(false)}>
+          <View style={styles.pickerBackdrop}>
+            <GlassSurface style={styles.pickerCard} borderRadius={radius.lg}>
+              <View style={[styles.pickerHead, { borderBottomColor: theme.line }]}>
+                <Text style={[styles.pickerTitle, { color: theme.text }]}>Add Item</Text>
+                <Pressable onPress={() => setShowItemPicker(false)} hitSlop={10}>
+                  <Icon name="close" size={16} color={theme.text3} />
+                </Pressable>
+              </View>
+              <ScrollView style={{ maxHeight: 360 }}>
+                {catalogue.length === 0 ? (
+                  <Text style={[styles.pickerEmpty, { color: theme.text3 }]}>No items in inventory yet.</Text>
+                ) : catalogue.map((inv) => (
+                  <Pressable key={inv.id} onPress={() => addBillItem(inv)} style={[styles.pickerRow, { borderBottomColor: theme.line }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pickerName, { color: theme.text }]}>{inv.name}</Text>
+                      <Text style={[styles.pickerMeta, { color: theme.text3 }]}>
+                        {Number(inv.quantity)} {inv.unit || 'pcs'} in stock
+                      </Text>
+                    </View>
+                    <Text style={[styles.pickerRate, { color: brand.primary }]}>₹{Number(inv.selling_rate)}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </GlassSurface>
+          </View>
+        </Modal>
+      )}
+
       {showCalendar && (
         <CalendarPickerModal
           value={scheduledAt}
@@ -876,6 +994,20 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 }
 
 const styles = StyleSheet.create({
+  qtyBtn: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  qtyBtnText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
+  gstRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginTop: spacing(3) },
+  gstBox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  gstLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 12.5 },
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
+  pickerCard: { width: '100%', maxWidth: 420, overflow: 'hidden' },
+  pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing(4), borderBottomWidth: 1 },
+  pickerTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5), borderBottomWidth: 1 },
+  pickerName: { fontFamily: 'Manrope_700Bold', fontSize: 13.5 },
+  pickerMeta: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, marginTop: 2 },
+  pickerRate: { fontFamily: 'Manrope_800ExtraBold', fontSize: 13.5 },
+  pickerEmpty: { padding: spacing(6), textAlign: 'center', fontSize: 13 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
   modalCardWrap: { width: '100%', maxWidth: 440, maxHeight: '86%' },
   modalCard: { width: '100%', maxHeight: '100%', padding: spacing(5) },

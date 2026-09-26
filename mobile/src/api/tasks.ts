@@ -208,6 +208,10 @@ export interface BillService {
 export interface BillInput {
   companyName: string;
   services: BillService[];
+  // Parts fitted on the job, priced at the rate admin set in Inventory.
+  itemsSubtotal?: number;
+  // GST is decided per bill, not always charged.
+  gstOn?: boolean;
   extraCost: number;
   transportKm: number;
   manualDiscount: number;
@@ -229,6 +233,7 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 
 export interface BillBreakdown {
   servicesSubtotal: number;
+  itemsSubtotal: number;
   platformFee: number;
   transportFee: number;
   gst: number;
@@ -249,11 +254,12 @@ export function computeBill(input: BillInput): BillBreakdown {
   const isNetworkingExperts = input.companyName.trim().toLowerCase().replace(/\s+/g, ' ') === 'networking experts';
   const platformFee = isNetworkingExperts ? 50 : 100;
   const transportFee = Math.round(Math.max(0, input.transportKm) * TRANSPORT_PER_KM);
-  const base = servicesSubtotal + input.extraCost + platformFee + transportFee;
-  const gst = Math.round(base * GST_RATE);
+  const itemsSubtotal = Math.max(0, Number(input.itemsSubtotal) || 0);
+  const base = servicesSubtotal + itemsSubtotal + input.extraCost + platformFee + transportFee;
+  const gst = input.gstOn === false ? 0 : Math.round(base * GST_RATE);
   const grossTotal = base + gst;
   const discount = Math.min(grossTotal, Math.max(0, input.couponDiscount) + Math.max(0, input.manualDiscount));
-  return { servicesSubtotal, platformFee, transportFee, gst, discount, total: grossTotal - discount };
+  return { servicesSubtotal, itemsSubtotal, platformFee, transportFee, gst, discount, total: grossTotal - discount };
 }
 
 export type PaymentMethod = 'cash' | 'online';
@@ -272,7 +278,7 @@ function billPatch(bill: ResolveBill): Record<string, unknown> {
   if (bill.manualDiscount > 0) labels.push('Employee discount');
   return {
     company_name: bill.companyName.trim(),
-    bill_amount: bd.servicesSubtotal + bill.extraCost,
+    bill_amount: bd.servicesSubtotal + bd.itemsSubtotal + bill.extraCost,
     extra_cost: bill.extraCost,
     extra_cost_reason: bill.extraReason || null,
     transport_km: bill.transportKm,
