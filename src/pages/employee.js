@@ -5,6 +5,29 @@ import { saveDeviceTaken, saveDeviceReturn, saveFollowUpStatus, loadDeviceTakenL
 import { getEmployeeDevices, getDeviceStatus, renderDeviceTrackingTab, renderFollowUpTab } from './device-tracking-employee.js';
 import { kpiCard } from './dashboard-widgets.js';
 
+// Small REST helpers for the endpoints that aren't part of the generic data
+// layer (inventory catalogue, bill items).
+const EMP_API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? '/api'
+  : 'http://localhost:5000/api';
+const empAuthHeaders = (json = false) => {
+  const h = { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` };
+  if (json) h['Content-Type'] = 'application/json';
+  return h;
+};
+async function empApiGet(path) {
+  const res = await fetch(`${EMP_API}${path}`, { headers: empAuthHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+async function empApiPost(path, body) {
+  const res = await fetch(`${EMP_API}${path}`, { method: 'POST', headers: empAuthHeaders(true), body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 // Device tracking master on/off (admin-controlled). Cached after first fetch.
 let deviceTrackingEnabled = true;
 async function loadDeviceTrackingEnabled() {
@@ -3893,7 +3916,22 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <small id="bill-loc-status" style="display:none; margin-top:4px; color:var(--primary); font-size:0.75rem; font-weight:600;"></small>
               </div>
 
+              <div class="form-group">
+                <label>Items used <span style="color:var(--text-dim);font-weight:500;">(parts fitted on this job)</span></label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <select id="bill-item-pick" style="flex:2;min-width:180px;"><option value="">Loading items…</option></select>
+                  <input type="number" id="bill-item-qty" min="0.01" step="0.01" value="1" placeholder="Qty" style="flex:0 0 90px;"/>
+                  <button type="button" class="btn btn-secondary btn-sm" id="bill-item-add">Add</button>
+                </div>
+                <div id="bill-item-list" style="margin-top:10px;"></div>
+              </div>
+
+              <label style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;font-size:0.85rem;font-weight:600;">
+                <input type="checkbox" id="bill-gst-on" checked/> Charge GST (18%) on this bill
+              </label>
+
               <div class="bill-breakdown" id="bill-breakdown">
+                <div id="br-item-lines"></div>
                 <div id="br-service-lines"></div>
                 <div class="bill-row" id="br-extra-row" style="display:none;"><span id="br-extra-label">Additional charges</span><b id="br-extra">₹0</b></div>
                 <div class="bill-row"><span>Platform fee</span><b id="br-platform">₹50</b></div>
@@ -4164,15 +4202,18 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
 
     const calcTotal = () => {
       bill.servicesSubtotal = billServicesSubtotal();
+      bill.itemsSubtotal = billItems.reduce((sum, it) => sum + Number(it.quantity) * Number(it.rate), 0);
       bill.extra = Number(extraInput.value) || 0;
       bill.km = Math.max(0, Number(kmInput.value) || 0);
       bill.transport = Math.round(bill.km * TRANSPORT_PER_KM);
       bill.platform = getPlatformFee();
-      const base = bill.servicesSubtotal + bill.extra + bill.platform + bill.transport;
+      const base = bill.servicesSubtotal + bill.itemsSubtotal + bill.extra + bill.platform + bill.transport;
       bill.taxable = base;
       // GST is charged on the full base, then the coupon/discount comes off the
       // GRAND total (services + platform + transport + GST), per business rule.
-      bill.gst = Math.round(base * GST_RATE);
+      // GST is per bill — admin decides which jobs carry it.
+      bill.gstOn = overlay.querySelector('#bill-gst-on')?.checked !== false;
+      bill.gst = bill.gstOn ? Math.round(base * GST_RATE) : 0;
       const grossTotal = base + bill.gst;
       const couponDiscount = Math.min(bill.couponDiscount || 0, grossTotal);
       bill.manualDiscount = Math.max(0, Number(manualDiscountInput?.value) || 0);
@@ -4183,6 +4224,17 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       bill.discountLabel = labels.join(' + ') || '';
       bill.discountReason = discountReasonInput?.value.trim() || '';
       bill.total = grossTotal - bill.discount;
+
+      const itemLines = overlay.querySelector('#br-item-lines');
+      if (itemLines) {
+        itemLines.innerHTML = billItems.map(it => `
+          <div class="bill-row">
+            <span>${escapeHtml(it.name)} × ${Number(it.quantity)}</span>
+            <b>${inr(Number(it.quantity) * Number(it.rate))}</b>
+          </div>`).join('');
+      }
+      const gstRow = overlay.querySelector('#br-gst')?.closest('.bill-row');
+      if (gstRow) gstRow.style.display = bill.gstOn ? 'flex' : 'none';
 
       const serviceLines = overlay.querySelector('#br-service-lines');
       if (serviceLines) {
@@ -4224,6 +4276,71 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
       const cashDisplay = overlay.querySelector('#cash-amount-display');
       if (cashDisplay) cashDisplay.textContent = inr(bill.total);
     };
+
+    // ── Items used on this job ──────────────────────────
+    // The catalogue comes from Inventory; the technician picks quantities and
+    // the rate is the one admin set. Stock is adjusted server-side when the
+    // bill saves, so nothing moves until the job is actually billed.
+    let billItems = [];
+    let catalogue = [];
+    const itemPick = overlay.querySelector('#bill-item-pick');
+    const itemQty = overlay.querySelector('#bill-item-qty');
+    const itemList = overlay.querySelector('#bill-item-list');
+
+    const renderBillItems = () => {
+      if (!itemList) return;
+      itemList.innerHTML = billItems.length
+        ? billItems.map((it, idx) => `
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line,var(--border));border-radius:10px;margin-bottom:6px;">
+              <span style="flex:1;font-size:0.85rem;">${escapeHtml(it.name)}</span>
+              <span style="font-size:0.8rem;color:var(--text-dim);">${Number(it.quantity)} × ${inr(it.rate)}</span>
+              <b style="font-size:0.85rem;">${inr(Number(it.quantity) * Number(it.rate))}</b>
+              <button type="button" class="btn btn-secondary btn-sm" data-rm-item="${idx}">✕</button>
+            </div>`).join('')
+        : '<small style="color:var(--text-dim);">No items added.</small>';
+      itemList.querySelectorAll('[data-rm-item]').forEach(btn => {
+        btn.onclick = () => { billItems.splice(Number(btn.dataset.rmItem), 1); renderBillItems(); calcTotal(); };
+      });
+    };
+
+    (async () => {
+      if (!itemPick) return;
+      try {
+        const [cat, existing] = await Promise.all([
+          empApiGet('/inventory/items'),
+          inquiryRow?.id ? empApiGet(`/bill-items?ref_type=inquiry&ref_id=${encodeURIComponent(inquiryRow.id)}`) : Promise.resolve([]),
+        ]);
+        catalogue = Array.isArray(cat) ? cat : [];
+        billItems = (Array.isArray(existing) ? existing : []).map(r => ({
+          item_id: r.item_id, name: r.name, quantity: Number(r.quantity), rate: Number(r.rate),
+        }));
+        itemPick.innerHTML = '<option value="">Select an item…</option>' + catalogue.map(i => `
+          <option value="${escapeHtml(i.id)}">${escapeHtml(i.name)} — ${inr(i.selling_rate)} (${Number(i.quantity)} left)</option>`).join('');
+        renderBillItems();
+        calcTotal();
+      } catch {
+        itemPick.innerHTML = '<option value="">Items unavailable</option>';
+      }
+    })();
+
+    const addItemBtn = overlay.querySelector('#bill-item-add');
+    if (addItemBtn) addItemBtn.onclick = () => {
+      const chosen = catalogue.find(i => i.id === itemPick.value);
+      if (!chosen) return toast('Pick an item first', 'warning');
+      const quantity = Number(itemQty.value);
+      if (!(quantity > 0)) return toast('Enter a quantity', 'warning');
+      if (Number(chosen.quantity) < quantity) toast(`Only ${Number(chosen.quantity)} ${chosen.unit || 'pcs'} in stock — recorded anyway`, 'warning');
+      const existing = billItems.find(it => it.item_id === chosen.id);
+      if (existing) existing.quantity = Number(existing.quantity) + quantity;
+      else billItems.push({ item_id: chosen.id, name: chosen.name, quantity, rate: Number(chosen.selling_rate) });
+      itemPick.value = '';
+      itemQty.value = '1';
+      renderBillItems();
+      calcTotal();
+    };
+
+    const gstToggle = overlay.querySelector('#bill-gst-on');
+    if (gstToggle) gstToggle.onchange = () => calcTotal();
 
     const validateDiscount = () => {
       calcTotal();
@@ -5299,8 +5416,20 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         inqUpdates.bill_amount = 0;
         inqUpdates.payment_status = 'foc';
       }
+      if (resolving && inquiryRow?.id) {
+        try {
+          await empApiPost('/bill-items', {
+            ref_type: 'inquiry',
+            ref_id: inquiryRow.id,
+            items: billItems.map(it => ({ item_id: it.item_id, name: it.name, quantity: it.quantity, rate: it.rate })),
+          });
+        } catch (err) {
+          console.error('[bill] items save failed', err);
+          toast('Bill saved, but the items could not be recorded', 'warning');
+        }
+      }
       if (resolving && bill.total > 0) {
-        inqUpdates.bill_amount = bill.servicesSubtotal + bill.extra;
+        inqUpdates.bill_amount = bill.servicesSubtotal + bill.itemsSubtotal + bill.extra;
         inqUpdates.extra_cost = bill.extra;
         inqUpdates.extra_cost_reason = overlay.querySelector('#extra-reason').value.trim() || null;
         inqUpdates.transport_km = bill.km;

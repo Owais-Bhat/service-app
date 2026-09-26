@@ -6945,6 +6945,129 @@ app.get('/api/inventory/movements', authenticateToken, async (req, res) => {
     }
 });
 
+// ── Bill items ───────────────────────────────────────
+// Goods that went onto a service or installation bill. Saving replaces the
+// whole set for that job: the previous consumption is returned to stock first,
+// then the new lines are consumed, so re-saving a bill can never drift the
+// stock count. Each line keeps a snapshot of what the goods cost us, which is
+// what margin is measured against later.
+const BILL_REF_TYPES = new Set(['inquiry', 'installation']);
+
+async function loadBillItems(connection, refType, refId) {
+    const [rows] = await connection.query(
+        `SELECT b.*, i.unit, i.quantity AS in_stock
+           FROM bill_items b
+           LEFT JOIN inventory_items i ON i.id = b.item_id
+          WHERE b.ref_type = ? AND b.ref_id = ?
+          ORDER BY b.created_at ASC`,
+        [refType, refId]
+    );
+    return rows;
+}
+
+app.get('/api/bill-items', authenticateToken, async (req, res) => {
+    const { ref_type: refType, ref_id: refId } = req.query;
+    if (!BILL_REF_TYPES.has(refType) || !refId) return res.status(400).json({ error: 'ref_type and ref_id are required' });
+    let connection;
+    try {
+        connection = await getConn();
+        res.json(await loadBillItems(connection, refType, refId));
+    } catch (err) {
+        console.error('[bill-items] load failed:', err.message);
+        res.status(500).json({ error: 'Could not load bill items' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/bill-items', authenticateToken, async (req, res) => {
+    const { ref_type: refType, ref_id: refId, items } = req.body || {};
+    if (!BILL_REF_TYPES.has(refType) || !refId) return res.status(400).json({ error: 'ref_type and ref_id are required' });
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'items must be a list' });
+
+    let connection;
+    try {
+        connection = await getConn();
+
+        // Only the admin, or the technician the job belongs to, may bill it.
+        if (req.user.role !== 'admin') {
+            const table = refType === 'inquiry' ? 'inquiries' : 'installations';
+            const [[owner]] = await connection.query(
+                `SELECT assigned_employee_id FROM ${table} WHERE id = ? LIMIT 1`,
+                [refId]
+            );
+            if (!owner || String(owner.assigned_employee_id || '') !== String(req.user.id)) {
+                return res.status(403).json({ error: 'This job is not assigned to you' });
+            }
+        }
+
+        // Put back whatever the previous version of this bill consumed.
+        const [previous] = await connection.query(
+            `SELECT item_id, quantity FROM bill_items
+              WHERE ref_type = ? AND ref_id = ? AND item_id IS NOT NULL`,
+            [refType, refId]
+        );
+        for (const line of previous) {
+            await recordInventoryMovement(connection, {
+                itemId: line.item_id, type: 'return', qty: Number(line.quantity),
+                refType, refId, employeeId: req.user.id, note: 'Bill edited — returned to stock',
+                createdBy: req.user.id,
+            });
+        }
+        await connection.query('DELETE FROM bill_items WHERE ref_type = ? AND ref_id = ?', [refType, refId]);
+
+        const saved = [];
+        for (const raw of items) {
+            const name = String(raw?.name || '').trim();
+            const quantity = Number(raw?.quantity);
+            const rate = Number(raw?.rate);
+            if (!name || !(quantity > 0) || !(rate >= 0)) continue;
+
+            let itemId = raw.item_id || null;
+            let costRate = null;
+            if (itemId) {
+                const [[item]] = await connection.query(
+                    'SELECT id, purchase_rate FROM inventory_items WHERE id = ? LIMIT 1', [itemId]
+                );
+                if (!item) itemId = null;
+                else costRate = Number(item.purchase_rate);
+            }
+            const row = {
+                id: uuidv4(),
+                ref_type: refType,
+                ref_id: refId,
+                item_id: itemId,
+                name: name.slice(0, 255),
+                // A line the technician typed in on site has no cost behind it,
+                // so it's reported apart from stocked goods.
+                kind: itemId ? 'item' : 'custom',
+                quantity,
+                rate,
+                cost_rate: costRate,
+                amount: Math.round(quantity * rate * 100) / 100,
+                created_by: req.user.id,
+            };
+            await connection.query('INSERT INTO bill_items SET ?', [row]);
+            if (itemId) {
+                await recordInventoryMovement(connection, {
+                    itemId, type: 'consume', qty: quantity, rate: costRate,
+                    refType, refId, employeeId: req.user.id, note: `Used on ${refType === 'inquiry' ? 'service' : 'installation'}`,
+                    createdBy: req.user.id,
+                });
+            }
+            saved.push(row);
+        }
+
+        const total = saved.reduce((s, r) => s + Number(r.amount), 0);
+        res.status(201).json({ items: await loadBillItems(connection, refType, refId), total });
+    } catch (err) {
+        console.error('[bill-items] save failed:', err.message);
+        res.status(500).json({ error: 'Could not save the bill items' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 const JOB_CARD_ELIGIBLE_STATUSES = ['resolved', 'closed', 'case_closed', 'foc', 'issue_not_resolved'];
 
 // Admin queues for the Job Card workflow: jobs awaiting a job card ("pending"),
