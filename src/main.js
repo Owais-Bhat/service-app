@@ -195,6 +195,7 @@ function getNavItems(role) {
       children: [
         { id: 'employee-panel', label: 'Employees' },
         { id: 'users', label: 'Users' },
+        { id: 'inventory', label: 'Inventory' },
         { id: 'device-types', label: 'Device Types' },
         { id: 'pricing', label: 'Pricing' },
         { id: 'training-admin', label: 'Employee Tutorials' },
@@ -274,6 +275,7 @@ const PAGE_LOADERS = {
     'popup-ads': () => import('./pages/media-training.js').then(m => m.renderPopupAdsTab),
     'training-admin': () => import('./pages/media-training.js').then(m => m.renderTrainingAdminTab),
     'ai-report': () => import('./pages/media-training.js').then(m => m.renderAIReportTab),
+    inventory: () => import('./pages/inventory.js').then(m => m.renderInventoryTab),
     'device-types': () => import('./pages/admin.js').then(m => m.renderDeviceTypesTab),
     feedback: () => import('./pages/admin.js').then(m => m.renderFeedbackTab),
     complaints: () => import('./pages/admin.js').then(m => m.renderComplaintsTab),

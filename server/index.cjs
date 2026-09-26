@@ -1977,6 +1977,66 @@ const requiredTables = [
         FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE SET NULL
     )`,
+    // Goods the business stocks and fits. `quantity` is a running total kept
+    // in step with inventory_movements; the ledger is the record of truth.
+    `CREATE TABLE IF NOT EXISTS inventory_items (
+        id VARCHAR(36) PRIMARY KEY,
+        sku VARCHAR(60),
+        name VARCHAR(255) NOT NULL,
+        category VARCHAR(120),
+        unit VARCHAR(20) DEFAULT 'pcs',
+        purchase_rate DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        selling_rate DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        gst_rate DECIMAL(5, 2) DEFAULT 18,
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 0,
+        min_stock DECIMAL(12, 2) NOT NULL DEFAULT 0,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        created_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_inventory_items_name (name),
+        INDEX idx_inventory_items_active (active)
+    )`,
+    // Every in and out, with the cost rate at that moment — this is what makes
+    // margin reporting survive a later reprice.
+    `CREATE TABLE IF NOT EXISTS inventory_movements (
+        id VARCHAR(36) PRIMARY KEY,
+        item_id VARCHAR(36) NOT NULL,
+        type VARCHAR(20) NOT NULL COMMENT "purchase | consume | return | adjust_in | adjust_out | damage",
+        quantity DECIMAL(12, 2) NOT NULL COMMENT 'signed: + into stock, - out of stock',
+        rate DECIMAL(10, 2),
+        ref_type VARCHAR(20) COMMENT "'inquiry' | 'installation' | null",
+        ref_id VARCHAR(36),
+        employee_id VARCHAR(36),
+        note TEXT,
+        created_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_inventory_mov_item (item_id, created_at),
+        INDEX idx_inventory_mov_ref (ref_type, ref_id),
+        FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES profiles(id) ON DELETE SET NULL
+    )`,
+    // Bill lines for both service requests and installations. `cost_rate` is a
+    // snapshot of what the goods cost us when the bill was made, so margin is
+    // fixed at that moment; off-master lines (added on site) carry no cost and
+    // are reported separately.
+    `CREATE TABLE IF NOT EXISTS bill_items (
+        id VARCHAR(36) PRIMARY KEY,
+        ref_type VARCHAR(20) NOT NULL COMMENT "'inquiry' | 'installation'",
+        ref_id VARCHAR(36) NOT NULL,
+        item_id VARCHAR(36),
+        name VARCHAR(255) NOT NULL,
+        kind VARCHAR(20) NOT NULL DEFAULT 'item' COMMENT "'item' | 'custom' | 'service'",
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 1,
+        rate DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        cost_rate DECIMAL(10, 2),
+        amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+        created_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_bill_items_ref (ref_type, ref_id),
+        INDEX idx_bill_items_item (item_id),
+        FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE SET NULL
+    )`,
     `CREATE TABLE IF NOT EXISTS employee_location_history (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
@@ -6649,6 +6709,237 @@ app.get('/api/response-times/alerts', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('[response-sla] alerts failed:', err.message);
         res.status(500).json({ error: 'Could not load alerts' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// ── Inventory ────────────────────────────────────────
+// Goods the business buys and fits: every item carries a purchase rate and a
+// selling rate (admin sets both), and `quantity` is a running total kept in
+// step with inventory_movements — the ledger is the truth, the column is just
+// the fast read. Anything that changes stock writes a movement row with the
+// cost rate of that moment, which is what makes margin reporting exact even
+// after a reprice.
+const LOW_STOCK_NOTIFIED = new Map();      // item id → last alert time
+const LOW_STOCK_QUIET_MS = 12 * 60 * 60 * 1000;
+
+function inventoryNumber(v, fallback = 0) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+// Raise (at most twice a day per item) when an item drops to its minimum.
+async function checkLowStock(connection, itemId) {
+    try {
+        const [rows] = await connection.query(
+            'SELECT name, quantity, min_stock, unit FROM inventory_items WHERE id = ? LIMIT 1',
+            [itemId]
+        );
+        const item = rows[0];
+        if (!item || Number(item.min_stock) <= 0) return;
+        if (Number(item.quantity) > Number(item.min_stock)) return;
+        const last = LOW_STOCK_NOTIFIED.get(itemId) || 0;
+        if (Date.now() - last < LOW_STOCK_QUIET_MS) return;
+        LOW_STOCK_NOTIFIED.set(itemId, Date.now());
+        recordNotification({
+            subject: 'low_stock',
+            title: '📦 Low stock',
+            body: `${item.name} is down to ${Number(item.quantity)} ${item.unit || 'pcs'} (minimum ${Number(item.min_stock)}).`,
+            audience: { role: 'admin' },
+            data: { item_id: itemId, quantity: Number(item.quantity), min_stock: Number(item.min_stock), voice: `${item.name} is running low.` },
+        }).catch(() => {});
+    } catch (err) {
+        console.error('[inventory] low-stock check failed:', err.message);
+    }
+}
+
+// Single place that moves stock: writes the ledger row, adjusts the running
+// quantity, and raises the low-stock alert when needed.
+async function recordInventoryMovement(connection, {
+    itemId, type, qty, rate = null, refType = null, refId = null, employeeId = null, note = null, createdBy = null,
+}) {
+    const delta = ['purchase', 'return', 'adjust_in'].includes(type) ? Math.abs(qty) : -Math.abs(qty);
+    await connection.query(
+        `INSERT INTO inventory_movements (id, item_id, type, quantity, rate, ref_type, ref_id, employee_id, note, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [uuidv4(), itemId, type, delta, rate, refType, refId, employeeId, note, createdBy]
+    );
+    await connection.query('UPDATE inventory_items SET quantity = quantity + ? WHERE id = ?', [delta, itemId]);
+    if (delta < 0) await checkLowStock(connection, itemId);
+}
+
+// Employees need the catalogue to build a bill; only admins see cost.
+app.get('/api/inventory/items', authenticateToken, async (req, res) => {
+    const isAdmin = req.user.role === 'admin';
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT id, sku, name, category, unit, selling_rate, gst_rate, quantity, min_stock, active
+                    ${isAdmin ? ', purchase_rate, created_at' : ''}
+               FROM inventory_items
+              ${req.query.all === '1' && isAdmin ? '' : 'WHERE active = 1'}
+              ORDER BY name ASC`
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[inventory] list failed:', err.message);
+        res.status(500).json({ error: 'Could not load items' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+function itemPayload(body) {
+    const b = body || {};
+    const name = String(b.name || '').trim();
+    if (!name) return { error: 'Item name is required' };
+    const selling = inventoryNumber(b.selling_rate, -1);
+    const purchase = inventoryNumber(b.purchase_rate, -1);
+    if (selling < 0) return { error: 'Selling rate is required' };
+    if (purchase < 0) return { error: 'Purchase rate is required' };
+    return {
+        row: {
+            sku: String(b.sku || '').trim().slice(0, 60) || null,
+            name: name.slice(0, 255),
+            category: String(b.category || '').trim().slice(0, 120) || null,
+            unit: String(b.unit || 'pcs').trim().slice(0, 20),
+            purchase_rate: Math.round(purchase * 100) / 100,
+            selling_rate: Math.round(selling * 100) / 100,
+            gst_rate: Math.max(0, inventoryNumber(b.gst_rate, 18)),
+            min_stock: Math.max(0, inventoryNumber(b.min_stock, 0)),
+            active: b.active === false || b.active === 0 ? 0 : 1,
+        },
+    };
+}
+
+app.post('/api/inventory/items', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { row, error } = itemPayload(req.body);
+    if (error) return res.status(400).json({ error });
+    let connection;
+    try {
+        connection = await getConn();
+        const id = uuidv4();
+        await connection.query('INSERT INTO inventory_items SET ?', [{ id, ...row, created_by: req.user.id }]);
+        // Opening stock, if any, is just the first purchase movement.
+        const opening = Math.max(0, inventoryNumber(req.body.opening_stock, 0));
+        if (opening > 0) {
+            await recordInventoryMovement(connection, {
+                itemId: id, type: 'purchase', qty: opening, rate: row.purchase_rate,
+                note: 'Opening stock', createdBy: req.user.id,
+            });
+        }
+        const [[saved]] = await connection.query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+        res.status(201).json(saved);
+    } catch (err) {
+        console.error('[inventory] create failed:', err.message);
+        res.status(500).json({ error: 'Could not save the item' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.put('/api/inventory/items/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { row, error } = itemPayload(req.body);
+    if (error) return res.status(400).json({ error });
+    let connection;
+    try {
+        connection = await getConn();
+        const [result] = await connection.query('UPDATE inventory_items SET ? WHERE id = ?', [row, req.params.id]);
+        if (!result.affectedRows) return res.status(404).json({ error: 'Item not found' });
+        const [[saved]] = await connection.query('SELECT * FROM inventory_items WHERE id = ?', [req.params.id]);
+        res.json(saved);
+    } catch (err) {
+        console.error('[inventory] update failed:', err.message);
+        res.status(500).json({ error: 'Could not update the item' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.delete('/api/inventory/items/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    let connection;
+    try {
+        connection = await getConn();
+        // Items that have already been billed stay on record — deactivate instead.
+        const [[used]] = await connection.query('SELECT COUNT(*) AS n FROM bill_items WHERE item_id = ?', [req.params.id]);
+        if (Number(used.n) > 0) {
+            await connection.query('UPDATE inventory_items SET active = 0 WHERE id = ?', [req.params.id]);
+            return res.json({ ok: true, deactivated: true });
+        }
+        await connection.query('DELETE FROM inventory_movements WHERE item_id = ?', [req.params.id]);
+        const [result] = await connection.query('DELETE FROM inventory_items WHERE id = ?', [req.params.id]);
+        if (!result.affectedRows) return res.status(404).json({ error: 'Item not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[inventory] delete failed:', err.message);
+        res.status(500).json({ error: 'Could not delete the item' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Stock in / out by hand: purchase, return from a job, damage, correction.
+app.post('/api/inventory/movements', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { item_id: itemId, type, quantity, rate, note } = req.body || {};
+    const allowed = ['purchase', 'return', 'adjust_in', 'adjust_out', 'damage'];
+    if (!itemId || !allowed.includes(type)) return res.status(400).json({ error: 'Item and a valid movement type are required' });
+    const qty = inventoryNumber(quantity, 0);
+    if (qty <= 0) return res.status(400).json({ error: 'Quantity must be more than zero' });
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [[item]] = await connection.query('SELECT id, purchase_rate FROM inventory_items WHERE id = ? LIMIT 1', [itemId]);
+        if (!item) return res.status(404).json({ error: 'Item not found' });
+        const movementRate = rate == null || rate === '' ? Number(item.purchase_rate) : inventoryNumber(rate, 0);
+        await recordInventoryMovement(connection, {
+            itemId, type, qty, rate: movementRate, note: note || null, createdBy: req.user.id,
+        });
+        // A purchase is also the newest cost, which is what margins are measured against.
+        if (type === 'purchase' && movementRate > 0) {
+            await connection.query('UPDATE inventory_items SET purchase_rate = ? WHERE id = ?', [movementRate, itemId]);
+        }
+        const [[saved]] = await connection.query('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
+        res.status(201).json(saved);
+    } catch (err) {
+        console.error('[inventory] movement failed:', err.message);
+        res.status(500).json({ error: 'Could not record the movement' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/inventory/movements', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { item_id: itemId, from, to } = req.query;
+    const where = [];
+    const params = [];
+    if (itemId) { where.push('m.item_id = ?'); params.push(itemId); }
+    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push('DATE(m.created_at) >= ?'); params.push(from); }
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) { where.push('DATE(m.created_at) <= ?'); params.push(to); }
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT m.*, i.name AS item_name, i.unit, p.full_name AS employee_name
+               FROM inventory_movements m
+               JOIN inventory_items i ON i.id = m.item_id
+               LEFT JOIN profiles p ON p.id = m.employee_id
+              ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+              ORDER BY m.created_at DESC
+              LIMIT 1000`,
+            params
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('[inventory] movement list failed:', err.message);
+        res.status(500).json({ error: 'Could not load movements' });
     } finally {
         if (connection) connection.release();
     }
