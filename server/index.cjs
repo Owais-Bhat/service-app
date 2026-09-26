@@ -1387,6 +1387,33 @@ function startVerificationReminderJob() {
 }
 
 const requiredColumns = {
+    // Installations carry the same lifecycle as service requests: who it went
+    // to, whether they accepted, when work started and finished, the
+    // technician's own update, and the on-site bill. Payment stays separate —
+    // an installation bill is handed over unpaid and settled whenever the
+    // money actually comes in.
+    installations: [
+        { name: 'assignment_status', definition: "VARCHAR(20) COMMENT \"'pending' | 'accepted' | 'declined'\"" },
+        { name: 'decline_reason', definition: 'TEXT' },
+        { name: 'assigned_at', definition: 'TIMESTAMP NULL' },
+        { name: 'accepted_at', definition: 'TIMESTAMP NULL' },
+        { name: 'started_at', definition: 'TIMESTAMP NULL' },
+        { name: 'completed_at', definition: 'TIMESTAMP NULL' },
+        { name: 'employee_update_detail', definition: 'TEXT' },
+        { name: 'employee_update_at', definition: 'TIMESTAMP NULL' },
+        { name: 'items_total', definition: 'DECIMAL(12, 2) DEFAULT 0' },
+        { name: 'labour_charge', definition: 'DECIMAL(12, 2) DEFAULT 0' },
+        { name: 'gst_applied', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'gst_amount', definition: 'DECIMAL(12, 2) DEFAULT 0' },
+        { name: 'bill_total', definition: 'DECIMAL(12, 2) DEFAULT 0' },
+        { name: 'bill_no', definition: 'VARCHAR(60)' },
+        { name: 'bill_generated_at', definition: 'TIMESTAMP NULL' },
+        { name: 'payment_status', definition: "VARCHAR(20) DEFAULT 'unpaid'" },
+        { name: 'payment_method', definition: 'VARCHAR(20)' },
+        { name: 'payment_received_at', definition: 'TIMESTAMP NULL' },
+        { name: 'payment_note', definition: 'TEXT' },
+        { name: 'updated_at', definition: 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
+    ],
     training_items: [
         { name: 'category', definition: "VARCHAR(80) DEFAULT 'General'" },
         { name: 'required', definition: 'TINYINT(1) DEFAULT 1' },
@@ -7063,6 +7090,228 @@ app.post('/api/bill-items', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('[bill-items] save failed:', err.message);
         res.status(500).json({ error: 'Could not save the bill items' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// ── Installation lifecycle ───────────────────────────
+// Mirrors the service-request flow: admin assigns, the technician accepts and
+// starts, adds the parts he fitted, and hands over a bill on site. Payment is
+// deliberately not part of finishing the job — installation bills go out
+// unpaid and are settled whenever the money actually arrives, either by the
+// technician taking cash there and then or by admin marking it paid later.
+const INSTALLATION_GST_RATE = 0.18;
+
+async function loadInstallation(connection, id) {
+    const [[row]] = await connection.query(
+        `SELECT i.*, p.full_name AS employee_name, p.phone AS employee_phone
+           FROM installations i
+           LEFT JOIN profiles p ON p.id = i.assigned_employee_id
+          WHERE i.id = ? LIMIT 1`,
+        [id]
+    );
+    return row || null;
+}
+
+function canTouchInstallation(user, row) {
+    if (!row) return false;
+    if (user.role === 'admin') return true;
+    return String(row.assigned_employee_id || '') === String(user.id);
+}
+
+app.get('/api/installations/:id', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const row = await loadInstallation(connection, req.params.id);
+        if (!row) return res.status(404).json({ error: 'Installation not found' });
+        if (!canTouchInstallation(req.user, row)) return res.sendStatus(403);
+        const items = await loadBillItems(connection, 'installation', row.id);
+        res.json({ installation: row, items });
+    } catch (err) {
+        console.error('[installation] load failed:', err.message);
+        res.status(500).json({ error: 'Could not load the installation' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Admin hands the job to a technician; he gets the same SMS + push a service
+// assignment sends.
+app.post('/api/installations/:id/assign', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const employeeId = req.body?.employee_id || null;
+    let connection;
+    try {
+        connection = await getConn();
+        const row = await loadInstallation(connection, req.params.id);
+        if (!row) return res.status(404).json({ error: 'Installation not found' });
+
+        await connection.query(
+            `UPDATE installations
+                SET assigned_employee_id = ?, assignment_status = ?, decline_reason = NULL,
+                    assigned_at = ?, accepted_at = NULL, status = ?
+              WHERE id = ?`,
+            [employeeId, employeeId ? 'pending' : null, employeeId ? sqlDateTime(new Date()) : null,
+             employeeId ? 'assigned' : 'pending', req.params.id]
+        );
+
+        if (employeeId) {
+            recordNotification({
+                subject: 'new_assignment',
+                title: '🧰 New Installation',
+                body: `${row.full_name || 'A customer'} — ${row.installation_type || 'installation'}${row.preferred_date ? ` on ${row.preferred_date}` : ''}`,
+                audience: { userId: employeeId },
+                data: { installation_id: row.id, ticket_no: row.ticket_no },
+            }).catch(() => {});
+            const [[emp]] = await connection.query('SELECT phone FROM profiles WHERE id = ? LIMIT 1', [employeeId]);
+            if (emp?.phone) {
+                smsNotify(emp.phone, 'SMS_TID_ASSIGN_EMP', [
+                    smsVar(row.ticket_no, 'N/A', 20),
+                    smsVar(row.installation_type, 'Installation', 80),
+                    smsVar(row.full_name, 'Customer', 60),
+                    smsPhoneVar(row.phone),
+                    smsVar(row.address || row.location, 'See app', 100),
+                ]);
+            }
+        }
+        res.json(await loadInstallation(connection, req.params.id));
+    } catch (err) {
+        console.error('[installation] assign failed:', err.message);
+        res.status(500).json({ error: 'Could not assign the installation' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Technician's own steps: accept, decline, start, and progress notes.
+app.post('/api/installations/:id/status', authenticateToken, async (req, res) => {
+    const { action, detail } = req.body || {};
+    const allowed = ['accept', 'decline', 'start', 'update', 'complete'];
+    if (!allowed.includes(action)) return res.status(400).json({ error: 'Unknown action' });
+
+    let connection;
+    try {
+        connection = await getConn();
+        const row = await loadInstallation(connection, req.params.id);
+        if (!row) return res.status(404).json({ error: 'Installation not found' });
+        if (!canTouchInstallation(req.user, row)) return res.sendStatus(403);
+
+        const now = sqlDateTime(new Date());
+        const updates = {};
+        if (action === 'accept') { updates.assignment_status = 'accepted'; updates.accepted_at = now; }
+        if (action === 'decline') {
+            updates.assignment_status = 'declined';
+            updates.decline_reason = String(detail || '').trim() || 'No reason given';
+            updates.assigned_employee_id = null;
+            updates.status = 'pending';
+        }
+        if (action === 'start') { updates.started_at = now; updates.status = 'in_progress'; }
+        if (action === 'complete') { updates.completed_at = now; updates.status = 'completed'; }
+        if (detail && action !== 'decline') {
+            updates.employee_update_detail = String(detail).trim();
+            updates.employee_update_at = now;
+        }
+        await connection.query('UPDATE installations SET ? WHERE id = ?', [updates, req.params.id]);
+
+        if (action === 'decline') {
+            recordNotification({
+                subject: 'assignment_declined',
+                title: '🚫 Installation declined',
+                body: `${row.ticket_no || 'Installation'} was declined — ${updates.decline_reason}`,
+                audience: { role: 'admin' },
+                data: { installation_id: row.id },
+            }).catch(() => {});
+        }
+        res.json(await loadInstallation(connection, req.params.id));
+    } catch (err) {
+        console.error('[installation] status failed:', err.message);
+        res.status(500).json({ error: 'Could not update the installation' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// The on-site bill: parts (already saved through /api/bill-items) plus a
+// labour charge, with GST only if this bill is meant to carry it.
+app.post('/api/installations/:id/bill', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await getConn();
+        const row = await loadInstallation(connection, req.params.id);
+        if (!row) return res.status(404).json({ error: 'Installation not found' });
+        if (!canTouchInstallation(req.user, row)) return res.sendStatus(403);
+
+        const items = await loadBillItems(connection, 'installation', row.id);
+        const itemsTotal = items.reduce((sum, it) => sum + Number(it.amount), 0);
+        const labour = Math.max(0, Number(req.body?.labour_charge) || 0);
+        const gstApplied = !!req.body?.gst_applied;
+        const base = itemsTotal + labour;
+        const gst = gstApplied ? Math.round(base * INSTALLATION_GST_RATE) : 0;
+        const total = base + gst;
+
+        await connection.query(
+            `UPDATE installations
+                SET items_total = ?, labour_charge = ?, gst_applied = ?, gst_amount = ?,
+                    bill_total = ?, bill_no = COALESCE(bill_no, ?), bill_generated_at = ?,
+                    payment_status = COALESCE(NULLIF(payment_status, ''), 'unpaid')
+              WHERE id = ?`,
+            [itemsTotal, labour, gstApplied ? 1 : 0, gst, total,
+             'INB-' + Math.floor(100000 + Math.random() * 900000), sqlDateTime(new Date()), req.params.id]
+        );
+
+        recordNotification({
+            subject: 'installation_billed',
+            title: '🧾 Installation bill created',
+            body: `${row.full_name || 'Customer'} — ₹${Math.round(total)}${gstApplied ? ' (incl. GST)' : ''}, ${row.ticket_no || ''}`,
+            audience: { role: 'admin' },
+            data: { installation_id: row.id, total },
+        }).catch(() => {});
+
+        res.json(await loadInstallation(connection, req.params.id));
+    } catch (err) {
+        console.error('[installation] bill failed:', err.message);
+        res.status(500).json({ error: 'Could not save the bill' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Money, whenever it lands: the technician can record cash taken on site, and
+// admin can mark a bill paid (or back to unpaid) at any point after.
+app.post('/api/installations/:id/payment', authenticateToken, async (req, res) => {
+    const { paid, method, note } = req.body || {};
+    let connection;
+    try {
+        connection = await getConn();
+        const row = await loadInstallation(connection, req.params.id);
+        if (!row) return res.status(404).json({ error: 'Installation not found' });
+        if (!canTouchInstallation(req.user, row)) return res.sendStatus(403);
+        if (paid === false && req.user.role !== 'admin') return res.sendStatus(403);
+
+        const isPaid = paid !== false;
+        await connection.query(
+            `UPDATE installations
+                SET payment_status = ?, payment_method = ?, payment_received_at = ?, payment_note = ?
+              WHERE id = ?`,
+            [isPaid ? 'paid' : 'unpaid', isPaid ? (method || 'cash') : null,
+             isPaid ? sqlDateTime(new Date()) : null, note || null, req.params.id]
+        );
+
+        if (isPaid) {
+            recordNotification({
+                subject: 'payment_received',
+                title: '💰 Installation paid',
+                body: `${row.full_name || 'Customer'} paid ₹${Math.round(Number(row.bill_total) || 0)} (${method || 'cash'}) — ${row.ticket_no || ''}`,
+                audience: { role: 'admin' },
+                data: { installation_id: row.id },
+            }).catch(() => {});
+        }
+        res.json(await loadInstallation(connection, req.params.id));
+    } catch (err) {
+        console.error('[installation] payment failed:', err.message);
+        res.status(500).json({ error: 'Could not record the payment' });
     } finally {
         if (connection) connection.release();
     }

@@ -6,7 +6,24 @@
 import { supabase } from '../supabase.js';
 import { ICONS } from '../icons.js';
 import { showLoader, toast, exportToCSV } from '../utils.js';
-import { openInstallationDetail } from './admin.js';
+const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? '/api'
+  : 'http://localhost:5000/api';
+const authHeaders = (json = false) => {
+  const h = { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` };
+  if (json) h['Content-Type'] = 'application/json';
+  return h;
+};
+async function api(method, path, body) {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: authHeaders(!!body),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ymd = (d) => {
@@ -275,7 +292,7 @@ function bindRows(container, scope) {
   scope.querySelectorAll('[data-open]').forEach(tr => {
     tr.onclick = (e) => {
       if (e.target.closest('[data-del]')) return;
-      openInstallationDetail(tr.dataset.open, data.employees, () => renderInstallationsAdminTab(container));
+      openDetail(container, tr.dataset.open);
     };
   });
   scope.querySelectorAll('[data-del]').forEach(btn => {
@@ -485,6 +502,121 @@ function exportRows(rows, techs) {
     Location: r.location || '',
     Address: r.address || '',
   })));
+}
+
+// Detail — the whole life of one installation on a single sheet: where it is
+// now, who has it, what was fitted, the bill, and the money. Payment is
+// separate from finishing the job: bills go out unpaid and get settled
+// whenever the cash actually arrives.
+async function openDetail(container, id) {
+  let payload;
+  try {
+    payload = await api('GET', `/installations/${encodeURIComponent(id)}`);
+  } catch (err) {
+    return toast(err.message, 'error');
+  }
+  const r = payload.installation;
+  const items = payload.items || [];
+  const itemsTotal = items.reduce((sum, it) => sum + Number(it.amount), 0);
+
+  const step = (label, at, note) => `
+    <div class="inst-step${at ? ' done' : ''}">
+      <span class="inst-step-dot"></span>
+      <div>
+        <b>${esc(label)}</b>
+        <div class="inst-step-when">${at ? esc(new Date(at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : 'Pending'}</div>
+        ${note ? `<div class="inst-step-note">${esc(note)}</div>` : ''}
+      </div>
+    </div>`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <span class="modal-title">${esc(r.ticket_no || 'Installation')}</span>
+        <button class="modal-close" id="ind-close">${ICONS.close}</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:16px;">
+          <div style="font-weight:800;font-size:1rem;">${esc(r.full_name || 'Customer')}</div>
+          <div style="font-size:0.85rem;color:var(--text-soft);">${esc(r.phone || '')} · ${esc(r.installation_type || '')}</div>
+          <div style="font-size:0.85rem;color:var(--text-dim);margin-top:4px;">${esc(r.address || r.location || '')}</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;">
+            Scheduled ${esc(dayLabel(r.preferred_date))}${r.preferred_time ? ' · ' + esc(r.preferred_time) : ''}
+            ${r.employee_name ? ` · with <b style="color:var(--text)">${esc(r.employee_name)}</b>` : ' · unassigned'}
+          </div>
+        </div>
+
+        <div class="inst-timeline">
+          ${step('Booked', r.created_at)}
+          ${step('Assigned', r.assigned_at, r.employee_name ? `To ${r.employee_name}` : '')}
+          ${step(r.assignment_status === 'declined' ? 'Declined' : 'Accepted', r.assignment_status === 'declined' ? r.updated_at : r.accepted_at, r.decline_reason || '')}
+          ${step('Work started', r.started_at, r.employee_update_detail || '')}
+          ${step('Completed', r.completed_at)}
+          ${step('Bill made', r.bill_generated_at, r.bill_no ? `Bill ${r.bill_no}` : '')}
+          ${step('Paid', r.payment_received_at, r.payment_method ? `${r.payment_method}${r.payment_note ? ' — ' + r.payment_note : ''}` : '')}
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-header"><span class="card-title">Bill</span><span class="at2-count">${items.length} item${items.length === 1 ? '' : 's'}</span></div>
+          <div class="table-wrap"><table class="at2-tbl">
+            <tbody>
+              ${items.map(it => `
+                <tr>
+                  <td>${esc(it.name)}${it.kind === 'custom' ? ' <span class="at2-chip muted">off-list</span>' : ''}</td>
+                  <td style="text-align:right">${Number(it.quantity)} × ₹${Number(it.rate)}</td>
+                  <td style="text-align:right"><b>₹${Number(it.amount).toLocaleString('en-IN')}</b></td>
+                </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px">No items on this bill</td></tr>'}
+              <tr><td>Items</td><td></td><td style="text-align:right">₹${itemsTotal.toLocaleString('en-IN')}</td></tr>
+              <tr><td>Labour</td><td></td><td style="text-align:right">₹${Number(r.labour_charge || 0).toLocaleString('en-IN')}</td></tr>
+              ${Number(r.gst_amount) > 0 ? `<tr><td>GST</td><td></td><td style="text-align:right">₹${Number(r.gst_amount).toLocaleString('en-IN')}</td></tr>` : ''}
+              <tr><td><b>Total</b></td><td></td><td style="text-align:right"><b style="color:var(--primary)">₹${Number(r.bill_total || 0).toLocaleString('en-IN')}</b></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <label>Assign / reassign technician</label>
+          <select id="ind-emp">
+            <option value="">— Unassigned —</option>
+            ${data.employees.map(e => `<option value="${esc(e.id)}"${r.assigned_employee_id === e.id ? ' selected' : ''}>${esc(e.full_name || 'Employee')}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer" style="gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" id="ind-cancel">Close</button>
+        <button class="btn btn-secondary" id="ind-assign">Save assignment</button>
+        ${Number(r.bill_total) > 0 ? (r.payment_status === 'paid'
+          ? '<button class="btn btn-secondary" id="ind-unpaid">Mark unpaid</button>'
+          : '<button class="btn btn-primary" id="ind-paid">Mark paid</button>') : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = (sel) => overlay.querySelector(sel);
+  const close = () => overlay.remove();
+  $('#ind-close').onclick = close;
+  $('#ind-cancel').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  $('#ind-assign').onclick = async () => {
+    try {
+      await api('POST', `/installations/${r.id}/assign`, { employee_id: $('#ind-emp').value || null });
+      toast('Assignment saved', 'success');
+      close();
+      renderInstallationsAdminTab(container);
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  const pay = async (paid) => {
+    try {
+      await api('POST', `/installations/${r.id}/payment`, { paid, method: 'cash' });
+      toast(paid ? 'Marked paid' : 'Marked unpaid', 'success');
+      close();
+      renderInstallationsAdminTab(container);
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  if ($('#ind-paid')) $('#ind-paid').onclick = () => pay(true);
+  if ($('#ind-unpaid')) $('#ind-unpaid').onclick = () => pay(false);
 }
 
 // Booking form — same fields the Calendar tab and the dashboard write.
