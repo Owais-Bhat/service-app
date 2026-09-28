@@ -16,6 +16,7 @@ import { dataGet } from '../api/client';
 import EmployeePanelScreen from './EmployeePanelScreen';
 import LeaveAdminScreen from './LeaveAdminScreen';
 import AssignmentQueueScreen from './AssignmentQueueScreen';
+import AdminInstallationsScreen from './AdminInstallationsScreen';
 import ServicePricingScreen from './ServicePricingScreen';
 import ContactsScreen from './ContactsScreen';
 import FinanceSummaryScreen from './FinanceSummaryScreen';
@@ -49,6 +50,7 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
 
   const [showLeaveAdmin, setShowLeaveAdmin] = useState(false);
   const [showAssignmentQueue, setShowAssignmentQueue] = useState(false);
+  const [showInstallations, setShowInstallations] = useState(false);
   const [showServicePricing, setShowServicePricing] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [showFinance, setShowFinance] = useState(false);
@@ -60,6 +62,7 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
 
   const MORE_SECTIONS = [
     { label: 'Service Requests', onPress: onOpenServiceRequests },
+    { label: 'Installations', onPress: () => setShowInstallations(true) },
     { label: 'Job Cards' },
     { label: 'Leave Requests', onPress: () => setShowLeaveAdmin(true) },
     { label: 'Assignment Queue', onPress: () => setShowAssignmentQueue(true) },
@@ -122,6 +125,7 @@ export default function AdminDashboardScreen({ onOpenNotifications, onOpenLiveLo
 
   if (showLeaveAdmin) return <LeaveAdminScreen onBack={() => setShowLeaveAdmin(false)} />;
   if (showAssignmentQueue) return <AssignmentQueueScreen onBack={() => setShowAssignmentQueue(false)} />;
+  if (showInstallations) return <AdminInstallationsScreen onBack={() => setShowInstallations(false)} />;
   if (showServicePricing) return <ServicePricingScreen onBack={() => setShowServicePricing(false)} />;
   if (showContacts) return <ContactsScreen onBack={() => setShowContacts(false)} />;
   if (showFinance) return <FinanceSummaryScreen onBack={() => setShowFinance(false)} />;
