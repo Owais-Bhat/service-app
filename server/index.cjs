@@ -9384,10 +9384,23 @@ async function startServer() {
         const connection = await getConn();
         console.log('✅ Database connected successfully!');
         await ensureRequiredColumns(connection);
-        await ensureAccountingSchema(connection);
-        await ensureSalesSchema(connection);
-        await ensureStockSchema(connection);
-        await ensureJobSchema(connection);
+
+        // The accounting subsystem's own schema. It is kept apart from the
+        // line above on purpose: the app's core schema failing is fatal, but
+        // the accounting tables failing must not take the service portal down
+        // with them. A failure here is loud, and only the accounting screens
+        // stop working.
+        try {
+            await ensureAccountingSchema(connection);
+            await ensureSalesSchema(connection);
+            await ensureStockSchema(connection);
+            await ensureJobSchema(connection);
+        } catch (err) {
+            console.error('❌ Accounting schema migration failed — accounting features will not work.');
+            console.error('   The rest of the portal is unaffected. Fix this and restart.');
+            console.error(err);
+        }
+
         await loadAppSettings(connection);
         connection.release();
         startAutoClockOutJob();
