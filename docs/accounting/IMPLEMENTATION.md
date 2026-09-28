@@ -76,14 +76,87 @@ database).
 
 ---
 
+## Stage 2 — Sell ✅ (built, tested locally, **not deployed**)
+
+The whole selling path works end to end: quotation → acceptance → invoice →
+receipt → ledger → PDF.
+
+### Delivered
+
+| Piece | Where | Notes |
+|---|---|---|
+| Pricing engine | `server/modules/tax-engine.cjs` | one pure function prices every document — line and document discounts, tax-inclusive or exclusive, charges, fractional quantities, rate-wise summary, rounding reported separately |
+| Documents | `server/modules/sales/schema.cjs` | `sales_documents`, `sales_document_lines`, `payments`, `payment_allocations` |
+| Document service | `server/modules/sales/service.cjs` | draft → issue → cancel, conversion, snapshots, payments, allocations, ledger posting |
+| API | `server/modules/sales/routes.cjs` | documents, live pricing preview, issue/cancel/convert/acceptance, payments, allocation, receivables ageing, PDF |
+| PDF | `server/modules/sales/pdf.cjs` | A4, repeating table header, multipage, letterhead, bank block, signature, page numbers |
+| Screen | `src/pages/sales.js` | Invoices · Quotations · Credit Notes · Receipts · Outstanding, with an editor priced live by the server |
+| Navigation | `src/main.js` | new **Sales** group → Invoices & Quotations |
+
+### Rules the code enforces
+
+1. **A quotation is paper, an invoice is an event.** Estimates and proformas
+   take a number and print, but post nothing to the ledger. Only invoices and
+   credit notes post.
+2. **Issued means frozen.** Issuing snapshots the customer (name, GSTIN,
+   address, treatment) and each item (name, HSN, unit) onto the document.
+   Editing the customer or repricing the product later changes nothing on it.
+   An issued document has no edit path — only cancel, which reverses its
+   journal and records the reason.
+3. **Payment status is derived** from posted allocations. There is no "mark as
+   paid" field anywhere in the system.
+4. **An estimate converts once.** A second conversion returns the invoice that
+   already exists.
+5. **Advances stay visible.** Money received and not allocated credits Customer
+   Advances (2200), not income and not the receivable. Applying it later moves
+   it to the receivable without pretending new money arrived.
+6. **Tax follows the states.** Same state → CGST + SGST (UTGST in a union
+   territory); different state → IGST. Exempt, nil-rated, zero-rated and
+   non-GST carry no tax whatever rate is passed with them.
+7. **Nothing issues into a locked period**, and a refused issue leaves the
+   document a draft rather than half-issued.
+8. **A tax document cannot be issued** until the business details are confirmed
+   (and, for a regular registration, the GSTIN is on file).
+
+### Tests
+
+`node --test tests/tax-engine.test.mjs tests/sales-stage2.test.mjs`
+
+- tax engine: 15 pure tests — intra/inter-state, inclusive prices reconciling to
+  the paisa, fractional quantities, line and document discounts, rate-wise
+  summary, non-GST treatments, charges, rounding, union territory, and the
+  inputs it refuses.
+- Stage 2: 18 acceptance tests against the local API and database — estimate
+  posts nothing, converts exactly once, invoice journal balanced and account by
+  account, issued document not editable, part payment then advance then paid,
+  over-payment and over-allocation refused, credit note reversing sale and tax,
+  IGST on an inter-state sale, cancellation reversing to nil, receivables
+  buckets adding up to the total, ledger-versus-invoices reconciliation, a
+  one-line invoice printing on one page and a 60-line one running to several,
+  permissions, and the period lock.
+
+Full suite: **107 of 108 pass**. The one failure, `feedback-routing`, predates
+this work (verified by stashing the changes and re-running on HEAD) and is
+tracked separately.
+
+### Two bugs this stage found and fixed
+
+- **Paise counted twice.** A field named `*_paise` was being run through the
+  rupee parser, multiplying every such amount by a hundred — a ₹5,000 advance
+  arrived as ₹5,00,000. One helper now decides which spelling is which.
+- **Every invoice printed two pages.** pdfkit starts a new page when text is
+  written below the bottom margin, which is exactly where a footer goes.
+
+---
+
 ## Verification status
 
 | Requirement | Status |
 |---|---|
-| Financial reconciliation | ⏳ nothing to reconcile until invoices exist (Stage 2) |
+| Financial reconciliation | ✅ receivable in the ledger reconciles to invoices less credit notes less allocations, asserted in the Stage 2 suite |
 | Migration checks | ⏳ Stage 6 |
 | Permissions | ✅ server-enforced, tested |
-| Document output (PDF) | ⏳ Stage 2 |
+| Document output (PDF) | ✅ renders, paginates and totals correctly — **but prints a placeholder-free letterhead only once the business details are filled in** |
 | Tax configuration | 🔒 rates seeded, but **not verified against current CBIC guidance** — see below |
 
 ### 🔒 Blocked on a fact or a credential
@@ -101,8 +174,6 @@ database).
 
 ## Not yet started
 
-- **Stage 2 — Sell:** estimates → invoices → receipts → journals → PDFs, with
-  document lines, customer/item snapshots, credit notes, payment allocations.
 - **Stage 3 — Buy & stock:** purchase orders, goods receipt, supplier bills,
   serial numbers, warehouses, technician stock, transfers, valuation.
 - **Stage 4 — Jobs:** job card ↔ materials ↔ invoice, returns, advances,
@@ -117,10 +188,12 @@ database).
 
 ## Deployment
 
-Stage 1 is committed but **not pushed**. Pushing to `main` auto-deploys to
+Stages 1 and 2 are committed but **not pushed**. Pushing to `main` auto-deploys to
 `services.networkingexperts.in`, and the owner asked for nothing to reach
-production without approval. On deploy, the schema migration runs on boot: it
-only creates new tables and adds nullable columns, and touches no existing data.
+production without approval. On deploy, the schema migration runs on boot: it only creates new tables and
+adds nullable columns, and touches no existing data. Nothing in the existing
+service, installation or billing flows calls the new code — the accounting
+screens are additions to the sidebar, not replacements.
 
 **Rollback:** the new tables are unreferenced by existing code paths, so
 reverting the commit is sufficient; no data migration has to be undone.

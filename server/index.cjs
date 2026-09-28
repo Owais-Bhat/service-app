@@ -835,6 +835,8 @@ const { ensureAccountingSchema } = require('./modules/ledger/schema.cjs');
 const { createPermissions } = require('./modules/permissions.cjs');
 const { createAudit } = require('./modules/audit.cjs');
 const { mountAccounting } = require('./modules/accounting-routes.cjs');
+const { ensureSalesSchema } = require('./modules/sales/schema.cjs');
+const { mountSales } = require('./modules/sales/routes.cjs');
 
 const permissions = createPermissions({ getConn });
 const audit = createAudit({ getConn });
@@ -6815,7 +6817,8 @@ app.get('/api/inventory/items', authenticateToken, async (req, res) => {
     try {
         connection = await getConn();
         const [rows] = await connection.query(
-            `SELECT id, sku, name, category, unit, selling_rate, gst_rate, quantity, min_stock, active
+            `SELECT id, sku, name, category, unit, selling_rate, gst_rate, quantity, min_stock, active,
+                    hsn_sac, item_type, brand, model, base_unit, track_serial, warranty_months
                     ${isAdmin ? ', purchase_rate, created_at' : ''}
                FROM inventory_items
               ${req.query.all === '1' && isAdmin ? '' : 'WHERE active = 1'}
@@ -9339,6 +9342,7 @@ app.post('/api/bills/upload', authenticateToken, express.json({ limit: BILL_UPLO
 // Accounting routes go on before the SPA catch-all below, which answers
 // everything it is given with index.html.
 mountAccounting({ app, getConn, authenticateToken, permissions, audit });
+mountSales({ app, getConn, authenticateToken, permissions, audit });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9375,6 +9379,7 @@ async function startServer() {
         console.log('✅ Database connected successfully!');
         await ensureRequiredColumns(connection);
         await ensureAccountingSchema(connection);
+        await ensureSalesSchema(connection);
         await loadAppSettings(connection);
         connection.release();
         startAutoClockOutJob();

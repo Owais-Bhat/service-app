@@ -162,7 +162,13 @@ function getNavItems(role) {
       ],
     },
     {
-      type: 'group', key: 'accounts', icon: ICONS.receipt, label: 'Accounts',
+      type: 'group', key: 'sales', icon: ICONS.receipt, label: 'Sales',
+      children: [
+        { id: 'sales', label: 'Invoices & Quotations' },
+      ],
+    },
+    {
+      type: 'group', key: 'accounts', icon: ICONS.wallet || ICONS.receipt, label: 'Accounts',
       children: [
         { id: 'ledger', label: 'Ledger & Journals' },
       ],
@@ -286,6 +292,7 @@ const PAGE_LOADERS = {
     inventory: () => import('./pages/inventory.js').then(m => m.renderInventoryTab),
     parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
     ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
+    sales: () => import('./pages/sales.js').then(m => m.renderSalesTab),
     'business-settings': () => import('./pages/business-settings.js').then(m => m.renderBusinessSettingsTab),
     'device-types': () => import('./pages/admin.js').then(m => m.renderDeviceTypesTab),
     feedback: () => import('./pages/admin.js').then(m => m.renderFeedbackTab),
