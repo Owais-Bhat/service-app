@@ -5,7 +5,7 @@
 // calendar reads preferred_date and upcoming jobs stay visible.
 import { supabase } from '../supabase.js';
 import { ICONS } from '../icons.js';
-import { showLoader, toast, exportToCSV } from '../utils.js';
+import { showLoader, toast, exportToCSV, returnBillItems } from '../utils.js';
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
   : 'http://localhost:5000/api';
@@ -222,6 +222,7 @@ function rowHtml(r) {
       <td><span class="at2-chip ${chip.cls}">${chip.label}</span></td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.address || '')}">${esc(r.address || r.location || '—')}</td>
       <td style="white-space:nowrap">
+        <button class="at2-photo in2-edit" data-edit="${esc(r.id)}" title="Edit installation">${ICONS.edit}</button>
         <button class="at2-photo in2-del" data-del="${esc(r.id)}" title="Delete installation">${ICONS.close}</button>
       </td>
     </tr>`;
@@ -291,8 +292,15 @@ function paintInstalls(container, body, rows, techs) {
 function bindRows(container, scope) {
   scope.querySelectorAll('[data-open]').forEach(tr => {
     tr.onclick = (e) => {
-      if (e.target.closest('[data-del]')) return;
+      if (e.target.closest('[data-del]') || e.target.closest('[data-edit]')) return;
       openDetail(container, tr.dataset.open);
+    };
+  });
+  scope.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const row = data.rows.find(r => r.id === btn.dataset.edit);
+      if (row) openCreateModal(container, row);
     };
   });
   scope.querySelectorAll('[data-del]').forEach(btn => {
@@ -303,6 +311,8 @@ function bindRows(container, scope) {
       if (!confirm(`Delete the installation for ${row.full_name || 'this customer'} on ${row.preferred_date || ''}? This cannot be undone.`)) return;
       btn.disabled = true;
       try {
+        // Give the parts back to the store before the job disappears.
+        await returnBillItems('installation', row.id);
         const { error } = await supabase.from('installations').delete().eq('id', btn.dataset.del);
         if (error) throw new Error(error.message);
         toast('Installation deleted', 'success');
@@ -586,6 +596,7 @@ async function openDetail(container, id) {
       </div>
       <div class="modal-footer" style="gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary" id="ind-cancel">Close</button>
+        <button class="btn btn-secondary" id="ind-edit">Edit booking</button>
         <button class="btn btn-secondary" id="ind-assign">Save assignment</button>
         ${Number(r.bill_total) > 0 ? (r.payment_status === 'paid'
           ? '<button class="btn btn-secondary" id="ind-unpaid">Mark unpaid</button>'
@@ -598,6 +609,11 @@ async function openDetail(container, id) {
   $('#ind-close').onclick = close;
   $('#ind-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  $('#ind-edit').onclick = () => {
+    close();
+    openCreateModal(container, r);
+  };
 
   $('#ind-assign').onclick = async () => {
     try {
@@ -620,37 +636,38 @@ async function openDetail(container, id) {
 }
 
 // Booking form — same fields the Calendar tab and the dashboard write.
-function openCreateModal(container) {
+function openCreateModal(container, existing = null) {
+  const isEdit = !!existing;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal" style="max-width:560px;">
       <div class="modal-header">
-        <span class="modal-title">New Installation</span>
+        <span class="modal-title">${isEdit ? 'Edit Installation' : 'New Installation'}</span>
         <button class="modal-close" id="in2-c">${ICONS.close}</button>
       </div>
       <div class="modal-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
-          <div class="form-group"><label>Customer Name</label><input type="text" id="in2-name" placeholder="Customer name"></div>
-          <div class="form-group"><label>Phone</label><input type="tel" id="in2-phone" placeholder="10 digit mobile number"></div>
-          <div class="form-group"><label>Location (city / area)</label><input type="text" id="in2-location" placeholder="e.g. Rajbagh, Srinagar"></div>
-          <div class="form-group"><label>Installation Type</label><input type="text" id="in2-type" placeholder="e.g. 4 Camera CCTV"></div>
-          <div class="form-group"><label>Date</label><input type="date" id="in2-date" value="${ymd(new Date())}"></div>
-          <div class="form-group"><label>Time</label><input type="time" id="in2-time"></div>
+          <div class="form-group"><label>Customer Name</label><input type="text" id="in2-name" value="${esc(existing?.full_name || '')}" placeholder="Customer name"></div>
+          <div class="form-group"><label>Phone</label><input type="tel" id="in2-phone" value="${esc(existing?.phone || '')}" placeholder="10 digit mobile number"></div>
+          <div class="form-group"><label>Location (city / area)</label><input type="text" id="in2-location" value="${esc(existing?.location || '')}" placeholder="e.g. Rajbagh, Srinagar"></div>
+          <div class="form-group"><label>Installation Type</label><input type="text" id="in2-type" value="${esc(existing?.installation_type || '')}" placeholder="e.g. 4 Camera CCTV"></div>
+          <div class="form-group"><label>Date</label><input type="date" id="in2-date" value="${existing?.preferred_date ? ymd(existing.preferred_date) : ymd(new Date())}"></div>
+          <div class="form-group"><label>Time</label><input type="time" id="in2-time" value="${existing?.preferred_time && /^\d{2}:\d{2}/.test(existing.preferred_time) ? esc(existing.preferred_time.slice(0, 5)) : ''}"></div>
           <div class="form-group">
             <label>Assign Technician <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label>
             <select id="in2-emp-new">
               <option value="">— Unassigned —</option>
-              ${data.employees.map(e => `<option value="${esc(e.id)}">${esc(e.full_name || 'Employee')}</option>`).join('')}
+              ${data.employees.map(e => `<option value="${esc(e.id)}"${existing?.assigned_employee_id === e.id ? ' selected' : ''}>${esc(e.full_name || 'Employee')}</option>`).join('')}
             </select>
           </div>
         </div>
-        <div class="form-group"><label>Address</label><textarea id="in2-address" rows="2" placeholder="Full address / landmark"></textarea></div>
-        <div class="form-group"><label>Details <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label><textarea id="in2-desc" rows="2"></textarea></div>
+        <div class="form-group"><label>Address</label><textarea id="in2-address" rows="2" placeholder="Full address / landmark">${esc(existing?.address || '')}</textarea></div>
+        <div class="form-group"><label>Details <span style="color:var(--text-dim);font-weight:500;">(optional)</span></label><textarea id="in2-desc" rows="2">${esc(existing?.description || '')}</textarea></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="in2-cancel">Cancel</button>
-        <button class="btn btn-primary" id="in2-save">Save Installation</button>
+        <button class="btn btn-primary" id="in2-save">${isEdit ? 'Save Changes' : 'Save Installation'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -672,23 +689,28 @@ function openCreateModal(container) {
     }
     const btn = $('#in2-save');
     btn.disabled = true;
+    const fields = {
+      full_name: name,
+      phone,
+      location,
+      address,
+      installation_type: type,
+      preferred_date: date,
+      preferred_time: $('#in2-time').value || 'Anytime',
+      assigned_employee_id: $('#in2-emp-new').value || null,
+      description: $('#in2-desc').value.trim() || null,
+    };
     try {
-      const { error } = await supabase.from('installations').insert([{
-        id: crypto.randomUUID(),
-        ticket_no: 'INST-' + Math.floor(100000 + Math.random() * 900000),
-        full_name: name,
-        phone,
-        location,
-        address,
-        installation_type: type,
-        preferred_date: date,
-        preferred_time: $('#in2-time').value || 'Anytime',
-        assigned_employee_id: $('#in2-emp-new').value || null,
-        description: $('#in2-desc').value.trim() || null,
-        status: 'pending',
-      }]);
+      const { error } = isEdit
+        ? await supabase.from('installations').update(fields).eq('id', existing.id)
+        : await supabase.from('installations').insert([{
+            id: crypto.randomUUID(),
+            ticket_no: 'INST-' + Math.floor(100000 + Math.random() * 900000),
+            ...fields,
+            status: 'pending',
+          }]);
       if (error) throw new Error(error.message);
-      toast('Installation added', 'success');
+      toast(isEdit ? 'Installation updated' : 'Installation added', 'success');
       close();
       renderInstallationsAdminTab(container);
     } catch (err) {

@@ -8,7 +8,7 @@
 // them, so assigning/billing behaves exactly as it does on the full tabs.
 import { supabase } from '../supabase.js';
 import { ICONS } from '../icons.js';
-import { toast, showLoader, effectiveSLADeadline, isSlaPaused } from '../utils.js';
+import { toast, showLoader, effectiveSLADeadline, isSlaPaused, returnBillItems } from '../utils.js';
 import { openInquiryDetail, openAdminRequestModal, openInstallationDetail } from './admin.js';
 import { fetchAssignmentAlerts } from './response-times.js';
 
@@ -188,7 +188,7 @@ function cardHtml({ id, kind, title, badge, tone, name, lines = [], footLeft, fo
         <b class="dash2-c2-ticket">${esc(title)}</b>
         <span class="dash2-c2-tr">
           ${badge ? `<span class="dash2-badge tone-${tone || 'muted'}">${esc(badge)}</span>` : ''}
-          ${canDelete ? `<button class="dash2-del" data-del="${esc(id)}" title="Delete installation">${ICONS.close}</button>` : ''}
+          ${canDelete ? `<button class="dash2-del" data-del="${esc(id)}" data-delkind="${kind}" title="Delete ${kind === 'inquiry' ? 'service request' : 'installation'}">${ICONS.close}</button>` : ''}
         </span>
       </div>
       ${name ? `<div class="dash2-c2-name">${esc(name)}</div>` : ''}
@@ -235,6 +235,7 @@ function inquiryRow(r) {
     ],
     footLeft: `${prettyDay(r.created_at)} · ${clock(r.created_at)}`,
     footRight: slaText(r),
+    canDelete: true,
   });
 }
 
@@ -281,6 +282,7 @@ function paintPanel(container) {
       ],
       footLeft: `${prettyDay(r.updated_at || r.created_at)} · ${clock(r.updated_at || r.created_at)}`,
       footRight: `<span class="dash2-sla ok">${esc(String(r.status || 'resolved').replace(/_/g, ' '))}</span>`,
+      canDelete: true,
     })).join('');
   } else if (state.tab === 'online') {
     rows = b.online.map(r => cardHtml({
@@ -418,18 +420,44 @@ function bindRows(container, list) {
     };
   });
 
+  // Installations and service requests both go from here — a request can be
+  // removed whatever state it reached, so a billed or paid one says so first
+  // and hands its parts back to the store on the way out.
   list.querySelectorAll('[data-del]').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
       const id = btn.dataset.del;
-      const row = data.installations.find(r => r.id === id);
+      const isInquiry = btn.dataset.delkind === 'inquiry';
+      const row = isInquiry
+        ? data.inquiries.find(r => r.id === id)
+        : data.installations.find(r => r.id === id);
       if (!row) return;
-      if (!confirm(`Delete the installation for ${row.full_name || 'this customer'} on ${row.preferred_date || ''}? This cannot be undone.`)) return;
+
+      let question;
+      if (isInquiry) {
+        const bill = Number(row.bill_total) || Number(row.bill_amount) || 0;
+        const note = bill > 0
+          ? `
+
+This request has a bill of ₹${Math.round(bill).toLocaleString('en-IN')}${String(row.payment_status || '').toLowerCase() === 'paid' ? ' which is already paid' : ''}. Its bill, items and history go with it.`
+          : '';
+        question = `Delete ${row.ticket_no || 'this request'} for ${row.full_name || 'the customer'}?${note}
+
+This cannot be undone.`;
+      } else {
+        question = `Delete the installation for ${row.full_name || 'this customer'} on ${row.preferred_date || ''}? This cannot be undone.`;
+      }
+      if (!confirm(question)) return;
+
       btn.disabled = true;
       try {
-        const { error } = await supabase.from('installations').delete().eq('id', id);
+        await returnBillItems(isInquiry ? 'inquiry' : 'installation', id);
+        const { error } = await supabase
+          .from(isInquiry ? 'inquiries' : 'installations')
+          .delete()
+          .eq('id', id);
         if (error) throw new Error(error.message);
-        toast('Installation deleted', 'success');
+        toast(isInquiry ? 'Service request deleted' : 'Installation deleted', 'success');
         await refresh(container);
       } catch (err) {
         toast(err.message || 'Could not delete', 'error');

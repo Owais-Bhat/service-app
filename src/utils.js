@@ -342,3 +342,23 @@ export function showLoader(container) {
     </div>
   `;
 }
+
+// Deleting a job has to hand its parts back to the store, or the stock count
+// drifts away from what is on the shelf. Saving an empty bill is exactly the
+// return the server performs when a bill is edited, so every delete path calls
+// this before removing the row. A failure here is not fatal to the delete.
+export async function returnBillItems(refType, refId) {
+  const base = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? '/api'
+    : 'http://localhost:5000/api';
+  try {
+    await fetch(`${base}/bill-items`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+      },
+      body: JSON.stringify({ ref_type: refType, ref_id: refId, items: [] }),
+    });
+  } catch { /* the row still goes — stock is reconciled from the ledger */ }
+}

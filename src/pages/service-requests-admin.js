@@ -5,7 +5,7 @@
 // billing behave exactly as they do everywhere else.
 import { supabase } from '../supabase.js';
 import { ICONS } from '../icons.js';
-import { showLoader, toast, exportToCSV, effectiveSLADeadline, isSlaPaused } from '../utils.js';
+import { showLoader, toast, exportToCSV, effectiveSLADeadline, isSlaPaused, returnBillItems } from '../utils.js';
 import { openInquiryDetail, openAdminRequestModal } from './admin.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -265,7 +265,7 @@ function paintRequests(container, body, rows, techs) {
                 </button>
                 ${open ? `
                   <div class="table-wrap"><table class="at2-tbl">
-                    <thead><tr><th>Ticket</th><th>Customer</th><th>Service</th><th>Received</th><th>Status</th><th>SLA</th><th>Amount</th></tr></thead>
+                    <thead><tr><th>Ticket</th><th>Customer</th><th>Service</th><th>Received</th><th>Status</th><th>SLA</th><th>Amount</th><th></th></tr></thead>
                     <tbody>${t.rows.map(rowHtml).join('')}</tbody>
                   </table></div>` : ''}
               </div>`;
@@ -298,12 +298,45 @@ function rowHtml(r) {
       <td><span class="at2-chip ${chip.cls}">${chip.label}</span></td>
       <td>${slaChip(r)}</td>
       <td style="white-space:nowrap">${r.amount ? esc(money(r.amount)) : '—'}</td>
+      <td style="white-space:nowrap">
+        <button class="at2-photo sr2-del" data-del="${esc(r.id)}" title="Delete request">${ICONS.close}</button>
+      </td>
     </tr>`;
 }
 
 function bindRows(container, scope) {
   scope.querySelectorAll('[data-open]').forEach(tr => {
-    tr.onclick = () => openInquiryDetail(tr.dataset.open, () => renderServiceRequestsTab(container));
+    tr.onclick = (e) => {
+      if (e.target.closest('[data-del]')) return;
+      openInquiryDetail(tr.dataset.open, () => renderServiceRequestsTab(container));
+    };
+  });
+
+  // A request can be removed at any point — including a billed or paid one,
+  // which is why the confirm spells out what is going with it.
+  scope.querySelectorAll('[data-del]').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const row = data.rows.find(r => r.id === btn.dataset.del);
+      if (!row) return;
+      const billed = Number(row.bill_total) > 0 || Number(row.bill_amount) > 0;
+      const warning = billed
+        ? `\n\nThis request has a bill of ${money(Number(row.bill_total) || Number(row.bill_amount))}${row.payment_status === 'paid' ? ' which is already paid' : ''}. Its bill, items and history go with it.`
+        : '';
+      if (!confirm(`Delete ${row.ticket_no || 'this request'} for ${row.full_name || 'the customer'}?${warning}\n\nThis cannot be undone.`)) return;
+      btn.disabled = true;
+      try {
+        // Parts used on this job go back to the store first.
+        await returnBillItems('inquiry', row.id);
+        const { error } = await supabase.from('inquiries').delete().eq('id', row.id);
+        if (error) throw new Error(error.message);
+        toast('Service request deleted', 'success');
+        renderServiceRequestsTab(container);
+      } catch (err) {
+        toast(err.message || 'Could not delete the request', 'error');
+        btn.disabled = false;
+      }
+    };
   });
 }
 
@@ -412,7 +445,7 @@ function paintLogs(container, body, rows) {
     <div class="card">
       <div class="card-header"><span class="card-title">Request Logs</span><span class="at2-count">${rows.length} requests</span></div>
       <div class="table-wrap"><table class="at2-tbl">
-        <thead><tr><th>Technician</th><th>Ticket</th><th>Customer</th><th>Service</th><th>Received</th><th>Status</th><th>SLA</th><th>Amount</th></tr></thead>
+        <thead><tr><th>Technician</th><th>Ticket</th><th>Customer</th><th>Service</th><th>Received</th><th>Status</th><th>SLA</th><th>Amount</th><th></th></tr></thead>
         <tbody>
           ${rows.length ? rows.map(r => `
             <tr data-open="${esc(r.id)}" style="cursor:pointer">

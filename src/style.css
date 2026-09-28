@@ -8907,6 +8907,8 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
 }
 .at2-photo svg { width: 14px; height: 14px; }
 .at2-photo:hover { border-color: var(--primary); color: var(--primary); }
+/* Destructive row actions read red, the edit pencil keeps the normal tone. */
+.in2-del:hover, .sr2-del:hover { border-color: var(--danger); color: var(--danger); }
 .at2-count { margin-left: auto; font-size: 0.75rem; color: var(--text-dim); font-weight: 700; }
 .at2-empty { padding: 26px; text-align: center; color: var(--text-dim); }
 
