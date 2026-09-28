@@ -45,6 +45,14 @@ async function assertPeriodOpen(conn, businessId, date) {
     }
 }
 
+// Prefixes for documents raised before anyone configured a series for them.
+const DEFAULT_PREFIXES = {
+    invoice: 'INV', estimate: 'EST', proforma: 'PI', credit_note: 'CN', debit_note: 'DN',
+    sales_order: 'SO', delivery_challan: 'DC', receipt: 'RCT', payment: 'PAY',
+    purchase_order: 'PO', goods_receipt: 'GRN', supplier_bill: 'SB', purchase_return: 'PR',
+    journal: 'JV', expense: 'EXP', stock_count: 'SC',
+};
+
 // ── document numbers ────────────────────────────────────────────────────
 // Atomic by design: the UPDATE both reserves the number and remembers it on
 // this connection, so two simultaneous invoices get two different numbers even
@@ -60,11 +68,13 @@ async function allocateNumber(conn, businessId, docType, date = new Date()) {
     );
 
     if (!series) {
-        // A new financial year, or a document type nobody has raised yet.
+        // A new financial year, or a document type nobody has raised yet. The
+        // prefix is the one an accountant would expect to see on that kind of
+        // document, not the first three letters of a column value.
         const id = randomUUID();
         await conn.query('INSERT INTO number_series SET ?', [{
             id, business_id: businessId, doc_type: docType, fy_label: label,
-            prefix: `${docType.slice(0, 3).toUpperCase()}-${label.replace('-', '')}-`,
+            prefix: `${DEFAULT_PREFIXES[docType] || docType.split('_').map((w) => w[0]).join('').toUpperCase()}-${label.replace('-', '')}-`,
             padding: 4, next_number: 1, reset_policy: 'fy', active: 1,
         }]);
         [[series]] = await conn.query('SELECT * FROM number_series WHERE id = ?', [id]);

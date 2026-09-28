@@ -837,6 +837,8 @@ const { createAudit } = require('./modules/audit.cjs');
 const { mountAccounting } = require('./modules/accounting-routes.cjs');
 const { ensureSalesSchema } = require('./modules/sales/schema.cjs');
 const { mountSales } = require('./modules/sales/routes.cjs');
+const { ensureStockSchema } = require('./modules/stock/schema.cjs');
+const { mountStock } = require('./modules/stock/routes.cjs');
 
 const permissions = createPermissions({ getConn });
 const audit = createAudit({ getConn });
@@ -9343,6 +9345,7 @@ app.post('/api/bills/upload', authenticateToken, express.json({ limit: BILL_UPLO
 // everything it is given with index.html.
 mountAccounting({ app, getConn, authenticateToken, permissions, audit });
 mountSales({ app, getConn, authenticateToken, permissions, audit });
+mountStock({ app, getConn, authenticateToken, permissions, audit });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9380,6 +9383,7 @@ async function startServer() {
         await ensureRequiredColumns(connection);
         await ensureAccountingSchema(connection);
         await ensureSalesSchema(connection);
+        await ensureStockSchema(connection);
         await loadAppSettings(connection);
         connection.release();
         startAutoClockOutJob();

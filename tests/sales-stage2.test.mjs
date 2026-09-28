@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const API = 'http://127.0.0.1:5000/api';
 
 let mysql; let jwt; let db; let tokens; let reachable = false;
-const made = { docs: [], payments: [], parties: [], items: [], journals: [] };
+const made = { docs: [], payments: [], parties: [], items: [], journals: [], locks: [] };
 let businessBefore = null;
 
 try {
@@ -471,6 +471,7 @@ test('nothing can be issued into a closed period', { skip }, async () => {
     locked_upto: '2026-09-30', reason: 'ZZ test — September closed',
   });
   assert.equal(lock.status, 201);
+  made.locks.push(lock.body.id);
 
   const draft = await call('POST', '/sales/documents', {
     doc_type: 'invoice', party_id: customer.id, doc_date: '2026-09-20',
@@ -530,6 +531,9 @@ test.after(async () => {
     await db.query('DELETE FROM inventory_movements WHERE item_id = ?', [id]);
     await db.query('DELETE FROM inventory_items WHERE id = ?', [id]);
   }
+  // A lock left behind by an interrupted run would block every later test.
+  for (const id of made.locks.filter(Boolean)) await db.query('DELETE FROM period_locks WHERE id = ?', [id]);
+  await db.query("DELETE FROM period_locks WHERE reason LIKE '%ZZ test%'");
   await db.query("DELETE FROM audit_log WHERE reason LIKE 'ZZ test%'");
   if (businessBefore) {
     await db.query(

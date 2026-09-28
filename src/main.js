@@ -168,6 +168,14 @@ function getNavItems(role) {
       ],
     },
     {
+      type: 'group', key: 'purchasing', icon: ICONS.box, label: 'Purchases & Stock',
+      children: [
+        { id: 'purchases', label: 'Purchases' },
+        { id: 'stock', label: 'Stock' },
+        { id: 'inventory', label: 'Items' },
+      ],
+    },
+    {
       type: 'group', key: 'accounts', icon: ICONS.wallet || ICONS.receipt, label: 'Accounts',
       children: [
         { id: 'ledger', label: 'Ledger & Journals' },
@@ -208,7 +216,6 @@ function getNavItems(role) {
       children: [
         { id: 'employee-panel', label: 'Employees' },
         { id: 'users', label: 'Users' },
-        { id: 'inventory', label: 'Inventory' },
         { id: 'device-types', label: 'Device Types' },
         { id: 'pricing', label: 'Pricing' },
         { id: 'business-settings', label: 'Business & Tax Setup' },
@@ -293,6 +300,8 @@ const PAGE_LOADERS = {
     parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
     ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
     sales: () => import('./pages/sales.js').then(m => m.renderSalesTab),
+    purchases: () => import('./pages/purchases.js').then(m => m.renderPurchasesTab),
+    stock: () => import('./pages/stock.js').then(m => m.renderStockTab),
     'business-settings': () => import('./pages/business-settings.js').then(m => m.renderBusinessSettingsTab),
     'device-types': () => import('./pages/admin.js').then(m => m.renderDeviceTypesTab),
     feedback: () => import('./pages/admin.js').then(m => m.renderFeedbackTab),

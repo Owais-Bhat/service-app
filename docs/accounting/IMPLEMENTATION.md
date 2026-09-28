@@ -149,6 +149,85 @@ tracked separately.
 
 ---
 
+## Stage 3 - Buy & stock (built, tested locally, **not deployed**)
+
+Order -> receive -> be billed -> pay, with the goods tracked from the
+supplier's van to the technician's van to the customer's wall.
+
+### Delivered
+
+| Piece | Where | Notes |
+|---|---|---|
+| Stock engine | `server/modules/stock/engine.cjs` | one door in and out of stock, moving-average valuation, unit conversion, negative-stock guard, reservations, serials, location balances, valuation-vs-ledger check |
+| Schema | `server/modules/stock/schema.cjs` | `stock_locations`, `item_serials`, `stock_reservations`, `stock_counts` (+lines), `purchase_documents` (+lines), `purchase_allocations`; `inventory_movements` and `inventory_items` grew the columns this needs |
+| Purchase flow | `server/modules/stock/purchases.cjs` | PO -> GRN (partial) -> supplier bill -> return, landed cost, supplier payments, order status |
+| API | `server/modules/stock/routes.cjs` | purchases, payables ageing, locations, transfers, adjustments, reservations, serials, customer devices, counts, valuation |
+| Screens | `src/pages/purchases.js`, `src/pages/stock.js` | Orders, Receipts, Bills, Returns, Payables; On Hand, Locations & Vans, Serial Numbers, Stock Count |
+| Navigation | `src/main.js` | new **Purchases & Stock** group; the item catalogue moved here from Management |
+
+### The rules that make the numbers trustworthy
+
+1. **Receiving and being billed are different events.** A goods receipt puts
+   stock on the shelf and parks its value in *Goods Received Not Billed*
+   (2300). The supplier bill clears that account, claims the input tax and
+   creates the payable - and touches no stock. One delivery, counted once.
+2. **Every stock change goes through `move()`**, which writes the ledger row
+   and the running quantity in the same breath. The valuation endpoint
+   recomputes from the ledger and reports any disagreement instead of hiding
+   it.
+3. **Moving average cost**, per item, in paise per base unit - used for stock
+   value, for what goods cost when they leave, and for returns.
+4. **Freight is part of what the goods cost.** Charges on a receipt are spread
+   across its lines by value, so a metre of cable costs what it actually cost.
+5. **A roll is bought, metres are held.** Items carry a secondary unit and a
+   conversion factor; the ledger is always in the base unit.
+6. **A transfer is not a sale.** Store -> van -> store writes two rows that
+   balance to nothing, and touches no income or expense account.
+7. **A customer's device is not our stock.** It lives in a location marked
+   not-ours, is tracked by serial, and never appears in the valuation.
+8. **A serial number cannot arrive twice**, and it carries its cost, its
+   supplier, its warranty date and the job it goes out on.
+9. **Reservations are promises, not consumption.** Available = on hand minus
+   reserved; a quotation reduces neither.
+10. **Stock cannot go negative** without a per-item exception, and an
+    adjustment needs a reason that lands in the audit trail.
+11. **A count changes nothing until it is approved**, and the difference posts
+    to *Inventory Write-off / Shrinkage* (5010) so a loss appears in the
+    accounts rather than as a quietly edited number.
+
+### Tests
+
+`node --test tests/stock-stage3.test.mjs` - 18 acceptance tests:
+order posts nothing; partial receipt takes only what arrived and refuses to
+over-receive; receipt parks value in GRNI; **the supplier bill does not receive
+the goods a second time**; freight lands in the cost of the goods; the moving
+average moves when the price does; a serial cannot arrive twice and the count
+must match; warranty and supplier follow the serial; a customer's device is
+tracked and valued at nothing; store to van and back is neither sale nor
+expense and cannot overdraw the van; reservations hold without consuming;
+negative stock refused; a count posts its difference to shrinkage and settles
+once; supplier payment clears the payable and cannot overpay; the ledger's
+inventory account equals the stock it represents; a billed receipt cannot be
+unwound; permissions.
+
+Full suite: **125 of 126 pass** (`npm test`, now `--test-concurrency=1` because
+the database-backed suites share one database). The one failure,
+`feedback-routing`, predates this work and is tracked separately.
+
+### Bugs this stage found and fixed
+
+- **A van appeared to hold twice what it held.** Location balances were reading
+  both `location_id` and `to_location_id`, counting the destination of a
+  transfer twice. A movement belongs to one location; `to_location_id` is for
+  tracing the other half.
+- **Ugly document numbers.** A document type with no configured series got the
+  first three letters of its name (`GOO-` for a goods receipt). There is now a
+  proper prefix map - `GRN`, `SB`, `PR`, `SC`.
+- **Suites interfering.** `node --test` runs files in parallel; two suites
+  against one database tripped over each other's period locks.
+
+---
+
 ## Verification status
 
 | Requirement | Status |
@@ -174,8 +253,6 @@ tracked separately.
 
 ## Not yet started
 
-- **Stage 3 — Buy & stock:** purchase orders, goods receipt, supplier bills,
-  serial numbers, warehouses, technician stock, transfers, valuation.
 - **Stage 4 — Jobs:** job card ↔ materials ↔ invoice, returns, advances,
   expenses, approvals.
 - **Stage 5 — Reports & tax:** ageing, ledgers, P&L, balance sheet, stock
@@ -188,7 +265,7 @@ tracked separately.
 
 ## Deployment
 
-Stages 1 and 2 are committed but **not pushed**. Pushing to `main` auto-deploys to
+Stages 1, 2 and 3 are committed but **not pushed**. Pushing to `main` auto-deploys to
 `services.networkingexperts.in`, and the owner asked for nothing to reach
 production without approval. On deploy, the schema migration runs on boot: it only creates new tables and
 adds nullable columns, and touches no existing data. Nothing in the existing

@@ -341,9 +341,10 @@ const SEED_SERIES = [
     ['receipt', 'RCT-'],
     ['payment', 'PAY-'],
     ['purchase_order', 'PO-'],
-    ['grn', 'GRN-'],
+    ['goods_receipt', 'GRN-'],
     ['supplier_bill', 'SB-'],
     ['purchase_return', 'PR-'],
+    ['stock_count', 'SC-'],
     ['journal', 'JV-'],
     ['expense', 'EXP-'],
 ];
