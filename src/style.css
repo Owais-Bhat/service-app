@@ -8922,6 +8922,37 @@ select.in2-state option { background: var(--bg); color: var(--text); font-weight
 .at2-count { margin-left: auto; font-size: 0.75rem; color: var(--text-dim); font-weight: 700; }
 .at2-empty { padding: 26px; text-align: center; color: var(--text-dim); }
 
+/* ── Accounting screens (parties, ledger, business setup) ────────────────
+   Same furniture as the other at2 pages, plus the few pieces these screens
+   need: a filter strip that is not inside a card, a scope line that spells out
+   what a figure covers, and a note style for the sentences that explain a rule
+   rather than decorate it. */
+.at2-head { align-items: flex-start; }
+.at2-headbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.at2-panel {
+  margin-top: 14px;
+  background: var(--glass-bg-strong, var(--bg-white));
+  border: 1px solid var(--line, var(--border));
+  border-radius: var(--r-md, 16px);
+  box-shadow: var(--neu-sm);
+  overflow: hidden;
+}
+.at2-panel > .at2-filters {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 14px 16px; border-bottom: 1px solid var(--line, var(--border));
+}
+.at2-body { padding: 14px 16px; }
+.at2-search {
+  flex: 1; min-width: 200px; padding: 9px 12px;
+  border: 1px solid var(--line, var(--border)); border-radius: 10px;
+  background: var(--bg); color: var(--text); font-family: inherit; font-size: 0.86rem;
+}
+.at2-check { display: inline-flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-soft); font-weight: 600; }
+.at2-dates { display: inline-flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-soft); font-weight: 700; }
+.at2-dates input { padding: 7px 10px; border: 1px solid var(--line, var(--border)); border-radius: 9px; background: var(--bg); color: var(--text); font-family: inherit; }
+.at2-scope { font-size: 0.78rem; color: var(--text-dim); margin-left: auto; }
+.at2-note { font-size: 0.78rem; color: var(--text-dim); line-height: 1.6; margin: 12px 0 0; }
+
 @media (max-width: 1100px) { .at2-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   .at2-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }

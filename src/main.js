@@ -156,8 +156,15 @@ function getNavItems(role) {
     {
       type: 'group', key: 'customers', icon: ICONS.users, label: 'Customers',
       children: [
+        { id: 'parties', label: 'Customers & Suppliers' },
         { id: 'contacts', label: 'Contacts' },
         { id: 'complaints', label: 'Complaints' },
+      ],
+    },
+    {
+      type: 'group', key: 'accounts', icon: ICONS.receipt, label: 'Accounts',
+      children: [
+        { id: 'ledger', label: 'Ledger & Journals' },
       ],
     },
     { id: 'calendar', icon: ICONS.calendar, label: 'Calendar' },
@@ -198,6 +205,7 @@ function getNavItems(role) {
         { id: 'inventory', label: 'Inventory' },
         { id: 'device-types', label: 'Device Types' },
         { id: 'pricing', label: 'Pricing' },
+        { id: 'business-settings', label: 'Business & Tax Setup' },
         { id: 'training-admin', label: 'Employee Tutorials' },
         { id: 'training-courses', label: 'Training Courses' },
         { id: 'settings', label: 'Settings' },
@@ -276,6 +284,9 @@ const PAGE_LOADERS = {
     'training-admin': () => import('./pages/media-training.js').then(m => m.renderTrainingAdminTab),
     'ai-report': () => import('./pages/media-training.js').then(m => m.renderAIReportTab),
     inventory: () => import('./pages/inventory.js').then(m => m.renderInventoryTab),
+    parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
+    ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
+    'business-settings': () => import('./pages/business-settings.js').then(m => m.renderBusinessSettingsTab),
     'device-types': () => import('./pages/admin.js').then(m => m.renderDeviceTypesTab),
     feedback: () => import('./pages/admin.js').then(m => m.renderFeedbackTab),
     complaints: () => import('./pages/admin.js').then(m => m.renderComplaintsTab),

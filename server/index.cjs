@@ -827,6 +827,18 @@ const pool = mysql.createPool({
 });
 async function getConn() { return pool.getConnection(); }
 
+// ── Accounting & masters (Stage 1) ───────────────────────────────────────
+// Kept in server/modules/ rather than inlined here: the ledger has its own
+// rules and its own tests, and this file is already long enough that burying
+// them in it would make both harder to trust.
+const { ensureAccountingSchema } = require('./modules/ledger/schema.cjs');
+const { createPermissions } = require('./modules/permissions.cjs');
+const { createAudit } = require('./modules/audit.cjs');
+const { mountAccounting } = require('./modules/accounting-routes.cjs');
+
+const permissions = createPermissions({ getConn });
+const audit = createAudit({ getConn });
+
 async function canAccessInquiry(connection, user, inquiryId) {
     if (user?.role === 'admin') return true;
     if (user?.role !== 'employee') return false;
@@ -9324,6 +9336,10 @@ app.post('/api/bills/upload', authenticateToken, express.json({ limit: BILL_UPLO
     }
 });
 
+// Accounting routes go on before the SPA catch-all below, which answers
+// everything it is given with index.html.
+mountAccounting({ app, getConn, authenticateToken, permissions, audit });
+
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
     res.status(404).type('text/plain').send('Asset not found');
@@ -9358,6 +9374,7 @@ async function startServer() {
         const connection = await getConn();
         console.log('✅ Database connected successfully!');
         await ensureRequiredColumns(connection);
+        await ensureAccountingSchema(connection);
         await loadAppSettings(connection);
         connection.release();
         startAutoClockOutJob();
