@@ -228,6 +228,73 @@ the database-backed suites share one database). The one failure,
 
 ---
 
+## Stage 4 - Jobs (built, tested locally, **not deployed**)
+
+The join between the work and the money: what a technician fitted, what it
+cost, what the customer was charged, and what was left over.
+
+### Delivered
+
+| Piece | Where | Notes |
+|---|---|---|
+| Schema | `server/modules/jobs/schema.cjs` | `job_material_issues` (+lines), `job_costs`, `job_estimates`; `businesses` gained `require_material_approval` and default labour/travel rates |
+| Job service | `server/modules/jobs/service.cjs` | submit -> approve/reject materials, other costs, job summary, invoice from job, estimate from an accepted quotation |
+| API | `server/modules/jobs/routes.cjs` | approval queue, job summary, costs, job invoice, profitability report, technician-held stock |
+| Screen | `src/pages/job-costing.js` | Awaiting Approval, Job Profitability, Done Not Billed, Held by Technicians |
+| Navigation | `src/main.js` | Work -> Job Costing |
+
+### The rules
+
+1. **A technician submits; an approver accepts.** Until the submission is
+   approved, no stock moves and no cost reaches the accounts. The business
+   decides whether approval is required at all (`require_material_approval`,
+   off by default, so the existing flow is unchanged until it is switched on).
+2. **Approval is the accounting moment.** Materials used post
+   Dr Cost of Goods Sold / Cr Inventory at moving average; material returned
+   posts the reverse at the same cost. Approving twice is refused.
+3. **A rejected submission moves nothing** and has to say why.
+4. **Labour, travel and subcontractors are costs**, posted to their own
+   accounts against payables. An *estimated* cost is a plan and posts nothing.
+5. **The invoice is built from what was approved** - materials used less
+   materials returned, priced at the selling rate, plus billable charges. Costs
+   marked not billable stay costs and are never charged to the customer.
+6. **One job, one invoice.** Asking again returns the draft that exists.
+   Materials still awaiting approval block invoicing.
+7. **A job with no linked customer cannot be invoiced** - the software will not
+   guess who to bill.
+8. **Cost and margin are a capability.** The same job summary serves a
+   technician with the money removed; he can open the job he was sent to, and
+   no other.
+9. **Margin always states its basis** - revenue is invoiced value before tax,
+   cost is approved materials at moving average plus actual labour, travel and
+   subcontract. Submissions awaiting approval are excluded and said to be.
+
+### Tests
+
+`node --test tests/jobs-stage4.test.mjs` - 14 acceptance tests: submission
+moves nothing; approval moves stock out of the van and posts COGS; returns come
+back at the same cost; a rejection moves nothing; labour and travel reach their
+accounts while an estimate does not; the invoice is built once from what was
+approved, with non-billable costs excluded; the job's own numbers
+(cost 2,500 / revenue 3,700 / margin 1,200 at 32.4%); a technician sees the job
+but not the money and cannot approve his own materials; the profitability
+report finds the job; work done and never billed is visible as exactly that;
+technician-held stock; a job with no customer refuses to be invoiced; and the
+books still balance.
+
+Full suite: **139 of 140 pass**. The one failure, `feedback-routing`, predates
+this work.
+
+### Note on the existing technician bill
+
+The older `bill_items` path (the technician's bill on the mobile app) still
+moves stock without posting cost of goods sold. It is untouched on purpose -
+it is in daily use. The new path posts properly, and Stage 6's migration will
+reconcile the two. Switching `require_material_approval` on is what moves a
+business from the old flow to the new one.
+
+---
+
 ## Verification status
 
 | Requirement | Status |
@@ -253,8 +320,6 @@ the database-backed suites share one database). The one failure,
 
 ## Not yet started
 
-- **Stage 4 — Jobs:** job card ↔ materials ↔ invoice, returns, advances,
-  expenses, approvals.
 - **Stage 5 — Reports & tax:** ageing, ledgers, P&L, balance sheet, stock
   valuation, job profitability, GST exports.
 - **Stage 6 — Migration & automation:** reviewed migration of existing bills,
@@ -265,7 +330,7 @@ the database-backed suites share one database). The one failure,
 
 ## Deployment
 
-Stages 1, 2 and 3 are committed but **not pushed**. Pushing to `main` auto-deploys to
+Stages 1 to 4 are committed but **not pushed**. Pushing to `main` auto-deploys to
 `services.networkingexperts.in`, and the owner asked for nothing to reach
 production without approval. On deploy, the schema migration runs on boot: it only creates new tables and
 adds nullable columns, and touches no existing data. Nothing in the existing

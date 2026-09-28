@@ -50,7 +50,7 @@ const DEFAULT_PREFIXES = {
     invoice: 'INV', estimate: 'EST', proforma: 'PI', credit_note: 'CN', debit_note: 'DN',
     sales_order: 'SO', delivery_challan: 'DC', receipt: 'RCT', payment: 'PAY',
     purchase_order: 'PO', goods_receipt: 'GRN', supplier_bill: 'SB', purchase_return: 'PR',
-    journal: 'JV', expense: 'EXP', stock_count: 'SC',
+    journal: 'JV', expense: 'EXP', stock_count: 'SC', material_issue: 'MI',
 };
 
 // ── document numbers ────────────────────────────────────────────────────
