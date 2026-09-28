@@ -8892,6 +8892,16 @@ body.nav-collapsed .sidebar-user { justify-content: center; gap: 0; }
 .at2-chip.warn { background: rgba(245,158,11,0.16); color: var(--warning); }
 .at2-chip.danger { background: rgba(239,68,68,0.13); color: var(--danger); }
 
+/* The status chip in a row is a live select — it keeps the chip's look and
+   only shows it is clickable on hover. */
+select.in2-state {
+  border: 1px solid transparent; cursor: pointer; appearance: none;
+  font-family: inherit; line-height: 1.5; padding-right: 9px;
+}
+select.in2-state:hover { border-color: currentColor; }
+select.in2-state:disabled { opacity: 0.55; cursor: progress; }
+select.in2-state option { background: var(--bg); color: var(--text); font-weight: 600; }
+
 .at2-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
 .at2-tbl th {
   text-align: left; padding: 10px 14px; white-space: nowrap;

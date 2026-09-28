@@ -219,7 +219,11 @@ function rowHtml(r) {
       <td>${esc(r.full_name || 'Customer')}${r.phone ? `<div style="font-size:0.75rem;color:var(--text-dim)">${esc(r.phone)}</div>` : ''}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.installation_type || '')}">${esc(r.installation_type || '—')}</td>
       <td style="white-space:nowrap">${esc(dayLabel(r.preferred_date))}<div style="font-size:0.75rem;color:var(--text-dim)">${esc(r.preferred_time || 'Anytime')}</div></td>
-      <td><span class="at2-chip ${chip.cls}">${chip.label}</span></td>
+      <td>
+        <select class="in2-state at2-chip ${chip.cls}" data-state="${esc(r.id)}" title="Change status">
+          ${STATES.map(st => `<option value="${st.key}"${st.key === r.state ? ' selected' : ''}>${st.label}</option>`).join('')}
+        </select>
+      </td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.address || '')}">${esc(r.address || r.location || '—')}</td>
       <td style="white-space:nowrap">
         <button class="at2-photo in2-edit" data-edit="${esc(r.id)}" title="Edit installation">${ICONS.edit}</button>
@@ -292,10 +296,30 @@ function paintInstalls(container, body, rows, techs) {
 function bindRows(container, scope) {
   scope.querySelectorAll('[data-open]').forEach(tr => {
     tr.onclick = (e) => {
-      if (e.target.closest('[data-del]') || e.target.closest('[data-edit]')) return;
+      if (e.target.closest('[data-del]') || e.target.closest('[data-edit]') || e.target.closest('[data-state]')) return;
       openDetail(container, tr.dataset.open);
     };
   });
+  // Status is changed straight from the list — an unassigned booking is
+  // usually the one the office needs to move, and opening it first only got
+  // in the way.
+  scope.querySelectorAll('[data-state]').forEach(sel => {
+    const was = sel.value;
+    sel.onclick = (e) => e.stopPropagation();
+    sel.onchange = async () => {
+      sel.disabled = true;
+      try {
+        await api('POST', `/installations/${sel.dataset.state}/status`, { action: 'set_status', status: sel.value });
+        toast('Status updated', 'success');
+        renderInstallationsAdminTab(container);
+      } catch (err) {
+        toast(err.message || 'Could not change the status', 'error');
+        sel.value = was;
+        sel.disabled = false;
+      }
+    };
+  });
+
   scope.querySelectorAll('[data-edit]').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -587,6 +611,13 @@ async function openDetail(container, id) {
         </div>
 
         <div class="form-group" style="margin-top:16px;">
+          <label>Status</label>
+          <select id="ind-state">
+            ${STATES.map(st => `<option value="${st.key}"${st.key === stateOf(r) ? ' selected' : ''}>${st.label}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
           <label>Assign / reassign technician</label>
           <select id="ind-emp">
             <option value="">— Unassigned —</option>
@@ -613,6 +644,15 @@ async function openDetail(container, id) {
   $('#ind-edit').onclick = () => {
     close();
     openCreateModal(container, r);
+  };
+
+  $('#ind-state').onchange = async () => {
+    try {
+      await api('POST', `/installations/${r.id}/status`, { action: 'set_status', status: $('#ind-state').value });
+      toast('Status updated', 'success');
+      close();
+      renderInstallationsAdminTab(container);
+    } catch (err) { toast(err.message, 'error'); }
   };
 
   $('#ind-assign').onclick = async () => {

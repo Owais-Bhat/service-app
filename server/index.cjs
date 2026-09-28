@@ -7102,6 +7102,7 @@ app.post('/api/bill-items', authenticateToken, async (req, res) => {
 // unpaid and are settled whenever the money actually arrives, either by the
 // technician taking cash there and then or by admin marking it paid later.
 const INSTALLATION_GST_RATE = 0.18;
+const INSTALLATION_STATUSES = ['pending', 'assigned', 'in_progress', 'completed', 'cancelled'];
 
 async function loadInstallation(connection, id) {
     const [[row]] = await connection.query(
@@ -7188,8 +7189,9 @@ app.post('/api/installations/:id/assign', authenticateToken, async (req, res) =>
 // Technician's own steps: accept, decline, start, and progress notes.
 app.post('/api/installations/:id/status', authenticateToken, async (req, res) => {
     const { action, detail } = req.body || {};
-    const allowed = ['accept', 'decline', 'start', 'update', 'complete'];
+    const allowed = ['accept', 'decline', 'start', 'update', 'complete', 'set_status'];
     if (!allowed.includes(action)) return res.status(400).json({ error: 'Unknown action' });
+    if (action === 'set_status' && req.user.role !== 'admin') return res.sendStatus(403);
 
     let connection;
     try {
@@ -7209,6 +7211,26 @@ app.post('/api/installations/:id/status', authenticateToken, async (req, res) =>
         }
         if (action === 'start') { updates.started_at = now; updates.status = 'in_progress'; }
         if (action === 'complete') { updates.completed_at = now; updates.status = 'completed'; }
+        // Admin setting the state by hand — the office knows things the app
+        // was never told. The timeline follows the state rather than
+        // contradicting it: moving forward stamps the step that was skipped,
+        // moving back clears the ones that never really happened. Cancelling
+        // keeps whatever did happen before it.
+        if (action === 'set_status') {
+            const next = String(req.body?.status || '').toLowerCase();
+            if (!INSTALLATION_STATUSES.includes(next)) return res.status(400).json({ error: 'Unknown status' });
+            updates.status = next;
+            if (next === 'in_progress') {
+                updates.started_at = row.started_at || now;
+                updates.completed_at = null;
+            } else if (next === 'completed') {
+                updates.started_at = row.started_at || now;
+                updates.completed_at = row.completed_at || now;
+            } else if (next === 'pending' || next === 'assigned') {
+                updates.started_at = null;
+                updates.completed_at = null;
+            }
+        }
         if (detail && action !== 'decline') {
             updates.employee_update_detail = String(detail).trim();
             updates.employee_update_at = now;
