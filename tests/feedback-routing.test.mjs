@@ -11,11 +11,23 @@ test('feedback links survive a hosting SPA fallback', () => {
   assert.match(landingSource, /match\(\/\^\\\/f\\\/\(\[\^\/\?#\]\+\)\/\)/, 'landing page should extract a token from a legacy /f/<token> path');
 });
 
-test('new SMS feedback links use the explicit feedback route', () => {
+test('new SMS feedback links use the path-style /f/<token> route', () => {
+  // Path-only links survive SMS apps that cut a URL at the '?', which used to
+  // drop customers on the landing page with no token (see a6abc1c).
   assert.match(
     serverSource,
+    /\$\{publicBaseUrl\(req\)\}\/f\/\$\{encodeURIComponent\(token\)\}/,
+    'new feedback links should use /f/<token>'
+  );
+  assert.doesNotMatch(
+    serverSource,
     /\/feedback\?token=\$\{encodeURIComponent\(token\)\}/,
-    'new feedback links should use /feedback?token=<token>'
+    'the query-string link format should not come back'
+  );
+  assert.match(
+    serverSource,
+    /app\.get\('\/f\/:token'/,
+    'the server must actually serve /f/<token>, or the SMS link goes nowhere'
   );
 });
 
