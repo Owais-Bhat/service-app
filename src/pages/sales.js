@@ -336,10 +336,13 @@ function paintReceivables(container, body) {
 // Lines are typed here, but every figure on screen comes back from the server's
 // pricing call. Nothing is calculated in the browser, so the quotation and the
 // invoice can never drift apart.
-async function openEditor(container, { doc_type: docType = 'invoice', existing = null }) {
+async function openEditor(container, { doc_type: docTypeArg = 'invoice', existing = null }) {
+  const docType = existing?.document?.doc_type || docTypeArg;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   const doc = existing?.document || null;
+  // A quotation that has already gone out is revised, not edited as a draft.
+  const revising = !!(doc && doc.status !== 'draft');
   const gstOptions = taxRates.filter(t => t.treatment === 'gst' && !t.effective_to);
 
   const lineRow = (line = {}) => `
@@ -365,17 +368,19 @@ async function openEditor(container, { doc_type: docType = 'invoice', existing =
     </tr>`;
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:940px">
+    <div class="modal at2-modal" style="max-width:940px">
       <div class="modal-header">
-        <span class="modal-title">${doc ? `Edit ${esc(doc.doc_type.replace('_', ' '))}` : `New ${docType === 'estimate' ? 'quotation' : docType.replace('_', ' ')}`}</span>
+        <span class="modal-title">${revising ? `Revise quotation ${esc(doc.doc_no || '')}` : doc ? `Edit ${esc(doc.doc_type === 'estimate' ? 'quotation' : doc.doc_type.replace('_', ' '))}` : `New ${docType === 'estimate' ? 'quotation' : docType.replace('_', ' ')}`}</span>
         <button class="modal-close" id="sl-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
+        ${revising ? `<div class="at2-notice warn">This quotation has already gone out. Saving keeps its number (<b>${esc(doc.doc_no || '')}</b>) and marks it <b>revision ${Number(doc.revision_no || 0) + 1}</b>.
+          ${doc.status === 'accepted' ? 'The customer had accepted the earlier version, so it goes back to <b>sent</b> until they agree to this one.' : ''}</div>` : ''}
         <datalist id="sl-items">
           ${items.map(i => `<option value="${esc(i.name)}" data-id="${esc(i.id)}">`).join('')}
         </datalist>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>Customer *</label>
             <select id="sl-party">
               <option value="">— Choose —</option>
@@ -404,23 +409,25 @@ async function openEditor(container, { doc_type: docType = 'invoice', existing =
           </tbody>
         </table></div>
 
-        <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
-          <button class="btn btn-secondary" id="sl-add">${ICONS.plus}<span>Add line</span></button>
-          <div class="form-group" style="margin:0"><label style="font-size:0.75rem">Document discount ₹</label>
-            <input type="number" id="sl-docdisc" step="0.01" min="0" style="width:120px" value="${doc?.doc_discount_paise ? Number(doc.doc_discount_paise) / 100 : ''}"></div>
-          <div style="flex:1"></div>
-          <div id="sl-totals" style="min-width:260px"></div>
+        <div class="at2-editfoot">
+          <div class="at2-editfoot-left">
+            <button class="at2-addline" id="sl-add">${ICONS.plus}<span>Add line</span></button>
+            <div class="at2-inline-field"><label for="sl-docdisc">Document discount ₹</label>
+              <input type="number" id="sl-docdisc" step="0.01" min="0" placeholder="0" value="${doc?.doc_discount_paise ? Number(doc.doc_discount_paise) / 100 : ''}"></div>
+          </div>
+          <div class="at2-totals" id="sl-totals"></div>
         </div>
 
-        <div class="form-group" style="margin-top:12px"><label>Notes for the customer</label>
+        <div class="form-group"><label>Notes for the customer</label>
           <textarea id="sl-notes" rows="2">${esc(doc?.notes || '')}</textarea></div>
         <div class="form-group"><label>Terms</label>
           <textarea id="sl-terms" rows="2">${esc(doc?.terms || '')}</textarea></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="sl-cancel">Cancel</button>
-        <button class="btn btn-secondary" id="sl-save">Save draft</button>
-        <button class="btn btn-primary" id="sl-issue">Save &amp; issue</button>
+        ${revising
+      ? '<button class="btn btn-primary" id="sl-revise">Save revision</button>'
+      : '<button class="btn btn-secondary" id="sl-save">Save draft</button><button class="btn btn-primary" id="sl-issue">Save &amp; issue</button>'}
       </div>
     </div>`;
 
@@ -468,7 +475,7 @@ async function openEditor(container, { doc_type: docType = 'invoice', existing =
   const reprice = async () => {
     const payload = collect();
     if (!payload.lines.length) {
-      $('#sl-totals').innerHTML = '<span style="color:var(--text-dim);font-size:0.85rem">Add a line to see the total</span>';
+      $('#sl-totals').innerHTML = '<div class="empty">Add a line to see the total</div>';
       return;
     }
     try {
@@ -479,17 +486,14 @@ async function openEditor(container, { doc_type: docType = 'invoice', existing =
         tr.querySelector('.sl-amount').textContent = line ? rupees(line.amount_paise) : '—';
       });
       $('#sl-totals').innerHTML = `
-        <div style="font-size:0.84rem;color:var(--text-soft);line-height:1.7">
-          <div style="display:flex;justify-content:space-between"><span>Taxable</span><b>${rupees(t.taxable_paise)}</b></div>
-          ${t.cgst_paise ? `<div style="display:flex;justify-content:space-between"><span>CGST + SGST</span><b>${rupees(t.cgst_paise + t.sgst_paise + t.utgst_paise)}</b></div>` : ''}
-          ${t.igst_paise ? `<div style="display:flex;justify-content:space-between"><span>IGST</span><b>${rupees(t.igst_paise)}</b></div>` : ''}
-          ${t.round_off_paise ? `<div style="display:flex;justify-content:space-between"><span>Rounding</span><b>${rupees(t.round_off_paise)}</b></div>` : ''}
-          <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
-            <b>Total</b><b style="color:var(--primary);font-size:1.05rem">${rupees(t.total_paise)}</b></div>
-          <div style="font-size:0.72rem;color:var(--text-dim)">${priced.supply_type === 'inter' ? 'Inter-state — IGST' : 'Intra-state — CGST + SGST'}</div>
-        </div>`;
+        <div class="row"><span>Taxable value</span><b>${rupees(t.taxable_paise)}</b></div>
+        ${t.cgst_paise ? `<div class="row"><span>CGST</span><b>${rupees(t.cgst_paise)}</b></div><div class="row"><span>${t.utgst_paise ? 'UTGST' : 'SGST'}</span><b>${rupees(t.sgst_paise + t.utgst_paise)}</b></div>` : ''}
+        ${t.igst_paise ? `<div class="row"><span>IGST</span><b>${rupees(t.igst_paise)}</b></div>` : ''}
+        ${t.round_off_paise ? `<div class="row"><span>Rounding</span><b>${rupees(t.round_off_paise)}</b></div>` : ''}
+        <div class="grand"><span>Total</span><b>${rupees(t.total_paise)}</b></div>
+        <div class="hint">${priced.supply_type === 'inter' ? 'Inter-state supply — IGST' : 'Intra-state supply — CGST + SGST'}</div>`;
     } catch (err) {
-      $('#sl-totals').innerHTML = `<span style="color:var(--danger);font-size:0.82rem">${esc(err.message)}</span>`;
+      $('#sl-totals').innerHTML = `<div class="bad">${esc(err.message)}</div>`;
     }
   };
   const queueReprice = () => { clearTimeout(priceTimer); priceTimer = setTimeout(reprice, 300); };
@@ -559,8 +563,29 @@ async function openEditor(container, { doc_type: docType = 'invoice', existing =
       btn.disabled = false;
     }
   };
-  $('#sl-save').onclick = () => save(false);
-  $('#sl-issue').onclick = () => save(true);
+  if (revising) {
+    $('#sl-revise').onclick = async () => {
+      const payload = collect();
+      if (!payload.party_id) return toast('Choose the customer', 'warning');
+      if (!payload.lines.length) return toast('Add at least one line', 'warning');
+      const btn = $('#sl-revise');
+      btn.disabled = true;
+      try {
+        await api('POST', `/sales/documents/${doc.id}/revise`, payload);
+        toast('Quotation revised', 'success');
+        close();
+        await loadTab();
+        paint(container);
+        openDetail(container, doc.id);
+      } catch (err) {
+        toast(err.message, 'error');
+        btn.disabled = false;
+      }
+    };
+  } else {
+    $('#sl-save').onclick = () => save(false);
+    $('#sl-issue').onclick = () => save(true);
+  }
 }
 
 // ── detail ──────────────────────────────────────────────────────────────
@@ -579,9 +604,9 @@ async function openDetail(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:720px">
+    <div class="modal at2-modal" style="max-width:720px">
       <div class="modal-header">
-        <span class="modal-title">${esc(doc.doc_no || 'Draft')} <span class="at2-chip ${sTone}">${esc(sLabel)}</span></span>
+        <span class="modal-title">${esc(doc.doc_no || 'Draft')} <span class="at2-chip ${sTone}">${esc(sLabel)}</span>${Number(doc.revision_no) > 0 ? ` <span class="at2-chip warn">Revision ${Number(doc.revision_no)}</span>` : ""}</span>
         <button class="modal-close" id="sd-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
@@ -647,6 +672,8 @@ async function openDetail(container, id) {
         <button class="btn btn-secondary" id="sd-cancel">Close</button>
         ${!isDraft ? '<button class="btn btn-secondary" id="sd-pdf">Open PDF</button>' : ''}
         ${isDraft ? '<button class="btn btn-secondary" id="sd-edit">Edit</button>' : ''}
+        ${doc.doc_type === 'estimate' && ['issued', 'accepted', 'rejected', 'expired'].includes(doc.status) && !doc.converted_to_id
+      ? '<button class="btn btn-secondary" id="sd-revise">Edit / revise</button>' : ''}
         ${isDraft ? '<button class="btn btn-primary" id="sd-issue">Issue</button>' : ''}
         ${doc.doc_type === 'estimate' && ['issued', 'accepted'].includes(doc.status) && !doc.converted_to_id
       ? '<button class="btn btn-secondary" id="sd-accept">Mark accepted</button><button class="btn btn-primary" id="sd-convert">Convert to invoice</button>' : ''}
@@ -679,6 +706,7 @@ async function openDetail(container, id) {
   }
 
   if ($('#sd-edit')) $('#sd-edit').onclick = () => { close(); openEditor(container, { existing: loaded }); };
+  if ($('#sd-revise')) $('#sd-revise').onclick = () => { close(); openEditor(container, { existing: loaded }); };
 
   if ($('#sd-issue')) {
     $('#sd-issue').onclick = async () => {
@@ -745,13 +773,13 @@ async function openReceiptModal(container, { document: doc = null, balance = 0 }
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:560px">
+    <div class="modal at2-modal" style="max-width:560px">
       <div class="modal-header">
         <span class="modal-title">Record a receipt</span>
         <button class="modal-close" id="rc-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>From *</label>
             <select id="rc-party" ${doc ? 'disabled' : ''}>
               <option value="">— Choose —</option>
@@ -856,7 +884,7 @@ async function openPaymentDetail(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:520px">
+    <div class="modal at2-modal" style="max-width:520px">
       <div class="modal-header">
         <span class="modal-title">${esc(payment.payment_no || 'Receipt')}</span>
         <button class="modal-close" id="pd2-close">${ICONS.close}</button>

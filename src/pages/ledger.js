@@ -441,13 +441,13 @@ function openJournalModal(container) {
     </tr>`;
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:720px">
+    <div class="modal at2-modal" style="max-width:720px">
       <div class="modal-header">
         <span class="modal-title">New Journal Entry</span>
         <button class="modal-close" id="jm-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>Date</label><input type="date" id="jm-date" value="${ymd(new Date())}"></div>
           <div class="form-group" style="grid-column:span 2"><label>Narration</label><input type="text" id="jm-narration" placeholder="What is this entry for?"></div>
         </div>
@@ -455,9 +455,9 @@ function openJournalModal(container) {
           <thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Note</th><th></th></tr></thead>
           <tbody id="jm-lines">${lineHtml()}${lineHtml()}</tbody>
         </table></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:10px">
-          <button class="btn btn-secondary" id="jm-add">${ICONS.plus}<span>Add line</span></button>
-          <div id="jm-totals" style="font-weight:800"></div>
+        <div class="at2-editfoot">
+          <div class="at2-editfoot-left"><button class="at2-addline" id="jm-add">${ICONS.plus}<span>Add line</span></button></div>
+          <div class="at2-totals" id="jm-totals"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -481,10 +481,9 @@ function openJournalModal(container) {
     });
     const diff = debit - credit;
     $('#jm-totals').innerHTML = `
-      Debit ${rupees(debit)} · Credit ${rupees(credit)}
-      <span style="color:${diff === 0 ? 'var(--primary)' : 'var(--danger)'}">
-        ${diff === 0 ? ' · balanced' : ` · out by ${rupees(Math.abs(diff))}`}
-      </span>`;
+      <div class="row"><span>Debit</span><b>${rupees(debit)}</b></div>
+      <div class="row"><span>Credit</span><b>${rupees(credit)}</b></div>
+      <div class="grand"><span>${diff === 0 ? 'Balanced' : 'Out by'}</span><b class="${diff === 0 ? 'balanced' : 'off'}" style="${diff === 0 ? '' : 'color:var(--danger)'}">${diff === 0 ? '✓' : rupees(Math.abs(diff))}</b></div>`;
     $('#jm-save').disabled = !(debit > 0 && diff === 0);
   };
 
@@ -548,7 +547,7 @@ async function openJournalDetail(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:640px">
+    <div class="modal at2-modal" style="max-width:640px">
       <div class="modal-header">
         <span class="modal-title">${esc(journal.journal_no || 'Journal')}</span>
         <button class="modal-close" id="jd-close">${ICONS.close}</button>
@@ -609,7 +608,7 @@ function openAccountModal(container, existing = null) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:480px">
+    <div class="modal at2-modal" style="max-width:480px">
       <div class="modal-header">
         <span class="modal-title">${isEdit ? 'Edit Account' : 'New Account'}</span>
         <button class="modal-close" id="am-close">${ICONS.close}</button>

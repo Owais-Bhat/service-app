@@ -71,13 +71,9 @@ const table = (heads, rows, right = []) => `
     <tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td${right.includes(i) ? ' style="text-align:right"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody>
   </table></div>`;
 
-const stat = (label, value, tone = '') => `
-  <div class="card" style="padding:10px 16px;min-width:150px">
-    <div style="font-size:0.68rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.04em">${label}</div>
-    <div style="font-size:1.15rem;font-weight:800;${tone}">${value}</div>
-  </div>`;
-const stats = (...s) => `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">${s.join('')}</div>`;
-const notice = (kind, html) => `<div class="card" style="border-left:3px solid var(--${kind});padding:12px 14px;margin:10px 0;font-size:0.86rem;line-height:1.6">${html}</div>`;
+const stat = (label, value, tone = '') => `<div class="at2-stat ${tone ? 'danger' : ''}"><div class="k">${label}</div><div class="v${tone ? ' bad' : ''}">${value}</div></div>`;
+const stats = (...s) => `<div class="at2-stats">${s.join('')}</div>`;
+const notice = (kind, html) => `<div class="at2-notice ${kind === 'primary' ? '' : kind}">${html}</div>`;
 const intro = (text) => `<p class="at2-note" style="margin:0 0 12px">${text}</p>`;
 
 // What the books' checks said before and after, only where it matters.
@@ -90,7 +86,7 @@ function beforeAfter(before, after) {
     return [esc(a.label), `<span class="at2-chip ${b.ok ? 'ok' : 'danger'}">${b.ok ? 'OK' : 'gap'}</span> ${b.ok ? '' : fmt(b)}`,
       `<span class="at2-chip ${a.ok ? 'ok' : 'danger'}">${a.ok ? 'OK' : 'gap'}</span> ${a.ok ? '' : fmt(a)}${changed ? ' <small style="color:var(--primary)">changed</small>' : ''}`];
   });
-  return `<h4 style="margin:14px 0 6px">The books' own checks</h4>${table(['Check', 'Before', 'After'], rows)}`;
+  return `<div class="at2-h">The books' own checks</div>${table(['Check', 'Before', 'After'], rows)}`;
 }
 
 const button = (id, label, kind = 'primary') => `<button class="btn btn-${kind}" id="${id}">${label}</button>`;
@@ -156,7 +152,7 @@ async function stock(body) {
         <label style="font-size:0.78rem;color:var(--text-dim)">Stock counts from <input type="date" id="mg-date" value="${ymd(new Date())}"></label>
         ${button('mg-apply', 'Bring the ticked items in')}
       </div>` : notice('primary', 'Every item\'s stock is already in the books.')}
-      ${p.flagged.length ? `<h4 style="margin:18px 0 6px">Need a look first — not brought in</h4>${table(['Item', 'On hand', 'In history', 'Why'], p.flagged.map(r => [`<b>${esc(r.name)}</b>`, r.on_hand, r.in_movements, esc(r.reason)]), [1, 2])}` : ''}
+      ${p.flagged.length ? `<div class="at2-h">Need a look first — not brought in</div>${table(['Item', 'On hand', 'In history', 'Why'], p.flagged.map(r => [`<b>${esc(r.name)}</b>`, r.on_hand, r.in_movements, esc(r.reason)]), [1, 2])}` : ''}
       <div id="mg-result"></div>`;
 
     const apply = body.querySelector('#mg-apply');

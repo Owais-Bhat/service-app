@@ -115,6 +115,11 @@ const table = (heads, rows, { right = [], foot = null } = {}) => `
     </tbody>
   </table></div>`;
 
+const stat = (label, value, { sub = '', tone = '', bad = false } = {}) =>
+  `<div class="at2-stat ${tone}"><div class="k">${label}</div><div class="v${bad ? ' bad' : ''}">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+const stats = (...items) => `<div class="at2-stats">${items.join('')}</div>`;
+const notice = (kind, html) => `<div class="at2-notice ${kind === 'primary' ? '' : kind}">${html}</div>`;
+
 const scopeNote = (text) => `<p class="at2-note" style="margin:0 0 12px">${esc(text)}</p>`;
 
 const rangeBar = (extra = '') => `
@@ -169,15 +174,10 @@ async function load() {
 
 async function summary(body) {
   const s = await api(`/reports/owner-summary?on=${state.asOn}`);
-  const card = (label, value, sub = '', tone = '') => `
-    <div class="card" style="padding:12px 16px;min-width:170px;flex:1">
-      <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.04em">${label}</div>
-      <div style="font-size:1.3rem;font-weight:800;${tone}">${value}</div>
-      ${sub ? `<div style="font-size:0.74rem;color:var(--text-dim);margin-top:2px">${sub}</div>` : ''}
-    </div>`;
-  const row = (...cards) => `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">${cards.join('')}</div>`;
-  const heading = (t) => `<h4 style="margin:16px 0 8px;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">${t}</h4>`;
-  const bad = 'color:var(--danger)';
+  const card = (label, value, sub = '', tone = '') => stat(label, value, { sub, bad: !!tone, tone: tone ? 'danger' : '' });
+  const row = (...cards) => stats(...cards);
+  const heading = (t) => `<div class="at2-h">${t}</div>`;
+  const bad = 'x';
   const attention = [
     ...s.attention.failing_checks.map(c => `Health check: ${c}`),
     ...(s.attention.unposted_tickets ? [`${s.attention.unposted_tickets} ticket(s) could not be posted to the books`] : []),
@@ -186,8 +186,8 @@ async function summary(body) {
   ];
 
   body.innerHTML = `${asOnBar()}
-    ${attention.length ? `<div class="card" style="border-left:3px solid var(--warning);padding:12px 14px;margin-bottom:14px"><b>Needs a look</b><ul style="margin:6px 0 0 18px;font-size:0.85rem;line-height:1.7">${attention.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>`
-      : '<div class="card" style="border-left:3px solid var(--primary);padding:12px 14px;margin-bottom:14px"><b style="color:var(--primary)">Nothing needs attention.</b></div>'}
+    ${attention.length ? notice('warn', `<b>Needs a look</b><ul>${attention.map(a => `<li>${esc(a)}</li>`).join('')}</ul>`)
+      : notice('primary', '<b>Nothing needs attention.</b> The books agree and nothing is waiting on you.')}
     ${heading(`Today, ${day(s.as_on)}`)}
     ${row(card('Sales', rupees(s.today.sales_paise), 'billed, after discounts'), card('Money collected', rupees(s.today.collected_paise), 'against bills'))}
     ${heading(`This month, from ${day(s.month.from)}`)}
@@ -203,7 +203,7 @@ async function summary(body) {
       card('Stock value', rupees(s.stock.value_paise)))}
     ${s.receivable.top.length ? `${heading('Biggest amounts owed')}${table(['Customer', 'Owes', 'Oldest'], s.receivable.top.map(p => [`<b>${esc(p.party)}</b>${p.phone ? `<br><small style="color:var(--text-dim)">${esc(p.phone)}</small>` : ''}`, rupees(p.outstanding_paise), `${p.oldest_days} days`]), { right: [1, 2] })}` : ''}
     ${heading('The evening message')}
-    <div class="card" style="padding:12px 14px;font-size:0.86rem;line-height:1.7;color:var(--text-soft)">${esc(s.text)}</div>`;
+    ${notice('primary', esc(s.text))}`;
   bind(body);
   setExport(`owner-summary-${s.as_on}.csv`, [
     { Item: 'Sales today', Amount: plain(s.today.sales_paise) }, { Item: 'Collected today', Amount: plain(s.today.collected_paise) },
@@ -222,11 +222,8 @@ async function remindersTab(body) {
     return d <= 0 ? 'today' : `${d} day${d === 1 ? '' : 's'} ago`;
   };
   body.innerHTML = `${asOnBar()}${scopeNote(r.scope.basis)}
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Overdue from customers</div><div style="font-size:1.3rem;font-weight:800;color:var(--danger)">${rupees(r.totals.customers_paise)}</div></div>
-      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Overdue to suppliers</div><div style="font-size:1.3rem;font-weight:800">${rupees(r.totals.suppliers_paise)}</div></div>
-    </div>
-    <h4 style="margin:6px 0 8px">Customers to remind</h4>
+    ${stats(stat('Overdue from customers', rupees(r.totals.customers_paise), { tone: r.totals.customers_paise ? 'danger' : '', bad: !!r.totals.customers_paise }), stat('Overdue to suppliers', rupees(r.totals.suppliers_paise), { tone: 'warn' }))}
+    <div class="at2-h">Customers to remind</div>
     ${table(['Customer', 'Overdue', 'Total owed', 'Oldest', 'Last reminded', ''], r.customers.map(c => [
       `<b>${esc(c.party)}</b>${c.phone ? `<br><small style="color:var(--text-dim)">${esc(c.phone)}</small>` : '<br><small style="color:var(--danger)">no phone number</small>'}`,
       `<b style="color:var(--danger)">${rupees(c.overdue_paise)}</b>`, rupees(c.outstanding_paise), `${c.oldest_days} days`,
@@ -286,7 +283,7 @@ async function bs(body) {
       ${table(['Account', 'Amount'], [...list.map(a => [`${esc(a.code)} · ${esc(a.name)}`, rupees(a.balance_paise)]), ...(extra ? [extra] : [])], { right: [1], foot: ['Total', rupees(total)] })}
     </div>`;
   body.innerHTML = `${asOnBar()}${scopeNote(`As on ${day(r.scope.as_on)}. ${r.scope.basis}`)}
-    ${r.balanced ? '' : `<div class="card" style="border-left:3px solid var(--danger);padding:12px;margin-bottom:12px"><b style="color:var(--danger)">The balance sheet is out by ${rupees(t.difference_paise)}.</b> This should not be possible — see Health Check.</div>`}
+    ${r.balanced ? '' : notice('danger', `<b>The balance sheet is out by ${rupees(t.difference_paise)}.</b> This should not be possible — see Health Check.`)}
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       ${side('Assets', r.assets, t.assets_paise)}
       ${side('Liabilities & equity', [...r.liabilities, ...r.equity], t.liabilities_and_equity_paise,
@@ -366,10 +363,8 @@ async function gst(body) {
     const s = await api(`/reports/gst/summary?${q}`);
     const tax = (o) => o.cgst_paise + o.sgst_paise + o.igst_paise;
     html = `${scopeNote(s.scope.basis)}
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-        ${[['Tax collected on sales', s.output.tax_paise, ''], ['Tax you can claim', s.input.tax_paise, ''], ['Net payable', s.payable.total_paise, s.payable.total_paise < 0 ? 'color:var(--primary)' : 'color:var(--danger)']]
-          .map(([l, v, st]) => `<div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">${l}</div><div style="font-size:1.3rem;font-weight:800;${st}">${rupees(v)}</div></div>`).join('')}
-      </div>
+      ${stats(stat('Tax collected on sales', rupees(s.output.tax_paise)), stat('Tax you can claim', rupees(s.input.tax_paise)),
+        stat('Net payable', rupees(s.payable.total_paise), { tone: s.payable.total_paise > 0 ? 'danger' : '', bad: s.payable.total_paise > 0 }))}
       ${table(['', 'Taxable value', 'CGST', 'SGST/UTGST', 'IGST', 'Tax'], [
         ['<b>Sales</b>', rupees(s.output.taxable_paise), rupees(s.output.cgst_paise), rupees(s.output.sgst_paise), rupees(s.output.igst_paise), rupees(tax(s.output))],
         ['<b>Purchases (claimable)</b>', rupees(s.input.taxable_paise), rupees(s.input.cgst_paise), rupees(s.input.sgst_paise), rupees(s.input.igst_paise), rupees(tax(s.input))],
@@ -423,10 +418,9 @@ async function gst(body) {
 async function stock(body) {
   const v = await api('/reports/stock-valuation');
   body.innerHTML = `${scopeNote(`${v.scope.basis}. Set beside the Inventory account so a gap cannot hide.`)}
-    ${v.difference_paise ? `<div class="card" style="border-left:3px solid var(--warning);padding:12px;margin-bottom:12px">
-      Stock on hand is worth <b>${rupees(v.total_value_paise)}</b>; the Inventory account holds <b>${rupees(v.ledger_inventory_paise)}</b>.
-      The <b>${rupees(v.difference_paise)}</b> gap is stock the books have not been told about — usually stock that was on the shelf before accounting started.
-    </div>` : `<div class="card" style="border-left:3px solid var(--primary);padding:12px;margin-bottom:12px">The stock on hand and the Inventory account agree at <b>${rupees(v.total_value_paise)}</b>.</div>`}
+    ${v.difference_paise ? notice('warn', `Stock on hand is worth <b>${rupees(v.total_value_paise)}</b>; the Inventory account holds <b>${rupees(v.ledger_inventory_paise)}</b>.
+      The <b>${rupees(v.difference_paise)}</b> gap is stock the books have not been told about — usually stock that was on the shelf before accounting started. <b>Data Migration → Stock on the Shelf</b> brings it in.`)
+      : notice('primary', `The stock on hand and the Inventory account agree at <b>${rupees(v.total_value_paise)}</b>.`)}
     ${table(['Item', 'SKU', 'On hand', 'Avg cost', 'Value'], v.items.filter(i => i.quantity || i.value_paise).map(i => [
       `<b>${esc(i.name)}</b>${i.quantity_matches === false ? ' <span class="at2-chip danger">ledger mismatch</span>' : ''}`, esc(i.sku || '—'), `${i.quantity} ${esc(i.unit || '')}`, rupees(i.avg_cost_paise), rupees(i.value_paise)]),
       { right: [2, 3, 4], foot: ['Total', '', '', '', rupees(v.total_value_paise)] })}`;
@@ -437,10 +431,8 @@ async function jobs(body) {
   const r = await api(`/jobs/profitability?from=${state.from}&to=${state.to}`);
   const t = r.totals;
   body.innerHTML = `${rangeBar()}${scopeNote(r.scope.basis)}
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      ${[['Revenue', t.revenue_paise], ['Cost', t.cost_paise], ['Margin', t.margin_paise]].map(([l, v]) => `<div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">${l}</div><div style="font-size:1.3rem;font-weight:800">${rupees(v)}</div></div>`).join('')}
-      ${t.unbilled_jobs ? `<div class="card" style="padding:12px 18px;border-left:3px solid var(--warning)"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Not billed yet</div><div style="font-size:1.3rem;font-weight:800">${t.unbilled_jobs} job(s), ${rupees(t.unbilled_cost_paise)} cost</div></div>` : ''}
-    </div>
+    ${stats(stat('Revenue', rupees(t.revenue_paise)), stat('Cost', rupees(t.cost_paise)), stat('Margin', rupees(t.margin_paise), { tone: t.margin_paise < 0 ? 'danger' : '', bad: t.margin_paise < 0 }),
+      ...(t.unbilled_jobs ? [stat('Not billed yet', `${t.unbilled_jobs} job(s)`, { tone: 'warn', sub: `${rupees(t.unbilled_cost_paise)} of cost` })] : []))}
     ${table(['Date', 'Ticket', 'Customer', 'Revenue', 'Cost', 'Margin', '%'], r.jobs.map(j => [day(j.job_date), `<code>${esc(j.ticket_no || '—')}</code>`, esc(j.customer || '—'),
       j.unbilled ? '<span class="at2-chip warn">not billed</span>' : rupees(j.revenue_paise), rupees(j.total_cost_paise),
       `<b style="${j.margin_paise < 0 ? 'color:var(--danger)' : ''}">${rupees(j.margin_paise)}</b>`, j.margin_pct === null ? '—' : `${j.margin_pct}%`]), { right: [3, 4, 5, 6] })}`;
@@ -453,10 +445,7 @@ async function health(body) {
   const shown = (c) => c.count ? String(c.a_paise) : rupees(c.a_paise);
   const shownB = (c) => c.count ? String(c.b_paise) : rupees(c.b_paise);
   body.innerHTML = `${asOnBar()}
-    <div class="card" style="border-left:3px solid var(--${r.ok ? 'primary' : 'danger'});padding:12px 14px;margin-bottom:14px">
-      <b style="color:var(--${r.ok ? 'primary' : 'danger'})">${r.ok ? 'The books agree with themselves.' : 'Something does not agree — see below.'}</b>
-      <div style="font-size:0.82rem;color:var(--text-soft);margin-top:4px">Each line sets two independent sources side by side. A tick means they match to the paisa.</div>
-    </div>
+    ${notice(r.ok ? 'primary' : 'danger', `<b>${r.ok ? 'The books agree with themselves.' : 'Something does not agree — see below.'}</b> Each line sets two independent sources side by side. A tick means they match to the paisa.`)}
     ${table(['', 'Check', 'One side', 'Other side', 'Difference', ''], r.checks.map(c => [
       `<span class="at2-chip ${c.ok ? 'ok' : 'danger'}">${c.ok ? 'OK' : 'Check'}</span>`, `<b>${esc(c.label)}</b><br><small style="color:var(--text-dim)">${esc(c.note || '')}</small>`,
       shown(c), shownB(c), c.ok ? '—' : `<b style="color:var(--danger)">${c.count ? c.difference_paise : rupees(c.difference_paise)}</b>`, '']), { right: [2, 3, 4] })}`;

@@ -177,6 +177,23 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
         res.json(issued);
     }));
 
+    // A quotation can be corrected after it has gone out; nothing else that has
+    // been issued can.
+    app.post('/api/sales/documents/:id/revise', authenticateToken, requireCap('invoice.create'), handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        await conn.beginTransaction();
+        const out = await sales.reviseEstimate(conn, { businessId, user: req.user, id: req.params.id, payload: req.body || {} });
+        await conn.commit();
+
+        audit.record({
+            actor: req.user, action: 'document.revise', entityType: 'sales_document', entityId: req.params.id,
+            before: { revision_no: out.before.revision_no, status: out.before.status, total_paise: out.before.total_paise },
+            after: { revision_no: out.after.revision_no, status: out.after.status, total_paise: out.after.total_paise },
+            ip: req.ip,
+        });
+        res.json(await sales.loadDocument(conn, req.params.id));
+    }));
+
     app.post('/api/sales/documents/:id/cancel', authenticateToken, requireCap('invoice.cancel'), handle(async (req, res, conn) => {
         const reason = clean(req.body?.reason, 500);
         await conn.beginTransaction();

@@ -299,13 +299,13 @@ function openPartyModal(container, existing = null, defaultKind = 'customer') {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:620px">
+    <div class="modal at2-modal" style="max-width:620px">
       <div class="modal-header">
         <span class="modal-title">${isEdit ? 'Edit' : 'New'} ${esc(existing?.kind === 'supplier' ? 'Supplier' : defaultKind === 'supplier' ? 'Supplier' : 'Customer')}</span>
         <button class="modal-close" id="pm-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>Name *</label>
             <input type="text" id="pm-name" value="${esc(existing?.display_name || '')}" placeholder="Shop or person as everyone calls them"></div>
           <div class="form-group"><label>Legal name <small style="color:var(--text-dim)">(on the invoice)</small></label>
@@ -446,7 +446,7 @@ async function openPartyDetail(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:560px">
+    <div class="modal at2-modal" style="max-width:560px">
       <div class="modal-header">
         <span class="modal-title">${esc(party.display_name)}</span>
         <button class="modal-close" id="pd-close">${ICONS.close}</button>

@@ -9103,3 +9103,177 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
 .inst-step.done b { color: var(--text); }
 .inst-step-when { font-size: 0.76rem; color: var(--text-dim); }
 .inst-step-note { font-size: 0.78rem; color: var(--text-soft); margin-top: 2px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Accounting screens — one design
+   Fields, editors, totals, stat cards and modals for Sales, Purchases, Stock,
+   Ledger, Reports and Migration. Built on the theme variables, so light and
+   dark both follow.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Every field looks the same and is the same height. */
+.at2-modal input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]):not([type=range]),
+.at2-modal select,
+.at2-modal textarea,
+.at2 input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]):not([type=range]),
+.at2 select:not(.in2-state),
+.at2 textarea {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid var(--line, var(--border));
+  border-radius: 12px;
+  background: var(--panel-2, var(--bg-soft));
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+.at2-modal input:focus, .at2-modal select:focus, .at2-modal textarea:focus,
+.at2 input:focus, .at2 select:focus, .at2 textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--bg);
+}
+.at2-modal input::placeholder, .at2-modal textarea::placeholder, .at2 input::placeholder { color: var(--text-dim); opacity: 0.75; }
+.at2-modal .form-group input, .at2-modal .form-group select, .at2-modal .form-group textarea { width: 100%; }
+.at2-modal textarea { min-height: 76px; resize: vertical; line-height: 1.55; }
+.at2-modal select, .at2 select:not(.in2-state) { cursor: pointer; }
+.at2-modal input[type=checkbox], .at2 input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }
+
+/* The modal itself */
+.at2-modal { border-radius: 24px; max-height: 92vh; }
+.at2-modal .modal-header { padding: 18px 24px; border-radius: 24px 24px 0 0; }
+.at2-modal .modal-title { font-size: 1.08rem; }
+.at2-modal .modal-body { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 16px; }
+.at2-modal .form-group { margin: 0; }
+.at2-modal .form-group > label {
+  display: block; margin-bottom: 6px;
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim);
+}
+.at2-modal .form-group > label small { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.at2-modal .modal-footer {
+  padding: 14px 24px; gap: 10px;
+  position: sticky; bottom: 0; z-index: 2;
+  background: var(--bg, #fff); border-radius: 0 0 24px 24px;
+}
+.at2-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+
+/* The lines of a document, journal, count or transfer: an editable grid in a
+   box of its own, not a table with bare browser inputs in it. */
+.at2-modal .table-wrap {
+  border: 1px solid var(--line, var(--border)); border-radius: 16px;
+  background: color-mix(in srgb, var(--panel-2, var(--bg-soft)) 55%, transparent);
+  padding: 6px 10px 10px; overflow-x: auto;
+}
+.at2-modal .at2-tbl { border-collapse: separate; border-spacing: 0 6px; }
+.at2-modal .at2-tbl th { padding: 8px 6px 2px; border-bottom: 0; background: none; position: static; border-radius: 0; }
+.at2-modal .at2-tbl td { padding: 0 4px; border-bottom: 0; vertical-align: middle; }
+.at2-modal .at2-tbl td input, .at2-modal .at2-tbl td select { width: 100% !important; min-width: 0 !important; min-height: 38px; padding: 8px 10px; }
+.at2-modal .at2-tbl td:first-child input[type=text] { min-width: 190px !important; }
+.at2-modal .at2-tbl td input[type=number] { text-align: right; min-width: 76px !important; font-variant-numeric: tabular-nums; }
+.at2-modal .at2-tbl td.sl-amount { font-weight: 800; font-variant-numeric: tabular-nums; padding-left: 10px; }
+.at2-modal .at2-tbl tbody tr:hover td { background: none; }
+
+.at2-editfoot { display: flex; gap: 18px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.at2-editfoot-left { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.at2-addline {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 9px 16px; border-radius: 12px; font: inherit; font-size: 0.86rem; font-weight: 700;
+  color: var(--primary); background: transparent; border: 1.5px dashed color-mix(in srgb, var(--primary) 55%, transparent);
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.at2-addline:hover { background: var(--accent-soft); border-color: var(--primary); }
+.at2-addline svg { width: 15px; height: 15px; }
+.at2-inline-field { display: flex; align-items: center; gap: 10px; }
+.at2-inline-field label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); white-space: nowrap; }
+.at2-inline-field input { width: 130px !important; text-align: right; }
+
+/* Totals as a panel, the grand total large. */
+.at2-totals {
+  min-width: 290px; padding: 14px 18px; border-radius: 16px;
+  border: 1px solid var(--line, var(--border)); background: var(--panel-2, var(--bg-soft));
+  font-variant-numeric: tabular-nums;
+}
+.at2-totals .row { display: flex; justify-content: space-between; gap: 18px; padding: 3px 0; font-size: 0.86rem; color: var(--text-soft); }
+.at2-totals .row b { color: var(--text); font-weight: 700; }
+.at2-totals .grand {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 18px;
+  margin-top: 8px; padding-top: 10px; border-top: 1.5px dashed var(--line, var(--border));
+  font-weight: 800; color: var(--text);
+}
+.at2-totals .grand b { font-size: 1.4rem; color: var(--primary); letter-spacing: -0.02em; }
+.at2-totals .hint { margin-top: 6px; font-size: 0.72rem; color: var(--text-dim); }
+.at2-totals .empty { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 8px 0; }
+.at2-totals .bad { color: var(--danger); font-size: 0.85rem; }
+.at2-totals .balanced { color: var(--primary); }
+.at2-totals .off { color: var(--danger); }
+
+/* Stat cards: what a report or a migration step is about to say, at a glance. */
+.at2-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 12px; margin: 12px 0; }
+.at2-stat {
+  position: relative; overflow: hidden; padding: 14px 16px 13px 19px; border-radius: 16px;
+  border: 1px solid var(--line, var(--border)); background: var(--panel-2, var(--bg-soft));
+}
+.at2-stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--primary); opacity: 0.9; }
+.at2-stat.warn::before { background: var(--warning); }
+.at2-stat.danger::before { background: var(--danger); }
+.at2-stat.muted::before { background: var(--text-dim); opacity: 0.4; }
+.at2-stat .k { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim); }
+.at2-stat .v { margin-top: 3px; font-size: 1.32rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); font-variant-numeric: tabular-nums; }
+.at2-stat .v.bad { color: var(--danger); }
+.at2-stat .s { margin-top: 2px; font-size: 0.74rem; color: var(--text-dim); }
+
+/* A sentence that needs to be seen: a warning, a result, a reason. */
+.at2-notice {
+  margin: 10px 0; padding: 13px 16px; border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  font-size: 0.86rem; line-height: 1.6; color: var(--text);
+}
+.at2-notice.warn { border-color: color-mix(in srgb, var(--warning) 35%, transparent); background: color-mix(in srgb, var(--warning) 9%, transparent); }
+.at2-notice.danger { border-color: color-mix(in srgb, var(--danger) 35%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.at2-notice ul { margin: 6px 0 0 18px; padding: 0; }
+.at2-h { margin: 22px 0 10px; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.at2-h:first-child { margin-top: 4px; }
+
+/* Lists: a header that stays put, rows that answer the pointer, figures that line up. */
+.at2-tbl thead th { background: var(--panel-2, var(--bg-soft)); }
+.at2-tbl thead th:first-child { border-radius: 10px 0 0 10px; }
+.at2-tbl thead th:last-child { border-radius: 0 10px 10px 0; }
+.at2-tbl td { font-variant-numeric: tabular-nums; }
+.at2-tbl tbody tr { transition: background 0.12s ease; }
+.at2-tbl tbody tr:hover td { background: var(--row-hover); }
+.at2-tbl tbody tr[data-open], .at2-tbl tbody tr[data-open] td { cursor: pointer; }
+.at2-empty {
+  padding: 34px 20px; text-align: center; color: var(--text-dim); font-size: 0.9rem;
+  border: 1.5px dashed var(--line, var(--border)); border-radius: 16px;
+}
+.at2-tabs { padding: 4px; background: var(--panel-2, var(--bg-soft)); border: 1px solid var(--line, var(--border)); border-radius: 16px; width: fit-content; max-width: 100%; }
+.at2-tab { border-color: transparent; background: transparent; }
+.at2-tab.on { box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--primary) 70%, transparent); }
+.at2-filters label { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-dim); }
+.at2-filters label input, .at2-filters label select { text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+@media (max-width: 720px) {
+  .at2-modal .modal-body { padding: 16px 16px 20px; }
+  .at2-modal .modal-header, .at2-modal .modal-footer { padding-left: 16px; padding-right: 16px; }
+  .at2-totals { width: 100%; }
+  .at2-editfoot { flex-direction: column; }
+  .at2-tabs { border-radius: 14px; }
+}
+
+/* Column sizes for the line editors: the description takes what is left, the
+   figures get room to be read, and a select never clips its own value. */
+.at2-modal .at2-tbl td:first-child input[type=text] { min-width: 190px !important; }
+.at2-modal .at2-tbl td select { min-width: 96px !important; padding-right: 24px; }
+.at2-modal .at2-tbl td input.sl-hsn, .at2-modal .at2-tbl td input.pu-unit { min-width: 76px !important; }
+.at2-modal .at2-tbl td input.sl-rate, .at2-modal .at2-tbl td input.pu-rate { min-width: 96px !important; }
+.at2-modal .at2-tbl td input.sl-qty, .at2-modal .at2-tbl td input.pu-qty { min-width: 68px !important; }
+.at2-modal .at2-tbl td input.sl-disc { min-width: 64px !important; }
+.at2-modal .at2-tbl td input.pu-serials { min-width: 150px !important; }
+.at2-modal .at2-tbl td.sl-amount { min-width: 110px; }
+.at2-modal .at2-tbl td:last-child { width: 44px; text-align: center; }
+.at2-modal .at2-tbl td .at2-photo { width: 34px; height: 34px; border-radius: 10px; }

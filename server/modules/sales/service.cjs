@@ -160,14 +160,18 @@ async function priceDocument(conn, businessId, payload) {
     return { priced, placeOfSupply: placeOfSupply || biz.state_code };
 }
 
-async function saveDraft(conn, { businessId, user, payload, existingId = null }) {
+async function saveDraft(conn, { businessId, user, payload, existingId = null, revising = false }) {
     const docType = payload.doc_type || 'invoice';
     if (!DOC_TYPES.has(docType)) throw new SalesError('Unknown document type', 'bad_type', 400);
 
+    let existing = null;
     if (existingId) {
-        const [[current]] = await conn.query('SELECT status FROM sales_documents WHERE id = ? LIMIT 1', [existingId]);
-        if (!current) throw new SalesError('No such document', 'not_found', 404);
-        if (current.status !== 'draft') {
+        [[existing]] = await conn.query('SELECT status, doc_type, source_type, source_id FROM sales_documents WHERE id = ? LIMIT 1', [existingId]);
+        if (!existing) throw new SalesError('No such document', 'not_found', 404);
+        // A quotation moves no money, so an issued one may be revised; anything
+        // that posted to the books may not.
+        const revisable = revising && existing.doc_type === 'estimate' && REVISABLE.has(existing.status);
+        if (existing.status !== 'draft' && !revisable) {
             throw new SalesError('An issued document cannot be edited — cancel it and raise a new one', 'not_draft');
         }
     }
@@ -186,8 +190,9 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null })
         place_of_supply_state_code: placeOfSupply,
         supply_type: priced.supply_type,
         prices_include_tax: payload.prices_include_tax ? 1 : 0,
-        source_type: payload.source_type || null,
-        source_id: payload.source_id || null,
+        // A document keeps the job it came from unless the caller says otherwise.
+        source_type: payload.source_type || existing?.source_type || null,
+        source_id: payload.source_id || existing?.source_id || null,
         gross_paise: t.gross_paise,
         line_discount_paise: t.line_discount_paise,
         doc_discount_paise: t.doc_discount_paise,
@@ -268,39 +273,7 @@ async function issueDocument(conn, { businessId, user, id }) {
         }
     }
 
-    const [[party]] = await conn.query('SELECT * FROM parties WHERE id = ? LIMIT 1', [doc.party_id]);
-    const [addresses] = await conn.query(
-        'SELECT * FROM party_addresses WHERE party_id = ? ORDER BY is_default DESC', [doc.party_id]
-    );
-    const billing = addresses.find((a) => a.kind === 'billing') || addresses[0] || null;
-
-    // Everything the document will ever need to say about this customer,
-    // captured now. Editing the customer tomorrow changes nothing here.
-    const snapshot = {
-        display_name: party.display_name,
-        legal_name: party.legal_name,
-        phone: party.phone,
-        email: party.email,
-        gstin: party.gstin,
-        gst_treatment: party.gst_treatment,
-        place_of_supply_state_code: doc.place_of_supply_state_code,
-        address: billing ? {
-            line1: billing.line1, line2: billing.line2, city: billing.city,
-            state_name: billing.state_name, pincode: billing.pincode,
-        } : null,
-        credit_days: party.credit_days,
-    };
-
-    // The same freeze for the goods: the name, HSN and unit as they read today.
-    for (const line of loaded.lines) {
-        if (!line.item_id) continue;
-        const [[item]] = await conn.query('SELECT * FROM inventory_items WHERE id = ? LIMIT 1', [line.item_id]);
-        if (!item) continue;
-        await conn.query('UPDATE sales_document_lines SET item_snapshot = ?, hsn_sac = COALESCE(hsn_sac, ?), unit = COALESCE(unit, ?) WHERE id = ?', [
-            JSON.stringify({ name: item.name, sku: item.sku, hsn_sac: item.hsn_sac, unit: item.unit, brand: item.brand, model: item.model }),
-            item.hsn_sac || null, item.unit || null, line.id,
-        ]);
-    }
+    const { snapshot, party } = await freezeDocument(conn, loaded);
 
     const docNo = await posting.allocateNumber(conn, businessId, doc.doc_type, doc.doc_date);
     const dueDate = doc.due_date
@@ -321,6 +294,82 @@ async function issueDocument(conn, { businessId, user, id }) {
     );
 
     return loadDocument(conn, id);
+}
+
+// What a document says about the customer and the goods, captured at the moment
+// it leaves draft. Editing the customer or the item tomorrow changes nothing
+// on a document that has already been issued — except a quotation the owner
+// chooses to revise, which is frozen again.
+async function freezeDocument(conn, loaded) {
+    const doc = loaded.document;
+    const [[party]] = await conn.query('SELECT * FROM parties WHERE id = ? LIMIT 1', [doc.party_id]);
+    const [addresses] = await conn.query(
+        'SELECT * FROM party_addresses WHERE party_id = ? ORDER BY is_default DESC', [doc.party_id]
+    );
+    const billing = addresses.find((a) => a.kind === 'billing') || addresses[0] || null;
+
+    const snapshot = {
+        display_name: party.display_name,
+        legal_name: party.legal_name,
+        phone: party.phone,
+        email: party.email,
+        gstin: party.gstin,
+        gst_treatment: party.gst_treatment,
+        place_of_supply_state_code: doc.place_of_supply_state_code,
+        address: billing ? {
+            line1: billing.line1, line2: billing.line2, city: billing.city,
+            state_name: billing.state_name, pincode: billing.pincode,
+        } : null,
+        credit_days: party.credit_days,
+    };
+
+    for (const line of loaded.lines) {
+        if (!line.item_id) continue;
+        const [[item]] = await conn.query('SELECT * FROM inventory_items WHERE id = ? LIMIT 1', [line.item_id]);
+        if (!item) continue;
+        await conn.query('UPDATE sales_document_lines SET item_snapshot = ?, hsn_sac = COALESCE(hsn_sac, ?), unit = COALESCE(unit, ?) WHERE id = ?', [
+            JSON.stringify({ name: item.name, sku: item.sku, hsn_sac: item.hsn_sac, unit: item.unit, brand: item.brand, model: item.model }),
+            item.hsn_sac || null, item.unit || null, line.id,
+        ]);
+    }
+    return { snapshot, party };
+}
+
+// ── revising a quotation ────────────────────────────────────────────────
+// It keeps its number and says which revision it is. If the customer had
+// accepted the old version, it goes back to "sent": they agreed to something
+// that no longer exists.
+const REVISABLE = new Set(['issued', 'accepted', 'rejected', 'expired']);
+
+async function reviseEstimate(conn, { businessId, user, id, payload }) {
+    const [[cur]] = await conn.query('SELECT status, doc_type, converted_to_id FROM sales_documents WHERE id = ? LIMIT 1', [id]);
+    if (!cur) throw new SalesError('No such document', 'not_found', 404);
+    if (cur.doc_type !== 'estimate') {
+        throw new SalesError('Only a quotation can be revised — an invoice is cancelled and raised again', 'not_estimate');
+    }
+    if (cur.converted_to_id || cur.status === 'converted') {
+        throw new SalesError('This quotation has already become an invoice — change or cancel that instead', 'converted');
+    }
+    if (!REVISABLE.has(cur.status)) {
+        throw new SalesError(cur.status === 'draft' ? 'A draft is edited, not revised' : 'This quotation cannot be revised', 'not_revisable');
+    }
+
+    const before = await loadDocument(conn, id);
+    await saveDraft(conn, { businessId, user, payload: { ...payload, doc_type: 'estimate' }, existingId: id, revising: true });
+
+    const loaded = await loadDocument(conn, id);
+    if (!loaded.document.party_id) throw new SalesError('Choose the customer', 'no_party', 400);
+    if (!loaded.lines.length) throw new SalesError('A quotation needs at least one line', 'no_lines', 400);
+
+    const { snapshot } = await freezeDocument(conn, loaded);
+    await conn.query(
+        `UPDATE sales_documents
+            SET revision_no = COALESCE(revision_no, 0) + 1, status = 'issued',
+                accepted_at = NULL, acceptance_method = NULL, acceptance_note = NULL, party_snapshot = ?
+          WHERE id = ?`,
+        [JSON.stringify(snapshot), id]
+    );
+    return { before: before.document, after: (await loadDocument(conn, id)).document };
 }
 
 function addDays(date, days) {
@@ -653,4 +702,5 @@ module.exports = {
     paymentStatusOf,
     priceDocument,
     POSTS_TO_LEDGER,
+    reviseEstimate,
 };

@@ -145,13 +145,9 @@ function paint(container) {
       </div>
 
       ${pending.length ? `
-      <div class="card" style="border-left:3px solid var(--warning);margin-bottom:14px">
-        <div style="padding:14px">
-          <b style="font-size:0.9rem">Still needed before tax documents can be issued</b>
-          <ul style="margin:8px 0 0 18px;font-size:0.86rem;color:var(--text-soft);line-height:1.7">
-            ${pending.map(p => `<li>${esc(p)}</li>`).join('')}
-          </ul>
-        </div>
+      <div class="at2-notice warn">
+        <b>Still needed before tax documents can be issued</b>
+        <ul>${pending.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
       </div>` : ''}
 
       <div class="at2-tabs">
@@ -386,7 +382,7 @@ function openSeriesModal(container, row) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:460px">
+    <div class="modal at2-modal" style="max-width:460px">
       <div class="modal-header">
         <span class="modal-title">${esc(DOC_LABEL[row.doc_type] || row.doc_type)} — ${esc(row.fy_label)}</span>
         <button class="modal-close" id="sm-close">${ICONS.close}</button>
@@ -481,13 +477,13 @@ function paintService(container, body) {
     </div>
 
     ${attention.length ? `
-    <div class="card" style="border-left:3px solid var(--danger)">
-      <div class="card-header"><span class="card-title">Could not be posted</span></div>
+    <div class="at2-notice danger" style="padding:14px 16px 6px">
+      <b>Could not be posted</b>
       <div class="table-wrap"><table class="at2-tbl">
         <thead><tr><th>Ticket</th><th>Type</th><th>Why</th></tr></thead>
         <tbody>${attention.map(a => `<tr><td><b>${esc(a.ticket_ref || a.source_id.slice(0, 8))}</b></td><td>${esc(a.source_type === 'installation' ? 'Installation' : 'Service')}</td><td>${esc(a.note || '')}</td></tr>`).join('')}</tbody>
       </table></div>
-      <p class="at2-note" style="padding:0 14px 14px">Usually a closed accounting period or a missing business state. Fix it, then press Sync now — it is also retried every few minutes.</p>
+      <p class="at2-note">Usually a closed accounting period or a missing business state. Fix it, then press Sync now — it is also retried every few minutes.</p>
     </div>` : `<p class="at2-note">${s.enabled ? 'Nothing is waiting. New bills and payments appear in the ledger within a moment of being saved.' : 'Switched off — tickets are not being posted.'}</p>`}`;
 
   const save = async (from, message) => {
@@ -569,7 +565,7 @@ function openTaxModal(container, supersedes = null) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:460px">
+    <div class="modal at2-modal" style="max-width:460px">
       <div class="modal-header">
         <span class="modal-title">${supersedes ? `Change ${esc(supersedes.name)}` : 'New tax rate'}</span>
         <button class="modal-close" id="tm-close">${ICONS.close}</button>

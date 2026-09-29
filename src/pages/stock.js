@@ -216,11 +216,10 @@ function paintOnHand(container, body) {
 
   body.innerHTML = `
     ${valuation.discrepancies?.length ? `
-      <div class="card" style="border-left:3px solid var(--danger);margin-bottom:12px;padding:12px">
-        <b style="color:var(--danger)">The running count and the ledger disagree for ${valuation.discrepancies.length} item(s).</b>
-        <div style="font-size:0.82rem;color:var(--text-soft);margin-top:4px">
-          This should not be possible — every change goes through the ledger. Worth investigating before trusting the value.
-        </div>
+      <div class="at2-notice warn">
+        <b>${valuation.discrepancies.length} item(s) have a stock count that their movement history does not explain.</b>
+        Stock that was on the shelf before accounting started shows this until it is brought into the books —
+        Accounts → <b>Data Migration → Stock on the Shelf</b>. Anything else is worth counting and correcting with Adjust.
       </div>` : ''}
     <div class="table-wrap"><table class="at2-tbl">
       <thead><tr><th>Item</th><th>SKU</th><th style="text-align:right">On hand</th>
@@ -403,7 +402,7 @@ function openTransferModal(container) {
   const owned = locations.filter(l => l.owned);
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:560px">
+    <div class="modal at2-modal" style="max-width:560px">
       <div class="modal-header">
         <span class="modal-title">Transfer stock</span>
         <button class="modal-close" id="tr-close">${ICONS.close}</button>
@@ -497,7 +496,7 @@ function openAdjustModal(container) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:480px">
+    <div class="modal at2-modal" style="max-width:480px">
       <div class="modal-header">
         <span class="modal-title">Adjust stock</span>
         <button class="modal-close" id="ad-close">${ICONS.close}</button>
@@ -662,7 +661,7 @@ async function openImportModal(container, file) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:980px;width:96vw">
+    <div class="modal at2-modal" style="max-width:980px;width:96vw">
       <div class="modal-header">
         <span class="modal-title">Import stock — ${esc(file.name)}</span>
         <button class="modal-close" id="im-close">${ICONS.close}</button>
@@ -704,9 +703,9 @@ async function openImportModal(container, file) {
     </div>
 
     ${check.errors.length ? `
-      <div class="card" style="border-left:3px solid var(--danger);padding:12px;margin-bottom:12px;max-height:180px;overflow:auto">
-        <b style="color:var(--danger)">Nothing will be imported until these are fixed</b>
-        <ul style="margin:6px 0 0 18px;font-size:0.82rem;line-height:1.7">
+      <div class="at2-notice danger" style="max-height:190px;overflow:auto">
+        <b>Nothing will be imported until these are fixed</b>
+        <ul>
           ${check.errors.slice(0, 60).map(e => `<li>${esc(e)}</li>`).join('')}
           ${check.errors.length > 60 ? `<li>…and ${check.errors.length - 60} more</li>` : ''}
         </ul>
@@ -771,7 +770,7 @@ function openLocationModal(container) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:440px">
+    <div class="modal at2-modal" style="max-width:440px">
       <div class="modal-header">
         <span class="modal-title">New location</span>
         <button class="modal-close" id="lo-close">${ICONS.close}</button>

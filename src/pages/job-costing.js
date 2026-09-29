@@ -291,7 +291,7 @@ async function openIssue(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:600px">
+    <div class="modal at2-modal" style="max-width:600px">
       <div class="modal-header">
         <span class="modal-title">${esc(issue.issue_no || 'Materials')}</span>
         <button class="modal-close" id="ji-close">${ICONS.close}</button>
@@ -384,7 +384,7 @@ async function openJob(container, jobType, jobId) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:760px">
+    <div class="modal at2-modal" style="max-width:760px">
       <div class="modal-header">
         <span class="modal-title">${esc(job.ticket_no || 'Job')}</span>
         <button class="modal-close" id="jd-close">${ICONS.close}</button>

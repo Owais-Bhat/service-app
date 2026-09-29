@@ -281,7 +281,7 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
     </tr>`;
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:900px">
+    <div class="modal at2-modal" style="max-width:900px">
       <div class="modal-header">
         <span class="modal-title">${doc && doc.id ? 'Edit' : 'New'} ${esc(DOC_LABEL[docType] || 'document').toLowerCase()}${grnId ? ' — against a goods receipt' : ''}</span>
         <button class="modal-close" id="pu-close">${ICONS.close}</button>
@@ -289,7 +289,7 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
       <div class="modal-body">
         <datalist id="pu-items">${items.map(i => `<option value="${esc(i.name)}">`).join('')}</datalist>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>Supplier *</label>
             <select id="pu-party">
               <option value="">— Choose —</option>
@@ -322,16 +322,17 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
           </tbody>
         </table></div>
 
-        <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px;flex-wrap:wrap">
-          <button class="btn btn-secondary" id="pu-add">${ICONS.plus}<span>Add line</span></button>
-          <div class="form-group" style="margin:0"><label style="font-size:0.75rem">Freight / other charges ₹</label>
-            <input type="number" id="pu-freight" step="0.01" min="0" style="width:130px" placeholder="0">
-            <small style="color:var(--text-dim);font-size:0.72rem">Added to the cost of the goods</small></div>
-          <div style="flex:1"></div>
-          <div id="pu-totals" style="min-width:240px"></div>
+        <div class="at2-editfoot">
+          <div class="at2-editfoot-left">
+            <button class="at2-addline" id="pu-add">${ICONS.plus}<span>Add line</span></button>
+            <div class="at2-inline-field"><label for="pu-freight">Freight / other charges ₹</label>
+              <input type="number" id="pu-freight" step="0.01" min="0" placeholder="0"></div>
+            <small style="color:var(--text-dim);font-size:0.72rem;margin-top:-6px">Freight is added to the cost of the goods</small>
+          </div>
+          <div class="at2-totals" id="pu-totals"></div>
         </div>
 
-        <div class="form-group" style="margin-top:12px"><label>Notes</label>
+        <div class="form-group"><label>Notes</label>
           <textarea id="pu-notes" rows="2">${esc(doc?.notes || '')}</textarea></div>
       </div>
       <div class="modal-footer">
@@ -414,13 +415,11 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
     const tax = payload.lines.reduce((s, l) => s + (Number(l.rate) * l.quantity * (l.tax_rate_bps / 10000)), 0);
     const freight = payload.charges.reduce((s, c) => s + Number(c.amount), 0);
     $('#pu-totals').innerHTML = `
-      <div style="font-size:0.84rem;color:var(--text-soft);line-height:1.7">
-        <div style="display:flex;justify-content:space-between"><span>Goods</span><b>${rupees(Math.round(taxable * 100))}</b></div>
-        ${freight ? `<div style="display:flex;justify-content:space-between"><span>Freight</span><b>${rupees(Math.round(freight * 100))}</b></div>` : ''}
-        <div style="display:flex;justify-content:space-between"><span>Tax</span><b>${rupees(Math.round(tax * 100))}</b></div>
-        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
-          <b>Approx total</b><b style="color:var(--primary)">${rupees(Math.round((taxable + tax + freight) * 100))}</b></div>
-      </div>`;
+      <div class="row"><span>Goods</span><b>${rupees(Math.round(taxable * 100))}</b></div>
+      ${freight ? `<div class="row"><span>Freight</span><b>${rupees(Math.round(freight * 100))}</b></div>` : ''}
+      <div class="row"><span>Tax</span><b>${rupees(Math.round(tax * 100))}</b></div>
+      <div class="grand"><span>Approx. total</span><b>${rupees(Math.round((taxable + tax + freight) * 100))}</b></div>
+      <div class="hint">The server works out the exact figure when you save</div>`;
   }
 
   wireLines();
@@ -474,7 +473,7 @@ async function openDetail(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:720px">
+    <div class="modal at2-modal" style="max-width:720px">
       <div class="modal-header">
         <span class="modal-title">${esc(doc.doc_no || 'Draft')} <span class="at2-chip ${tone}">${esc(label)}</span></span>
         <button class="modal-close" id="pd-close">${ICONS.close}</button>
@@ -616,13 +615,13 @@ function openReceiveModal(container, order) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:680px">
+    <div class="modal at2-modal" style="max-width:680px">
       <div class="modal-header">
         <span class="modal-title">Receive against ${esc(order.document.doc_no)}</span>
         <button class="modal-close" id="rv-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>Date</label><input type="date" id="rv-date" value="${ymd(new Date())}"></div>
           <div class="form-group"><label>Into</label>
             <select id="rv-location">
@@ -694,13 +693,13 @@ function openPaymentModal(container, { document: doc = null, balance = 0 } = {})
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:520px">
+    <div class="modal at2-modal" style="max-width:520px">
       <div class="modal-header">
         <span class="modal-title">Pay a supplier</span>
         <button class="modal-close" id="sp-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div class="at2-grid">
           <div class="form-group"><label>Supplier *</label>
             <select id="sp-party" ${doc ? 'disabled' : ''}>
               <option value="">— Choose —</option>

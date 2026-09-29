@@ -369,6 +369,13 @@ Tests: `tests/reports-stage5.test.mjs` (15).
 **Known limits:** the older-tickets run is bounded by a 60 s request budget (the sweep completes the remainder); register entries carry no GST because the register has no GST field; the summary and digest use server-local time; reminders are per customer, not per invoice.
 Tests: `tests/migration-stage6.test.mjs` (19). Code: `server/modules/migration/`, `server/modules/reports/service.cjs` (`ownerSummary`, `reminders`), `src/pages/migration.js`, `src/pages/reports.js`.
 
+## Design pass, quotation revision and PDF layout (built, tested locally, **not deployed**)
+
+- **One design for the accounting screens** (`src/style.css`, block "Accounting screens — one design"): every field in an accounting modal or page is the same height and look; modals get the `at2-modal` shell; line editors (invoice, purchase order, journal, count, transfer) sit in a box of their own instead of bare browser inputs; totals are a panel (`.at2-totals`) with the grand total large; results, warnings and reasons are `.at2-notice`; report and migration figures are `.at2-stat` cards. Built on the theme variables, so light and dark both follow. Verified at desktop and phone width.
+- **Quotations can be revised after they go out** (`POST /api/sales/documents/:id/revise`, `sales.reviseEstimate`): same number, `revision_no` + 1, customer and item snapshots frozen again, and an acceptance is withdrawn (they agreed to the old version). Only a quotation — it posts nothing to the books; an invoice is still cancelled and raised again. Refused for a draft (edit it), a converted quotation (it became an invoice) and a cancelled one. Audited (`document.revise`). Sales → open a quotation → **Edit / revise**. The editor also showed *Due date* instead of *Valid until* when editing an existing quotation; fixed.
+- **Printed documents** (`sales/pdf.cjs`): the table's columns now always add up to the page width (the Amount column used to run past the right margin); tax columns are left out when nothing on the document carries tax; the customer block no longer prints the GST treatment or overlaps the table header; rows are tall enough for the two-line tax cells; a quotation no longer prints a due date and shows *(Revision n)* next to its number; *Amount in words* (lakh/crore) is printed beside the total.
+- Tests: `tests/quotation-revise.test.mjs` (7).
+
 ## Verification status
 
 | Requirement | Status |
