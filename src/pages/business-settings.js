@@ -30,6 +30,41 @@ async function api(method, path, body) {
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Uploads go through the app's existing endpoint, which stores the bytes and
+// hands back a path. The form keeps that path in a hidden field so saving works
+// exactly as it did when these were typed-in URLs.
+async function uploadImage(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API}/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` },
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Upload failed');
+  return data.url;
+}
+
+function imageField(id, label, value, note) {
+  return `
+    <div class="form-group bs-imgfield" data-img="${id}">
+      <label>${esc(label)}</label>
+      <input type="hidden" id="${id}" value="${esc(value || '')}">
+      <div class="bs-imgbox">
+        <div class="bs-imgpreview" id="${id}-preview">
+          ${value ? `<img src="${esc(value)}" alt="${esc(label)}">` : '<span>Nothing uploaded</span>'}
+        </div>
+        <div class="bs-imgactions">
+          <input type="file" id="${id}-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+          <button type="button" class="btn btn-secondary btn-sm" data-pick="${id}">${ICONS.upload || ICONS.plus}<span>Upload</span></button>
+          <button type="button" class="btn btn-secondary btn-sm" data-clear="${id}"${value ? '' : ' hidden'}>Remove</button>
+        </div>
+      </div>
+      ${note ? `<small style="color:var(--text-dim);font-size:0.75rem">${esc(note)}</small>` : ''}
+    </div>`;
+}
 const day = (v) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const STATES = [
@@ -195,8 +230,8 @@ function paintBusiness(container, body) {
         ${field('bs-ifsc', 'IFSC', b.bank_ifsc)}
         ${field('bs-branch', 'Branch', b.bank_branch)}
         ${field('bs-upi', 'UPI ID', b.upi_id)}
-        ${field('bs-logo', 'Logo URL', b.logo_url)}
-        ${field('bs-sign', 'Signature URL', b.signature_url)}
+        ${imageField('bs-logo', 'Logo', b.logo_url, 'Printed top-left on every document. A PNG about 400px wide works well.')}
+        ${imageField('bs-sign', 'Signature', b.signature_url, 'Printed above "Authorised signatory". A PNG with a transparent background looks best.')}
         <div class="form-group">
           <label>Financial year starts</label>
           <select id="bs-fy">
@@ -226,6 +261,42 @@ function paintBusiness(container, body) {
         fact, not a default.
       </p>
     </div>`;
+
+  // Upload controls: pick a file, it goes up, the preview and the hidden field
+  // both follow. Saving is unchanged.
+  body.querySelectorAll('[data-pick]').forEach(btn => {
+    const id = btn.dataset.pick;
+    const input = body.querySelector(`#${id}-file`);
+    btn.onclick = () => input.click();
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) return toast('Choose an image file', 'warning');
+      btn.disabled = true;
+      try {
+        const url = await uploadImage(file);
+        body.querySelector(`#${id}`).value = url;
+        body.querySelector(`#${id}-preview`).innerHTML = `<img src="${esc(url)}" alt="">`;
+        body.querySelector(`[data-clear="${id}"]`).hidden = false;
+        toast('Uploaded — remember to save', 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        input.value = '';
+      }
+    };
+  });
+
+  body.querySelectorAll('[data-clear]').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.clear;
+      body.querySelector(`#${id}`).value = '';
+      body.querySelector(`#${id}-preview`).innerHTML = '<span>Nothing uploaded</span>';
+      btn.hidden = true;
+      toast('Removed — remember to save', 'info');
+    };
+  });
 
   body.querySelector('#bs-save').onclick = async (e) => {
     const val = (id) => body.querySelector(id).value.trim();

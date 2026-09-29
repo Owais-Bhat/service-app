@@ -19,6 +19,27 @@ const ymd = (d) => {
         : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+// The logo and signature the owner uploaded live in `uploaded_files`, and a
+// document printed on the server needs their bytes. An empty field, or an
+// image in a format a PDF cannot hold, prints without them and says so in the
+// log rather than holding up the bill.
+async function loadUploadedImage(conn, url) {
+    const id = String(url || '').match(/^\/uploads\/([\w.-]+)$/)?.[1];
+    if (!id) return null;
+    try {
+        const [[row]] = await conn.query('SELECT mime, data FROM uploaded_files WHERE id = ? LIMIT 1', [id]);
+        if (!row?.data) return null;
+        if (row.mime && !/^image\/(png|jpe?g)$/i.test(row.mime)) {
+            console.warn(`[sales/pdf] ${row.mime} cannot be drawn into a PDF \u2014 upload a PNG or JPEG`);
+            return null;
+        }
+        return row.data;
+    } catch (err) {
+        console.warn('[sales/pdf] could not read the uploaded image:', err.message);
+        return null;
+    }
+}
+
 function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
     const { requireCap } = permissions;
 
@@ -216,7 +237,14 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
         if (!loaded) return res.status(404).json({ error: 'No such document' });
         const [[biz]] = await conn.query('SELECT * FROM businesses WHERE id = ? LIMIT 1', [businessId]);
 
-        const pdf = await renderDocumentPdf({ business: biz, ...loaded });
+        // Uploaded images are stored in the database, so the renderer is
+        // handed the bytes rather than a path it could not open.
+        const [logo, signature] = await Promise.all([
+            loadUploadedImage(conn, biz.logo_url),
+            loadUploadedImage(conn, biz.signature_url),
+        ]);
+
+        const pdf = await renderDocumentPdf({ business: biz, ...loaded, logo, signature });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader(
             'Content-Disposition',

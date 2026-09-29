@@ -8953,6 +8953,20 @@ select.in2-state option { background: var(--bg); color: var(--text); font-weight
 .at2-scope { font-size: 0.78rem; color: var(--text-dim); margin-left: auto; }
 .at2-note { font-size: 0.78rem; color: var(--text-dim); line-height: 1.6; margin: 12px 0 0; }
 
+/* Logo and signature pickers in Business & Tax Setup — a preview big enough to
+   tell whether the right file went up, next to the buttons that change it. */
+.bs-imgbox { display: flex; gap: 12px; align-items: center; }
+.bs-imgpreview {
+  width: 128px; height: 64px; flex-shrink: 0;
+  border: 1px dashed var(--line, var(--border)); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: var(--panel-2, var(--bg-soft));
+}
+.bs-imgpreview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.bs-imgpreview span { font-size: 0.72rem; color: var(--text-dim); }
+.bs-imgactions { display: flex; flex-direction: column; gap: 6px; }
+.bs-imgactions .btn { padding: 6px 12px; font-size: 0.78rem; }
+
 @media (max-width: 1100px) { .at2-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   .at2-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }

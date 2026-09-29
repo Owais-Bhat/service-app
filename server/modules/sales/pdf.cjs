@@ -52,7 +52,11 @@ const rupees = (paise) => formatINR(Number(paise) || 0, { symbol: HAS_UNICODE })
 
 const dayLabel = (v) => (v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 
-function renderDocumentPdf({ business, document: doc, lines, allocations = [], paid_paise: paid = 0 }) {
+/**
+ * @param {Buffer} [logo]      the business logo, already read from wherever it lives
+ * @param {Buffer} [signature] the authorised signature
+ */
+function renderDocumentPdf({ business, document: doc, lines, allocations = [], paid_paise: paid = 0, logo = null, signature = null }) {
     if (!PDFDocument) throw new Error('PDF generation is not available on this server');
 
     return new Promise((resolve, reject) => {
@@ -69,10 +73,19 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
 
         // ── letterhead ──────────────────────────────────────────────────
         let y = 40;
-        if (business.logo_url && /^https?:\/\//.test(business.logo_url) === false) {
-            try { pdf.image(business.logo_url, 40, y, { height: 42 }); } catch { /* a missing logo must not stop the bill */ }
+        let textLeft = 40;
+        if (logo) {
+            try {
+                // Fitted into a box rather than scaled by height, so a tall logo
+                // and a wide one both sit correctly beside the business name.
+                pdf.image(logo, 40, y, { fit: [120, 48], align: 'left', valign: 'top' });
+                textLeft = 172;
+            } catch (err) {
+                console.warn('[sales/pdf] could not draw the logo:', err.message);
+            }
         }
-        pdf.font(bold).fontSize(17).fillColor(INK).text(business.legal_name || 'Networking Experts', 40, y, { width: W * 0.6 });
+        pdf.font(bold).fontSize(17).fillColor(INK)
+            .text(business.legal_name || 'Networking Experts', textLeft, y, { width: W * 0.6 - (textLeft - 40) });
         y = pdf.y + 2;
         const addressLines = [
             business.address_line1, business.address_line2,
@@ -81,7 +94,8 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
             [business.phone && `Ph ${business.phone}`, business.email].filter(Boolean).join('  ·  '),
             business.gstin && `GSTIN ${business.gstin}`,
         ].filter(Boolean);
-        pdf.font(reg).fontSize(8.5).fillColor(MUTED).text(addressLines.join('\n'), 40, y, { width: W * 0.6, lineGap: 1.5 });
+        pdf.font(reg).fontSize(8.5).fillColor(MUTED)
+            .text(addressLines.join('\n'), textLeft, y, { width: W * 0.6 - (textLeft - 40), lineGap: 1.5 });
 
         pdf.font(bold).fontSize(16).fillColor(BRAND)
             .text(TITLES[doc.doc_type] || 'DOCUMENT', 40, 40, { width: W, align: 'right' });
@@ -249,8 +263,12 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
         pdf.moveTo(40, footY - 8).lineTo(40 + W, footY - 8).strokeColor(LINE).lineWidth(1).stroke();
         pdf.font(reg).fontSize(8).fillColor(MUTED).text(notes.join('\n'), 40, footY, { width: W * 0.62, lineGap: 2 });
 
-        if (business.signature_url && !/^https?:\/\//.test(business.signature_url)) {
-            try { pdf.image(business.signature_url, 40 + W - 130, footY, { height: 34 }); } catch { /* optional */ }
+        if (signature) {
+            try {
+                pdf.image(signature, 40 + W - 130, footY, { fit: [120, 36], align: 'right' });
+            } catch (err) {
+                console.warn('[sales/pdf] could not draw the signature:', err.message);
+            }
         }
         pdf.font(reg).fontSize(8).fillColor(MUTED)
             .text(`For ${business.legal_name || 'Networking Experts'}`, 40 + W - 170, footY + 40, { width: 170, align: 'right' })
