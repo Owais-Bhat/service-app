@@ -841,6 +841,14 @@ const { ensureStockSchema } = require('./modules/stock/schema.cjs');
 const { mountStock } = require('./modules/stock/routes.cjs');
 const { ensureJobSchema } = require('./modules/jobs/schema.cjs');
 const { mountJobs } = require('./modules/jobs/routes.cjs');
+const { ensureServiceLedgerSchema } = require('./modules/service-ledger/service.cjs');
+const { mountServiceLedger } = require('./modules/service-ledger/routes.cjs');
+
+// Service and installation money reaches the books through this. The hooks
+// below call it whenever a ticket is saved, paid or deleted; until the routes
+// are mounted they are harmless no-ops.
+let serviceLedger = { syncSoon() {}, startSweeper() {}, runSweep: async () => ({}) };
+const LEDGER_KIND = { inquiries: 'inquiry', installations: 'installation' };
 
 const permissions = createPermissions({ getConn });
 const audit = createAudit({ getConn });
@@ -2691,6 +2699,7 @@ async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     }
 
     if (inqRow) broadcastChange('UPDATE', 'inquiries', inqRow);
+    if (inqRow) serviceLedger.syncSoon('inquiry', inqRow.id);
     if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
 
     const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
@@ -7349,6 +7358,7 @@ app.post('/api/installations/:id/payment', authenticateToken, async (req, res) =
                 data: { installation_id: row.id },
             }).catch(() => {});
         }
+        serviceLedger.syncSoon('installation', req.params.id);
         res.json(await loadInstallation(connection, req.params.id));
     } catch (err) {
         console.error('[installation] payment failed:', err.message);
@@ -8113,6 +8123,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
 
         connection.release();
         updatedRows.forEach(row => broadcastChange('UPDATE', table, row));
+        if (LEDGER_KIND[table]) updatedRows.forEach(row => serviceLedger.syncSoon(LEDGER_KIND[table], row.id));
         if (updatedRows.length === 0) broadcastChange('UPDATE', table, { ...data, _filter: eqs });
         if (table === 'ads' || table === 'service_pricing') invalidateLandingBootstrap();
 
@@ -8463,6 +8474,7 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
         connection.release();
 
         deletedRows.forEach(row => broadcastChange('DELETE', table, row));
+        if (LEDGER_KIND[table]) deletedRows.forEach(row => serviceLedger.syncSoon(LEDGER_KIND[table], row.id));
         if (table === 'ads' || table === 'service_pricing') invalidateLandingBootstrap();
         res.json({ success: true, affectedRows: result.affectedRows || 0 });
     } catch (error) {
@@ -9349,6 +9361,7 @@ mountAccounting({ app, getConn, authenticateToken, permissions, audit });
 mountSales({ app, getConn, authenticateToken, permissions, audit });
 mountStock({ app, getConn, authenticateToken, permissions, audit });
 mountJobs({ app, getConn, authenticateToken, permissions, audit });
+serviceLedger = mountServiceLedger({ app, getConn, authenticateToken, permissions, audit });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9395,6 +9408,7 @@ async function startServer() {
             await ensureSalesSchema(connection);
             await ensureStockSchema(connection);
             await ensureJobSchema(connection);
+            await ensureServiceLedgerSchema(connection);
         } catch (err) {
             console.error('❌ Accounting schema migration failed — accounting features will not work.');
             console.error('   The rest of the portal is unaffected. Fix this and restart.');
@@ -9403,6 +9417,7 @@ async function startServer() {
 
         await loadAppSettings(connection);
         connection.release();
+        serviceLedger.startSweeper();
         startAutoClockOutJob();
         startDeviceReminderJob();
         startSlaJob();

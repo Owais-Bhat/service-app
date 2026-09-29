@@ -307,6 +307,26 @@ Stock screen → **Template** downloads `stock-import-template.xlsx` (sheet `Ite
 - Needs `item.manage` and `stock.adjust`. Limit 1000 rows per file (request body cap is 1 MB).
 - Tests: `tests/stock-import.test.mjs` (13). Code: `server/modules/stock/importer.cjs`, `src/pages/stock.js`.
 
+## Service income in the books (built, tested locally, **not deployed**)
+
+Service tickets (`inquiries`) and installations carry their own bill and payment fields; nothing posted them to the ledger. `server/modules/service-ledger/` now does, per ticket, up to three journals (`source_type = 'service'`, `source_id` = the ticket):
+
+| Part | When | Dr / Cr |
+|---|---|---|
+| income | bill made | Dr 1100 Receivable (party) + 4900 Discounts Allowed / Cr 4000 goods, 4010 service (4020 for installation), 2100/2110 GST |
+| collect | marked paid | Dr 1010 Bank (online) · 1000 Cash (cash, no technician custody) · 1020 Cash with Technicians (cash collected, not handed in) / Cr 1100 |
+| handover | `cash_submitted_at` set | Dr 1000 / Cr 1020 |
+
+- **Trigger:** `syncSoon` after a ticket is saved through `/api/data` (PATCH/DELETE), `markTicketPaid`, or the installation pay route; plus a sweep every 5 minutes (and 30 s after boot) that compares each ticket's signature with what was last posted, so any other route is still caught. `POST /api/service-ledger/sync` runs it on demand.
+- **Never edited:** a changed bill, an un-marked payment or a deleted ticket reverses the old journal and posts a new one. `service_ledger_links` holds the journal ids, signatures and versions (idempotency key `svc:<kind>:<id>:<part>:<ver>`).
+- **Start date:** `businesses.service_ledger_from`, set to the day the column is first created (so going live pulls in nothing old); NULL = off. Only tickets billed on/after it are posted; older money belongs in opening balances. Change it under Business & Tax Setup → Service Income.
+- **Customer:** matched to an existing party by the last 10 digits of the phone, else created (`Created automatically from a service ticket`). Party balance is read from the ledger, so it shows up in Customers.
+- **Blocked, not lost:** a closed period or missing business state marks the link `blocked` with the reason, shown on the Service Income tab, and is retried by every sweep.
+- **Not double counted:** a ticket already invoiced through Stage 4 (`sales_documents.source_type/source_id`) is skipped. FOC tickets and bills before the start date are skipped.
+- **Discount:** the billing screen takes the discount off *after* GST, so GST stays on the full base and the discount is its own Dr line.
+- **Known limits:** installation cash goes straight to the till (installations have no handover flow); gig-worker payouts are not posted yet; Sales → Receivables ageing is invoice-based and does not list service receivables (the party balance and trial balance do); ticket timestamps are stored in UTC by the app, so a bill made between midnight and 05:30 IST lands on the previous date.
+- Tests: `tests/service-ledger.test.mjs` (20). Code: `server/modules/service-ledger/`, `src/pages/business-settings.js` (Service Income tab), hooks in `server/index.cjs`.
+
 ## Verification status
 
 | Requirement | Status |

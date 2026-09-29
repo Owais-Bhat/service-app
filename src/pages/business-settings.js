@@ -94,9 +94,12 @@ const TABS = [
   { key: 'business', label: 'Business' },
   { key: 'numbering', label: 'Numbering' },
   { key: 'tax', label: 'Tax Rates' },
+  { key: 'service', label: 'Service Income' },
 ];
 
 const state = { tab: 'business' };
+let serviceInfo = null;
+let serviceError = '';
 let info = null;
 let series = [];
 let taxRates = [];
@@ -116,6 +119,11 @@ export async function renderBusinessSettingsTab(container) {
 async function loadTab() {
   if (state.tab === 'numbering') series = await api('GET', '/accounting/series');
   if (state.tab === 'tax') taxRates = await api('GET', '/accounting/tax-rates');
+  if (state.tab === 'service') {
+    serviceInfo = null;
+    serviceError = '';
+    try { serviceInfo = await api('GET', '/service-ledger/status'); } catch (err) { serviceError = err.message; }
+  }
 }
 
 function paint(container) {
@@ -171,6 +179,7 @@ function paintBody(container) {
   if (state.tab === 'business') return paintBusiness(container, body);
   if (state.tab === 'numbering') return paintNumbering(container, body);
   if (state.tab === 'tax') return paintTax(container, body);
+  if (state.tab === 'service') return paintService(container, body);
 }
 
 function paintBusiness(container, body) {
@@ -427,6 +436,87 @@ function openSeriesModal(container, row) {
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
+    }
+  };
+}
+
+// ── Service income → the books ─────────────────────────────────────────
+// Service and installation bills and payments live on the tickets. This tab
+// says from which date they are written into the ledger, and shows what is
+// waiting on the owner.
+function paintService(container, body) {
+  if (!serviceInfo) {
+    body.innerHTML = `<div class="at2-empty">${esc(serviceError || 'Could not load')}</div>`;
+    return;
+  }
+  const s = serviceInfo;
+  const attention = s.attention || [];
+  const inputDate = s.from || new Date().toISOString().slice(0, 10);
+
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><span class="card-title">Service &amp; installation income in the ledger</span>
+        <span class="at2-chip ${s.enabled ? 'ok' : 'warn'}" style="margin-left:8px">${s.enabled ? `On from ${esc(day(s.from))}` : 'Off'}</span></div>
+      <div style="padding:14px;font-size:0.86rem;line-height:1.7;color:var(--text-soft)">
+        Every service ticket and installation with a bill is written into the books by itself:
+        <b>the bill</b> (customer owes you, sales, GST, discount), <b>the payment</b> (bank, till, or cash a technician is carrying)
+        and <b>the cash handed in</b>. If a ticket is corrected, un-marked as paid or deleted, the old entry is reversed and a new one is posted — nothing is edited or lost.
+        <br>Only tickets billed <b>on or after</b> the date below are posted. Anything billed earlier belongs in the opening balances, so it is not counted twice.
+      </div>
+      <div style="padding:0 14px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="margin:0">
+          <label>Post tickets billed from</label>
+          <input type="date" id="sl-from" value="${esc(inputDate)}">
+        </div>
+        <button class="btn btn-primary" id="sl-save">Save date</button>
+        <button class="btn btn-secondary" id="sl-sync">Sync now</button>
+        ${s.enabled ? '<button class="btn btn-secondary" id="sl-off">Switch off</button>' : ''}
+      </div>
+    </div>
+
+    <div class="at2-kpis" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Bills in the books</div><div style="font-size:1.4rem;font-weight:800">${s.billed}</div></div>
+      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Payments recorded</div><div style="font-size:1.4rem;font-weight:800">${s.collected}</div></div>
+      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Need attention</div><div style="font-size:1.4rem;font-weight:800;color:${attention.length ? 'var(--danger)' : 'inherit'}">${attention.length}</div></div>
+    </div>
+
+    ${attention.length ? `
+    <div class="card" style="border-left:3px solid var(--danger)">
+      <div class="card-header"><span class="card-title">Could not be posted</span></div>
+      <div class="table-wrap"><table class="at2-tbl">
+        <thead><tr><th>Ticket</th><th>Type</th><th>Why</th></tr></thead>
+        <tbody>${attention.map(a => `<tr><td><b>${esc(a.ticket_ref || a.source_id.slice(0, 8))}</b></td><td>${esc(a.source_type === 'installation' ? 'Installation' : 'Service')}</td><td>${esc(a.note || '')}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="at2-note" style="padding:0 14px 14px">Usually a closed accounting period or a missing business state. Fix it, then press Sync now — it is also retried every few minutes.</p>
+    </div>` : `<p class="at2-note">${s.enabled ? 'Nothing is waiting. New bills and payments appear in the ledger within a moment of being saved.' : 'Switched off — tickets are not being posted.'}</p>`}`;
+
+  const save = async (from, message) => {
+    try {
+      await api('PUT', '/service-ledger/settings', { from });
+      toast(message, 'success');
+      await loadTab();
+      paintBody(container);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  body.querySelector('#sl-save').onclick = () => {
+    const v = body.querySelector('#sl-from').value;
+    if (!v) return toast('Choose the date', 'warning');
+    save(v, `Posting tickets billed from ${day(v)}`);
+  };
+  const off = body.querySelector('#sl-off');
+  if (off) off.onclick = () => save(null, 'Switched off');
+  body.querySelector('#sl-sync').onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      const out = await api('POST', '/service-ledger/sync');
+      toast(out.checked ? `${out.synced} posted, ${out.blocked} need attention` : 'Everything is already up to date', 'success');
+      await loadTab();
+      paintBody(container);
+    } catch (err) {
+      toast(err.message, 'error');
+      e.target.disabled = false;
     }
   };
 }
