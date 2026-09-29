@@ -180,6 +180,7 @@ function getNavItems(role) {
       type: 'group', key: 'accounts', icon: ICONS.wallet || ICONS.receipt, label: 'Accounts',
       children: [
         { id: 'ledger', label: 'Ledger & Journals' },
+        { id: 'fin-reports', label: 'Financial Reports' },
       ],
     },
     { id: 'calendar', icon: ICONS.calendar, label: 'Calendar' },
@@ -300,6 +301,7 @@ const PAGE_LOADERS = {
     inventory: () => import('./pages/inventory.js').then(m => m.renderInventoryTab),
     parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
     ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
+    'fin-reports': () => import('./pages/reports.js').then(m => m.renderReportsTab),
     sales: () => import('./pages/sales.js').then(m => m.renderSalesTab),
     purchases: () => import('./pages/purchases.js').then(m => m.renderPurchasesTab),
     stock: () => import('./pages/stock.js').then(m => m.renderStockTab),

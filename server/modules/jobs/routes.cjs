@@ -245,16 +245,30 @@ function mountJobs({ app, getConn, authenticateToken, permissions, audit }) {
                LEFT JOIN inquiries inq ON inq.id = j.job_id AND j.job_type = 'inquiry'
                LEFT JOIN installations ins ON ins.id = j.job_id AND j.job_type = 'installation'
                LEFT JOIN (
-                    SELECT source_type, source_id,
-                           SUM(CASE WHEN doc_type = 'credit_note' THEN -taxable_paise ELSE taxable_paise END) AS revenue_paise,
-                           MAX(doc_no) AS doc_no, MAX(status) AS invoice_status
-                      FROM sales_documents
-                     WHERE business_id = ? AND status = 'issued' AND source_type IS NOT NULL
+                    SELECT source_type, source_id, SUM(revenue_paise) AS revenue_paise,
+                           MAX(doc_no) AS doc_no, MAX(invoice_status) AS invoice_status
+                      FROM (
+                           SELECT source_type, source_id,
+                                  SUM(CASE WHEN doc_type = 'credit_note' THEN -taxable_paise ELSE taxable_paise END) AS revenue_paise,
+                                  MAX(doc_no) AS doc_no, MAX(status) AS invoice_status
+                             FROM sales_documents
+                            WHERE business_id = ? AND status = 'issued' AND source_type IS NOT NULL
+                            GROUP BY source_type, source_id
+                           UNION ALL
+                           -- billed on the ticket itself: its sales, less any discount, from the ledger
+                           SELECT lk.source_type, lk.source_id, SUM(jl.credit_paise - jl.debit_paise), NULL, 'ticket'
+                             FROM service_ledger_links lk
+                             JOIN journals jr ON jr.source_id = lk.source_id AND jr.source_type = 'service'
+                             JOIN journal_lines jl ON jl.journal_id = jr.id
+                             JOIN accounts ac ON ac.id = jl.account_id AND ac.code IN ('4000', '4010', '4020', '4900')
+                            WHERE lk.business_id = ?
+                            GROUP BY lk.source_type, lk.source_id
+                      ) revenue_sources
                      GROUP BY source_type, source_id
                ) rev ON rev.source_type = j.job_type AND rev.source_id = j.job_id
               HAVING job_date IS NULL OR (DATE(job_date) BETWEEN ? AND ?)
               ORDER BY job_date DESC`,
-            [businessId, businessId, businessId, from, to]
+            [businessId, businessId, businessId, businessId, from, to]
         );
 
         const jobsOut = rows.map((r) => {

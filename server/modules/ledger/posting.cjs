@@ -240,8 +240,8 @@ async function trialBalance(conn, businessId, { from = null, to = null } = {}) {
 
     const [rows] = await conn.query(
         `SELECT a.id, a.code, a.name, a.type, a.subtype,
-                COALESCE(SUM(l.debit_paise), 0)  AS debit_paise,
-                COALESCE(SUM(l.credit_paise), 0) AS credit_paise
+                COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.debit_paise END), 0)  AS debit_paise,
+                COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.credit_paise END), 0) AS credit_paise
            FROM accounts a
            LEFT JOIN journal_lines l ON l.account_id = a.id
            LEFT JOIN journals j ON j.id = l.journal_id AND ${where.join(' AND ')}

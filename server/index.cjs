@@ -843,6 +843,7 @@ const { ensureJobSchema } = require('./modules/jobs/schema.cjs');
 const { mountJobs } = require('./modules/jobs/routes.cjs');
 const { ensureServiceLedgerSchema } = require('./modules/service-ledger/service.cjs');
 const { mountServiceLedger } = require('./modules/service-ledger/routes.cjs');
+const { mountReports } = require('./modules/reports/routes.cjs');
 
 // Service and installation money reaches the books through this. The hooks
 // below call it whenever a ticket is saved, paid or deleted; until the routes
@@ -9362,6 +9363,7 @@ mountSales({ app, getConn, authenticateToken, permissions, audit });
 mountStock({ app, getConn, authenticateToken, permissions, audit });
 mountJobs({ app, getConn, authenticateToken, permissions, audit });
 serviceLedger = mountServiceLedger({ app, getConn, authenticateToken, permissions, audit });
+mountReports({ app, getConn, authenticateToken, permissions });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {

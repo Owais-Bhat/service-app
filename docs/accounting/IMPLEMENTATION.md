@@ -327,6 +327,29 @@ Service tickets (`inquiries`) and installations carry their own bill and payment
 - **Known limits:** installation cash goes straight to the till (installations have no handover flow); gig-worker payouts are not posted yet; Sales → Receivables ageing is invoice-based and does not list service receivables (the party balance and trial balance do); ticket timestamps are stored in UTC by the app, so a bill made between midnight and 05:30 IST lands on the previous date.
 - Tests: `tests/service-ledger.test.mjs` (20). Code: `server/modules/service-ledger/`, `src/pages/business-settings.js` (Service Income tab), hooks in `server/index.cjs`.
 
+## Stage 5 — Reports & GST working papers (built, tested locally, **not deployed**)
+
+Accounts → **Financial Reports** (`src/pages/reports.js`, API `GET /api/reports/*`, `server/modules/reports/`). Read-only, gated on `report.financial`. Every report is worked out from posted journals (or the invoices/bills behind them) when opened, states its period and basis, and exports to CSV (plain numbers, no ₹ or commas, for Excel).
+
+| Report | Source | Notes |
+|---|---|---|
+| Profit & Loss | income/expense accounts in the date range | income, COGS (subtype `cogs`), expenses; discounts allowed shown against income |
+| Balance Sheet | everything posted up to a date | profit shown cumulatively (no year-end close yet); flags if assets ≠ liabilities + equity + profit |
+| Who Owes What | ledger lines on receivable / payable accounts | FIFO ageing 0–30 / 31–60 / 61–90 / 90+ **from the day each amount was charged** (a journal has no due date); includes invoices, service tickets and opening balances; overpayment shown as "paid ahead" |
+| Account Ledger | one account, opening → running balance → closing | closes at the figure the balance sheet shows |
+| Party Statement | a customer's or supplier's receivable/payable lines | Dr = they owe us |
+| GST | see below | working papers, **not a return, not the portal upload format, no e-invoicing/IRN** |
+| Stock Value | `stock.valuation` beside account 1200 | shows the gap when stock exists that the books have not been told about |
+| Job Profit | existing `/api/jobs/profitability` | now counts revenue billed on the ticket (from the ledger), not only Sales invoices |
+| Health Check | `GET /api/reports/reconciliation` | debits = credits; balance sheet holds; receivable/payable control vs the named parties; stock vs Inventory; cash with technicians vs tickets; tickets stuck unposted |
+
+**GST tabs:** *Summary* (tax collected − claimable input = payable, by CGST/SGST/IGST, sales by category, and each figure set against the tax accounts so a manual journal touching them shows as a difference); *Sales Register* (issued invoices/credit/debit notes **plus service and installation bills**, categorised B2B / B2CL (inter-state, unregistered, over ₹2.5 lakh) / B2CS / CDNR / CDNUR); *HSN Summary* (invoice lines by code and rate, credit notes taken off; tickets carry no HSN so are not in it); *Purchases & ITC* (supplier bills and returns; tax on purchases marked not claimable stays in cost and is reported separately).
+
+**Fixed on the way:** `posting.trialBalance` summed journal lines regardless of the date range (the join filtered the journal, not the line), so a range narrower than all history leaked in lines from outside it. The tests always asked for the whole year, so it never showed. Regression test in `tests/reports-stage5.test.mjs`.
+
+**Known limits:** ageing has no due dates (transaction date is used); the balance sheet is cumulative, not year-closed; the Health Check's inventory line will show a gap until stock that predates accounting is given an opening entry (Stage 6 / Stock → Import Excel).
+Tests: `tests/reports-stage5.test.mjs` (15).
+
 ## Verification status
 
 | Requirement | Status |
@@ -352,8 +375,6 @@ Service tickets (`inquiries`) and installations carry their own bill and payment
 
 ## Not yet started
 
-- **Stage 5 — Reports & tax:** ageing, ledgers, P&L, balance sheet, stock
-  valuation, job profitability, GST exports.
 - **Stage 6 — Migration & automation:** reviewed migration of existing bills,
   payments, cash collections and service log; reconciliation before and after;
   reminders; owner summary.
