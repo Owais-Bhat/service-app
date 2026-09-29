@@ -350,6 +350,25 @@ Accounts → **Financial Reports** (`src/pages/reports.js`, API `GET /api/report
 **Known limits:** ageing has no due dates (transaction date is used); the balance sheet is cumulative, not year-closed; the Health Check's inventory line will show a gap until stock that predates accounting is given an opening entry (Stage 6 / Stock → Import Excel).
 Tests: `tests/reports-stage5.test.mjs` (15).
 
+## Stage 6 — Migration, summary and reminders (built, tested locally, **not deployed**)
+
+**Accounts → Data Migration** (`src/pages/migration.js`, API `/api/migration/*`, `server/modules/migration/`). Every migration is *look first (nothing written) → confirm → the Health Check's own reconciliation is run before and after*, and each run is kept in **History** with both readings. Every step can be repeated: what is already in is never posted twice.
+
+| Migration | What it does | Guards |
+|---|---|---|
+| **Older tickets** | Moves `service_ledger_from` earlier and lets the ordinary sweep post the tickets billed in between — the same code, on each ticket's own billing date | must be earlier than the current start; tickets invoiced through Sales are left to Sales; warns if opening balances were entered as of a later date (double-count risk), if tickets fall in a closed period (they block, the rest post, and the sweep retries once the lock is lifted), or if the business state is missing; a 60 s budget, then the automatic sweep finishes the rest |
+| **Stock on the shelf** | For items whose recorded value is more than their movements carry, adds an `opening` movement and one journal Dr 1200 Inventory / Cr 3100 Opening Balance Equity. Item quantity and cost are **not** touched; only the ledger catches up | legacy movements that have quantity but no value are handled (value-only); an item whose history shows *more* stock than is on hand, or less value than its movements, is **flagged and not booked**; warns if the Inventory account and the movements already differ; refuses to run twice |
+| **Service register** | `service_logs` entries that are not on any ticket (no link, no matching ticket number) are booked as **service income with no GST**, dated the day written; paid ones are received into Cash in Hand or Bank as chosen; pending ones become receivables | tracked in `migration_items`, so an entry is never booked twice; an entry in a closed period fails alone and the rest go through; a ticket's entry is refused rather than double-counted |
+
+**Owner Summary** (Financial Reports, first tab, `GET /api/reports/owner-summary`): today and this month's sales, money collected, costs and profit; cash in hand, bank and cash with technicians; what customers owe (and how much is over 30 days) and what we owe; GST payable this month; stock value; and a "needs a look" list (failing health checks, unposted tickets, technician cash held 3+ days, low stock). "Collected" counts only journals that also settle a receivable, so cash a technician hands in (a move between two cash accounts) is not double counted.
+
+**Reminders** (Financial Reports → Reminders, `GET /api/reports/reminders`): customers with anything charged over 30 days ago and still unpaid, with a ready message and a `wa.me` link, plus suppliers we owe. **Nothing is sent by the system** — the button opens WhatsApp and a person presses send (no customer-facing template was invented). Recording that someone was reminded (`payment_reminders`) moves no money.
+
+**Evening summary:** after 8 pm server time, once a day, the admins get one in-app/push notification (`subject: owner_summary`) with the day in a few plain lines. Deduplicated through `app_settings.last_owner_digest`; skipped if nothing is in the books yet; switch on `businesses.owner_digest_on` (default on) under Data Migration → Evening Summary, with a "send it now" button. Nothing is sent outside NEST.
+
+**Known limits:** the older-tickets run is bounded by a 60 s request budget (the sweep completes the remainder); register entries carry no GST because the register has no GST field; the summary and digest use server-local time; reminders are per customer, not per invoice.
+Tests: `tests/migration-stage6.test.mjs` (19). Code: `server/modules/migration/`, `server/modules/reports/service.cjs` (`ownerSummary`, `reminders`), `src/pages/migration.js`, `src/pages/reports.js`.
+
 ## Verification status
 
 | Requirement | Status |
@@ -375,9 +394,9 @@ Tests: `tests/reports-stage5.test.mjs` (15).
 
 ## Not yet started
 
-- **Stage 6 — Migration & automation:** reviewed migration of existing bills,
-  payments, cash collections and service log; reconciliation before and after;
-  reminders; owner summary.
+All six stages are built. What remains is operating them: filling in Business & Tax Setup,
+entering opening balances, and having an accountant check the GST slabs and the reports
+against the current rules before anything is filed from them.
 
 ---
 

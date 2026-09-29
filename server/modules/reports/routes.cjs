@@ -90,6 +90,29 @@ function mountReports({ app, getConn, authenticateToken, permissions }) {
         res.json(await service.stockValuation(conn, businessId));
     });
 
+    get('owner-summary', async (req, res, conn, businessId) => {
+        const summary = await service.ownerSummary(conn, businessId, { on: date(req.query.on, service.today(), 'Date') });
+        res.json({ ...summary, text: service.digestText(summary) });
+    });
+
+    get('reminders', async (req, res, conn, businessId) => {
+        res.json(await service.reminders(conn, businessId, { asOn: date(req.query.as_on, service.today(), 'As on') }));
+    });
+
+    // Recording that a reminder was sent. Writes one row and touches no ledger.
+    app.post('/api/reports/reminders/mark', authenticateToken, requireCap('party.manage'), handle(async (req, res, conn, businessId) => {
+        const b = req.body || {};
+        if (!b.party_id) throw bad('Choose a customer');
+        const [[party]] = await conn.query('SELECT id FROM parties WHERE id = ? LIMIT 1', [String(b.party_id)]);
+        if (!party) throw Object.assign(new Error('No such customer'), { status: 404 });
+        await conn.query('INSERT INTO payment_reminders SET ?', [{
+            id: require('crypto').randomUUID(), business_id: businessId, party_id: party.id,
+            amount_paise: Math.max(0, Math.round(Number(b.amount_paise) || 0)),
+            channel: ['whatsapp', 'call', 'sms', 'visit'].includes(b.channel) ? b.channel : 'whatsapp', created_by: req.user.id,
+        }]);
+        res.status(201).json({ ok: true });
+    }));
+
     get('reconciliation', async (req, res, conn, businessId) => {
         res.json(await service.reconciliation(conn, businessId, { asOn: date(req.query.as_on, service.today(), 'As on') }));
     });

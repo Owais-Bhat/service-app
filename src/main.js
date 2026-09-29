@@ -181,6 +181,7 @@ function getNavItems(role) {
       children: [
         { id: 'ledger', label: 'Ledger & Journals' },
         { id: 'fin-reports', label: 'Financial Reports' },
+        { id: 'migration', label: 'Data Migration' },
       ],
     },
     { id: 'calendar', icon: ICONS.calendar, label: 'Calendar' },
@@ -302,6 +303,7 @@ const PAGE_LOADERS = {
     parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
     ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
     'fin-reports': () => import('./pages/reports.js').then(m => m.renderReportsTab),
+    migration: () => import('./pages/migration.js').then(m => m.renderMigrationTab),
     sales: () => import('./pages/sales.js').then(m => m.renderSalesTab),
     purchases: () => import('./pages/purchases.js').then(m => m.renderPurchasesTab),
     stock: () => import('./pages/stock.js').then(m => m.renderStockTab),

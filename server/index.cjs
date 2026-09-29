@@ -844,6 +844,9 @@ const { mountJobs } = require('./modules/jobs/routes.cjs');
 const { ensureServiceLedgerSchema } = require('./modules/service-ledger/service.cjs');
 const { mountServiceLedger } = require('./modules/service-ledger/routes.cjs');
 const { mountReports } = require('./modules/reports/routes.cjs');
+const { ensureMigrationSchema } = require('./modules/migration/service.cjs');
+const { mountMigration } = require('./modules/migration/routes.cjs');
+let migration = { startDigestJob() {} };
 
 // Service and installation money reaches the books through this. The hooks
 // below call it whenever a ticket is saved, paid or deleted; until the routes
@@ -9364,6 +9367,7 @@ mountStock({ app, getConn, authenticateToken, permissions, audit });
 mountJobs({ app, getConn, authenticateToken, permissions, audit });
 serviceLedger = mountServiceLedger({ app, getConn, authenticateToken, permissions, audit });
 mountReports({ app, getConn, authenticateToken, permissions });
+migration = mountMigration({ app, getConn, authenticateToken, permissions, audit, recordNotification });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9411,6 +9415,7 @@ async function startServer() {
             await ensureStockSchema(connection);
             await ensureJobSchema(connection);
             await ensureServiceLedgerSchema(connection);
+            await ensureMigrationSchema(connection);
         } catch (err) {
             console.error('❌ Accounting schema migration failed — accounting features will not work.');
             console.error('   The rest of the portal is unaffected. Fix this and restart.');
@@ -9420,6 +9425,7 @@ async function startServer() {
         await loadAppSettings(connection);
         connection.release();
         serviceLedger.startSweeper();
+        migration.startDigestJob();
         startAutoClockOutJob();
         startDeviceReminderJob();
         startSlaJob();

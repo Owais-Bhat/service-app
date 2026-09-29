@@ -21,6 +21,13 @@ async function api(path) {
   return data;
 }
 
+async function apiPost(path, body) {
+  const res = await fetch(`${API}${path}`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const rupees = (paise) => `₹${(Number(paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 // A plain number a spreadsheet can add up — no symbol, no thousands commas.
@@ -30,6 +37,8 @@ const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate(
 const day = (v) => v ? new Date(`${String(v).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const TABS = [
+  { key: 'summary', label: 'Owner Summary' },
+  { key: 'reminders', label: 'Reminders' },
   { key: 'pl', label: 'Profit & Loss' },
   { key: 'bs', label: 'Balance Sheet' },
   { key: 'ageing', label: 'Who Owes What' },
@@ -48,7 +57,7 @@ const GST_TABS = [
 ];
 
 const state = {
-  tab: 'pl', gstTab: 'summary', kind: 'receivable',
+  tab: 'summary', gstTab: 'summary', kind: 'receivable',
   from: '', to: ymd(new Date()), asOn: ymd(new Date()),
   account: '', party: '',
 };
@@ -150,13 +159,100 @@ async function load() {
   body.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
   setExport(null, null);
   try {
-    await ({ pl, bs, ageing, ledger, statement, gst, stock, jobs, health }[state.tab])(body);
+    await ({ summary, reminders: remindersTab, pl, bs, ageing, ledger, statement, gst, stock, jobs, health }[state.tab])(body);
   } catch (err) {
     body.innerHTML = `<div class="at2-empty" style="color:var(--danger)">${esc(err.message)}</div>`;
   }
 }
 
 // ── the reports ─────────────────────────────────────────────────────────
+
+async function summary(body) {
+  const s = await api(`/reports/owner-summary?on=${state.asOn}`);
+  const card = (label, value, sub = '', tone = '') => `
+    <div class="card" style="padding:12px 16px;min-width:170px;flex:1">
+      <div style="font-size:0.7rem;color:var(--text-dim);font-weight:800;text-transform:uppercase;letter-spacing:0.04em">${label}</div>
+      <div style="font-size:1.3rem;font-weight:800;${tone}">${value}</div>
+      ${sub ? `<div style="font-size:0.74rem;color:var(--text-dim);margin-top:2px">${sub}</div>` : ''}
+    </div>`;
+  const row = (...cards) => `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">${cards.join('')}</div>`;
+  const heading = (t) => `<h4 style="margin:16px 0 8px;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">${t}</h4>`;
+  const bad = 'color:var(--danger)';
+  const attention = [
+    ...s.attention.failing_checks.map(c => `Health check: ${c}`),
+    ...(s.attention.unposted_tickets ? [`${s.attention.unposted_tickets} ticket(s) could not be posted to the books`] : []),
+    ...(s.money.technician_cash_oldest_days >= 3 ? [`Cash with technicians for ${s.money.technician_cash_oldest_days} days — ${s.money.technician_cash_tickets} ticket(s)`] : []),
+    ...(s.stock.low_items ? [`${s.stock.low_items} item(s) at or below their minimum stock`] : []),
+  ];
+
+  body.innerHTML = `${asOnBar()}
+    ${attention.length ? `<div class="card" style="border-left:3px solid var(--warning);padding:12px 14px;margin-bottom:14px"><b>Needs a look</b><ul style="margin:6px 0 0 18px;font-size:0.85rem;line-height:1.7">${attention.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>`
+      : '<div class="card" style="border-left:3px solid var(--primary);padding:12px 14px;margin-bottom:14px"><b style="color:var(--primary)">Nothing needs attention.</b></div>'}
+    ${heading(`Today, ${day(s.as_on)}`)}
+    ${row(card('Sales', rupees(s.today.sales_paise), 'billed, after discounts'), card('Money collected', rupees(s.today.collected_paise), 'against bills'))}
+    ${heading(`This month, from ${day(s.month.from)}`)}
+    ${row(card('Sales', rupees(s.month.sales_paise)), card('Collected', rupees(s.month.collected_paise)), card('Costs', rupees(s.month.expenses_paise), 'goods sold + expenses'),
+      card('Profit', rupees(s.month.profit_paise), '', s.month.profit_paise < 0 ? bad : ''))}
+    ${heading('Where the money is')}
+    ${row(card('Cash in hand', rupees(s.money.cash_in_hand_paise)), card('Bank', rupees(s.money.bank_paise)),
+      card('With technicians', rupees(s.money.with_technicians_paise), s.money.technician_cash_tickets ? `${s.money.technician_cash_tickets} ticket(s), oldest ${s.money.technician_cash_oldest_days} day(s)` : 'nothing pending'))}
+    ${heading('Owed')}
+    ${row(card('Customers owe you', rupees(s.receivable.total_paise), s.receivable.overdue_paise ? `${rupees(s.receivable.overdue_paise)} older than 30 days` : 'nothing overdue', s.receivable.overdue_paise ? bad : ''),
+      card('You owe suppliers', rupees(s.payable.total_paise), s.payable.overdue_paise ? `${rupees(s.payable.overdue_paise)} older than 30 days` : ''),
+      card('GST payable this month', rupees(s.gst.month_payable_paise), `${rupees(s.gst.collected_paise)} collected − ${rupees(s.gst.claimable_paise)} claimable`),
+      card('Stock value', rupees(s.stock.value_paise)))}
+    ${s.receivable.top.length ? `${heading('Biggest amounts owed')}${table(['Customer', 'Owes', 'Oldest'], s.receivable.top.map(p => [`<b>${esc(p.party)}</b>${p.phone ? `<br><small style="color:var(--text-dim)">${esc(p.phone)}</small>` : ''}`, rupees(p.outstanding_paise), `${p.oldest_days} days`]), { right: [1, 2] })}` : ''}
+    ${heading('The evening message')}
+    <div class="card" style="padding:12px 14px;font-size:0.86rem;line-height:1.7;color:var(--text-soft)">${esc(s.text)}</div>`;
+  bind(body);
+  setExport(`owner-summary-${s.as_on}.csv`, [
+    { Item: 'Sales today', Amount: plain(s.today.sales_paise) }, { Item: 'Collected today', Amount: plain(s.today.collected_paise) },
+    { Item: 'Sales this month', Amount: plain(s.month.sales_paise) }, { Item: 'Costs this month', Amount: plain(s.month.expenses_paise) }, { Item: 'Profit this month', Amount: plain(s.month.profit_paise) },
+    { Item: 'Cash in hand', Amount: plain(s.money.cash_in_hand_paise) }, { Item: 'Bank', Amount: plain(s.money.bank_paise) }, { Item: 'With technicians', Amount: plain(s.money.with_technicians_paise) },
+    { Item: 'Customers owe', Amount: plain(s.receivable.total_paise) }, { Item: 'You owe suppliers', Amount: plain(s.payable.total_paise) },
+    { Item: 'GST payable this month', Amount: plain(s.gst.month_payable_paise) }, { Item: 'Stock value', Amount: plain(s.stock.value_paise) },
+  ]);
+}
+
+async function remindersTab(body) {
+  const r = await api(`/reports/reminders?as_on=${state.asOn}`);
+  const ago = (v) => {
+    if (!v) return 'never';
+    const d = Math.floor((Date.now() - new Date(v).getTime()) / 86400000);
+    return d <= 0 ? 'today' : `${d} day${d === 1 ? '' : 's'} ago`;
+  };
+  body.innerHTML = `${asOnBar()}${scopeNote(r.scope.basis)}
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Overdue from customers</div><div style="font-size:1.3rem;font-weight:800;color:var(--danger)">${rupees(r.totals.customers_paise)}</div></div>
+      <div class="card" style="padding:12px 18px"><div style="font-size:0.72rem;color:var(--text-dim);font-weight:800;text-transform:uppercase">Overdue to suppliers</div><div style="font-size:1.3rem;font-weight:800">${rupees(r.totals.suppliers_paise)}</div></div>
+    </div>
+    <h4 style="margin:6px 0 8px">Customers to remind</h4>
+    ${table(['Customer', 'Overdue', 'Total owed', 'Oldest', 'Last reminded', ''], r.customers.map(c => [
+      `<b>${esc(c.party)}</b>${c.phone ? `<br><small style="color:var(--text-dim)">${esc(c.phone)}</small>` : '<br><small style="color:var(--danger)">no phone number</small>'}`,
+      `<b style="color:var(--danger)">${rupees(c.overdue_paise)}</b>`, rupees(c.outstanding_paise), `${c.oldest_days} days`,
+      c.times_reminded ? `${ago(c.last_reminded_at)} <small style="color:var(--text-dim)">(${c.times_reminded}×)</small>` : 'never',
+      `<div style="display:flex;gap:6px;justify-content:flex-end">
+        ${c.whatsapp_url ? `<button class="btn btn-primary btn-sm" data-wa="${esc(c.party_id)}">WhatsApp</button>` : ''}
+        <button class="btn btn-secondary btn-sm" data-mark="${esc(c.party_id)}" title="Note that you reminded them another way">Mark reminded</button>
+      </div>`]), { right: [1, 2, 3] })}
+    ${r.suppliers.length ? `<h4 style="margin:18px 0 8px">Suppliers you owe</h4>${table(['Supplier', 'Overdue', 'Total owed', 'Oldest'], r.suppliers.map(s => [`<b>${esc(s.party)}</b>`, rupees(s.overdue_paise), rupees(s.outstanding_paise), `${s.oldest_days} days`]), { right: [1, 2, 3] })}` : ''}`;
+  bind(body);
+
+  const byId = new Map(r.customers.map(c => [c.party_id, c]));
+  const mark = async (id, channel) => {
+    const c = byId.get(id);
+    try {
+      await apiPost('/reports/reminders/mark', { party_id: id, amount_paise: c.outstanding_paise, channel });
+      toast('Noted', 'success');
+      load();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  body.querySelectorAll('[data-wa]').forEach(b => {
+    b.onclick = () => { window.open(byId.get(b.dataset.wa).whatsapp_url, '_blank', 'noopener'); mark(b.dataset.wa, 'whatsapp'); };
+  });
+  body.querySelectorAll('[data-mark]').forEach(b => { b.onclick = () => mark(b.dataset.mark, 'call'); });
+  setExport(`reminders-${state.asOn}.csv`, r.customers.map(c => ({ Customer: c.party, Phone: c.phone || '', Overdue: plain(c.overdue_paise), Total: plain(c.outstanding_paise), 'Oldest days': c.oldest_days, Message: c.message })));
+}
 
 async function pl(body) {
   const r = await api(`/reports/profit-loss?from=${state.from}&to=${state.to}`);

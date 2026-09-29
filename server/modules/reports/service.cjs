@@ -585,8 +585,167 @@ async function reconciliation(conn, businessId, { asOn }) {
     return { as_on: asOn, ok: checks.every((c) => c.ok), checks };
 }
 
+// ── the owner's one-page summary ────────────────────────────────────────
+//
+// The handful of figures an owner asks for at the end of a day, each drawn
+// from the same reports above so the page cannot disagree with them.
+
+const monthStart = (on) => `${on.slice(0, 7)}-01`;
+
+// Money that came in against bills: the cash, bank and technician-held cash
+// lines of journals that also settle a receivable. Cash handed in by a
+// technician moves between two of those accounts and nets to nothing; a
+// payment that is later reversed comes back out.
+async function collected(conn, businessId, { from, to }) {
+    const [[r]] = await conn.query(
+        `SELECT COALESCE(SUM(l.debit_paise - l.credit_paise), 0) AS net
+           FROM journal_lines l
+           JOIN journals j ON j.id = l.journal_id
+           JOIN accounts a ON a.id = l.account_id AND a.code IN ('1000', '1010', '1020')
+          WHERE j.business_id = ? AND j.journal_date BETWEEN ? AND ?
+            AND EXISTS (SELECT 1 FROM journal_lines r JOIN accounts ar ON ar.id = r.account_id
+                         WHERE r.journal_id = j.id AND ar.subtype = 'receivable')`,
+        [businessId, from, to]
+    );
+    return Number(r.net);
+}
+
+async function ownerSummary(conn, businessId, { on }) {
+    const from = monthStart(on);
+    const [day, month, sheet, owed, owing, tax, stockV, health] = await Promise.all([
+        profitLoss(conn, businessId, { from: on, to: on }),
+        profitLoss(conn, businessId, { from, to: on }),
+        balanceSheet(conn, businessId, { asOn: on }),
+        ageing(conn, businessId, { kind: 'receivable', asOn: on }),
+        ageing(conn, businessId, { kind: 'payable', asOn: on }),
+        gstSummary(conn, businessId, { from, to: on }),
+        stockValuation(conn, businessId),
+        reconciliation(conn, businessId, { asOn: on }),
+    ]);
+    const [collectedToday, collectedMonth] = await Promise.all([
+        collected(conn, businessId, { from: on, to: on }),
+        collected(conn, businessId, { from, to: on }),
+    ]);
+
+    const bal = (code) => sheet.assets.find((a) => a.code === code)?.balance_paise || 0;
+    const overdue = (t) => t.d31_60 + t.d61_90 + t.d90_plus;
+
+    const [[held]] = await conn.query(
+        `SELECT COUNT(*) AS n, COALESCE(SUM(bill_total), 0) AS total, COALESCE(MAX(DATEDIFF(?, DATE(cash_collected_at))), 0) AS oldest
+           FROM inquiries
+          WHERE payment_status = 'paid' AND payment_method LIKE '%cash%'
+            AND cash_collected_at IS NOT NULL AND cash_submitted_at IS NULL`,
+        [on]
+    );
+    const [[low]] = await conn.query(
+        'SELECT COUNT(*) AS n FROM inventory_items WHERE active = 1 AND min_stock > 0 AND quantity <= min_stock'
+    );
+    const [[stuck]] = await conn.query(
+        "SELECT COUNT(*) AS n FROM service_ledger_links WHERE business_id = ? AND status = 'blocked'", [businessId]
+    );
+
+    return {
+        as_on: on,
+        today: { sales_paise: day.totals.income_paise, collected_paise: collectedToday },
+        month: {
+            from, sales_paise: month.totals.income_paise, collected_paise: collectedMonth,
+            expenses_paise: month.totals.cogs_paise + month.totals.expenses_paise, profit_paise: month.totals.net_profit_paise,
+        },
+        money: {
+            cash_in_hand_paise: bal('1000'), bank_paise: bal('1010'), with_technicians_paise: bal('1020'),
+            technician_cash_tickets: Number(held.n), technician_cash_oldest_days: Number(held.oldest),
+        },
+        receivable: {
+            total_paise: owed.totals.outstanding_paise, overdue_paise: overdue(owed.totals),
+            top: owed.parties.slice(0, 5).map((p) => ({ party: p.party, phone: p.phone, outstanding_paise: p.outstanding_paise, oldest_days: p.oldest_days })),
+        },
+        payable: { total_paise: owing.totals.outstanding_paise, overdue_paise: overdue(owing.totals) },
+        gst: { month_payable_paise: tax.payable.total_paise, collected_paise: tax.output.tax_paise, claimable_paise: tax.input.tax_paise },
+        stock: { value_paise: stockV.total_value_paise, low_items: Number(low.n) },
+        attention: {
+            unposted_tickets: Number(stuck.n),
+            failing_checks: health.checks.filter((c) => !c.ok).map((c) => c.label),
+        },
+    };
+}
+
+const inr = (paise) => `₹${Math.round(Number(paise || 0) / 100).toLocaleString('en-IN')}`;
+
+/** The summary as a few plain lines, for a notification. */
+function digestText(s) {
+    const lines = [
+        `Aaj: bikri ${inr(s.today.sales_paise)}, paisa aaya ${inr(s.today.collected_paise)}.`,
+        `Is mahine: bikri ${inr(s.month.sales_paise)}, kharcha ${inr(s.month.expenses_paise)}, munafa ${inr(s.month.profit_paise)}.`,
+        `Customers ka baaki ${inr(s.receivable.total_paise)}${s.receivable.overdue_paise ? ` (${inr(s.receivable.overdue_paise)} 30 din se purana)` : ''}.`,
+    ];
+    if (s.money.with_technicians_paise > 0) {
+        lines.push(`Technicians ke paas cash ${inr(s.money.with_technicians_paise)}${s.money.technician_cash_oldest_days > 1 ? ` (sabse purana ${s.money.technician_cash_oldest_days} din)` : ''}.`);
+    }
+    if (s.payable.total_paise > 0) lines.push(`Suppliers ko dena ${inr(s.payable.total_paise)}.`);
+    if (s.stock.low_items) lines.push(`${s.stock.low_items} item kam stock me.`);
+    if (s.attention.unposted_tickets) lines.push(`${s.attention.unposted_tickets} ticket books me nahi chadh paaye.`);
+    if (s.attention.failing_checks.length) lines.push(`Health check me gadbad: ${s.attention.failing_checks.join('; ')}.`);
+    return lines.join(' ');
+}
+
+// ── payment reminders ───────────────────────────────────────────────────
+
+const OVERDUE_AFTER_DAYS = 30;
+
+const phoneFor = (phone) => {
+    const d = String(phone || '').replace(/\D/g, '').slice(-10);
+    return d.length === 10 ? d : null;
+};
+
+function reminderMessage({ business, party, amount_paise, oldest_days }) {
+    const upi = business.upi_id ? ` You can pay by UPI to ${business.upi_id}.` : '';
+    const how = business.payment_instructions ? ` ${String(business.payment_instructions).trim().slice(0, 240)}` : '';
+    return `Assalamu alaikum ${party}, a gentle reminder from ${business.trade_name || business.legal_name || 'us'}: ${inr(amount_paise)} is pending on your account`
+        + `${oldest_days ? ` (the oldest bill is ${oldest_days} days old)` : ''}.${upi}${how} Kindly clear it at your earliest convenience. Thank you.`;
+}
+
+async function reminders(conn, businessId, { asOn }) {
+    const [[business]] = await conn.query('SELECT legal_name, trade_name, upi_id, payment_instructions FROM businesses WHERE id = ? LIMIT 1', [businessId]);
+    const [receivable, payable] = await Promise.all([
+        ageing(conn, businessId, { kind: 'receivable', asOn }),
+        ageing(conn, businessId, { kind: 'payable', asOn }),
+    ]);
+    const [last] = await conn.query(
+        `SELECT party_id, MAX(created_at) AS at, COUNT(*) AS times FROM payment_reminders WHERE business_id = ? GROUP BY party_id`, [businessId]
+    );
+    const lastBy = new Map(last.map((r) => [r.party_id, r]));
+
+    const overdue = (p) => p.d31_60 + p.d61_90 + p.d90_plus;
+    const customers = receivable.parties
+        .filter((p) => p.party_id && overdue(p) > 0)
+        .map((p) => {
+            const phone = phoneFor(p.phone);
+            const message = reminderMessage({ business, party: p.party, amount_paise: p.outstanding_paise, oldest_days: p.oldest_days });
+            const l = lastBy.get(p.party_id);
+            return {
+                party_id: p.party_id, party: p.party, phone: p.phone, overdue_paise: overdue(p), outstanding_paise: p.outstanding_paise,
+                oldest_days: p.oldest_days, message,
+                whatsapp_url: phone ? `https://wa.me/91${phone}?text=${encodeURIComponent(message)}` : null,
+                last_reminded_at: l ? l.at : null, times_reminded: l ? Number(l.times) : 0,
+            };
+        })
+        .sort((a, b) => b.overdue_paise - a.overdue_paise);
+
+    const suppliers = payable.parties
+        .filter((p) => overdue(p) > 0)
+        .map((p) => ({ party_id: p.party_id, party: p.party, phone: p.phone, overdue_paise: overdue(p), outstanding_paise: p.outstanding_paise, oldest_days: p.oldest_days }));
+
+    return {
+        as_on: asOn,
+        scope: { basis: `Customers with anything charged more than ${OVERDUE_AFTER_DAYS} days ago and still unpaid. Nothing is sent from here — the button opens WhatsApp with the message ready, and you press send.` },
+        customers, suppliers,
+        totals: { customers_paise: customers.reduce((s, c) => s + c.overdue_paise, 0), suppliers_paise: suppliers.reduce((s, c) => s + c.overdue_paise, 0) },
+    };
+}
+
 module.exports = {
     ymd, today, startOfFinancialYear, natural, resolveAccount,
     profitLoss, balanceSheet, accountLedger, ageing, partyStatement,
     salesRegister, purchaseRegister, hsnSummary, gstSummary, stockValuation, reconciliation,
+    ownerSummary, digestText, reminders, phoneFor,
 };
