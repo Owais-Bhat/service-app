@@ -451,6 +451,38 @@ The QR is left off if there is no UPI id.
 
 ---
 
+## Site and device register
+
+`server/modules/devices/`, page `src/pages/devices.js` (sidebar: Customers → Sites & Devices), panel
+`src/pages/customer-equipment.js`. Tables `customer_sites`, `customer_devices`, `customer_device_events`
+(created on boot; nothing existing is altered).
+
+- **What it holds** — per customer: sites (Main shop, Godown…) and the devices at them: kind (DVR, NVR, camera,
+  switch, router, hard disk, UPS, power supply, access control, intercom, other), brand, model, serial, place
+  ("rack behind the counter"), installed date, warranty date, quantity for identical units (8 cameras = one entry),
+  the ticket/invoice it was fitted under, and the AMC contract covering it.
+- **Warranty is worked out from the date, never stored** — in warranty, ending soon (60 days or fewer),
+  expired, not recorded.
+- **A device is never deleted.** A swap (*Replace*) fits the new device in the old one's place — same customer,
+  site, spot and contract — and closes the old one as *replaced*, pointing at its successor. *Taken away* marks it
+  removed (it can be put back). Both keep their history, and a replaced device's record is frozen.
+- **Serials are unique** among devices still in service; a duplicate names the customer who has it.
+- **History** on every device: installed, serviced, repaired, replaced, notes; marking faulty/working is recorded.
+- **Phone lookup** — a service request carries a name and a phone, so the admin's service-request modal asks
+  `GET /api/devices/lookup?phone=` (matched on the last 10 digits, however it was typed) and shows the customer's
+  equipment with warranty state, any **running AMC with free visits left** (or "expired N days ago — offer a renewal"),
+  and a **Count this as an AMC visit** button that logs the ticket against the contract. It shows nothing when the
+  number matches no customer, or the user may not see the register.
+- **AMC link** — a device can be under a contract; in the contract, *Cover the other N devices* brings all of a
+  customer's uncovered equipment under it, and **a renewal carries the covered devices onto the new term.**
+- Capabilities: `device.view` (admin, accountant, office, team lead, employee) and `device.manage` (admin,
+  accountant, office).
+
+Not done: the technician's own screens (the Android app) do not show the register yet — that needs a new APK
+build; the technician's web view is unchanged. There is no Excel import for devices.
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

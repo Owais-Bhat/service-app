@@ -372,6 +372,8 @@ async function renewContract(conn, { businessId, user, id, payload = {} }) {
             notes: c.notes, terms: c.terms, renewed_from_id: c.id, created_by: user?.id || null,
         }]);
         await conn.query('UPDATE amc_contracts SET renewed_to_id = ? WHERE id = ?', [newId, id]);
+        // The equipment covered by the old term is covered by the new one.
+        await conn.query('UPDATE customer_devices SET amc_contract_id = ? WHERE amc_contract_id = ?', [newId, id]).catch(() => {});
         await conn.commit();
         return newId;
     } catch (err) {

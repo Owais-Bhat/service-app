@@ -41,6 +41,8 @@ const CAPABILITIES = {
     // annual maintenance contracts
     'amc.view': 'See maintenance contracts and renewals',
     'amc.manage': 'Create, renew, invoice and cancel maintenance contracts',
+    'device.view': 'See the sites and equipment registered for a customer',
+    'device.manage': 'Add, edit and replace registered customer equipment',
 
     // stock
     'stock.view': 'See stock on hand',
@@ -64,7 +66,7 @@ const ROLE_CAPS = {
         'ledger.view', 'ledger.post', 'ledger.reverse', 'period.lock',
         'invoice.view', 'invoice.create', 'invoice.cancel',
         'payment.view', 'payment.record',
-        'purchase.view', 'purchase.manage', 'amc.view', 'amc.manage',
+        'purchase.view', 'purchase.manage', 'amc.view', 'amc.manage', 'device.view', 'device.manage',
         'stock.view', 'report.financial', 'report.operations', 'audit.view',
     ],
 
@@ -73,7 +75,7 @@ const ROLE_CAPS = {
         'party.view', 'party.manage', 'item.view',
         'invoice.view', 'invoice.create',
         'payment.view', 'payment.record',
-        'purchase.view', 'stock.view', 'report.operations', 'amc.view', 'amc.manage',
+        'purchase.view', 'stock.view', 'report.operations', 'amc.view', 'amc.manage', 'device.view', 'device.manage',
     ],
 
     // The store: everything about goods, nothing about money.
@@ -87,11 +89,11 @@ const ROLE_CAPS = {
     // Existing roles keep what they do today and gain only what they need.
     team_lead: [
         'party.view', 'item.view', 'invoice.view', 'payment.view',
-        'stock.view', 'stock.move', 'report.operations',
+        'stock.view', 'stock.move', 'report.operations', 'device.view',
     ],
 
     employee: [
-        'party.view', 'item.view', 'stock.view', 'stock.move',
+        'party.view', 'item.view', 'stock.view', 'stock.move', 'device.view',
     ],
 };
 

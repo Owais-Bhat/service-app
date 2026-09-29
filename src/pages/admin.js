@@ -16,6 +16,7 @@ import {
   showLoader,
 } from "../utils.js";
 import { openPremiumBillModal, shareBillToPublicLink } from "./employee.js";
+import { mountCustomerEquipment } from "./customer-equipment.js";
 const API_BASE =
   window.location.hostname !== "localhost" &&
   window.location.hostname !== "127.0.0.1"
@@ -1066,6 +1067,13 @@ export async function openInquiryDetail(id, onDone) {
               })
               .join("")}          </select>          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentLocked ? (canTransfer ? "Already assigned — use Transfer below to move it to another technician." : "Already assigned.") : "Only currently clocked-in employees with no strict EOD restriction can receive new assignments."}</small>        </div>      </div>      <div class="modal-footer">        <button class="btn btn-secondary" id="ci2">Close</button>        <button class="btn btn-primary" id="save-sr" ${assignmentLocked ? "disabled" : ""}>${ICONS.check}<span>${assignmentLocked ? "Already assigned" : "Save assignment"}</span></button>      </div>    </div>`;
   document.body.appendChild(overlay);
+
+  // What is installed at this customer, and any AMC that is running — matched
+  // by phone. Says nothing when the number matches no customer record.
+  const equipmentHost = document.createElement("div");
+  equipmentHost.id = "sr-equipment";
+  overlay.querySelector(".sr-meta")?.appendChild(equipmentHost);
+  mountCustomerEquipment(equipmentHost, { phone: i.phone, ticketNo: i.ticket_no });
 
   // ── transfer to another technician ───────────────────────────────────
   if (canTransfer) {

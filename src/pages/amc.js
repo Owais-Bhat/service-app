@@ -10,6 +10,7 @@
 import { toast } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
+import { warrantyChip } from './devices.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -399,6 +400,11 @@ async function openDetail(id) {
   let loaded;
   try { loaded = await api('GET', `/amc/contracts/${encodeURIComponent(id)}`); } catch (err) { return toast(err.message, 'error'); }
   const { contract: c, visits, earlier_terms: earlier } = loaded;
+  // The customer's registered equipment: what this contract covers, and what it does not yet.
+  let equipment = [];
+  try { equipment = (await api('GET', `/devices?party_id=${encodeURIComponent(c.party_id)}`)).devices; } catch { /* no access to the register */ }
+  const covered = equipment.filter(x => x.amc_contract_id === c.id);
+  const uncovered = equipment.filter(x => !x.amc_contract_id);
   const [tone, label] = STATE_CHIP[c.state] || ['muted', c.state];
   const live = c.state !== 'cancelled';
   const canRenew = live && !c.renewed_to_id;
@@ -458,6 +464,21 @@ async function openDetail(id) {
           </tbody></table></div>` : '<div style="padding:14px;color:var(--text-dim);font-size:0.84rem">No visits logged yet.</div>'}
         </div>
 
+        ${equipment.length ? `
+        <div class="card" style="margin-top:12px">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <span class="card-title">Covered equipment (${covered.reduce((n, x) => n + x.quantity, 0)})</span>
+            ${live && uncovered.length ? `<button class="btn btn-secondary" id="ad-cover" style="padding:6px 10px">Cover the other ${uncovered.length} device${uncovered.length === 1 ? '' : 's'}</button>` : ''}
+          </div>
+          ${covered.length ? `<div class="table-wrap"><table class="at2-tbl"><tbody>
+            ${covered.map(x => { const [wt, wl] = warrantyChip(x); return `<tr>
+              <td>${x.quantity > 1 ? `<b>${x.quantity} ×</b> ` : ''}<b>${esc([x.brand, x.model].filter(Boolean).join(' ') || x.category_label)}</b><div style="font-size:0.74rem;color:var(--text-dim)">${esc(x.site_name || '')}${x.location_note ? ` · ${esc(x.location_note)}` : ''}</div></td>
+              <td><code style="font-size:0.72rem">${esc(x.serial_no || '')}</code></td>
+              <td><span class="at2-chip ${wt}">${wl}</span></td>
+              <td>${x.status === 'faulty' ? '<span class="at2-chip danger">Faulty</span>' : ''}</td></tr>`; }).join('')}
+          </tbody></table></div>` : '<div style="padding:14px;color:var(--text-dim);font-size:0.84rem">No registered device is linked to this contract yet.</div>'}
+        </div>` : ''}
+
         ${earlier.length ? `<p class="at2-note">Earlier terms: ${earlier.map(t => `${esc(t.contract_no)} (${esc(day(t.start_date))} – ${esc(day(t.end_date))}, ${rupees(t.amount_paise)})`).join(' · ')}</p>` : ''}
       </div>
       <div class="modal-footer" style="gap:8px;flex-wrap:wrap">
@@ -515,6 +536,15 @@ async function openDetail(id) {
   }
 
   if ($('#ad-addvisit')) $('#ad-addvisit').onclick = () => openVisit(c, again);
+  if ($('#ad-cover')) {
+    $('#ad-cover').onclick = async () => {
+      try {
+        const out = await api('POST', `/amc/contracts/${encodeURIComponent(id)}/cover-devices`, {});
+        toast(`${out.covered} device${out.covered === 1 ? '' : 's'} now covered`, 'success');
+        await again();
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  }
 
   overlay.querySelectorAll('[data-delvisit]').forEach(btn => {
     btn.onclick = async () => {
