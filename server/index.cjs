@@ -6138,6 +6138,92 @@ app.get('/api/profiles/:id', authenticateToken, async (req, res) => {
 // Admin "Manage service request" bootstrap. This replaces four broad client
 // queries with one scoped response and computes technician availability on the
 // server, close to the database.
+// Moving a service request from one technician to another — including after the
+// first has already accepted it, or when they never answered. The new
+// technician gets it as a fresh assignment and has to accept it; the old one is
+// told it has gone; who moved it, from whom, to whom and why is kept in the
+// audit trail.
+app.post('/api/admin/inquiries/:id/transfer', authenticateToken, async (req, res) => {
+    if (!(await isTicketAssigner(req.user))) return res.sendStatus(403);
+    const employeeId = String(req.body?.employee_id || '').trim();
+    const reason = String(req.body?.reason || '').trim().slice(0, 300);
+    if (!employeeId) return res.status(400).json({ error: 'Choose the technician to transfer it to' });
+
+    let connection;
+    try {
+        connection = await getConn();
+        const [[row]] = await connection.query('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [req.params.id]);
+        if (!row) return res.status(404).json({ error: 'Service request not found' });
+        if (!row.assigned_employee_id) {
+            return res.status(409).json({ error: 'This request is not assigned yet — assign it instead of transferring it' });
+        }
+        if (row.assigned_employee_id === employeeId) {
+            return res.status(400).json({ error: 'It is already with that technician' });
+        }
+        if (['resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc'].includes(row.status) || row.payment_status === 'paid') {
+            return res.status(409).json({ error: 'This request is already finished, so it cannot be transferred' });
+        }
+        if (row.pool_status === 'claimed') {
+            return res.status(409).json({ error: 'A public-pool job claimed by a gig worker cannot be transferred' });
+        }
+
+        const [[target]] = await connection.query("SELECT id, full_name, phone FROM profiles WHERE id = ? AND role = 'employee' LIMIT 1", [employeeId]);
+        if (!target) return res.status(400).json({ error: 'That technician does not exist' });
+        const [[previous]] = await connection.query('SELECT full_name FROM profiles WHERE id = ? LIMIT 1', [row.assigned_employee_id]);
+
+        await connection.query(
+            `UPDATE inquiries
+                SET assigned_employee_id = ?, assignment_status = 'pending', decline_reason = NULL,
+                    assigned_at = NOW(), status = 'assigned', auto_assigned = 0
+              WHERE id = ?`,
+            [employeeId, row.id]
+        );
+        if (row.ticket_id) {
+            await connection.query("UPDATE tickets SET assigned_to = ?, status = 'assigned' WHERE id = ?", [employeeId, row.ticket_id]);
+        }
+        const [[fresh]] = await connection.query('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [row.id]);
+        broadcastChange('UPDATE', 'inquiries', fresh);
+
+        const ref = row.ticket_no ? ` (${row.ticket_no})` : '';
+        recordNotification({
+            subject: 'assignment_transferred',
+            title: '↪ Request moved to someone else',
+            body: `${row.full_name || 'A client'} — ${row.service_item || 'service request'}${ref} has been transferred to ${target.full_name || 'another technician'}.${reason ? ` Reason: ${reason}` : ''}`,
+            audience: { userId: row.assigned_employee_id },
+            data: { inquiry_id: row.id, ticket_no: row.ticket_no },
+        }).catch(() => {});
+        recordNotification({
+            subject: 'new_assignment',
+            title: '📋 New Assignment',
+            body: `${row.full_name || 'A client'} — ${row.service_item || 'service request'}${ref}${previous?.full_name ? ` (transferred from ${previous.full_name})` : ''}`,
+            audience: { userId: employeeId },
+            data: { inquiry_id: row.id, ticket_no: row.ticket_no },
+        }).catch(() => {});
+        if (target.phone) {
+            smsNotify(target.phone, 'SMS_TID_ASSIGN_EMP', [
+                smsVar(row.ticket_no, 'N/A', 20),
+                smsVar(row.service_item, 'General Service', 80),
+                smsVar(row.full_name, 'Customer', 60),
+                smsPhoneVar(row.phone),
+                smsVar(row.location, 'See app', 100),
+            ]);
+        }
+
+        audit.record({
+            actor: req.user, action: 'ticket.transfer', entityType: 'inquiry', entityId: row.id,
+            before: { assigned_employee_id: row.assigned_employee_id, assignment_status: row.assignment_status, status: row.status },
+            after: { assigned_employee_id: employeeId, assignment_status: 'pending', status: 'assigned' },
+            reason: reason || null, ip: req.ip,
+        });
+        res.json({ ok: true, from: previous?.full_name || null, to: target.full_name });
+    } catch (err) {
+        console.error('[transfer] failed:', err.message);
+        res.status(500).json({ error: 'Could not transfer the request' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.get('/api/admin/inquiries/:id/manage-context', authenticateToken, async (req, res) => {
     if (!(await isTicketAssigner(req.user))) return res.sendStatus(403);
     let connection;

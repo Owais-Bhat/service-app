@@ -998,8 +998,13 @@ export async function openInquiryDetail(id, onDone) {
     i.assigned_employee_id && i.assignment_status !== "declined",
   );
   const assignmentLockText = assignmentAwaitingResponse
-    ? `${technicianName || "Assigned technician"} must accept or decline before admin can change this assignment.`
-    : `${technicianName || "This technician"} is already assigned. Reassignment is locked unless the employee declines.`;
+    ? `${technicianName || "Assigned technician"} has not answered yet. You can wait, or transfer it to someone else below.`
+    : `${technicianName || "This technician"} has accepted this request. To move it to another technician, use Transfer below.`;
+  // A request that is still open can be moved to another technician even after
+  // the first has accepted it — or never answered.
+  const canTransfer = assignmentLocked
+    && !["resolved", "closed", "case_closed", "issue_not_resolved", "foc"].includes(i.status)
+    && i.payment_status !== "paid";
   let billServices = [];
   if (i.bill_total) {
     billServices = (context.billServices || []).map((p) => {
@@ -1059,8 +1064,62 @@ export async function openInquiryDetail(id, onDone) {
                   i.assigned_employee_id === e.id ? "selected" : ""
                 } ${disabledAttr}>${statusLabel} - ${e.full_name}</option>`;
               })
-              .join("")}          </select>          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentLocked ? "Already assigned. Save is disabled to prevent duplicate assignment." : "Only currently clocked-in employees with no strict EOD restriction can receive new assignments."}</small>        </div>      </div>      <div class="modal-footer">        <button class="btn btn-secondary" id="ci2">Close</button>        <button class="btn btn-primary" id="save-sr" ${assignmentLocked ? "disabled" : ""}>${ICONS.check}<span>${assignmentLocked ? "Already assigned" : "Save assignment"}</span></button>      </div>    </div>`;
+              .join("")}          </select>          <small style="display:block;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">${assignmentLocked ? (canTransfer ? "Already assigned — use Transfer below to move it to another technician." : "Already assigned.") : "Only currently clocked-in employees with no strict EOD restriction can receive new assignments."}</small>        </div>      </div>      <div class="modal-footer">        <button class="btn btn-secondary" id="ci2">Close</button>        <button class="btn btn-primary" id="save-sr" ${assignmentLocked ? "disabled" : ""}>${ICONS.check}<span>${assignmentLocked ? "Already assigned" : "Save assignment"}</span></button>      </div>    </div>`;
   document.body.appendChild(overlay);
+
+  // ── transfer to another technician ───────────────────────────────────
+  if (canTransfer) {
+    const holder = overlay.querySelector("#assign-to")?.parentElement;
+    const others = availableEmployees.filter((e) => e.id !== i.assigned_employee_id && (activeEmployeeIds.has(e.id) || e.always_assign));
+    if (holder) {
+      holder.insertAdjacentHTML("beforeend", `
+        <div class="transfer-panel" style="margin-top:14px;padding:14px;border:1.5px dashed var(--border);border-radius:14px">
+          <button type="button" class="btn btn-secondary" id="tr-open" style="width:100%">Transfer to another technician</button>
+          <div id="tr-form" hidden style="margin-top:12px">
+            <div class="form-group" style="margin-bottom:10px"><label>Transfer to</label>
+              <select id="tr-emp">
+                <option value="">— Choose a technician —</option>
+                ${others.map((e) => `<option value="${e.id}">${escapeHtml(e.full_name || "Employee")}${e._clockedIn ? " — clocked in" : " — always assign"}</option>`).join("")}
+              </select>
+              ${others.length ? "" : '<small style="display:block;margin-top:6px;color:var(--danger)">No other technician is clocked in right now.</small>'}
+            </div>
+            <div class="form-group" style="margin-bottom:10px"><label>Reason <small>(optional)</small></label>
+              <input type="text" id="tr-reason" maxlength="300" placeholder="Why is it being moved?"></div>
+            <small style="display:block;margin-bottom:10px;color:var(--text-dim)">${escapeHtml(technicianName || "The current technician")} is told it has moved. The new technician has to accept it.</small>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button type="button" class="btn btn-secondary" id="tr-cancel">Cancel</button>
+              <button type="button" class="btn btn-primary" id="tr-go">Transfer</button>
+            </div>
+          </div>
+        </div>`);
+      const box = overlay.querySelector("#tr-form");
+      overlay.querySelector("#tr-open").onclick = () => { box.hidden = false; overlay.querySelector("#tr-open").hidden = true; };
+      overlay.querySelector("#tr-cancel").onclick = () => { box.hidden = true; overlay.querySelector("#tr-open").hidden = false; };
+      overlay.querySelector("#tr-go").onclick = async () => {
+        const to = overlay.querySelector("#tr-emp").value;
+        if (!to) return toast("Choose the technician to transfer it to", "warning");
+        const toName = others.find((e) => e.id === to)?.full_name || "the new technician";
+        if (!confirm(`Transfer ${i.ticket_no || "this request"} from ${technicianName || "the current technician"} to ${toName}?`)) return;
+        const go = overlay.querySelector("#tr-go");
+        go.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE}/admin/inquiries/${encodeURIComponent(i.id)}/transfer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({ employee_id: to, reason: overlay.querySelector("#tr-reason").value.trim() }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Could not transfer the request");
+          toast(`Transferred to ${data.to || toName}`, "success");
+          overlay.remove();
+          onDone();
+        } catch (err) {
+          toast(err.message, "error");
+          go.disabled = false;
+        }
+      };
+    }
+  }
 
   // Device Service photos (taken / returned) the technician uploaded — admins
   // couldn't see these before. Fetched on open and appended to the modal body.

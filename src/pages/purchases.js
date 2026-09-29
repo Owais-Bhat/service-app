@@ -8,6 +8,7 @@
 // partial delivery cannot be over-received.
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { openQuickParty } from './party-quick-add.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -290,11 +291,14 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
         <datalist id="pu-items">${items.map(i => `<option value="${esc(i.name)}">`).join('')}</datalist>
 
         <div class="at2-grid">
-          <div class="form-group"><label>Supplier *</label>
-            <select id="pu-party">
-              <option value="">— Choose —</option>
-              ${suppliers.map(p => `<option value="${esc(p.id)}"${doc?.party_id === p.id ? ' selected' : ''}>${esc(p.display_name)}</option>`).join('')}
-            </select></div>
+          <div class="form-group" style="grid-column:span 2"><label>Supplier *</label>
+            <div class="at2-select-row">
+              <select id="pu-party">
+                <option value="">— Choose —</option>
+                ${suppliers.map(p => `<option value="${esc(p.id)}"${doc?.party_id === p.id ? ' selected' : ''}>${esc(p.display_name)}</option>`).join('')}
+              </select>
+              <button type="button" class="at2-plus" id="pu-newparty" title="Add a new supplier">${ICONS.plus}<span>New</span></button>
+            </div></div>
           <div class="form-group"><label>Date</label>
             <input type="date" id="pu-date" value="${doc ? ymd(doc.doc_date) : ymd(new Date())}"></div>
           ${['goods_receipt', 'purchase_return'].includes(docType) ? `
@@ -422,6 +426,14 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
       <div class="hint">The server works out the exact figure when you save</div>`;
   }
 
+  $('#pu-newparty').onclick = () => openQuickParty({
+    kind: 'supplier',
+    onCreated: (p) => {
+      suppliers.push(p);
+      $('#pu-party').appendChild(new Option(p.display_name, p.id, true, true));
+      $('#pu-party').value = p.id;
+    },
+  });
   wireLines();
   updateTotals();
   $('#pu-add').onclick = () => { $('#pu-lines').insertAdjacentHTML('beforeend', lineRow()); wireLines(); };

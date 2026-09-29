@@ -139,7 +139,7 @@ function paint(container) {
             <div style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;">Received ${formatDateTime(i.created_at)}${i.preferred_time ? ` · Prefers ${esc(i.preferred_time)}` : ''}</div>
             ${declined && i.decline_reason ? `<div style="font-size:0.8rem;color:var(--danger);margin-top:6px;">Declined: ${esc(i.decline_reason)}</div>` : ''}
           </div>
-          <button class="btn btn-primary ar-assign" data-id="${esc(i.id)}">${ICONS.user}<span>${i.assigned_employee_id ? 'Reassign' : 'Assign'}</span></button>
+          <button class="btn btn-primary ar-assign" data-id="${esc(i.id)}">${ICONS.user}<span>${i.assigned_employee_id ? 'Transfer' : 'Assign'}</span></button>
         </div>
       </div>`;
   }).join('');
@@ -161,12 +161,14 @@ async function openAssignModal(inquiryId, onDone) {
   // flagged always-assign) and not EOD-restricted can take a job.
   const selectable = ctx.employees.filter(e => (e.clockedIn && !e.restricted) || e.always_assign);
 
+  // Already with someone who accepted (or who has not answered): that is a transfer.
+  const isMove = !!(i.assigned_employee_id && i.assignment_status !== 'declined');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal" style="max-width:520px;">
       <div class="modal-header">
-        <span class="modal-title">Assign ${esc(i.ticket_no || 'request')}</span>
+        <span class="modal-title">${i.assigned_employee_id && i.assignment_status !== 'declined' ? 'Transfer' : 'Assign'} ${esc(i.ticket_no || 'request')}</span>
         <button class="modal-close" id="ar-m-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
@@ -177,13 +179,16 @@ async function openAssignModal(inquiryId, onDone) {
           ${i.description ? `<div style="font-size:0.85rem;margin-top:8px;white-space:pre-wrap;">${esc(i.description)}</div>` : ''}
         </div>
         <div class="form-group">
-          <label>Assign to technician</label>
+          <label>${i.assigned_employee_id && i.assignment_status !== 'declined' ? 'Transfer to technician' : 'Assign to technician'}</label>
           <select id="ar-m-emp">
             <option value="">— None —</option>
             ${selectable.map(e => `<option value="${esc(e.id)}"${i.assigned_employee_id === e.id ? ' selected' : ''}>${esc(e.full_name)}${e.clockedIn ? ' — clocked in' : ' — always assign'}</option>`).join('')}
           </select>
           ${selectable.length ? '' : '<small style="display:block;margin-top:8px;color:var(--danger);">No technician is clocked in right now.</small>'}
         </div>
+        ${isMove ? `<div class="form-group"><label>Reason <small>(optional)</small></label>
+          <input type="text" id="ar-m-reason" maxlength="300" placeholder="Why is it being moved?">
+          <small style="display:block;margin-top:6px;color:var(--text-dim);">The current technician is told it has moved; the new one has to accept it.</small></div>` : ''}
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="ar-m-cancel">Cancel</button>
@@ -202,6 +207,15 @@ async function openAssignModal(inquiryId, onDone) {
     const btn = overlay.querySelector('#ar-m-save');
     btn.disabled = true;
     try {
+      if (isMove && empId && empId !== i.assigned_employee_id) {
+        await api('POST', `/admin/inquiries/${encodeURIComponent(inquiryId)}/transfer`, {
+          employee_id: empId, reason: overlay.querySelector('#ar-m-reason')?.value.trim() || '',
+        });
+        toast('Transferred', 'success');
+        close();
+        onDone?.();
+        return;
+      }
       // The server stamps assigned_at and fires the employee/customer SMS and
       // in-app notification off this same patch (see the inquiries PATCH hook).
       await api('PATCH', `/data/inquiries?eq=id:${encodeURIComponent(inquiryId)}`, {

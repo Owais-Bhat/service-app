@@ -376,6 +376,14 @@ Tests: `tests/migration-stage6.test.mjs` (19). Code: `server/modules/migration/`
 - **Printed documents** (`sales/pdf.cjs`): the table's columns now always add up to the page width (the Amount column used to run past the right margin); tax columns are left out when nothing on the document carries tax; the customer block no longer prints the GST treatment or overlaps the table header; rows are tall enough for the two-line tax cells; a quotation no longer prints a due date and shows *(Revision n)* next to its number; *Amount in words* (lakh/crore) is printed beside the total.
 - Tests: `tests/quotation-revise.test.mjs` (7).
 
+## Quick customer, item borders, and transfer of a service request (built, tested locally, **not deployed**)
+
+- **New customer / supplier from inside an invoice or purchase order** (`src/pages/party-quick-add.js`): a **+ New** button beside the Customer (Supplier) field opens a short form (name, phone, GSTIN, city, credit days), saves through the ordinary `POST /api/parties` — so it is in Customers & Suppliers — and selects it in the document being written. The place of supply is taken from the GSTIN, else assumed to be the business's own state.
+- **Line-item fields** in the accounting editors have a firm dark border (theme text colour, so near-black on light and near-white on dark).
+- **Transfer of a service request** (`POST /api/admin/inquiries/:id/transfer`, admin or anyone allowed to assign tickets): the admin's Service Request modal locked the assignment as soon as the technician accepted (or while they had not answered). It now shows **Transfer to another technician** for any request that is still open. The new technician gets a fresh assignment and must accept it (`assignment_status = 'pending'`, the SLA clock restarts, linked `tickets.assigned_to` follows); the old technician is notified ("moved to X", with the reason); the new one gets the in-app notification and SMS; who moved it, from whom, to whom and why is in the audit log (`ticket.transfer`). Refused for a request that is unassigned, already with that technician, finished (resolved/closed/FOC/paid), or a public-pool job claimed by a gig worker. The Assign Requests page's button now reads **Transfer** for an assigned request and asks for the reason. Installations already allowed reassignment.
+- **Not done:** the mobile app's admin service-request screen (`mobile/src/components/AdminServiceRequestDetailModal.tsx`) still shows the old lock; it needs the same button and a new build.
+- Tests: `tests/ticket-transfer.test.mjs` (4).
+
 ## Verification status
 
 | Requirement | Status |

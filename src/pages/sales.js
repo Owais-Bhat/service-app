@@ -10,6 +10,7 @@
 // awkward, it is what keeps the books worth reading.
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { openQuickParty } from './party-quick-add.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -381,11 +382,14 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         </datalist>
 
         <div class="at2-grid">
-          <div class="form-group"><label>Customer *</label>
-            <select id="sl-party">
-              <option value="">— Choose —</option>
-              ${parties.map(p => `<option value="${esc(p.id)}"${doc?.party_id === p.id ? ' selected' : ''}>${esc(p.display_name)}${p.phone ? ` · ${esc(p.phone)}` : ''}</option>`).join('')}
-            </select></div>
+          <div class="form-group" style="grid-column:span 2"><label>Customer *</label>
+            <div class="at2-select-row">
+              <select id="sl-party">
+                <option value="">— Choose —</option>
+                ${parties.map(p => `<option value="${esc(p.id)}"${doc?.party_id === p.id ? ' selected' : ''}>${esc(p.display_name)}${p.phone ? ` · ${esc(p.phone)}` : ''}</option>`).join('')}
+              </select>
+              ${revising ? '' : `<button type="button" class="at2-plus" id="sl-newparty" title="Add a new customer">${ICONS.plus}<span>New</span></button>`}
+            </div></div>
           <div class="form-group"><label>Date</label>
             <input type="date" id="sl-date" value="${doc ? ymd(doc.doc_date) : ymd(new Date())}"></div>
           ${docType === 'estimate' ? `
@@ -527,6 +531,20 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   };
   wireLines();
   $('#sl-party').onchange = queueReprice;
+  if ($('#sl-newparty')) {
+    $('#sl-newparty').onclick = () => openQuickParty({
+      kind: 'customer',
+      onCreated: (p) => {
+        // The new customer is in Customers & Suppliers already; here it joins the
+        // list and is chosen.
+        parties.push(p);
+        const opt = new Option(`${p.display_name}${p.phone ? ` · ${p.phone}` : ''}`, p.id, true, true);
+        $('#sl-party').appendChild(opt);
+        $('#sl-party').value = p.id;
+        queueReprice();
+      },
+    });
+  }
   $('#sl-inclusive').onchange = queueReprice;
   $('#sl-docdisc').oninput = queueReprice;
   $('#sl-add').onclick = () => {

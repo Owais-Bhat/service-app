@@ -9159,7 +9159,7 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
   position: sticky; bottom: 0; z-index: 2;
   background: var(--bg, #fff); border-radius: 0 0 24px 24px;
 }
-.at2-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.at2-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
 
 /* The lines of a document, journal, count or transfer: an editable grid in a
    box of its own, not a table with bare browser inputs in it. */
@@ -9277,3 +9277,29 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
 .at2-modal .at2-tbl td.sl-amount { min-width: 110px; }
 .at2-modal .at2-tbl td:last-child { width: 44px; text-align: center; }
 .at2-modal .at2-tbl td .at2-photo { width: 34px; height: 34px; border-radius: 10px; }
+
+/* A field with a small button beside it: "+ New" next to the customer. */
+.at2-select-row { display: flex; gap: 8px; align-items: stretch; }
+.at2-select-row select { flex: 1; min-width: 0; }
+.at2-plus {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; cursor: pointer;
+  padding: 0 14px; min-height: 40px; border-radius: 12px; font: inherit; font-size: 0.84rem; font-weight: 800;
+  color: #fff; background: var(--primary); border: 1px solid var(--primary);
+  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--primary) 80%, transparent);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.at2-plus:hover { filter: brightness(1.06); }
+.at2-plus:active { transform: translateY(1px); }
+.at2-plus svg { width: 15px; height: 15px; }
+
+/* The line-item fields get a firm, dark border so each box is easy to find.
+   It follows the theme's text colour: near-black on light, near-white on dark. */
+.at2-modal .at2-tbl td input, .at2-modal .at2-tbl td select,
+.at2-modal .at2-inline-field input {
+  border: 1.5px solid color-mix(in srgb, var(--text) 82%, transparent) !important;
+  background: var(--bg) !important;
+}
+.at2-modal .at2-tbl td input:focus, .at2-modal .at2-tbl td select:focus,
+.at2-modal .at2-inline-field input:focus {
+  border-color: var(--primary) !important;
+}
