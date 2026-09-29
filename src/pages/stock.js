@@ -101,6 +101,8 @@ function paint(container) {
           <p>On the shelf, in the vans, reserved, and every device we can point at</p>
         </div>
         <div class="at2-headbtns">
+          <button class="btn btn-secondary" id="st-template">${ICONS.download}<span>Template</span></button>
+          <button class="btn btn-secondary" id="st-import">${ICONS.upload || ICONS.plus}<span>Import Excel</span></button>
           <button class="btn btn-secondary" id="st-export">${ICONS.download}<span>Export</span></button>
           <button class="btn btn-secondary" id="st-adjust">${ICONS.edit}<span>Adjust</span></button>
           <button class="btn btn-primary" id="st-transfer">${ICONS['arrow-right'] || ICONS.plus}<span>Transfer</span></button>
@@ -153,6 +155,14 @@ function paint(container) {
   container.querySelector('#st-transfer').onclick = () => openTransferModal(container);
   container.querySelector('#st-adjust').onclick = () => openAdjustModal(container);
   container.querySelector('#st-export').onclick = () => exportCurrent();
+  container.querySelector('#st-template').onclick = () => downloadTemplate();
+  const importInput = document.createElement('input');
+  importInput.type = 'file';
+  importInput.accept = '.xlsx,.xls,.csv';
+  importInput.style.display = 'none';
+  container.appendChild(importInput);
+  container.querySelector('#st-import').onclick = () => { importInput.value = ''; importInput.click(); };
+  importInput.onchange = () => { if (importInput.files[0]) openImportModal(container, importInput.files[0]); };
 
   paintBody(container);
 }
@@ -545,6 +555,214 @@ function openAdjustModal(container) {
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
+    }
+  };
+}
+
+// ── Excel import ───────────────────────────────────────────────────────
+// The sheet is read here, in the browser, and sent as plain rows. The server
+// checks it — the same check for the preview and for the real import — so
+// what the screen shows is what would be saved.
+let xlsxLoader = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (xlsxLoader) return xlsxLoader;
+  xlsxLoader = new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    el.onload = () => (window.XLSX ? resolve(window.XLSX) : reject(new Error('Excel reader did not load')));
+    el.onerror = () => { xlsxLoader = null; reject(new Error('Could not load the Excel reader — check the internet connection, or save the sheet as CSV')); };
+    document.head.appendChild(el);
+  });
+  return xlsxLoader;
+}
+
+function parseCSV(textValue) {
+  const rows = [];
+  let cur = '', row = [], quoted = false;
+  for (let i = 0; i < textValue.length; i += 1) {
+    const c = textValue[i];
+    if (quoted) {
+      if (c === '"' && textValue[i + 1] === '"') { cur += '"'; i += 1; }
+      else if (c === '"') quoted = false;
+      else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); cur = ''; row = []; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c ?? '').trim() !== ''));
+}
+
+async function readSheet(file) {
+  if (/\.csv$/i.test(file.name)) return parseCSV((await file.text()).replace(/^﻿/, ''));
+  const XLSX = await loadXLSX();
+  const book = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheetName = book.SheetNames.find(n => n.trim().toLowerCase() === 'items') || book.SheetNames[0];
+  return XLSX.utils.sheet_to_json(book.Sheets[sheetName], { header: 1, blankrows: false, defval: '' });
+}
+
+const GUIDE = [
+  ['Column', 'Needed?', 'What to write'],
+  ['Item Name', 'Yes', 'The name as it should print on a bill.'],
+  ['SKU', 'No', 'Your own code. Must be unique. If a SKU already exists, that item is updated instead of a new one being made.'],
+  ['Category', 'No', 'Any word — Cameras, Cables, Accessories.'],
+  ['HSN/SAC', 'No', 'Tax code, 4 to 8 digits. Prints on GST bills.'],
+  ['Unit', 'No', 'pcs, m, roll, box, set. Left empty = pcs.'],
+  ['Purchase Rate', 'Yes', 'What one unit costs you, in rupees, without GST. Numbers only — no ₹ sign.'],
+  ['Selling Rate', 'Yes', 'What you charge for one unit, in rupees, without GST.'],
+  ['GST %', 'No', '0, 5, 12, 18 or 28. Left empty = 18.'],
+  ['Opening Qty', 'No', 'How many you have right now. Up to 3 decimals (90.5 metres). Only for items that have no stock yet.'],
+  ['Opening Rate', 'No', 'Cost of one unit of the stock you have. Left empty = Purchase Rate.'],
+  ['Min Stock', 'No', 'You get a low-stock warning below this number.'],
+  ['Location', 'No', 'Where it is kept — must already exist under Locations & Vans. Left empty = Main Store.'],
+  ['Brand / Model', 'No', 'Free text.'],
+  ['Warranty (months)', 'No', 'A whole number, like 12 or 24.'],
+  ['Track Serial', 'No', 'Y if every piece has its own serial number (cameras, DVRs). Otherwise N or empty.'],
+  ['Serial Numbers', 'No', 'Only when Track Serial is Y. Separate with commas. The count must equal Opening Qty.'],
+  [],
+  ['Rules'],
+  ['Keep the first row (the headings) exactly as it is. Delete the three sample rows before you add your own.'],
+  ['One row is one item. Nothing is saved until every row is correct — you will see the problems first.'],
+  ['Opening Qty is only for items that have no stock yet. To change stock later, use Adjust or a Stock Count.'],
+];
+
+async function downloadTemplate() {
+  try {
+    const t = await api('GET', '/stock/import/template');
+    let XLSX = null;
+    // A .csv template still works if the Excel writer cannot be fetched.
+    try { XLSX = await loadXLSX(); } catch { XLSX = null; }
+
+    if (XLSX) {
+      const book = XLSX.utils.book_new();
+      const items = XLSX.utils.aoa_to_sheet([t.columns, ...t.sample_rows]);
+      items['!cols'] = t.columns.map((c, i) => ({ wch: i === 0 ? 30 : i === t.columns.length - 1 ? 40 : Math.max(12, c.length + 2) }));
+      const guide = XLSX.utils.aoa_to_sheet(GUIDE);
+      guide['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 100 }];
+      XLSX.utils.book_append_sheet(book, items, 'Items');
+      XLSX.utils.book_append_sheet(book, guide, 'How to fill');
+      XLSX.writeFile(book, 'stock-import-template.xlsx');
+    } else {
+      const csv = [t.columns, ...t.sample_rows]
+        .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'stock-import-template.csv';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+    toast('Template downloaded — delete the 3 sample rows, then add your items', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function openImportModal(container, file) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:980px;width:96vw">
+      <div class="modal-header">
+        <span class="modal-title">Import stock — ${esc(file.name)}</span>
+        <button class="modal-close" id="im-close">${ICONS.close}</button>
+      </div>
+      <div class="modal-body" id="im-body"><div class="loading-screen"><div class="spinner"></div></div></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="im-cancel">Close</button>
+        <button class="btn btn-primary" id="im-go" disabled>Import</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = (sel) => overlay.querySelector(sel);
+  const close = () => overlay.remove();
+  $('#im-close').onclick = close;
+  $('#im-cancel').onclick = close;
+
+  const body = $('#im-body');
+  const go = $('#im-go');
+  let table;
+  let check;
+  try {
+    table = await readSheet(file);
+    check = await api('POST', '/stock/import', { rows: table, dry_run: true, file_name: file.name });
+  } catch (err) {
+    body.innerHTML = `<div class="at2-empty" style="color:var(--danger)">${esc(err.message)}</div>`;
+    return;
+  }
+
+  const sm = check.summary;
+  const problemRows = check.rows.filter(r => r.problems.length);
+  body.innerHTML = `
+    <div class="at2-chiprow" style="display:flex;margin:0 0 12px">
+      <span class="at2-chip ok">${sm.rows} row${sm.rows === 1 ? '' : 's'}</span>
+      <span class="at2-chip ok">${sm.create} new</span>
+      <span class="at2-chip warn">${sm.update} updated</span>
+      <span class="at2-chip ok">${sm.with_stock} with opening stock</span>
+      ${canSeeCost ? `<span class="at2-chip ok">stock value ${rupees(sm.total_value_paise)}</span>` : ''}
+      ${problemRows.length ? `<span class="at2-chip danger">${problemRows.length} row${problemRows.length === 1 ? '' : 's'} with problems</span>` : ''}
+    </div>
+
+    ${check.errors.length ? `
+      <div class="card" style="border-left:3px solid var(--danger);padding:12px;margin-bottom:12px;max-height:180px;overflow:auto">
+        <b style="color:var(--danger)">Nothing will be imported until these are fixed</b>
+        <ul style="margin:6px 0 0 18px;font-size:0.82rem;line-height:1.7">
+          ${check.errors.slice(0, 60).map(e => `<li>${esc(e)}</li>`).join('')}
+          ${check.errors.length > 60 ? `<li>…and ${check.errors.length - 60} more</li>` : ''}
+        </ul>
+        <div style="font-size:0.78rem;color:var(--text-dim);margin-top:6px">Fix the sheet in Excel, then choose it again with Import Excel.</div>
+      </div>` : ''}
+
+    ${check.ignored_columns.length ? `<p class="at2-note" style="margin:0 0 10px">Columns not recognised and ignored: ${esc(check.ignored_columns.join(', '))}</p>` : ''}
+
+    ${check.rows.length ? `
+    <div class="table-wrap" style="max-height:340px;overflow:auto"><table class="at2-tbl">
+      <thead><tr><th>Row</th><th></th><th>Item</th><th>SKU</th><th>Unit</th>
+        <th style="text-align:right">Purchase</th><th style="text-align:right">Selling</th><th style="text-align:right">GST</th>
+        <th style="text-align:right">Opening</th><th>Location</th></tr></thead>
+      <tbody>
+        ${check.rows.slice(0, 300).map(r => `
+          <tr${r.problems.length ? ' style="background:rgba(239,68,68,0.07)"' : ''}>
+            <td>${r.row}</td>
+            <td><span class="at2-chip ${r.problems.length ? 'danger' : r.action === 'create' ? 'ok' : 'warn'}">${r.problems.length ? 'fix' : r.action === 'create' ? 'new' : 'update'}</span></td>
+            <td><b>${esc(r.name)}</b>${r.serials ? ` <small style="color:var(--text-dim)">${r.serials} serial${r.serials === 1 ? '' : 's'}</small>` : ''}</td>
+            <td>${esc(r.sku || '—')}</td><td>${esc(r.unit)}</td>
+            <td style="text-align:right">${r.purchase_rate ?? '—'}</td>
+            <td style="text-align:right">${r.selling_rate ?? '—'}</td>
+            <td style="text-align:right">${r.gst_rate}%</td>
+            <td style="text-align:right">${r.opening_qty > 0 ? `<b>${r.opening_qty}</b>` : '—'}</td>
+            <td>${esc(r.location || '—')}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table></div>
+    ${check.rows.length > 300 ? `<p class="at2-note">Showing the first 300 rows. All ${check.rows.length} are checked.</p>` : ''}` : ''}
+
+    ${check.ok ? `
+      <div class="form-group" style="margin-top:14px;max-width:280px">
+        <label>Opening stock counts from *</label>
+        <input type="date" id="im-date" value="${ymd(new Date())}">
+      </div>
+      <p class="at2-note">${sm.with_stock ? 'The stock value is recorded once in the books as Inventory against Opening Balance Equity, so the stock and the accounts start in agreement. ' : ''}Importing the same file again will not add stock twice.</p>` : ''}`;
+
+  if (!check.ok) return;
+  go.disabled = false;
+  go.textContent = `Import ${sm.rows} item${sm.rows === 1 ? '' : 's'}`;
+  go.onclick = async () => {
+    const date = $('#im-date').value;
+    if (!date) return toast('Choose the opening stock date', 'warning');
+    go.disabled = true;
+    go.textContent = 'Importing…';
+    try {
+      const out = await api('POST', '/stock/import', { rows: table, dry_run: false, opening_date: date, file_name: file.name });
+      const d = out.done;
+      toast(`Done — ${d.created} added, ${d.updated} updated, ${d.stocked} with opening stock`, 'success');
+      close();
+      await loadTab();
+      paint(container);
+    } catch (err) {
+      toast(err.message, 'error');
+      go.disabled = false;
+      go.textContent = `Import ${sm.rows} item${sm.rows === 1 ? '' : 's'}`;
     }
   };
 }

@@ -9,6 +9,7 @@ const posting = require('../ledger/posting.cjs');
 const { defaultBusinessId } = require('../ledger/schema.cjs');
 const stock = require('./engine.cjs');
 const purchases = require('./purchases.cjs');
+const importer = require('./importer.cjs');
 
 const clean = (v, max = 255) => (v === undefined || v === null ? null : String(v).trim().slice(0, max) || null);
 const ymd = (d) => {
@@ -320,6 +321,48 @@ function mountStock({ app, getConn, authenticateToken, permissions, audit }) {
             scope: { basis: 'moving average cost, from the stock ledger', as_on: ymd(new Date()) },
         });
     }));
+
+    // ── bulk item + opening stock import ────────────────────────────────
+    // The template's columns come from here, so the screen and the checker
+    // cannot drift apart.
+    app.get('/api/stock/import/template', authenticateToken, requireCap('stock.adjust'), (req, res) => {
+        res.json({
+            columns: importer.COLUMNS.map((c) => c.label),
+            sample_rows: importer.SAMPLE_ROWS,
+        });
+    });
+
+    // dry_run: true → check the file and report; nothing is written.
+    const importHandler = handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const b = req.body || {};
+        const checked = await importer.validateRows(conn, businessId, b.rows);
+        const shaped = {
+            ok: checked.ok,
+            errors: checked.errors,
+            ignored_columns: checked.ignored_columns || [],
+            summary: checked.summary,
+            rows: checked.rows.map((r) => ({
+                row: r.row, action: r.action, name: r.name, sku: r.sku, unit: r.unit,
+                purchase_rate: r.purchase_rate, selling_rate: r.selling_rate, gst_rate: r.gst_rate,
+                opening_qty: r.opening_qty, opening_rate: r.opening_rate, location: r.location_name,
+                serials: r.serials.length, problems: r.problems,
+            })),
+        };
+        if (b.dry_run !== false) return res.json({ ...shaped, dry_run: true });
+        if (!checked.ok) return res.status(422).json({ ...shaped, error: 'The file still has errors — nothing was imported' });
+
+        const done = await importer.importRows(conn, {
+            businessId, rows: checked.rows, openingDate: b.opening_date,
+            userId: req.user.id, fileName: clean(b.file_name, 120),
+        });
+        audit.record({
+            actor: req.user, action: 'stock.import', entityType: 'inventory_item', entityId: null,
+            after: done, reason: clean(b.file_name, 120), ip: req.ip,
+        });
+        res.status(201).json({ ...shaped, dry_run: false, done });
+    });
+    app.post('/api/stock/import', authenticateToken, requireCap('item.manage'), requireCap('stock.adjust'), importHandler);
 
     // ── purchases ───────────────────────────────────────────────────────
     app.get('/api/purchases/documents', authenticateToken, requireCap('purchase.view'), handle(async (req, res, conn) => {

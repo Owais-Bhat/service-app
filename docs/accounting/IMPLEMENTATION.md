@@ -295,6 +295,18 @@ business from the old flow to the new one.
 
 ---
 
+## Stock import from Excel (built, tested locally, **not deployed**)
+
+Stock screen → **Template** downloads `stock-import-template.xlsx` (sheet `Items` with the headings and three sample rows, sheet `How to fill`). **Import Excel** reads the sheet in the browser (`Items` sheet, else the first; `.csv` works too), sends plain rows to `POST /api/stock/import`, and shows a preview from the server's own check. The same check runs for the preview (`dry_run`) and for the real import, so what is shown is what is saved.
+
+- Columns: Item Name*, SKU, Category, HSN/SAC, Unit, Purchase Rate*, Selling Rate*, GST %, Opening Qty, Opening Rate, Min Stock, Location, Brand, Model, Warranty (months), Track Serial, Serial Numbers. Heading spellings are forgiving (`Selling Price (₹)`, `Qty`, `Code`).
+- All-or-nothing: any row with a problem stops the whole file; the errors name the row. Item, opening movement, serials and journal are one transaction.
+- Match on SKU (or name when there is no SKU): existing item is **updated**, new one **created**. A row that gives Opening Qty for an item that already has stock or history is refused, so the same file uploaded twice cannot double the shelf.
+- Opening stock goes through `stock.move()` (type `opening`) at the Opening Rate (blank = Purchase Rate); one journal per import: **Dr 1200 Inventory / Cr 3100 Opening Balance Equity**. Refused in a locked period.
+- Serial-tracked items: serial count must equal Opening Qty; a serial already on record is refused.
+- Needs `item.manage` and `stock.adjust`. Limit 1000 rows per file (request body cap is 1 MB).
+- Tests: `tests/stock-import.test.mjs` (13). Code: `server/modules/stock/importer.cjs`, `src/pages/stock.js`.
+
 ## Verification status
 
 | Requirement | Status |
