@@ -9303,3 +9303,6 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
 .at2-modal .at2-inline-field input:focus {
   border-color: var(--primary) !important;
 }
+
+/* Unit of measure on a line: narrow, like Qty. */
+.at2-modal .at2-tbl td input.sl-unit { min-width: 76px !important; }

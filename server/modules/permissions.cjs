@@ -38,6 +38,10 @@ const CAPABILITIES = {
     'purchase.view': 'See purchase orders and supplier bills',
     'purchase.manage': 'Raise purchase orders and enter supplier bills',
 
+    // annual maintenance contracts
+    'amc.view': 'See maintenance contracts and renewals',
+    'amc.manage': 'Create, renew, invoice and cancel maintenance contracts',
+
     // stock
     'stock.view': 'See stock on hand',
     'stock.move': 'Issue, transfer and return stock',
@@ -60,7 +64,7 @@ const ROLE_CAPS = {
         'ledger.view', 'ledger.post', 'ledger.reverse', 'period.lock',
         'invoice.view', 'invoice.create', 'invoice.cancel',
         'payment.view', 'payment.record',
-        'purchase.view', 'purchase.manage',
+        'purchase.view', 'purchase.manage', 'amc.view', 'amc.manage',
         'stock.view', 'report.financial', 'report.operations', 'audit.view',
     ],
 
@@ -69,7 +73,7 @@ const ROLE_CAPS = {
         'party.view', 'party.manage', 'item.view',
         'invoice.view', 'invoice.create',
         'payment.view', 'payment.record',
-        'purchase.view', 'stock.view', 'report.operations',
+        'purchase.view', 'stock.view', 'report.operations', 'amc.view', 'amc.manage',
     ],
 
     // The store: everything about goods, nothing about money.

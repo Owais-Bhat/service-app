@@ -158,6 +158,7 @@ function getNavItems(role) {
       type: 'group', key: 'customers', icon: ICONS.users, label: 'Customers',
       children: [
         { id: 'parties', label: 'Customers & Suppliers' },
+        { id: 'amc', label: 'AMC Contracts' },
         { id: 'contacts', label: 'Contacts' },
         { id: 'complaints', label: 'Complaints' },
       ],
@@ -301,6 +302,7 @@ const PAGE_LOADERS = {
     'ai-report': () => import('./pages/media-training.js').then(m => m.renderAIReportTab),
     inventory: () => import('./pages/inventory.js').then(m => m.renderInventoryTab),
     parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
+    amc: () => import('./pages/amc.js').then(m => m.renderAmcTab),
     ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
     'fin-reports': () => import('./pages/reports.js').then(m => m.renderReportsTab),
     migration: () => import('./pages/migration.js').then(m => m.renderMigrationTab),

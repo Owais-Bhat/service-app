@@ -407,6 +407,50 @@ Tests: `tests/migration-stage6.test.mjs` (19). Code: `server/modules/migration/`
 
 ---
 
+## AMC contracts, units on lines, and the printed layout
+
+**AMC contracts** (`server/modules/amc/`, page `src/pages/amc.js`, sidebar: Customers → AMC Contracts).
+A contract is a customer, a covered-equipment line, start and end dates, an amount (before GST),
+a GST treatment, and a count of free visits (blank = unlimited). Its lifecycle state is *worked out
+from the dates*, never stored: running, not started, expired, renewed, cancelled.
+
+- **Invoice the term** — one click raises an ordinary sales invoice (one line, HSN 9987, unit *Job*,
+  reference = contract number) and issues it, so it posts to the ledger, ages and is chased like any other.
+  Asking twice is refused (`already_invoiced`); the contract only remembers which invoice it is. Once a
+  term is invoiced its amount and tax are fixed — cancel the invoice in Sales first to change them.
+- **Visits** — logged against a contract, optionally with a service-ticket number (a ticket is never
+  counted twice). Visits past the free allowance are marked *chargeable*. Removing a visit re-works the
+  free/chargeable split in date order.
+- **Renewal** — a new contract starting the day after the old one ends, the same number of whole months
+  long, at the same rate unless changed; the old one records `renewed_to_id` and leaves the chase list.
+  Optionally raises the new term's invoice in the same step.
+- **Renewals Due** — running contracts ending within 45 days and expired ones up to 180 days back, each with a
+  written WhatsApp message and a `wa.me` link. **Nothing is sent automatically** — the office presses the
+  button and sends from their own phone; the count and date of reminders is kept.
+- **Notices** — every 6 hours the server tells admins once per threshold (30 / 15 / 7 / 1 days left, and expired).
+  After a restart it may repeat one notice.
+- New capabilities `amc.view` and `amc.manage` (admin, accountant and office roles have them).
+- Contract numbers come from the normal number series (`amc_contract`, prefix `AMC-`).
+- Tables: `amc_contracts`, `amc_visits`. Created on boot; nothing existing is altered.
+
+Not built yet (discussed, in order): a site/device register linked to contracts, WhatsApp API sending
+(needs a provider account), customer login, technician-on-the-way link, service-due reminders.
+
+**Units on lines.** Invoices and quotations have a *Unit* column (free text with a pick-list: Nos, Pcs,
+Meter, Feet, Roll, Box, Set, Pair, Kg, Ltr, Point, Camera, Job, Visit, Hour, Day, Month, Year, Lot).
+A catalogue item brings its own unit; otherwise *Nos*. The unit is a label on a sales line — sales lines
+do not move stock, so it is never converted. (Purchases still convert to the item's base unit and refuse a
+unit the item is not measured in.)
+
+**Printed layout** (`sales/pdf.cjs`). Reworked to the familiar Vyapar "GST Theme 1" arrangement, in the
+portal's green: company block with logo top-right; centred title; *Bill To* left and *Details* right; item
+table with its own Unit column; *Amount in words* and *Terms* left with the totals right; then *Pay To* with a
+**UPI QR** (built from the business UPI id; for an invoice with something owing it carries the balance as
+the amount), bank details and the signature. Adds the `qrcode` package (root and server `package.json`).
+The QR is left off if there is no UPI id.
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

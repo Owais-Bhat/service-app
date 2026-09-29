@@ -19,7 +19,7 @@ test('the table always fits the page, and a document with no tax has no tax colu
   const plain = tableColumns({ doc: { supply_type: 'intra', cgst_paise: 0, sgst_paise: 0, utgst_paise: 0, igst_paise: 0 }, lines: [{ tax_rate_bps: 0 }], width: W });
   assert.equal(plain.hasTax, false);
   assert.equal(plain.cols.reduce((n, c) => n + c.w, 0), W, 'the columns add up to the page width');
-  assert.deepEqual(plain.cols.map((c) => c.key), ['sn', 'desc', 'hsn', 'qty', 'rate', 'amount']);
+  assert.deepEqual(plain.cols.map((c) => c.key), ['sn', 'desc', 'hsn', 'qty', 'unit', 'rate', 'amount']);
   assert.ok(plain.cols[1].w > 200, 'the description gets the room the tax columns would have taken');
 
   const intra = tableColumns({ doc: { supply_type: 'intra', cgst_paise: 900, sgst_paise: 900 }, lines: [{ tax_rate_bps: 1800 }], width: W });

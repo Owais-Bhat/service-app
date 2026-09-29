@@ -11,6 +11,7 @@
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
+import { unitDatalist, tidyUnit, DEFAULT_UNIT } from './units.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -354,6 +355,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
       </td>
       <td><input type="text" class="sl-hsn" value="${esc(line.hsn_sac || '')}" placeholder="HSN" style="width:70px"></td>
       <td><input type="number" class="sl-qty" step="0.001" min="0" value="${line.quantity ?? 1}" style="width:70px"></td>
+      <td><input type="text" class="sl-unit" list="sl-units" value="${esc(line.unit || (line.description ? '' : DEFAULT_UNIT))}" placeholder="Unit" autocomplete="off" style="width:76px"></td>
       <td><input type="number" class="sl-rate" step="0.01" min="0" value="${line.rate_paise !== undefined ? Number(line.rate_paise) / 100 : ''}" style="width:90px"></td>
       <td><input type="number" class="sl-disc" step="0.01" min="0" max="100" value="${line.discount_bps ? Number(line.discount_bps) / 100 : ''}" placeholder="0" style="width:60px"></td>
       <td>
@@ -377,6 +379,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
       <div class="modal-body">
         ${revising ? `<div class="at2-notice warn">This quotation has already gone out. Saving keeps its number (<b>${esc(doc.doc_no || '')}</b>) and marks it <b>revision ${Number(doc.revision_no || 0) + 1}</b>.
           ${doc.status === 'accepted' ? 'The customer had accepted the earlier version, so it goes back to <b>sent</b> until they agree to this one.' : ''}</div>` : ''}
+        ${unitDatalist('sl-units')}
         <datalist id="sl-items">
           ${items.map(i => `<option value="${esc(i.name)}" data-id="${esc(i.id)}">`).join('')}
         </datalist>
@@ -407,7 +410,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         </label>
 
         <div class="table-wrap"><table class="at2-tbl">
-          <thead><tr><th>Description</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Disc %</th><th>Tax</th><th style="text-align:right">Amount</th><th></th></tr></thead>
+          <thead><tr><th>Description</th><th>HSN</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Disc %</th><th>Tax</th><th style="text-align:right">Amount</th><th></th></tr></thead>
           <tbody id="sl-lines">
             ${(existing?.lines?.filter(l => l.kind === 'item') || [{}]).map(lineRow).join('')}
           </tbody>
@@ -451,6 +454,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         description: tr.querySelector('.sl-desc').value.trim(),
         hsn_sac: tr.querySelector('.sl-hsn').value.trim() || null,
         quantity: Number(tr.querySelector('.sl-qty').value) || 0,
+        unit: tidyUnit(tr.querySelector('.sl-unit').value) || null,
         rate: tr.querySelector('.sl-rate').value || 0,
         discount_bps: Math.round((Number(tr.querySelector('.sl-disc').value) || 0) * 100),
         tax_rate_bps: isTreatment ? 0 : Number(taxValue),
@@ -511,6 +515,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         if (match) {
           tr.querySelector('.sl-item-id').value = match.id;
           tr.querySelector('.sl-hsn').value = match.hsn_sac || '';
+          tr.querySelector('.sl-unit').value = tidyUnit(match.base_unit || match.unit) || DEFAULT_UNIT;
           if (!tr.querySelector('.sl-rate').value) {
             tr.querySelector('.sl-rate').value = Number(match.selling_rate_paise ? match.selling_rate_paise / 100 : match.selling_rate) || '';
           }
