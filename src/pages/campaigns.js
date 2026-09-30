@@ -30,6 +30,7 @@ const pad = (n) => String(n).padStart(2, '0');
 const localInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 const STATUS = {
+  standing: ['ok', 'Monthly'],
   draft: ['muted', 'Draft'],
   scheduled: ['warn', 'Scheduled'],
   sending: ['ok', 'Sending'],
@@ -39,6 +40,9 @@ const STATUS = {
 };
 const RECIPIENT_CHIP = { sent: ['ok', 'Accepted'], failed: ['danger', 'Failed'], queued: ['muted', 'Waiting'], skipped: ['muted', 'Skipped'] };
 const VARIABLE_LABEL = { name: "Customer's name", business: 'Business name', text: 'Fixed text' };
+
+const DAY_OPTIONS = [['0', 'the last day of the month'], ...Array.from({ length: 28 }, (_, i) => [String(i + 1), `day ${i + 1} of the month`])];
+const dayText = (d) => (Number(d) === 0 ? 'the last day of every month' : `day ${d} of every month`);
 
 const view = { tab: 'campaigns' };
 let root = null;
@@ -105,16 +109,18 @@ function paint() {
       <thead><tr><th>Campaign</th><th>Goes to</th><th>Starts</th><th style="min-width:180px">Progress</th><th>Status</th></tr></thead>
       <tbody>
         ${campaigns.map(c => {
-    const [tone, label] = STATUS[c.status] || ['muted', c.status];
+    const [tone, label] = c.status === 'standing' && !c.auto_enabled ? ['muted', 'Monthly · off'] : (STATUS[c.status] || ['muted', c.status]);
     const p = c.progress;
     const done = p.sent + p.failed + p.skipped;
     const pct = p.total ? Math.round((done / p.total) * 100) : 0;
     return `
           <tr data-open="${esc(c.id)}">
-            <td><b>${esc(c.name)}</b><div style="font-size:0.74rem;color:var(--text-dim)">Template ${esc(c.message_id)}</div></td>
+            <td><b>${esc(c.name)}</b><div style="font-size:0.74rem;color:var(--text-dim)">Template ${esc(c.message_id)}${c.parent_id ? ' · from a monthly campaign' : ''}</div></td>
             <td style="font-size:0.82rem">${audienceLabel(c.audience)}</td>
-            <td style="white-space:nowrap">${esc(c.scheduled_at ? when(c.scheduled_at) : '—')}</td>
-            <td>${p.total ? `<div style="height:6px;border-radius:6px;background:rgba(127,127,127,0.18);overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--primary)"></div></div>
+            <td style="white-space:nowrap">${c.is_standing
+      ? (c.auto_enabled ? `Next: ${esc(when(c.next_run_at))}` : '<span style="color:var(--text-dim)">Automatic is off</span>')
+      : esc(c.scheduled_at ? when(c.scheduled_at) : '—')}</td>
+            <td>${c.is_standing ? `<span style="font-size:0.8rem;color:${c.offer_is_fresh ? 'var(--primary)' : 'var(--warning)'}">${c.offer_is_fresh ? 'Offer ready' : 'Offer not updated'}</span>${c.last_run_at ? `<div style="font-size:0.74rem;color:var(--text-dim)">Last sent ${esc(when(c.last_run_at))}</div>` : ''}` : p.total ? `<div style="height:6px;border-radius:6px;background:rgba(127,127,127,0.18);overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--primary)"></div></div>
               <div style="font-size:0.74rem;color:var(--text-dim);margin-top:3px">${p.sent} of ${p.total} sent${p.failed ? ` · <span style="color:var(--danger)">${p.failed} failed</span>` : ''}</div>` : '<span style="color:var(--text-dim);font-size:0.8rem">not scheduled yet</span>'}</td>
             <td><span class="at2-chip ${tone}">${esc(label)}</span></td>
           </tr>`;
@@ -191,7 +197,26 @@ function openEditor(existing = null) {
             <button type="button" class="btn btn-secondary btn-sm" id="ce-clearfile" hidden>Remove</button>
           </div></div>
 
-        <div class="card" style="margin-top:6px"><div class="card-header"><span class="card-title">Who it goes to</span></div>
+        <div class="card" style="margin-top:6px"><div class="card-header"><span class="card-title">When it goes out</span></div>
+          <div style="padding:14px;display:grid;gap:10px">
+            ${c && !c.is_standing ? '<div style="font-size:0.84rem;color:var(--text-dim)">One time — you schedule it from the campaign page.</div>' : `
+            <label class="at2-check" ${c ? 'hidden' : ''}><input type="radio" name="ce-when" value="once" ${c?.is_standing ? '' : 'checked'}> One time — I will schedule it myself</label>
+            <label class="at2-check" ${c ? 'hidden' : ''}><input type="radio" name="ce-when" value="monthly" ${c?.is_standing ? 'checked' : ''}> Every month, automatically — with whatever offer I have put in</label>
+            <div id="ce-monthly" style="display:${c?.is_standing ? 'grid' : 'none'};gap:10px;padding-left:24px">
+              <div class="at2-grid">
+                <div class="form-group" style="margin:0"><label>On</label>
+                  <select id="ce-day">${DAY_OPTIONS.map(([v, l]) => `<option value="${v}"${String(c?.run_day ?? 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+                <div class="form-group" style="margin:0"><label>At <small>(India time, ${meta.hours.from}:00–${meta.hours.until - 1}:00)</small></label>
+                  <input type="time" id="ce-time" value="${esc(c?.run_time || '10:00')}" min="09:00" max="20:00"></div>
+              </div>
+              <label class="at2-check"><input type="checkbox" id="ce-fresh" ${c?.fresh_offer_required === 0 ? '' : 'checked'}> Send only if I have updated the offer since the last time
+                <small style="color:var(--text-dim)">(so last month's offer is never sent again by mistake)</small></label>
+              <div style="font-size:0.78rem;color:var(--text-dim)">The list is built fresh each time from your customers, so new customers are included and people you have added to the do-not-message list are left out.
+                You get a notification a day before, saying how many will receive it.</div>
+            </div>`}
+          </div></div>
+
+        <div class="card" style="margin-top:12px"><div class="card-header"><span class="card-title">Who it goes to</span></div>
           <div style="padding:14px;display:grid;gap:10px">
             <label class="at2-check"><input type="checkbox" id="ce-customers" ${(c?.audience?.customers ?? true) ? 'checked' : ''}> Customers <small style="color:var(--text-dim)">(Customers &amp; Suppliers list)</small></label>
             <label class="at2-check"><input type="checkbox" id="ce-contacts" ${c?.audience?.contacts && (c?.audience?.segment || 'all') === 'all' ? 'checked' : ''}> Contacts <small style="color:var(--text-dim)">(everyone who ever raised a service request)</small></label>
@@ -260,6 +285,14 @@ function openEditor(existing = null) {
   $('#ce-segment').onchange = syncSegment;
   syncSegment();
 
+  const monthly = () => (c ? c.is_standing : overlay.querySelector('input[name=ce-when]:checked')?.value === 'monthly');
+  overlay.querySelectorAll('input[name=ce-when]').forEach(r => {
+    r.onchange = () => {
+      $('#ce-monthly').style.display = monthly() ? 'grid' : 'none';
+      $('#ce-save').textContent = monthly() ? 'Save monthly campaign' : 'Save as draft';
+    };
+  });
+
   const audience = () => ({ customers: $('#ce-customers').checked, contacts: $('#ce-contacts').checked, segment: $('#ce-segment').value });
   $('#ce-check').onclick = async () => {
     $('#ce-count').textContent = 'Checking…';
@@ -275,12 +308,15 @@ function openEditor(existing = null) {
       name: $('#ce-name').value.trim(), message_id: $('#ce-mid').value.trim(),
       variables: state.variables, media_path: state.media_path || null, audience: audience(),
     };
+    if (monthly()) {
+      payload.recurrence = { type: 'monthly', day: Number($('#ce-day').value), time: $('#ce-time').value, fresh_offer_required: $('#ce-fresh').checked };
+    }
     if (!payload.name) return toast('Give the campaign a name', 'warning');
     if (!payload.message_id) return toast('Enter the template id from Fast2SMS', 'warning');
     $('#ce-save').disabled = true;
     try {
       const saved = c ? await api('PATCH', `/campaigns/${encodeURIComponent(c.id)}`, payload) : await api('POST', '/campaigns', payload);
-      toast(c ? 'Saved' : 'Saved as a draft — test it, then schedule it', 'success');
+      toast(c ? 'Saved' : monthly() ? 'Saved — send yourself a test, then switch automatic on' : 'Saved as a draft — test it, then schedule it', 'success');
       close();
       await reload();
       openDetail(saved.id);
@@ -302,12 +338,34 @@ async function openDetail(id) {
       <div class="modal-header"><span class="modal-title">${esc(c.name)} <span class="at2-chip ${tone}">${esc(label)}</span></span><button class="modal-close" id="cd-close">${ICONS.close}</button></div>
       <div class="modal-body">
         ${c.pause_reason ? `<div class="at2-notice ${c.status === 'paused' ? 'danger' : ''}">${esc(c.pause_reason)}</div>` : ''}
-        <div class="at2-stats" style="margin:0 0 12px">
+        ${c.is_standing ? `
+        <div class="at2-notice ${c.auto_enabled ? (c.offer_is_fresh ? '' : 'warn') : 'warn'}" style="margin-bottom:12px">
+          <b>${c.auto_enabled ? `Automatic — ${esc(dayText(c.run_day))} at ${esc(c.run_time)} (India time)` : 'Automatic sending is off'}</b>
+          ${c.auto_enabled ? `<br>Next: <b>${esc(when(c.next_run_at))}</b>` : '<br>Turn it on and it goes out by itself every month. Or press <b>Publish now</b> whenever you want.'}
+          <br>${c.offer_is_fresh
+      ? 'The offer is ready — it will be sent.'
+      : `<b>The offer has not been updated since the last time it was sent.</b> ${c.fresh_offer_required ? 'If you do not change it, this month is skipped.' : 'It will be sent again as it is.'}`}
+          ${c.last_run_at ? `<br>Last sent: ${esc(when(c.last_run_at))}` : ''}
+        </div>
+        <div class="card" style="margin-bottom:12px"><div class="card-header"><span class="card-title">This month's offer</span></div>
+          <div style="padding:12px 14px;font-size:0.9rem;line-height:1.6">
+            ${c.variables.filter(v => v.type === 'text').map(v => `<div>“${esc(v.value)}”</div>`).join('') || '<span style="color:var(--text-dim)">No fixed text — the message uses only the name.</span>'}
+            ${c.media_path ? '<div style="font-size:0.8rem;color:var(--text-dim)">with a picture / PDF header</div>' : ''}
+            <button class="btn btn-secondary btn-sm" id="cd-offer" style="margin-top:8px">Change this month's offer</button>
+          </div></div>
+        ${c.runs?.length ? `
+        <div class="card" style="margin-bottom:12px"><div class="card-header"><span class="card-title">Sent so far</span></div>
+          <div class="table-wrap"><table class="at2-tbl"><tbody>
+            ${c.runs.map(r => { const [rt, rl] = STATUS[r.status] || ['muted', r.status]; return `<tr data-run="${esc(r.id)}" style="cursor:pointer">
+              <td>${esc(r.name)}</td><td>${r.progress.sent} of ${r.progress.total} sent${r.progress.failed ? ` · ${r.progress.failed} failed` : ''}</td>
+              <td><span class="at2-chip ${rt}">${esc(rl)}</span></td></tr>`; }).join('')}
+          </tbody></table></div></div>` : ''}` : ''}
+        ${c.is_standing ? '' : `<div class="at2-stats" style="margin:0 0 12px">
           <div class="at2-stat"><div class="k">Accepted</div><div class="v">${p.sent}</div><div class="s">of ${p.total || '—'}</div></div>
           <div class="at2-stat ${p.failed ? 'danger' : 'muted'}"><div class="k">Failed</div><div class="v ${p.failed ? 'bad' : ''}">${p.failed}</div></div>
           <div class="at2-stat muted"><div class="k">Waiting</div><div class="v">${p.queued}</div></div>
           <div class="at2-stat muted"><div class="k">Skipped</div><div class="v">${p.skipped}</div></div>
-        </div>
+        </div>`}
         <div style="font-size:0.84rem;line-height:1.7;margin-bottom:10px">
           <div><b>Template</b> ${esc(c.message_id)}${c.media_path ? ' · with a picture / PDF header' : ''}</div>
           <div><b>Blanks</b> ${c.variables.length ? c.variables.map((v, i) => `{{${i + 1}}} = ${esc(v.type === 'text' ? `“${v.value}”` : VARIABLE_LABEL[v.type])}`).join(' · ') : 'none'}</div>
@@ -325,6 +383,9 @@ async function openDetail(id) {
       </div>
       <div class="modal-footer" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary" id="cd-cancel">Close</button>
+        ${c.is_standing ? `<button class="btn btn-secondary" id="cd-delete">Delete</button><button class="btn btn-secondary" id="cd-edit">Edit</button><button class="btn btn-secondary" id="cd-test">Send me a test</button>
+          <button class="btn btn-secondary" id="cd-publish">Publish now</button>
+          <button class="btn btn-primary" id="cd-auto">${c.auto_enabled ? 'Turn automatic off' : 'Turn automatic on'}</button>` : ''}
         ${c.status === 'draft' ? '<button class="btn btn-secondary" id="cd-delete">Delete</button><button class="btn btn-secondary" id="cd-edit">Edit</button><button class="btn btn-secondary" id="cd-test">Send me a test</button><button class="btn btn-primary" id="cd-schedule">Schedule…</button>' : ''}
         ${['scheduled', 'sending'].includes(c.status) ? '<button class="btn btn-secondary" id="cd-pause">Pause</button>' : ''}
         ${c.status === 'paused' ? '<button class="btn btn-primary" id="cd-resume">Resume</button>' : ''}
@@ -354,6 +415,31 @@ async function openDetail(id) {
     try { await api('POST', `/campaigns/${encodeURIComponent(id)}/test`, { phone }); toast('Test sent — check your WhatsApp', 'success'); } catch (err) { toast(err.message, 'error'); }
   };
   if ($('#cd-schedule')) $('#cd-schedule').onclick = () => openSchedule(c, again);
+  if ($('#cd-offer')) $('#cd-offer').onclick = () => openOfferEditor(c, again);
+  if ($('#cd-auto')) {
+    $('#cd-auto').onclick = async () => {
+      try {
+        const out = await api('POST', `/campaigns/${encodeURIComponent(id)}/auto`, { enabled: !c.auto_enabled });
+        toast(c.auto_enabled ? 'Automatic sending is off' : `On — next: ${when(out.next_run_at)}`, 'success');
+        await again();
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  }
+  if ($('#cd-publish')) {
+    $('#cd-publish').onclick = async () => {
+      let reach;
+      try { reach = await api('POST', '/campaigns/audience', c.audience); } catch (err) { return toast(err.message, 'error'); }
+      if (!reach.will_send) return toast('Nobody would receive this — check the audience', 'warning');
+      if (!confirm(`Publish “${c.name}” now to ${reach.will_send} people?\n\nIt goes out a few a minute, in daytime hours. This does not change the automatic monthly schedule.`)) return;
+      $('#cd-publish').disabled = true;
+      try {
+        const out = await api('POST', `/campaigns/${encodeURIComponent(id)}/publish-now`);
+        toast(`Publishing to ${out.recipients} people`, 'success');
+        await again();
+      } catch (err) { toast(err.message, 'error'); $('#cd-publish').disabled = false; }
+    };
+  }
+  overlay.querySelectorAll('[data-run]').forEach(tr => { tr.onclick = () => { close(); openDetail(tr.dataset.run); }; });
   if ($('#cd-pause')) $('#cd-pause').onclick = act('pause', 'Paused');
   if ($('#cd-resume')) $('#cd-resume').onclick = act('resume', 'Resumed');
   if ($('#cd-stop')) $('#cd-stop').onclick = act('cancel', 'Campaign cancelled', 'Cancel this campaign? Whatever has not been sent yet will not go out.');
@@ -400,5 +486,64 @@ async function openSchedule(c, done) {
       close();
       await done();
     } catch (err) { toast(err.message, 'error'); $('#sc-go').disabled = false; }
+  };
+}
+
+
+// ── this month's offer ──────────────────────────────────────────────────
+// The one thing changed month to month: the offer's words and its picture.
+function openOfferEditor(c, done) {
+  const state = { media_path: c.media_path || '', variables: c.variables.map(v => ({ ...v })) };
+  const texts = state.variables.map((v, i) => [v, i]).filter(([v]) => v.type === 'text');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.zIndex = '10050';
+  overlay.innerHTML = `
+    <div class="modal at2-modal" style="max-width:520px">
+      <div class="modal-header"><span class="modal-title">This month's offer</span><button class="modal-close" id="of-close">${ICONS.close}</button></div>
+      <div class="modal-body">
+        ${texts.length ? texts.map(([v, i]) => `<div class="form-group"><label>Offer text <small>(fills {{${i + 1}}})</small></label>
+          <textarea data-of="${i}" rows="2" maxlength="200">${esc(v.value)}</textarea></div>`).join('')
+    : '<div class="at2-notice warn">This campaign has no fixed-text blank, so there is no offer text to change. Use <b>Edit</b> to add one.</div>'}
+        <div class="form-group"><label>Picture in the header <small>(only if your template has one)</small></label>
+          <input type="file" id="of-file" accept="image/png,image/jpeg,application/pdf">
+          <div id="of-filename" style="font-size:0.8rem;color:var(--text-dim);margin-top:4px"></div>
+          <button type="button" class="btn btn-secondary btn-sm" id="of-clear" hidden style="margin-top:4px">Remove picture</button></div>
+        <p class="at2-note">Saving marks the offer as updated, so the next monthly send goes ahead.</p>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="of-cancel">Cancel</button><button class="btn btn-primary" id="of-save">Save offer</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = (sel) => overlay.querySelector(sel);
+  const close = () => overlay.remove();
+  $('#of-close').onclick = close;
+  $('#of-cancel').onclick = close;
+  const paintFile = () => { $('#of-filename').textContent = state.media_path ? `Attached: ${state.media_path.split('/').pop()}` : ''; $('#of-clear').hidden = !state.media_path; };
+  paintFile();
+  $('#of-clear').onclick = () => { state.media_path = ''; $('#of-file').value = ''; paintFile(); };
+  $('#of-file').onchange = async () => {
+    const file = $('#of-file').files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { $('#of-file').value = ''; return toast('WhatsApp allows up to 5 MB here', 'warning'); }
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch(`${API}/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` }, body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      state.media_path = data.url;
+      paintFile();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  $('#of-save').onclick = async () => {
+    overlay.querySelectorAll('[data-of]').forEach(t => { state.variables[Number(t.dataset.of)].value = t.value.trim(); });
+    if (state.variables.some(v => v.type === 'text' && !v.value)) return toast('The offer text cannot be empty', 'warning');
+    $('#of-save').disabled = true;
+    try {
+      await api('PATCH', `/campaigns/${encodeURIComponent(c.id)}`, { variables: state.variables, media_path: state.media_path || null });
+      toast('Offer updated', 'success');
+      close();
+      await done();
+    } catch (err) { toast(err.message, 'error'); $('#of-save').disabled = false; }
   };
 }

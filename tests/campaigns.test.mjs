@@ -38,6 +38,25 @@ test('the blanks are filled from the customer, the business, or fixed words', ()
   assert.deepEqual(camp.resolveVariables([{ type: 'name' }], { name: null, business: 'x' }), ['Customer'], 'never an empty name');
 });
 
+test('month end is the real last day of each month, at the chosen India time', () => {
+  const at = (after, day = 0, time = '10:00') => camp.nextRunAt({ day, time, after: new Date(after) }).toISOString();
+  assert.equal(at('2026-09-30T03:00:00Z'), '2026-09-30T04:30:00.000Z', '30 Sept, 10:00 IST is 04:30 UTC — still ahead this morning');
+  assert.equal(at('2026-09-30T05:00:00Z'), '2026-10-31T04:30:00.000Z', 'past it, so the next month end: 31 Oct');
+  assert.equal(at('2026-02-10T00:00:00Z'), '2026-02-28T04:30:00.000Z', 'February has 28 days');
+  assert.equal(at('2028-02-10T00:00:00Z'), '2028-02-29T04:30:00.000Z', 'and 29 in a leap year');
+  assert.equal(at('2027-12-31T05:00:00Z'), '2028-01-31T04:30:00.000Z', 'across the year end');
+  assert.equal(at('2026-09-16T00:00:00Z', 15, '09:30'), '2026-10-15T04:00:00.000Z', 'a fixed day of the month');
+  assert.equal(at('2026-09-10T00:00:00Z', 15, '09:30'), '2026-09-15T04:00:00.000Z');
+});
+
+test('a run time must be in daytime, since nothing is sent at night', () => {
+  assert.equal(camp.runTimeOk('09:00'), true);
+  assert.equal(camp.runTimeOk('20:00'), true);
+  for (const bad of ['08:59', '20:01', '21:00', '00:00', '9:00', 'abc', '']) assert.equal(camp.runTimeOk(bad), false, bad);
+  assert.equal(camp.monthLabel(new Date('2026-09-30T05:00:00Z')), 'September 2026');
+  assert.equal(camp.monthLabel(new Date('2026-09-30T20:00:00Z')), 'October 2026', 'after midnight India time it is already next month');
+});
+
 // ── against the test database ───────────────────────────────────────────
 let mysql; let jwt; let db; let token; let reachable = false;
 let businessId = null; let before = null; let seriesBefore = 0;
@@ -323,6 +342,167 @@ test('a test message goes to one number, and the routes are for the owner', { sk
 
   const del = await call('DELETE', `/campaigns/${id}`);
   assert.equal(del.status, 200);
+});
+
+const stopRuns = async (parentId) => {
+  const [runs] = await db.query("SELECT id FROM wa_campaigns WHERE parent_id = ? AND status IN ('scheduled', 'sending', 'paused')", [parentId]);
+  for (const r of runs) await camp.setStatus(db, { businessId, id: r.id, action: 'cancel' });
+};
+const standing = async (over = {}) => {
+  const id = await newCampaign({ name: 'ZZ monthly offer', recurrence: { type: 'monthly', day: 0, time: '10:00' }, ...over });
+  return id;
+};
+/** Only this standing campaign is automatic, so the counts a pass reports are its own. */
+const only = (id) => db.query("UPDATE wa_campaigns SET auto_enabled = 0 WHERE status = 'standing' AND id <> ?", [id]);
+const noted = () => { const list = []; return { list, recordNotification: async (n) => { list.push(n); } }; };
+
+test('a monthly campaign is set up with a real schedule, and stays a campaign that only makes runs', { skip }, async () => {
+  const api = (body) => call('POST', '/campaigns', { name: 'ZZ bad', message_id: '31', ...body });
+  assert.equal((await api({ recurrence: { type: 'monthly', day: 29, time: '10:00' } })).status, 400, 'day 29 does not exist every month — use the last day');
+  assert.equal((await api({ recurrence: { type: 'monthly', day: 0, time: '23:00' } })).status, 400, 'no night sends');
+  assert.equal((await api({ recurrence: { type: 'weekly', day: 0, time: '10:00' } })).status, 400);
+
+  const id = await standing({ variables: [{ type: 'name' }, { type: 'text', value: 'ZZ September offer' }, { type: 'business' }] });
+  const c = await camp.loadCampaign(db, businessId, id);
+  assert.equal(c.status, 'standing');
+  assert.equal(c.recurrence, 'monthly');
+  assert.equal(c.run_day, 0);
+  assert.equal(c.auto_enabled, 0, 'nothing is automatic until it is switched on');
+  assert.equal(c.offer_is_fresh, true, 'the offer counts as fresh from the day it is written');
+  await assert.rejects(() => camp.schedule(db, { businessId, id }), (e) => e.code === 'not_draft', 'a standing campaign is never sent itself');
+  await assert.rejects(() => camp.updateCampaign(db, { businessId, id, payload: { recurrence: null } }), (e) => e.code === 'stays_standing');
+  await camp.updateCampaign(db, { businessId, id, payload: { name: 'ZZ monthly offer (edited)' } });
+});
+
+test('switching it on works out the next month end; it needs WhatsApp on first', { skip }, async () => {
+  const id = await standing();
+  await setWhatsapp(false);
+  await assert.rejects(() => camp.setAuto(db, { businessId, id, enabled: true }), (e) => e.code === 'not_ready');
+  await setWhatsapp(true);
+  const out = await camp.setAuto(db, { businessId, id, enabled: true, now: new Date('2026-09-20T06:00:00Z') });
+  assert.equal(out.next_run_at.toISOString(), '2026-09-30T04:30:00.000Z');
+  assert.equal((await camp.setAuto(db, { businessId, id, enabled: false })).next_run_at, null);
+  const one = await newCampaign();
+  await assert.rejects(() => camp.setAuto(db, { businessId, id: one, enabled: true }), (e) => e.code === 'not_standing');
+});
+
+test('at month end it makes a run from the customers as they are then, and moves on to the next month', { skip }, async () => {
+  const id = await standing({ variables: [{ type: 'name' }, { type: 'text', value: 'ZZ month-end offer' }, { type: 'business' }] });
+  await camp.setAuto(db, { businessId, id, enabled: true, now: new Date('2026-09-20T06:00:00Z') });
+  await only(id);
+  const due = new Date('2026-09-30T04:30:00Z');
+  const now = new Date(due.getTime() + 5 * 60 * 1000);
+  const { list, recordNotification } = noted();
+
+  const r = await camp.runStanding(db, { now, recordNotification });
+  assert.equal(r.sent, 1, JSON.stringify(r));
+  const p = await camp.loadCampaign(db, businessId, id);
+  assert.equal(p.runs.length, 1);
+  const run = await camp.loadCampaign(db, businessId, p.runs[0].id, { recipients: 500 });
+  assert.equal(run.name, 'ZZ monthly offer — September 2026');
+  assert.equal(run.status, 'scheduled', 'ready to go out, a few a minute, in sending hours');
+  assert.equal(run.parent_id, id);
+  assert.deepEqual(run.variables, p.variables, 'the run carries the month\'s offer');
+  assert.ok(run.recipients.some((x) => x.name === 'ZZ Camp Alpha' || x.name === 'ZZ Camp Alpha Again'), 'the list was built at that moment, from the customers');
+  assert.equal(new Date(p.last_run_at).getTime(), now.getTime());
+  assert.equal(new Date(p.next_run_at).toISOString(), '2026-10-31T04:30:00.000Z', 'and it is set for the next month end');
+  assert.equal(list.at(-1).subject, 'campaign_standing');
+  assert.match(list.at(-1).title, /started/);
+
+  const again = await camp.runStanding(db, { now: new Date(now.getTime() + 60000), recordNotification });
+  assert.equal(again.sent, 0, 'not twice in one month');
+  await stopRuns(id);
+});
+
+test('a month in which the offer was not updated is skipped, and the owner is told', { skip }, async () => {
+  const id = await standing();
+  await camp.setAuto(db, { businessId, id, enabled: true, now: new Date('2026-09-20T06:00:00Z') });
+  await only(id);
+  const now = new Date('2026-09-30T04:35:00Z');
+  await db.query('UPDATE wa_campaigns SET last_run_at = ?, offer_updated_at = ? WHERE id = ?', [new Date('2026-08-31T04:35:00Z'), new Date('2026-08-25T00:00:00Z'), id]);
+  const { list, recordNotification } = noted();
+
+  const r = await camp.runStanding(db, { now, recordNotification });
+  assert.equal(r.skipped, 1);
+  assert.equal(r.sent, 0);
+  assert.equal((await camp.loadCampaign(db, businessId, id)).runs.length, 0, 'nothing went out');
+  assert.match(list.at(-1).title, /skipped/);
+  assert.equal(new Date((await camp.loadCampaign(db, businessId, id)).next_run_at).toISOString(), '2026-10-31T04:30:00.000Z');
+
+  // Updating the offer makes the next run go ahead.
+  await camp.updateCampaign(db, { businessId, id, payload: { variables: [{ type: 'name' }, { type: 'text', value: 'ZZ new offer' }] } });
+  assert.equal((await camp.loadCampaign(db, businessId, id)).offer_is_fresh, true);
+  await db.query('UPDATE wa_campaigns SET next_run_at = ? WHERE id = ?', [new Date('2026-10-31T04:30:00Z'), id]);
+  const ok = await camp.runStanding(db, { now: new Date('2026-10-31T04:40:00Z'), recordNotification });
+  assert.equal(ok.sent, 1);
+  await stopRuns(id);
+
+  // Owners who want it sent regardless can say so.
+  const always = await standing({ name: 'ZZ always send' });
+  await camp.updateCampaign(db, { businessId, id: always, payload: { recurrence: { type: 'monthly', day: 0, time: '10:00', fresh_offer_required: false } } });
+  await camp.setAuto(db, { businessId, id: always, enabled: true, now: new Date('2026-09-20T06:00:00Z') });
+  await only(always);
+  await db.query('UPDATE wa_campaigns SET last_run_at = ?, offer_updated_at = ? WHERE id = ?', [new Date('2026-08-31T04:35:00Z'), new Date('2026-08-01T00:00:00Z'), always]);
+  assert.equal((await camp.runStanding(db, { now, recordNotification })).sent, 1);
+  await stopRuns(always);
+});
+
+test('the owner gets a day\'s notice, once, saying how many will receive it', { skip }, async () => {
+  const id = await standing({ name: 'ZZ notice' });
+  await camp.setAuto(db, { businessId, id, enabled: true, now: new Date('2026-09-20T06:00:00Z') });
+  await only(id);
+  const { list, recordNotification } = noted();
+  const eve = new Date('2026-09-29T06:00:00Z'); // 22 hours before 10:00 IST on the 30th
+
+  const first = await camp.runStanding(db, { now: eve, recordNotification });
+  assert.equal(first.warned, 1);
+  assert.equal(first.sent, 0, 'a notice is not a send');
+  assert.match(list.at(-1).title, /Tomorrow/);
+  assert.match(list.at(-1).body, /\d+ people will receive it/);
+  assert.equal((await camp.runStanding(db, { now: new Date(eve.getTime() + 3600000), recordNotification })).warned, 0, 'once only');
+
+  const early = await camp.runStanding(db, { now: new Date('2026-09-20T06:00:00Z'), recordNotification });
+  assert.equal(early.warned + early.sent + early.skipped, 0, 'nothing happens days ahead');
+});
+
+test('a run missed because the server was down is skipped, not sent on the wrong day', { skip }, async () => {
+  const id = await standing({ name: 'ZZ missed' });
+  await camp.setAuto(db, { businessId, id, enabled: true, now: new Date('2026-09-20T06:00:00Z') });
+  await only(id);
+  const { list, recordNotification } = noted();
+  const r = await camp.runStanding(db, { now: new Date('2026-10-02T06:00:00Z'), recordNotification });
+  assert.equal(r.skipped, 1);
+  assert.equal((await camp.loadCampaign(db, businessId, id)).runs.length, 0);
+  assert.match(list.at(-1).title, /missed/);
+  assert.match(list.at(-1).body, /Publish now/);
+});
+
+test('Publish now is the manual button: it makes a run at once, whatever the calendar says', { skip }, async () => {
+  const id = await standing({ name: 'ZZ manual' });
+  const out = await call('POST', `/campaigns/${id}/publish-now`);
+  assert.equal(out.status, 201, JSON.stringify(out.body));
+  assert.ok(out.body.recipients >= 5);
+  assert.equal(out.body.campaign.runs.length, 1);
+  assert.equal(out.body.campaign.auto_enabled, 0, 'and it does not switch the automatic sending on');
+  await stopRuns(id);
+
+  const single = await newCampaign();
+  assert.equal((await call('POST', `/campaigns/${single}/publish-now`)).status, 409, 'a single campaign is scheduled the ordinary way');
+  const auto = await call('POST', `/campaigns/${id}/auto`, { enabled: true });
+  assert.equal(auto.status, 200, JSON.stringify(auto.body));
+  assert.ok(auto.body.campaign.next_run_at);
+  assert.equal(auto.body.campaign.is_standing, true);
+  assert.equal((await call('POST', `/campaigns/${id}/auto`, { enabled: false })).body.campaign.auto_enabled, 0);
+});
+
+test('a monthly campaign cannot be deleted while one of its runs is still going out', { skip }, async () => {
+  const id = await standing({ name: 'ZZ delete' });
+  await camp.startRun(db, { businessId, id });
+  await assert.rejects(() => camp.deleteCampaign(db, { businessId, id }), (e) => e.code === 'in_progress');
+  await stopRuns(id);
+  await camp.deleteCampaign(db, { businessId, id });
+  const [[{ n }]] = await db.query('SELECT COUNT(*) AS n FROM wa_campaigns WHERE id = ?', [id]);
+  assert.equal(Number(n), 0);
 });
 
 test.after(async () => {

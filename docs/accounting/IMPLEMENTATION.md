@@ -542,6 +542,25 @@ goes on the campaign), and each message is billed by Fast2SMS.
 - **Do-not-message list** — paste one or many numbers; they are removed from every waiting campaign at once. There is no inbound
   webhook, so a customer who replies STOP has to be added by hand.
 
+### Monthly (standing) campaigns — automatic and manual
+
+A campaign can be **monthly**: it is never sent itself; each month it makes a *run* — a copy of the current offer whose
+list is **built at that moment** from the customers/contacts/segment (new customers are in, do-not-message numbers are out)
+and which goes out through the same careful sender (a few a minute, 9–21 India time, daily cap, auto-pause on failures).
+
+- **When** — a day of the month (**the last day** by default — month end is the true last day: 28/29/30/31 — or day 1–28)
+  and a time between 9:00 and 20:00 India time. Switch **Turn automatic on** for it to run by itself.
+- **The offer** — the words are the campaign's fixed-text blank and the picture is its header; *Change this month's offer*
+  edits just those. **Saving a new offer marks it fresh.**
+- **Never a stale offer** — by default a month in which the offer was not updated since the last run is **skipped**, and the
+  owner is told; untick "send only if I have updated the offer" to resend the same one.
+- **A day's notice** — 24 hours before, admins get a notification saying how many people will receive it (and warning if it
+  would be skipped). A run missed by more than 12 hours (server down) is skipped and reported, never sent on the wrong day.
+- **Manual** — **Publish now** makes a run immediately, whatever the calendar says, without changing the automatic schedule.
+- Each run appears under the campaign ("Sent so far") with its own progress and per-recipient outcomes.
+- Columns added to `wa_campaigns` (added on boot only where missing): `parent_id, recurrence, run_day, run_time, next_run_at,
+  last_run_at, offer_updated_at, fresh_offer_required, auto_enabled, notified_for`; status `standing` for the campaign itself.
+
 Not built: reading STOP replies or delivery receipts automatically (needs Fast2SMS webhooks), per-customer personalised offers,
 and sending to a saved custom list from a spreadsheet.
 

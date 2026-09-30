@@ -120,6 +120,21 @@ function mountCampaigns({ app, getConn, authenticateToken, permissions, audit, r
         res.json({ ...out, campaign: await camp.loadCampaign(conn, businessId, req.params.id) });
     }));
 
+    // A monthly campaign: switch its automatic sending on or off, or publish it right now.
+    app.post('/api/campaigns/:id/auto', authenticateToken, guard, handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const out = await camp.setAuto(conn, { businessId, id: req.params.id, enabled: !!req.body?.enabled });
+        audit.record({ actor: req.user, action: req.body?.enabled ? 'campaign.auto_on' : 'campaign.auto_off', entityType: 'wa_campaign', entityId: req.params.id, after: out, ip: req.ip });
+        res.json({ ...out, campaign: await camp.loadCampaign(conn, businessId, req.params.id) });
+    }));
+
+    app.post('/api/campaigns/:id/publish-now', authenticateToken, guard, handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const out = await camp.startRun(conn, { businessId, id: req.params.id });
+        audit.record({ actor: req.user, action: 'campaign.publish_now', entityType: 'wa_campaign', entityId: req.params.id, after: { run_id: out.run_id, recipients: out.recipients }, ip: req.ip });
+        res.status(201).json({ ...out, campaign: await camp.loadCampaign(conn, businessId, req.params.id) });
+    }));
+
     for (const action of ['pause', 'resume', 'cancel']) {
         app.post(`/api/campaigns/:id/${action}`, authenticateToken, guard, handle(async (req, res, conn) => {
             const businessId = await business(conn);

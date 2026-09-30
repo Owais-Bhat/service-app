@@ -76,8 +76,27 @@ const TABLES = [
     )`,
 ];
 
+// Added after the first release, so each is added only where it is missing.
+const EXTRA_COLUMNS = [
+    ['parent_id', 'VARCHAR(36) NULL COMMENT "the standing campaign this run came from"'],
+    ['recurrence', 'VARCHAR(10) NULL COMMENT "monthly, for a standing campaign that sends itself"'],
+    ['run_day', 'TINYINT NULL COMMENT "day of the month, 0 = the last day"'],
+    ['run_time', 'CHAR(5) NULL COMMENT "HH:MM India time"'],
+    ['next_run_at', 'DATETIME NULL'],
+    ['last_run_at', 'DATETIME NULL'],
+    ['offer_updated_at', 'DATETIME NULL COMMENT "when the offer text or picture was last changed"'],
+    ['fresh_offer_required', 'TINYINT(1) NOT NULL DEFAULT 1 COMMENT "skip a month in which the offer was not updated"'],
+    ['auto_enabled', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['notified_for', 'DATETIME NULL COMMENT "the run this heads-up was sent for"'],
+];
+
 async function ensureCampaignSchema(conn) {
     for (const ddl of TABLES) await conn.query(ddl);
+    const [have] = await conn.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wa_campaigns'");
+    const names = new Set(have.map((r) => r.COLUMN_NAME));
+    for (const [name, def] of EXTRA_COLUMNS) {
+        if (!names.has(name)) await conn.query(`ALTER TABLE wa_campaigns ADD COLUMN ${name} ${def}`);
+    }
 }
 
 // ── limits ──────────────────────────────────────────────────────────────
@@ -96,6 +115,38 @@ const inSendingHours = (date = new Date()) => {
     const h = indiaHour(date);
     return h >= SEND_FROM_HOUR && h < SEND_UNTIL_HOUR;
 };
+
+// ── when a standing campaign next runs ──────────────────────────────────
+// India has no daylight saving, so a fixed +5:30 is exact. `day` 0 means the last
+// day of the month, which is what "month end" has to mean in a month of 28, 30 or 31.
+const IST_MS = 5.5 * 3600 * 1000;
+const lastDayOf = (y, m) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+
+function runTimeOk(time) {
+    const m = /^(\d\d):(\d\d)$/.exec(String(time || ''));
+    if (!m) return false;
+    const mins = Number(m[1]) * 60 + Number(m[2]);
+    return Number(m[1]) < 24 && Number(m[2]) < 60 && mins >= SEND_FROM_HOUR * 60 && mins <= (SEND_UNTIL_HOUR - 1) * 60;
+}
+
+/** The first moment after `after` that is `day` of a month at `time`, India time. */
+function nextRunAt({ day, time, after = new Date() }) {
+    const [hh, mm] = time.split(':').map(Number);
+    const ist = new Date(after.getTime() + IST_MS);
+    let y = ist.getUTCFullYear();
+    let m = ist.getUTCMonth();
+    for (let i = 0; i < 3; i += 1) {
+        const dom = day === 0 ? lastDayOf(y, m) : Math.min(day, lastDayOf(y, m));
+        const at = new Date(Date.UTC(y, m, dom, hh, mm) - IST_MS);
+        if (at.getTime() > after.getTime()) return at;
+        m += 1;
+        if (m > 11) { m = 0; y += 1; }
+    }
+    throw new CampaignError('Could not work out the next run', 'bad_schedule', 500);
+}
+
+/** "October 2026", in India time — for naming a run. */
+const monthLabel = (date) => new Date(date.getTime() + IST_MS).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 const clean = (v, max = 255) => (v === undefined || v === null ? null : String(v).trim().slice(0, max) || null);
 const last10 = (raw) => normalizeIndianMobile(raw);
@@ -211,6 +262,20 @@ function normalise(payload, { partial = false } = {}) {
         if (a.segment && !SEGMENTS[a.segment]) throw new CampaignError('Unknown segment', 'bad_segment', 400);
         out.audience = JSON.stringify({ customers: a.customers !== false, contacts: !!a.contacts, segment: a.segment || 'all' });
     }
+    if (has('recurrence')) {
+        const r = payload.recurrence;
+        if (r === null) {
+            out.recurrence = null; out.run_day = null; out.run_time = null; out.next_run_at = null; out.auto_enabled = 0;
+        } else {
+            const day = Number(r?.day);
+            if (r?.type !== 'monthly' || !Number.isInteger(day) || day < 0 || day > 28) {
+                throw new CampaignError('Choose the last day of the month, or a day from 1 to 28', 'bad_schedule', 400);
+            }
+            if (!runTimeOk(r.time)) throw new CampaignError(`Choose a time between ${SEND_FROM_HOUR}:00 and ${SEND_UNTIL_HOUR - 1}:00 — messages only go out in daytime`, 'bad_time', 400);
+            out.recurrence = 'monthly'; out.run_day = day; out.run_time = r.time;
+            out.fresh_offer_required = r.fresh_offer_required === false ? 0 : 1;
+        }
+    }
     return out;
 }
 
@@ -227,8 +292,17 @@ const shape = (row, progress) => ({
     ...row,
     variables: parse(row.variables, []),
     audience: parse(row.audience, { customers: true, contacts: false, segment: 'all' }),
+    is_standing: !!row.recurrence,
+    offer_is_fresh: offerIsFresh(row),
     progress,
 });
+
+/** An offer is fresh when it was written or changed after the last run went out. */
+function offerIsFresh(row) {
+    if (!row.recurrence) return null;
+    if (!row.offer_updated_at) return false;
+    return !row.last_run_at || new Date(row.offer_updated_at) > new Date(row.last_run_at);
+}
 
 async function listCampaigns(conn, businessId) {
     const [rows] = await conn.query('SELECT * FROM wa_campaigns WHERE business_id = ? ORDER BY created_at DESC LIMIT 100', [businessId]);
@@ -239,6 +313,10 @@ async function loadCampaign(conn, businessId, id, { recipients = 0 } = {}) {
     const [[row]] = await conn.query('SELECT * FROM wa_campaigns WHERE id = ? AND business_id = ? LIMIT 1', [id, businessId]);
     if (!row) return null;
     const out = shape(row, await counts(conn, id));
+    if (row.recurrence) {
+        const [runs] = await conn.query('SELECT id, name, status, scheduled_at, finished_at FROM wa_campaigns WHERE parent_id = ? ORDER BY created_at DESC LIMIT 24', [id]);
+        out.runs = await Promise.all(runs.map(async (r) => ({ ...r, progress: await counts(conn, r.id) })));
+    }
     if (recipients) {
         const [rs] = await conn.query(
             `SELECT phone, name, status, error, sent_at FROM wa_campaign_recipients WHERE campaign_id = ?
@@ -252,18 +330,29 @@ async function loadCampaign(conn, businessId, id, { recipients = 0 } = {}) {
 async function createCampaign(conn, { businessId, user, baseUrl, payload }) {
     const data = normalise(payload);
     const id = randomUUID();
+    const standing = data.recurrence === 'monthly';
     await conn.query('INSERT INTO wa_campaigns SET ?', [{
         id, business_id: businessId, created_by: user?.id || null, base_url: clean(baseUrl, 200),
         variables: JSON.stringify([]), audience: JSON.stringify({ customers: true, contacts: false, segment: 'all' }), ...data,
+        // A standing campaign is never sent itself; it makes a run each month. Its offer counts as fresh from the day it is written.
+        ...(standing ? { status: 'standing', offer_updated_at: new Date() } : {}),
     }]);
     return id;
 }
 
 async function updateCampaign(conn, { businessId, id, payload }) {
-    const [[c]] = await conn.query('SELECT status FROM wa_campaigns WHERE id = ? AND business_id = ?', [id, businessId]);
+    const [[c]] = await conn.query('SELECT status, recurrence, auto_enabled, run_day, run_time FROM wa_campaigns WHERE id = ? AND business_id = ?', [id, businessId]);
     if (!c) throw new CampaignError('No such campaign', 'not_found', 404);
-    if (c.status !== 'draft') throw new CampaignError('A campaign that has been scheduled cannot be edited — cancel it and make a new one', 'not_draft', 409);
+    // A standing campaign is edited freely — that is how the month's offer is changed. A single send is fixed once scheduled.
+    if (c.status !== 'draft' && c.status !== 'standing') throw new CampaignError('A campaign that has been scheduled cannot be edited — cancel it and make a new one', 'not_draft', 409);
     const data = normalise(payload, { partial: true });
+    if (c.status === 'standing') {
+        if (data.recurrence === null) throw new CampaignError('A monthly campaign stays monthly — delete it to stop it', 'stays_standing', 409);
+        if (['variables', 'media_path', 'message_id'].some((k) => data[k] !== undefined)) data.offer_updated_at = new Date();
+        if (data.run_day !== undefined && c.auto_enabled) {
+            data.next_run_at = nextRunAt({ day: data.run_day, time: data.run_time || c.run_time });
+        }
+    }
     if (Object.keys(data).length) await conn.query('UPDATE wa_campaigns SET ? WHERE id = ?', [data, id]);
 }
 
@@ -271,6 +360,10 @@ async function deleteCampaign(conn, { businessId, id }) {
     const [[c]] = await conn.query('SELECT status FROM wa_campaigns WHERE id = ? AND business_id = ?', [id, businessId]);
     if (!c) throw new CampaignError('No such campaign', 'not_found', 404);
     if (['scheduled', 'sending', 'paused'].includes(c.status)) throw new CampaignError('Cancel it before deleting', 'in_progress', 409);
+    if (c.status === 'standing') {
+        const [[{ n }]] = await conn.query("SELECT COUNT(*) AS n FROM wa_campaigns WHERE parent_id = ? AND status IN ('scheduled', 'sending', 'paused')", [id]);
+        if (Number(n)) throw new CampaignError('A run of this campaign is still going out — cancel that first', 'in_progress', 409);
+    }
     await conn.query('DELETE FROM wa_campaigns WHERE id = ?', [id]);
 }
 
@@ -311,6 +404,100 @@ async function schedule(conn, { businessId, id, at = null, now = new Date() }) {
         throw err;
     }
     return { recipients: recipients.length, stats, scheduled_at: when };
+}
+
+/** Switches a standing campaign's monthly sending on or off. */
+async function setAuto(conn, { businessId, id, enabled, now = new Date() }) {
+    const [[c]] = await conn.query('SELECT * FROM wa_campaigns WHERE id = ? AND business_id = ?', [id, businessId]);
+    if (!c) throw new CampaignError('No such campaign', 'not_found', 404);
+    if (c.status !== 'standing') throw new CampaignError('Only a monthly campaign can be switched to automatic', 'not_standing', 409);
+    if (enabled) {
+        const settings = await wa.getSettings(conn, businessId);
+        if (!settings.enabled || !settings.phone_number_id) throw new CampaignError('Switch WhatsApp on and set the phone number id in Business Settings → WhatsApp first', 'not_ready', 409);
+        const next = nextRunAt({ day: c.run_day, time: c.run_time, after: now });
+        await conn.query('UPDATE wa_campaigns SET auto_enabled = 1, next_run_at = ?, notified_for = NULL WHERE id = ?', [next, id]);
+        return { next_run_at: next };
+    }
+    await conn.query('UPDATE wa_campaigns SET auto_enabled = 0, next_run_at = NULL WHERE id = ?', [id]);
+    return { next_run_at: null };
+}
+
+/**
+ * Makes one run from a standing campaign: a copy of its offer, with the list built
+ * from the customers as they are right now, scheduled to start at once. This is
+ * what both the monthly timer and the *Publish now* button do.
+ */
+async function startRun(conn, { businessId, id, now = new Date() }) {
+    const [[c]] = await conn.query('SELECT * FROM wa_campaigns WHERE id = ? AND business_id = ?', [id, businessId]);
+    if (!c) throw new CampaignError('No such campaign', 'not_found', 404);
+    if (c.status !== 'standing') throw new CampaignError('Only a monthly campaign can be published this way', 'not_standing', 409);
+
+    const runId = randomUUID();
+    await conn.query('INSERT INTO wa_campaigns SET ?', [{
+        id: runId, business_id: businessId, name: `${c.name} — ${monthLabel(now)}`, message_id: c.message_id, variables: JSON.stringify(parse(c.variables, [])),
+        media_path: c.media_path, base_url: c.base_url, audience: JSON.stringify(parse(c.audience, {})), status: 'draft', parent_id: c.id, created_by: c.created_by,
+    }]);
+    try {
+        const out = await schedule(conn, { businessId, id: runId, now });
+        await conn.query('UPDATE wa_campaigns SET last_run_at = ? WHERE id = ?', [now, id]);
+        return { run_id: runId, recipients: out.recipients, stats: out.stats };
+    } catch (err) {
+        await conn.query('DELETE FROM wa_campaigns WHERE id = ?', [runId]); // nothing went out; do not leave an empty draft behind
+        throw err;
+    }
+}
+
+/**
+ * The monthly timer. For each standing campaign that is switched on: a day ahead,
+ * tell the owner what will go out; when the time comes, send it — or, if the offer
+ * was not updated since last month (and the owner asked to be safe about that),
+ * skip the month and say so. A run missed by more than half a day (the server was
+ * down) is skipped rather than sent on the wrong day.
+ */
+async function runStanding(conn, { now, recordNotification }) {
+    const out = { sent: 0, skipped: 0, warned: 0 };
+    const tell = (c, title, body) => recordNotification && recordNotification({ audience: { role: 'admin' }, subject: 'campaign_standing', title, body, data: { campaign_id: c.id } }).catch(() => {});
+    const [due] = await conn.query("SELECT * FROM wa_campaigns WHERE status = 'standing' AND auto_enabled = 1 AND next_run_at IS NOT NULL");
+    for (const c of due) {
+        const next = new Date(c.next_run_at);
+
+        // A day's notice, once per run.
+        if (next.getTime() - now.getTime() <= 24 * 3600 * 1000 && next > now && (!c.notified_for || new Date(c.notified_for).getTime() !== next.getTime())) {
+            const fresh = offerIsFresh(c);
+            const audience = await buildAudience(conn, c.business_id, parse(c.audience, {})).catch(() => null);
+            await conn.query('UPDATE wa_campaigns SET notified_for = ? WHERE id = ?', [next, c.id]);
+            tell(c, `Tomorrow's WhatsApp offer — ${c.name}`,
+                `${audience ? `${audience.stats.will_send} people` : 'Your customers'} will receive it${fresh ? '' : ', but the offer has not been updated since the last run, so it will be SKIPPED unless you update it'}. Change or pause it in Marketing → WhatsApp Campaigns.`);
+            out.warned += 1;
+            continue;
+        }
+        if (next > now) continue;
+
+        const advance = { next_run_at: nextRunAt({ day: c.run_day, time: c.run_time, after: now }) };
+        if (now.getTime() - next.getTime() > 12 * 3600 * 1000) {
+            await conn.query('UPDATE wa_campaigns SET ? WHERE id = ?', [advance, c.id]);
+            tell(c, `Monthly offer missed — ${c.name}`, 'The server was not running at the scheduled time, so this month\'s offer was not sent. Use Publish now if it is still wanted.');
+            out.skipped += 1;
+            continue;
+        }
+        if (c.fresh_offer_required && !offerIsFresh(c)) {
+            await conn.query('UPDATE wa_campaigns SET ? WHERE id = ?', [advance, c.id]);
+            tell(c, `Monthly offer skipped — ${c.name}`, 'You have not updated the offer since the last run, so nothing was sent this month. Update the offer text or picture and it will go out next month (or press Publish now).');
+            out.skipped += 1;
+            continue;
+        }
+        try {
+            const run = await startRun(conn, { businessId: c.business_id, id: c.id, now });
+            await conn.query('UPDATE wa_campaigns SET ? WHERE id = ?', [advance, c.id]);
+            tell(c, `Monthly offer started — ${c.name}`, `Sending to ${run.recipients} people now, a few every minute.`);
+            out.sent += 1;
+        } catch (err) {
+            await conn.query('UPDATE wa_campaigns SET ? WHERE id = ?', [advance, c.id]);
+            tell(c, `Monthly offer could not run — ${c.name}`, err.message);
+            out.skipped += 1;
+        }
+    }
+    return out;
 }
 
 async function setStatus(conn, { businessId, id, action }) {
@@ -385,6 +572,7 @@ async function tick({ getConn, recordNotification = null, now = new Date(), apiK
     const summary = { started: 0, sent: 0, failed: 0, paused: 0, finished: 0, waiting: null };
     try {
         conn = await getConn();
+        summary.standing = await runStanding(conn, { now, recordNotification });
         await conn.query("UPDATE wa_campaigns SET status = 'sending', started_at = COALESCE(started_at, ?) WHERE status = 'scheduled' AND scheduled_at <= ?", [now, now]);
 
         if (!ignoreHours && !inSendingHours(now)) { summary.waiting = 'outside sending hours'; return summary; }
@@ -486,5 +674,5 @@ async function removeOptout(conn, { businessId, phone }) {
 module.exports = {
     CampaignError, ensureCampaignSchema, SEGMENTS, RATE_PER_MINUTE, DAILY_CAP, SEND_FROM_HOUR, SEND_UNTIL_HOUR, FAILURES_BEFORE_PAUSE,
     indiaHour, inSendingHours, buildAudience, listCampaigns, loadCampaign, createCampaign, updateCampaign, deleteCampaign,
-    schedule, setStatus, testSend, tick, listOptouts, addOptouts, removeOptout, resolveVariables,
+    schedule, setStatus, setAuto, startRun, runStanding, nextRunAt, runTimeOk, monthLabel, testSend, tick, listOptouts, addOptouts, removeOptout, resolveVariables,
 };

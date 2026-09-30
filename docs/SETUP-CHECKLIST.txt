@@ -105,6 +105,21 @@ STEP 9.  WHATSAPP CAMPAIGN (Marketing -> WhatsApp Campaigns)  - jab template app
 [ ] Har message ka paisa Fast2SMS wallet se katta hai - wallet me balance rakho
 
 
+STEP 9B. MAHINE KE END PAR AUTOMATIC OFFER (Marketing -> WhatsApp Campaigns)
+---------------------------------------------------------------------
+[ ] "New campaign" -> "Every month, automatically" chuno
+[ ] Din: "the last day of the month" (ya 1-28 me koi din), Time: subah 9 se shaam 8 ke beech
+[ ] "Send only if I have updated the offer since the last time" tick rakho
+    (isse purana offer galti se dobara nahi jaata)
+[ ] Save karo -> "Send me a test" -> "Turn automatic on"
+[ ] HAR MAHINE: mahine ke end se pehle "Change this month's offer" dabao aur naya offer
+    likho (aur chaho to nayi image). Bas itna hi. Baaki apne aap hoga:
+    - 1 din pehle notification aayega ki kitne logon ko jaayega
+    - din aane par list khud bankar bhejna shuru ho jaata hai
+[ ] Offer nahi badla to us mahine kuch nahi jaata, aur notification aata hai
+[ ] Kabhi bhi haath se bhejna ho to "Publish now" dabao (automatic schedule nahi badalta)
+
+
 STEP 10.  ANDROID APP (abhi baaki)
 ---------------------------------------------------------------------
 [ ] Admin ki mobile app me "Transfer to another technician" button abhi nahi hai
