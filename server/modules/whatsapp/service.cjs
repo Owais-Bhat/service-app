@@ -51,7 +51,7 @@ const PURPOSES = {
         media: false,
         cap: 'payment.record',
         vars: ['Customer name', 'Amount due', 'Days overdue', 'Business name'],
-        suggested: 'Hello {{1}}, a payment of {{2}} to {{4}} has been pending for {{3}} days. Please pay by UPI or bank transfer at your earliest. Thank you.',
+        suggested: 'Hello {{1}}, a payment of {{2}} has been pending for {{3}} days. Please pay {{4}} by UPI or bank transfer at your earliest. Thank you.',
         sample: ['Sample Customer', '₹5,000', '45', 'Networking Experts'],
     },
     amc_renewal: {

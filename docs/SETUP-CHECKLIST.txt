@@ -1,0 +1,247 @@
+=====================================================================
+ NEST PORTAL - JO CHEEZEIN AAPKO KARNI HAIN  (SETUP CHECKLIST)
+ Networking Experts, Srinagar        -  services.networkingexperts.in
+=====================================================================
+
+Is file me do cheezein hain:
+  PART A  - aapke karne wale kaam (order me)
+  PART B  - WhatsApp templates jo aapko Fast2SMS me banane hain
+            (poora wording copy-paste ke liye tayyar hai)
+
+Koi password ya API key is file me mat likhna.
+
+
+=====================================================================
+ PART A - AAPKE KARNE WALE KAAM
+=====================================================================
+
+STEP 1.  BUSINESS & TAX SETUP  (Management -> Business & Tax Setup -> "Business" tab)
+---------------------------------------------------------------------
+[ ] Legal name        - jaisa GST registration me hai (invoice par yahi chhapta hai)
+[ ] Address, city, pincode, state
+[ ] GSTIN (agar registered hain), PAN
+[ ] Phone number, email
+[ ] BANK DETAILS      - bank name, account no., IFSC, branch
+[ ] UPI ID            - ye zaroor bharo. Isse invoice par "Scan to pay" QR aata hai
+[ ] LOGO              - PNG ya JPEG upload karo (WebP/SVG PDF me nahi chhapta)
+[ ] SIGNATURE         - PNG ya JPEG
+[ ] INVOICE FOOTER    - jaise "Thank you for your business."
+[ ] GST slabs aur HSN/SAC kisi accountant se ek baar check karwa lo
+    (system ke diye slabs shuruaati hain, salaah nahi)
+
+
+STEP 2.  SERVICE INCOME  (isi jagah "Service Income" tab)
+---------------------------------------------------------------------
+[ ] Ek date chuno "Post tickets billed from" - us date ke baad ke
+    service/installation bills ledger me apne aap jaate hain.
+    Us date se pehle wale bill "opening balances" me aayenge, dobara nahi.
+
+
+STEP 3.  DATA MIGRATION  (Accounts -> Data Migration)  - is order me
+---------------------------------------------------------------------
+[ ] 1. Stock on the Shelf   - pehle stock, Excel se ("Template" download karo,
+                              bharo, "Import Excel")
+[ ] 2. Older Tickets        - purane bill wale tickets (preview dekho, phir confirm)
+[ ] 3. Service Register     - haath se likhe register ki entries
+[ ] Har step ke baad Reports -> Health Check dekho. Sab "OK" hona chahiye.
+[ ] Opening balances (customers, suppliers, cash, bank) accountant ke saath daalo.
+
+
+STEP 4.  SERVER PAR (Hostinger)  - ek baar
+---------------------------------------------------------------------
+[ ] Hostinger hPanel -> Node.js app -> Environment variables me ye check karo:
+      SMS_API            = aapki Fast2SMS API key   (pehle se hoga, WhatsApp ke liye wahi chalti hai)
+      PUBLIC_BASE_URL    = https://services.networkingexperts.in
+        (ye naya hai. Isse WhatsApp me bheje PDF/photo ka link sahi banta hai.
+         Na bhi daalo to server khud utha leta hai, par daalna pakka hai.)
+[ ] Agar Fast2SMS ki WhatsApp key alag hai to WHATSAPP_API_KEY naam se daalo.
+
+
+STEP 5.  FAST2SMS ME WHATSAPP SETUP  (fast2sms.com dashboard)
+---------------------------------------------------------------------
+[ ] WhatsApp Business API onboarding poori karo (aapne API le li hai)
+[ ] "Phone number id" note karo - WhatsApp number ke saamne wala lamba number
+[ ] PART B ke templates banao (neeche). Meta ka approval aane me kuch ghante
+    ya 1-2 din lag sakte hain.
+[ ] Har approved template ka "template id" (message id) note karo.
+
+
+STEP 6.  PORTAL ME WHATSAPP JODO  (Management -> Business & Tax Setup -> "WhatsApp" tab)
+---------------------------------------------------------------------
+[ ] "WhatsApp phone number id" bharo
+[ ] Teeno templates ke id bharo (Invoice / Payment reminder / AMC renewal)
+[ ] "Sending is switched on" tick karo, "Save" dabao
+[ ] Har template ke saath "Test" button hai - apna number daalkar test karo
+[ ] Test theek aaye tabhi customers ko bhejna
+
+
+STEP 7.  AMC (Customers -> AMC Contracts)
+---------------------------------------------------------------------
+[ ] Apne best customers ke AMC contract banao (kya cover hai, dates, amount, free visits)
+[ ] Har contract me "Invoice this term" se invoice banao
+[ ] "Renewals Due" tab har hafte dekho. "Send now" / "Open chat" se renewal reminder bhejo
+
+
+STEP 8.  SITES & DEVICES (Customers -> Sites & Devices)
+---------------------------------------------------------------------
+[ ] Customers ke sites aur devices daalo (DVR/NVR, cameras quantity ke saath,
+    serial, warranty date)
+[ ] AMC contract me "Cover the other N devices" se devices contract se jodo
+[ ] Service request kholne par customer ka equipment aur AMC dikhega
+    (phone number se pehchanta hai - isliye customer ka number sahi hona chahiye)
+
+
+STEP 9.  WHATSAPP CAMPAIGN (Marketing -> WhatsApp Campaigns)  - jab template approve ho jaye
+---------------------------------------------------------------------
+[ ] PART B ka "Marketing template" banao (category: MARKETING) aur approve karwao
+[ ] New campaign -> template id, blanks, audience chuno
+[ ] "Check who this reaches" se ginti dekho
+[ ] "Send me a test" se apne number par dekho
+[ ] PEHLI BAAR chhote segment par chalao (jaise "AMC running" wale ya 20-30 log),
+    phir bade par
+[ ] Schedule karo - subah 9 se raat 9 ke beech hi jaata hai, 20 message/minute
+[ ] Jo koi "STOP" / "mat bhejo" bole, uska number
+    "Do-not-message list" me haath se daalo (abhi ye automatic nahi hai)
+[ ] Har message ka paisa Fast2SMS wallet se katta hai - wallet me balance rakho
+
+
+STEP 10.  ANDROID APP (abhi baaki)
+---------------------------------------------------------------------
+[ ] Admin ki mobile app me "Transfer to another technician" button abhi nahi hai
+    (web me hai). Uske liye naya APK build karna padega - mujhe bolo.
+[ ] Technician ko customer ka equipment/AMC mobile app me dikhane ke liye
+    bhi naya APK chahiye.
+
+
+ROZ / HAFTE KA KAAM
+---------------------------------------------------------------------
+[ ] Roz   : Sales me invoice/quotation banao, "Send on WhatsApp" se bhejo
+[ ] Roz   : Reports -> Reminders me overdue customers ko "Send now"
+[ ] Hafta : AMC -> Renewals Due
+[ ] Mahina: Reports -> Health Check, GST summary accountant ko dikhao
+
+
+=====================================================================
+ PART B - WHATSAPP TEMPLATES JO AAPKO BANANE HAIN
+=====================================================================
+
+Fast2SMS dashboard -> WhatsApp -> Templates -> New template.
+
+Sabke liye:
+  - Language        : English
+  - Template name   : sirf chhote akshar aur underscore (jaise invoice_document)
+  - Variables       : {{1}}, {{2}}... EXACT isi order me (order badalna mat -
+                      portal isi order me bharta hai)
+  - Sample values   : Meta approval ke liye har variable ka ek namuna bharna
+                      padta hai (neeche diya hai)
+  - Approval ke baad "template id" (message id) note karo aur portal ke
+    WhatsApp tab me daalo.
+
+---------------------------------------------------------------------
+TEMPLATE 1 :  INVOICE / QUOTATION  (PDF ke saath)
+---------------------------------------------------------------------
+Category        : UTILITY
+Template name   : invoice_document
+Header          : DOCUMENT (PDF)     <- zaroor "Document" chuno
+Header sample   : koi bhi ek sample PDF upload karo
+
+Body (copy karo):
+
+Hello {{1}}, your document {{2}} for {{3}} from {{4}} is attached. Thank you for your business.
+
+Variables (is order me):
+  {{1}} = Customer name          sample: Sami Ullah
+  {{2}} = Document number        sample: INV-202627-0033
+  {{3}} = Total amount           sample: Rs 16,000
+  {{4}} = Business name          sample: Networking Experts
+
+Portal me kahan jaata hai : "Invoice / quotation (with PDF)" wale box me id daalo.
+
+
+---------------------------------------------------------------------
+TEMPLATE 2 :  PAYMENT REMINDER
+---------------------------------------------------------------------
+Category        : UTILITY
+Template name   : payment_reminder
+Header          : none
+
+Body (copy karo):
+
+Hello {{1}}, a payment of {{2}} has been pending for {{3}} days. Please pay {{4}} by UPI or bank transfer at your earliest. Thank you.
+
+Variables (is order me):
+  {{1}} = Customer name          sample: Sami Ullah
+  {{2}} = Amount due             sample: Rs 5,000
+  {{3}} = Days overdue           sample: 45
+  {{4}} = Business name          sample: Networking Experts
+
+Portal me kahan jaata hai : "Payment reminder" wale box me id daalo.
+
+
+---------------------------------------------------------------------
+TEMPLATE 3 :  AMC RENEWAL REMINDER
+---------------------------------------------------------------------
+Category        : UTILITY
+Template name   : amc_renewal
+Header          : none
+
+Body (copy karo):
+
+Hello {{1}}, your annual maintenance contract {{2}} ends on {{3}}. Renew it for {{4}} to keep your cameras covered. Reply to this message or call {{5}} and we will take care of it.
+
+Variables (is order me):
+  {{1}} = Customer name          sample: Hotel Heevan
+  {{2}} = Contract number        sample: AMC-202627-0001
+  {{3}} = End date               sample: 31 Dec 2026
+  {{4}} = Renewal amount         sample: Rs 36,000 + GST
+  {{5}} = Business phone         sample: 9070149507
+
+Portal me kahan jaata hai : "AMC renewal reminder" wale box me id daalo.
+
+
+---------------------------------------------------------------------
+TEMPLATE 4 :  MARKETING / ANNOUNCEMENT  (campaigns ke liye)
+---------------------------------------------------------------------
+Category        : MARKETING          <- yahan "Marketing" hi chuno
+Template name   : announcement_offer
+Header          : (chaho to) IMAGE - offer ka poster (JPG/PNG)
+                  Agar header rakhoge to campaign banate waqt wahi type ki
+                  file upload karni padegi.
+
+Body (copy karo):
+
+Hello {{1}}, {{2}} - {{3}}. Call us or reply to this message to book. Reply STOP to unsubscribe.
+
+Variables (is order me):
+  {{1}} = Customer's name        sample: Sami Ullah
+  {{2}} = Fixed text (offer)     sample: 20% off on annual CCTV maintenance till Diwali
+  {{3}} = Business name          sample: Networking Experts
+
+Campaign banate waqt "blanks" me:
+  {{1}} -> Customer's name
+  {{2}} -> Fixed text  (yahan offer likho, jaise "20% off on annual CCTV maintenance till Diwali")
+  {{3}} -> Business name
+
+TIP: ek hi marketing template alag-alag offers ke liye chalega, kyunki offer
+{{2}} me har campaign par badal sakte ho. Har naye offer par naya template
+banane aur approve karwane ki zaroorat nahi.
+
+Aur kuch marketing templates chaho to (optional):
+  - "amc_offer"   : Hello {{1}}, your CCTV cameras are not under AMC. {{2}} Reply to this message to know more - {{3}}. Reply STOP to unsubscribe.
+  - "festival_greeting" : Hello {{1}}, {{2}} from all of us at {{3}}. Reply STOP to unsubscribe.
+
+
+=====================================================================
+ YAAD RAKHNE WALI BAATEIN
+=====================================================================
+* WhatsApp par business pehle sirf approved template bhej sakta hai -
+  apne aap likha hua free message nahi.
+* Utility templates (1, 2, 3) sasti aur jaldi approve hoti hain.
+  Marketing template mehngi hoti hai aur customer ki sahmati ke bina
+  bhejne par number restrict ho sakta hai.
+* Template reject ho jaye to wording thodi badal kar dobara bhejo
+  (offer/discount jaisi baat utility template me mat likho - wo marketing
+  me jaati hai).
+* Pehle hamesha Test button se apne number par dekho.
+* Ye file repo me docs/SETUP-CHECKLIST.txt par bhi rakhi hai.
+=====================================================================
