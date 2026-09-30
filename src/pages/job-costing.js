@@ -10,6 +10,7 @@
 // was invoiced before tax. Both are stated wherever a margin is shown.
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { openMaterialsModal } from './job-materials.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -86,6 +87,7 @@ function paint(container) {
         </div>
         <div class="at2-headbtns">
           <button class="btn btn-secondary" id="jc-export">${ICONS.download}<span>Export</span></button>
+          <button class="btn btn-primary" id="jc-record">${ICONS.plus}<span>Record materials used</span></button>
         </div>
       </div>
 
@@ -123,6 +125,7 @@ function paint(container) {
   if (from) from.onchange = reload;
   if (to) to.onchange = reload;
   container.querySelector('#jc-export').onclick = () => exportCurrent();
+  container.querySelector('#jc-record').onclick = () => openMaterialsModal({ onDone: async () => { await loadTab(); paint(container); } });
 
   paintBody(container);
 }
@@ -415,11 +418,11 @@ async function openJob(container, jobType, jobId) {
         </div>`).join('')}
         </div>
 
-        ${materials.length ? `
         <div class="card" style="margin-bottom:12px">
-          <div class="card-header"><span class="card-title">Materials</span>
-            ${t.pending_approvals ? `<span class="at2-chip warn">${t.pending_approvals} waiting</span>` : ''}</div>
-          <div class="table-wrap"><table class="at2-tbl">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span class="card-title">Materials ${t.pending_approvals ? `<span class="at2-chip warn">${t.pending_approvals} waiting</span>` : ''}</span>
+            <button class="btn btn-secondary btn-sm" id="jd-addmat">Record materials</button></div>
+          ${materials.length ? `<div class="table-wrap"><table class="at2-tbl">
             <thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Cost</th><th>State</th></tr></thead>
             <tbody>
               ${materials.map(m => `
@@ -430,8 +433,8 @@ async function openJob(container, jobType, jobId) {
                   <td><span class="at2-chip ${m.status === 'approved' ? 'ok' : m.status === 'rejected' ? 'danger' : 'warn'}">${esc(m.status)}</span></td>
                 </tr>`).join('')}
             </tbody>
-          </table></div>
-        </div>` : ''}
+          </table></div>` : '<div style="padding:14px;color:var(--text-dim);font-size:0.84rem">No materials recorded on this job yet.</div>'}
+        </div>
 
         ${costs.length ? `
         <div class="card" style="margin-bottom:12px">
@@ -484,6 +487,13 @@ async function openJob(container, jobType, jobId) {
   const close = () => overlay.remove();
   $('#jd-close').onclick = close;
   $('#jd-cancel').onclick = close;
+  $('#jd-addmat').onclick = () => openMaterialsModal({
+    job: {
+      job_type: jobType, job_id: jobId, ticket_no: job.ticket_no, full_name: job.customer, phone: job.phone,
+      what: job.type, status: job.status, assigned_employee_id: job.assigned_employee_id,
+    },
+    onDone: async () => { close(); await loadTab(); paint(container); openJob(container, jobType, jobId); },
+  });
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   $('#jc-addcost').onclick = async () => {

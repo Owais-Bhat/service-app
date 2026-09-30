@@ -7,6 +7,8 @@
 // quietly reconciled.
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { attachItemPicker } from './item-picker.js';
+import { openMaterialsModal } from './job-materials.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -105,7 +107,10 @@ function paint(container) {
           <button class="btn btn-secondary" id="st-import">${ICONS.upload || ICONS.plus}<span>Import Excel</span></button>
           <button class="btn btn-secondary" id="st-export">${ICONS.download}<span>Export</span></button>
           <button class="btn btn-secondary" id="st-adjust">${ICONS.edit}<span>Adjust</span></button>
-          <button class="btn btn-primary" id="st-transfer">${ICONS['arrow-right'] || ICONS.plus}<span>Transfer</span></button>
+          <button class="btn btn-secondary" id="st-transfer">${ICONS['arrow-right'] || ICONS.plus}<span>Transfer</span></button>
+          <button class="btn btn-secondary" id="st-takeback">${ICONS.refresh || ICONS.plus}<span>Take back</span></button>
+          <button class="btn btn-secondary" id="st-used">${ICONS.wrench || ICONS.check || ICONS.plus}<span>Used on a job</span></button>
+          <button class="btn btn-primary" id="st-give">${ICONS.plus}<span>Give to technician</span></button>
         </div>
       </div>
 
@@ -152,7 +157,10 @@ function paint(container) {
   const newLocation = container.querySelector('#st-new-location');
   if (newLocation) newLocation.onclick = () => openLocationModal(container);
 
-  container.querySelector('#st-transfer').onclick = () => openTransferModal(container);
+  container.querySelector('#st-transfer').onclick = () => openTransferModal(container, 'transfer');
+  container.querySelector('#st-give').onclick = () => openTransferModal(container, 'give');
+  container.querySelector('#st-takeback').onclick = () => openTransferModal(container, 'takeback');
+  container.querySelector('#st-used').onclick = () => openMaterialsModal({ onDone: async () => { await loadTab(); paint(container); } });
   container.querySelector('#st-adjust').onclick = () => openAdjustModal(container);
   container.querySelector('#st-export').onclick = () => exportCurrent();
   container.querySelector('#st-template').onclick = () => downloadTemplate();
@@ -396,92 +404,163 @@ function paintCount(container, body) {
 }
 
 // ── modals ──────────────────────────────────────────────────────────────
-function openTransferModal(container) {
+// Three ways into the same movement of goods, so nobody has to work out which
+// two locations to pick:
+//   give      store -> a technician's van        ("I am giving him stock")
+//   takeback  a technician's van -> store        ("he brought the unused stock back")
+//   transfer  any owned place -> any other       (the general form)
+// None of them is a sale or an expense — the business owns the goods either way.
+const TRANSFER_MODES = {
+  give: { title: 'Give stock to a technician', go: 'Give stock', note: 'e.g. for tomorrow’s installation at Rajbagh' },
+  takeback: { title: 'Take stock back from a technician', go: 'Take back', note: 'e.g. unused cable and connectors returned' },
+  transfer: { title: 'Transfer stock', go: 'Transfer', note: 'e.g. moving stock between stores' },
+};
+
+async function openTransferModal(container, mode = 'transfer') {
+  const cfg = TRANSFER_MODES[mode] || TRANSFER_MODES.transfer;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   const owned = locations.filter(l => l.owned);
+  const stores = owned.filter(l => l.kind !== 'van');
+  const vans = owned.filter(l => l.kind === 'van');
+  const mainStore = owned.find(l => l.is_default) || stores[0] || owned[0];
+
+  // Every technician, with or without a van yet — a van is made on first use.
+  let staff = [];
+  if (mode !== 'transfer') {
+    try { staff = await api('GET', '/data/profiles?eq=role:employee&order=full_name:asc'); } catch { /* falls back to the vans that exist */ }
+  }
+  const vanOf = (empId) => vans.find(v => v.employee_id === empId);
+  const techs = mode === 'takeback'
+    ? vans.map(v => ({ id: v.employee_id || `van:${v.id}`, name: v.employee_name || v.name, van: v }))
+    : (staff.length ? staff.map(p => ({ id: p.id, name: p.full_name, van: vanOf(p.id) }))
+      : vans.map(v => ({ id: v.employee_id || `van:${v.id}`, name: v.employee_name || v.name, van: v })));
+
+  const locOptions = (list, selectedId) => list.map(l => `<option value="${esc(l.id)}"${l.id === selectedId ? ' selected' : ''}>${esc(l.name)}${l.employee_name ? ` · ${esc(l.employee_name)}` : ''}</option>`).join('');
 
   overlay.innerHTML = `
-    <div class="modal at2-modal" style="max-width:560px">
+    <div class="modal at2-modal" style="max-width:640px">
       <div class="modal-header">
-        <span class="modal-title">Transfer stock</span>
+        <span class="modal-title">${esc(cfg.title)}</span>
         <button class="modal-close" id="tr-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
+        ${mode === 'transfer' ? `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group"><label>From</label>
-            <select id="tr-from">${owned.map(l => `<option value="${esc(l.id)}"${l.is_default ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>
-          <div class="form-group"><label>To</label>
-            <select id="tr-to">${owned.map(l => `<option value="${esc(l.id)}"${l.kind === 'van' ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>
+          <div class="form-group"><label>From</label><select id="tr-from">${locOptions(owned, mainStore?.id)}</select></div>
+          <div class="form-group"><label>To</label><select id="tr-to">${locOptions(owned, (vans[0] || owned.find(l => l !== mainStore))?.id)}</select></div>
+        </div>` : `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label>Technician</label>
+            <select id="tr-tech"><option value="">— Choose —</option>
+              ${techs.map(t => `<option value="${esc(t.id)}">${esc(t.name)}${mode === 'give' && !t.van ? ' (van will be created)' : ''}</option>`).join('')}
+            </select></div>
+          <div class="form-group"><label>${mode === 'give' ? 'Take it from' : 'Put it back into'}</label>
+            <select id="tr-store">${locOptions(stores.length ? stores : owned, mainStore?.id)}</select></div>
         </div>
+        ${mode === 'takeback' && !techs.length ? '<div class="at2-notice warn">No technician has a van yet, so nobody is holding stock. Use <b>Give to technician</b> first.</div>' : ''}`}
 
         <div class="table-wrap"><table class="at2-tbl">
           <thead><tr><th>Item</th><th>Quantity</th><th></th></tr></thead>
-          <tbody id="tr-lines">
-            <tr class="tr-line">
-              <td><select class="tr-item"><option value="">— Choose —</option>${items.map(i => `<option value="${esc(i.id)}">${esc(i.name)} (${Number(i.quantity)} ${esc(i.base_unit || i.unit || '')})</option>`).join('')}</select></td>
-              <td><input type="number" class="tr-qty" step="0.001" min="0" style="width:100px"></td>
-              <td><button class="at2-photo tr-del" title="Remove">${ICONS.close}</button></td>
-            </tr>
-          </tbody>
+          <tbody id="tr-lines"></tbody>
         </table></div>
         <button class="btn btn-secondary" id="tr-add" style="margin-top:8px">${ICONS.plus}<span>Add item</span></button>
 
-        <div class="form-group" style="margin-top:12px"><label>Note</label><input type="text" id="tr-note" placeholder="e.g. loading the van for tomorrow"></div>
-        <p class="at2-note">A transfer is not a sale and not an expense — it records where the goods are, nothing more.</p>
+        <div class="form-group" style="margin-top:12px"><label>Note</label><input type="text" id="tr-note" placeholder="${esc(cfg.note)}"></div>
+        <p class="at2-note">${mode === 'give'
+      ? 'The goods stay yours — they are only recorded as being with him. When he fits them on a job, record it under <b>Used on a job</b>.'
+      : mode === 'takeback' ? 'Use this for stock he did not use and brought back. Stock fitted on a job is recorded under <b>Used on a job</b> instead.'
+        : 'A transfer is not a sale and not an expense — it records where the goods are, nothing more.'}</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="tr-cancel">Cancel</button>
-        <button class="btn btn-primary" id="tr-save">Transfer</button>
+        <button class="btn btn-primary" id="tr-save">${esc(cfg.go)}</button>
       </div>
     </div>`;
 
   document.body.appendChild(overlay);
   const $ = (sel) => overlay.querySelector(sel);
-  const close = () => overlay.remove();
+  const close = () => { overlay.querySelectorAll('.tr-line').forEach(tr => tr._picker?.destroy()); overlay.remove(); };
   $('#tr-close').onclick = close;
   $('#tr-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
-  const wire = () => {
-    overlay.querySelectorAll('.tr-del').forEach(btn => {
-      btn.onclick = () => {
-        if (overlay.querySelectorAll('.tr-line').length <= 1) return;
-        btn.closest('.tr-line').remove();
-      };
+  // Where the goods come from decides what "held here" means beside each item.
+  const fromId = () => {
+    if (mode === 'transfer') return $('#tr-from').value;
+    if (mode === 'give') return $('#tr-store').value;
+    return techs.find(t => t.id === $('#tr-tech').value)?.van?.id || '';
+  };
+  // null until the first answer arrives, so a slow reply reads as "not known yet", not "none here".
+  let held = null;
+  const loadHeld = async () => {
+    const id = fromId();
+    let next = new Map();
+    if (id) { try { next = new Map((await api('GET', `/stock/locations/${encodeURIComponent(id)}/items`)).map(r => [r.id, Number(r.held_qty)])); } catch { next = null; /* the hint is a convenience */ } }
+    held = next;
+    overlay.querySelectorAll('.tr-line').forEach(check);
+  };
+  const hint = (i) => (held === null ? '' : held.has(i.id) ? `${held.get(i.id)} here` : (fromId() ? 'none here' : `${Number(i.quantity)} in all`));
+  const check = (tr) => {
+    const item = tr._picker?.item();
+    const q = Number(tr.querySelector('.tr-qty').value) || 0;
+    tr.querySelector('.tr-warn').textContent = held && item && fromId() && q > (held.get(item.id) || 0) ? `Only ${held.get(item.id) || 0} recorded there` : '';
+  };
+
+  const addLine = () => {
+    const tr = document.createElement('tr');
+    tr.className = 'tr-line';
+    tr.innerHTML = `
+      <td><input type="text" class="tr-item" placeholder="Search item…" style="min-width:230px"><div class="tr-warn" style="font-size:0.72rem;color:var(--danger)"></div></td>
+      <td><input type="number" class="tr-qty" step="0.001" min="0" style="width:100px"></td>
+      <td><button class="at2-photo tr-del" title="Remove">${ICONS.close}</button></td>`;
+    $('#tr-lines').appendChild(tr);
+    tr._picker = attachItemPicker(tr.querySelector('.tr-item'), {
+      items: () => items, hint, onPick: () => { tr.querySelector('.tr-qty').focus(); check(tr); },
     });
+    tr.querySelector('.tr-qty').oninput = () => check(tr);
+    tr.querySelector('.tr-del').onclick = () => {
+      if (overlay.querySelectorAll('.tr-line').length <= 1) return;
+      tr._picker.destroy();
+      tr.remove();
+    };
   };
-  wire();
-  $('#tr-add').onclick = () => {
-    const first = overlay.querySelector('.tr-line');
-    const clone = first.cloneNode(true);
-    clone.querySelector('.tr-item').value = '';
-    clone.querySelector('.tr-qty').value = '';
-    $('#tr-lines').appendChild(clone);
-    wire();
-  };
+  addLine();
+  $('#tr-add').onclick = addLine;
+  ['#tr-from', '#tr-store', '#tr-tech'].forEach(sel => { if ($(sel)) $(sel).onchange = loadHeld; });
+  loadHeld();
 
   $('#tr-save').onclick = async () => {
     const lines = [...overlay.querySelectorAll('.tr-line')].map(tr => ({
-      item_id: tr.querySelector('.tr-item').value,
+      item_id: tr._picker.value(),
       quantity: Number(tr.querySelector('.tr-qty').value) || 0,
     })).filter(l => l.item_id && l.quantity > 0);
-
     if (!lines.length) return toast('Choose an item and a quantity', 'warning');
-    if ($('#tr-from').value === $('#tr-to').value) return toast('Pick two different locations', 'warning');
 
     const btn = $('#tr-save');
     btn.disabled = true;
     try {
-      const to = locations.find(l => l.id === $('#tr-to').value);
+      let from; let to; let employeeId = null;
+      if (mode === 'transfer') {
+        from = $('#tr-from').value; to = $('#tr-to').value;
+        if (from === to) { btn.disabled = false; return toast('Pick two different locations', 'warning'); }
+        employeeId = locations.find(l => l.id === to)?.employee_id || null;
+      } else {
+        const tech = techs.find(t => t.id === $('#tr-tech').value);
+        if (!tech) { btn.disabled = false; return toast('Choose the technician', 'warning'); }
+        let van = tech.van;
+        if (!van) {
+          // First stock this technician has been given: his van is made now.
+          van = await api('POST', '/stock/locations', { name: `${tech.name}'s van`, kind: 'van', employee_id: tech.id });
+          locations = await api('GET', '/stock/locations');
+        }
+        employeeId = van.employee_id || null;
+        if (mode === 'give') { from = $('#tr-store').value; to = van.id; } else { from = van.id; to = $('#tr-store').value; }
+      }
       await api('POST', '/stock/transfers', {
-        from_location_id: $('#tr-from').value,
-        to_location_id: $('#tr-to').value,
-        employee_id: to?.employee_id || null,
-        note: $('#tr-note').value.trim(),
-        lines,
+        from_location_id: from, to_location_id: to, employee_id: employeeId, note: $('#tr-note').value.trim(), lines,
       });
-      toast('Transferred', 'success');
+      toast(mode === 'give' ? 'Stock given' : mode === 'takeback' ? 'Stock taken back' : 'Transferred', 'success');
       close();
       await loadTab();
       paint(container);
@@ -502,10 +581,8 @@ function openAdjustModal(container) {
         <button class="modal-close" id="ad-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div class="form-group"><label>Item</label>
-          <select id="ad-item"><option value="">— Choose —</option>
-            ${items.map(i => `<option value="${esc(i.id)}">${esc(i.name)} (${Number(i.quantity)} ${esc(i.base_unit || i.unit || '')})</option>`).join('')}
-          </select></div>
+        <div class="form-group"><label>Item <small style="color:var(--text-dim)">(type to search)</small></label>
+          <input type="text" id="ad-item" placeholder="Search by name, brand, model or SKU…"></div>
         <div class="form-group"><label>What happened</label>
           <select id="ad-type">
             <option value="adjust_in">Found more than the system says</option>
@@ -527,13 +604,15 @@ function openAdjustModal(container) {
   document.body.appendChild(overlay);
   const $ = (sel) => overlay.querySelector(sel);
   const close = () => overlay.remove();
-  $('#ad-close').onclick = close;
-  $('#ad-cancel').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const picker = attachItemPicker($('#ad-item'), { items: () => items, hint: (i) => `${Number(i.quantity)} ${i.base_unit || i.unit || ''}` });
+  const closeAdjust = () => { picker.destroy(); overlay.remove(); };
+  $('#ad-close').onclick = closeAdjust;
+  $('#ad-cancel').onclick = closeAdjust;
+  overlay.onclick = (e) => { if (e.target === overlay) closeAdjust(); };
 
   $('#ad-save').onclick = async () => {
     const body = {
-      item_id: $('#ad-item').value,
+      item_id: picker.value(),
       type: $('#ad-type').value,
       quantity: Number($('#ad-qty').value) || 0,
       location_id: $('#ad-location').value,
@@ -548,7 +627,7 @@ function openAdjustModal(container) {
     try {
       await api('POST', '/stock/adjustments', body);
       toast('Adjustment recorded', 'success');
-      close();
+      closeAdjust();
       await loadTab();
       paint(container);
     } catch (err) {

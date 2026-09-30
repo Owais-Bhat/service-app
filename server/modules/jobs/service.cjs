@@ -375,7 +375,7 @@ async function jobSummary(conn, { businessId, jobType, jobId }) {
     return {
         job: {
             id: job.id, type: jobType, ticket_no: job.ticket_no, customer: job.full_name,
-            phone: job.phone, status: job.status,
+            phone: job.phone, status: job.status, assigned_employee_id: job.assigned_employee_id || null,
         },
         estimates,
         issues,

@@ -547,6 +547,30 @@ and sending to a saved custom list from a spreadsheet.
 
 ---
 
+## Stock handed to technicians, used on jobs, taken back — and item search
+
+The stock engine already supported all of this (locations and vans, transfers, job material issues with approval);
+what was missing was a way to *do* it from the screen, and a way to find an item in a long list.
+
+- **Searchable item field** (`src/pages/item-picker.js`) — type any part of the name, brand, model, SKU or category; it filters
+  as you type, shows what is held (at the location the goods come from) beside each match, and is keyboard-operable. Used in
+  every stock action below and in Adjust stock, replacing dropdowns that could not be searched.
+- **Stock → Give to technician** — pick the technician and the store; his van is **created on first use**, then a transfer
+  store → van is made. **Take back** is the reverse (van → store) for stock he did not use. **Transfer** is still there for any
+  two owned places. None of these is a sale or an expense. Lines warn when more is asked for than the source holds.
+- **Stock → Used on a job** (also *Job Costing → Record materials used*, and *Record materials* inside any job) —
+  search the ticket (by number, customer or phone; service requests and installations), choose *Used / fitted* or *Came back from
+  the job*, the van it comes from (the assigned technician's van is preselected), items and quantities, and what to charge per
+  unit (prefilled from the item's selling rate). It is submitted as before: if the business requires approval it waits in
+  *Job Costing → Awaiting Approval* (the dialog offers to approve it on the spot); approving takes the goods out of the van and puts
+  the cost into the accounts; the charge carries to the job's invoice.
+- **Which door is which** — *Used* leaves the van for a job (cost of goods sold). *Came back from the job* puts a removed or unused
+  device into the named place (reverses the cost). Stock the technician simply carries back to the shop is a **Take back** transfer.
+- New endpoint `GET /api/jobs/search?q=` (stock.view); the job summary now also returns the assigned technician.
+- The existing on-hand and serial-number searches on the Stock page are unchanged.
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

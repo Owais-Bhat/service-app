@@ -113,6 +113,32 @@ STEP 10.  ANDROID APP (abhi baaki)
     bhi naya APK chahiye.
 
 
+STOCK - TECHNICIAN KO DENA, JOB PAR LAGANA, WAPAS LENA
+---------------------------------------------------------------------
+(Purchases & Stock -> Stock. Upar 3 naye button hain.)
+
+1. DENA     : "Give to technician" -> technician chuno, "Take it from" me Main Store,
+              item search karke likho aur quantity daalo -> "Give stock".
+              (Pehli baar us technician ki van apne aap ban jaati hai.)
+              Ye sale ya kharcha nahi hai - maal aapka hi hai, bas uske paas likha gaya.
+
+2. LAGANA   : Installation / service par jo maal laga, wo "Used on a job" se likho:
+              - Job: ticket number, customer ka naam ya phone likhkar dhoondho
+              - "Used / fitted on the job" chuno (technician ki van apne aap aa jaati hai)
+              - Item search karo, quantity, aur customer se kitna charge karna hai
+              - "Record" dabao. Approval maange to "approve now" haan karo.
+              Approve hote hi maal van se nikal jaata hai, cost accounts me jaati hai,
+              aur charge job ke invoice me aa sakta hai.
+
+3. WAPAS    : Jo maal technician ne use nahi kiya aur dukaan wapas laya:
+              "Take back" -> technician chuno, item aur quantity -> "Take back".
+              Jo device customer ki jagah se nikal kar wapas aaya (removed/unused):
+              "Used on a job" me "Came back from the job" chuno.
+
+4. SEARCH   : Ab har jagah item likhkar dhoondh sakte ho (naam, brand, model ya SKU ka
+              koi bhi hissa) - stock update (Adjust), Give, Take back, Used on a job.
+              Item ke saamne dikhta hai ki us jagah kitna hai.
+
 ROZ / HAFTE KA KAAM
 ---------------------------------------------------------------------
 [ ] Roz   : Sales me invoice/quotation banao, "Send on WhatsApp" se bhejo

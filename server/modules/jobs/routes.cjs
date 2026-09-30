@@ -43,6 +43,25 @@ function mountJobs({ app, getConn, authenticateToken, permissions, audit }) {
         return id;
     };
 
+    // Finding the ticket to record materials against: by ticket number, customer
+    // name or phone. With nothing typed, the latest jobs that are still open.
+    app.get('/api/jobs/search', authenticateToken, requireCap('stock.view'), handle(async (req, res, conn) => {
+        const q = String(req.query.q || '').trim().slice(0, 60);
+        const like = `%${q}%`;
+        const pick = (table, type, what) => `
+            SELECT '${type}' AS job_type, t.id AS job_id, t.ticket_no, t.full_name, t.phone, t.${what} AS what, t.status,
+                   t.assigned_employee_id, p.full_name AS employee_name, t.created_at
+              FROM ${table} t LEFT JOIN profiles p ON p.id = t.assigned_employee_id
+             WHERE ${q ? '(t.ticket_no LIKE ? OR t.full_name LIKE ? OR t.phone LIKE ?)' : "t.status NOT IN ('resolved', 'closed', 'case_closed', 'cancelled', 'foc')"}`;
+        const args = q ? [like, like, like] : [];
+        const [rows] = await conn.query(
+            `${pick('inquiries', 'inquiry', 'service_item')} UNION ALL ${pick('installations', 'installation', 'installation_type')}
+             ORDER BY created_at DESC LIMIT 25`,
+            [...args, ...args]
+        );
+        res.json(rows);
+    }));
+
     // ── what a job cost ─────────────────────────────────────────────────
     app.get('/api/jobs/:jobType/:jobId/summary', authenticateToken, requireCap('stock.view'), handle(async (req, res, conn) => {
         const businessId = await business(conn);
