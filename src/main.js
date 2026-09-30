@@ -234,6 +234,7 @@ function getNavItems(role) {
       children: [
         { id: 'ads', label: 'Landing Ads' },
         { id: 'popup-ads', label: 'Popup Ads' },
+        { id: 'campaigns', label: 'WhatsApp Campaigns' },
         { id: 'notices', label: 'Notices' },
         { id: 'discounts', label: 'Coupons' },
         { id: 'discount-details', label: 'Discount Details' },
@@ -305,6 +306,7 @@ const PAGE_LOADERS = {
     parties: () => import('./pages/parties.js').then(m => m.renderPartiesTab),
     amc: () => import('./pages/amc.js').then(m => m.renderAmcTab),
     devices: () => import('./pages/devices.js').then(m => m.renderDevicesTab),
+    campaigns: () => import('./pages/campaigns.js').then(m => m.renderCampaignsTab),
     ledger: () => import('./pages/ledger.js').then(m => m.renderLedgerTab),
     'fin-reports': () => import('./pages/reports.js').then(m => m.renderReportsTab),
     migration: () => import('./pages/migration.js').then(m => m.renderMigrationTab),

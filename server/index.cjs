@@ -853,6 +853,9 @@ const { ensureDeviceSchema } = require('./modules/devices/service.cjs');
 const { mountDevices } = require('./modules/devices/routes.cjs');
 const { ensureWhatsappSchema } = require('./modules/whatsapp/service.cjs');
 const { mountWhatsapp } = require('./modules/whatsapp/routes.cjs');
+const { ensureCampaignSchema } = require('./modules/campaigns/service.cjs');
+const { mountCampaigns } = require('./modules/campaigns/routes.cjs');
+let campaignJobs = { startSender() {} };
 let amcJobs = { startRenewalJob() {} };
 
 // Service and installation money reaches the books through this. The hooks
@@ -9464,6 +9467,7 @@ migration = mountMigration({ app, getConn, authenticateToken, permissions, audit
 amcJobs = mountAmc({ app, getConn, authenticateToken, permissions, audit, recordNotification });
 mountDevices({ app, getConn, authenticateToken, permissions, audit });
 mountWhatsapp({ app, getConn, authenticateToken, permissions, audit });
+campaignJobs = mountCampaigns({ app, getConn, authenticateToken, permissions, audit, recordNotification });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9515,6 +9519,7 @@ async function startServer() {
             await ensureAmcSchema(connection);
             await ensureDeviceSchema(connection);
             await ensureWhatsappSchema(connection);
+            await ensureCampaignSchema(connection);
         } catch (err) {
             console.error('❌ Accounting schema migration failed — accounting features will not work.');
             console.error('   The rest of the portal is unaffected. Fix this and restart.');
@@ -9526,6 +9531,7 @@ async function startServer() {
         serviceLedger.startSweeper();
         migration.startDigestJob();
         amcJobs.startRenewalJob();
+        campaignJobs.startSender();
         startAutoClockOutJob();
         startDeviceReminderJob();
         startSlaJob();

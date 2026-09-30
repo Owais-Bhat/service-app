@@ -516,6 +516,37 @@ are the next step once the templates are approved.
 
 ---
 
+## WhatsApp campaigns (announcements)
+
+`server/modules/campaigns/`, page `src/pages/campaigns.js` (sidebar: Marketing → WhatsApp Campaigns), capability
+`marketing.manage` (admin). Tables `wa_campaigns`, `wa_campaign_recipients`, `marketing_optouts`.
+
+A **broadcast, not a group** — WhatsApp Business has no group to post into. Each person gets the message on their own
+and cannot see who else received it. It needs a template approved under Fast2SMS/Meta's **Marketing** category (its id
+goes on the campaign), and each message is billed by Fast2SMS.
+
+- **Campaign** = template id + what fills its blanks ({{1}}… as customer name, business name, or fixed text; up to 5) +
+  an optional header picture/PDF (uploaded here, so it is served from our own address) + an audience.
+- **Audience** — *Customers* (Customers & Suppliers, customer/both, active) and/or *Contacts* (every phone that ever raised a
+  service request), de-duplicated by the last 10 digits (the customer record wins), invalid numbers dropped, do-not-message
+  numbers dropped. Segments narrow customers: AMC running, AMC lapsed (win-back), never had an AMC, equipment warranty ending in
+  60 days. A segment leaves plain contacts out (they have no contract or warranty). *Check who this reaches* shows the count and
+  what was left out; the preview masks numbers.
+- **Schedule** — start as soon as sending hours allow, or at a chosen date and time. Scheduling **freezes the list** (the count
+  confirmed is the count that goes out) and needs WhatsApp switched on in Business Settings. A scheduled campaign is not edited;
+  it can be paused, resumed or cancelled (cancelling drops whatever has not gone out). A draft can be tested to the owner's own number.
+- **The sender** runs every minute: **20 messages a minute** (`CAMPAIGN_RATE_PER_MINUTE`), **9:00–21:00 India time only**, at most
+  **1000 a day** (`CAMPAIGN_DAILY_CAP`). At night it holds until morning. It re-checks the do-not-message list at the moment of
+  sending. **Five failures in a row pause the campaign** (an unapproved template, an empty wallet) and notify admins, rather than
+  working through the list; finishing also notifies. Each recipient's outcome is stored; a refusal is *failed*, never *sent*.
+- **Do-not-message list** — paste one or many numbers; they are removed from every waiting campaign at once. There is no inbound
+  webhook, so a customer who replies STOP has to be added by hand.
+
+Not built: reading STOP replies or delivery receipts automatically (needs Fast2SMS webhooks), per-customer personalised offers,
+and sending to a saved custom list from a spreadsheet.
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

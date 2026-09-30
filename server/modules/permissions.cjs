@@ -43,6 +43,7 @@ const CAPABILITIES = {
     'amc.manage': 'Create, renew, invoice and cancel maintenance contracts',
     'device.view': 'See the sites and equipment registered for a customer',
     'device.manage': 'Add, edit and replace registered customer equipment',
+    'marketing.manage': 'Create and schedule WhatsApp announcements, and manage the do-not-message list',
 
     // stock
     'stock.view': 'See stock on hand',
