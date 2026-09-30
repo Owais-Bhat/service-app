@@ -67,14 +67,29 @@ export function attachItemPicker(input, { items, hint = () => '', onPick = () =>
     chosen = item;
     input.value = item.name;
     input.dataset.itemId = item.id;
+    input.style.borderColor = '';
     close();
     onPick(item);
+  };
+
+  // Someone who types the whole name and moves on has chosen it — as has someone
+  // whose few letters match only one item. Anything ambiguous stays unchosen (and is marked).
+  const resolve = () => {
+    if (chosen) return chosen;
+    const text = input.value.trim().toLowerCase();
+    if (!text) return null;
+    const hits = searchItems(items(), text, 5);
+    const exact = hits.find(i => i.name.toLowerCase() === text);
+    const only = exact || (hits.length === 1 ? hits[0] : null);
+    if (only) pick(only);
+    return only;
   };
 
   input.addEventListener('focus', () => { input.select?.(); paint(); });
   input.addEventListener('input', () => {
     // Typing after a choice starts a new search; the old choice no longer stands.
     if (chosen && input.value !== chosen.name) { chosen = null; input.dataset.itemId = ''; }
+    input.style.borderColor = '';
     active = 0;
     paint();
   });
@@ -87,14 +102,16 @@ export function attachItemPicker(input, { items, hint = () => '', onPick = () =>
   });
   input.addEventListener('blur', () => setTimeout(() => {
     close();
-    // Left the box with something typed but nothing chosen: put the last real choice back.
-    if (!chosen) { input.value = ''; input.dataset.itemId = ''; } else input.value = chosen.name;
+    if (chosen) { input.value = chosen.name; return; }
+    // Left with something typed: take it if it points at exactly one item, otherwise
+    // keep what was typed but mark the box, so it is plain that nothing is chosen yet.
+    if (input.value.trim() && !resolve()) input.style.borderColor = 'var(--danger)';
   }, 120));
   window.addEventListener('scroll', place, true);
 
   return {
-    value: () => (chosen ? chosen.id : ''),
-    item: () => chosen,
+    value: () => (resolve() ? chosen.id : ''),
+    item: () => resolve(),
     set(item) { chosen = item; input.value = item ? item.name : ''; input.dataset.itemId = item ? item.id : ''; },
     clear() { chosen = null; input.value = ''; input.dataset.itemId = ''; },
     destroy() { close(); window.removeEventListener('scroll', place, true); },

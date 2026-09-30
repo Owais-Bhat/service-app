@@ -618,16 +618,23 @@ function openAdjustModal(container) {
       location_id: $('#ad-location').value,
       reason: $('#ad-reason').value.trim(),
     };
-    if (!body.item_id) return toast('Choose the item', 'warning');
+    if (!body.item_id) {
+      $('#ad-item').style.borderColor = 'var(--danger)';
+      $('#ad-item').focus();
+      return toast(`Choose the item from the list${$('#ad-item').value.trim() ? ` — “${$('#ad-item').value.trim()}” matches more than one` : ''}`, 'warning');
+    }
     if (!(body.quantity > 0)) return toast('Enter the quantity', 'warning');
     if (!body.reason) return toast('A reason is required', 'warning');
 
     const btn = $('#ad-save');
     btn.disabled = true;
     try {
-      await api('POST', '/stock/adjustments', body);
-      toast('Adjustment recorded', 'success');
+      const made = await api('POST', '/stock/adjustments', body);
+      // Say what actually changed, so it does not have to be found on the list to be believed.
+      const name = picker.item()?.name || 'Item';
+      toast(`${name}: ${Number(made.balance_qty) - Number(made.quantity)} → ${Number(made.balance_qty)}`, 'success');
       closeAdjust();
+      items = await api('GET', '/inventory/items?all=1').catch(() => items);
       await loadTab();
       paint(container);
     } catch (err) {
