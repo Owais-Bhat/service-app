@@ -148,6 +148,23 @@ const SALES_TABLES = [
         FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
         FOREIGN KEY (document_id) REFERENCES sales_documents(id) ON DELETE CASCADE
     )`,
+
+    // A link a customer can open without logging in — the PDF of one issued
+    // document, for a limited time. Only a hash of the token is kept, so a copy
+    // of the database cannot be used to open anyone's invoice.
+    `CREATE TABLE IF NOT EXISTS document_share_links (
+        id VARCHAR(36) PRIMARY KEY,
+        document_id VARCHAR(36) NOT NULL,
+        token_hash CHAR(64) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_by VARCHAR(36),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_opened_at TIMESTAMP NULL,
+        opens INT NOT NULL DEFAULT 0,
+        UNIQUE KEY uniq_share_token (token_hash),
+        INDEX idx_share_doc (document_id),
+        FOREIGN KEY (document_id) REFERENCES sales_documents(id) ON DELETE CASCADE
+    )`,
 ];
 
 async function ensureSalesSchema(connection) {

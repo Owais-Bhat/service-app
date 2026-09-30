@@ -12,6 +12,7 @@ import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 import { unitDatalist, tidyUnit, DEFAULT_UNIT } from './units.js';
+import { sendWhatsapp } from './whatsapp-send.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -694,6 +695,7 @@ async function openDetail(container, id) {
       <div class="modal-footer" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary" id="sd-cancel">Close</button>
         ${!isDraft ? '<button class="btn btn-secondary" id="sd-pdf">Open PDF</button>' : ''}
+        ${!isDraft && doc.status !== 'cancelled' && doc.doc_type !== 'credit_note' ? '<button class="btn btn-secondary" id="sd-wa">Send on WhatsApp</button>' : ''}
         ${isDraft ? '<button class="btn btn-secondary" id="sd-edit">Edit</button>' : ''}
         ${doc.doc_type === 'estimate' && ['issued', 'accepted', 'rejected', 'expired'].includes(doc.status) && !doc.converted_to_id
       ? '<button class="btn btn-secondary" id="sd-revise">Edit / revise</button>' : ''}
@@ -713,6 +715,17 @@ async function openDetail(container, id) {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   const refresh = async () => { close(); await loadTab(); paint(container); };
+
+  if ($('#sd-wa')) {
+    $('#sd-wa').onclick = async () => {
+      const phone = snapshot.phone || doc.party_phone;
+      if (!phone) return toast('This customer has no mobile number saved', 'warning');
+      if (!confirm(`Send ${doc.doc_no} (${rupees(doc.total_paise)}) with its PDF to ${snapshot.display_name || doc.party_name} on WhatsApp (${phone})?`)) return;
+      $('#sd-wa').disabled = true;
+      await sendWhatsapp('document', { document_id: doc.id });
+      $('#sd-wa').disabled = false;
+    };
+  }
 
   if ($('#sd-pdf')) {
     $('#sd-pdf').onclick = async () => {

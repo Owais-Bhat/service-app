@@ -7,6 +7,7 @@
 // where they disagree.
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { sendWhatsapp } from './whatsapp-send.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -229,7 +230,8 @@ async function remindersTab(body) {
       `<b style="color:var(--danger)">${rupees(c.overdue_paise)}</b>`, rupees(c.outstanding_paise), `${c.oldest_days} days`,
       c.times_reminded ? `${ago(c.last_reminded_at)} <small style="color:var(--text-dim)">(${c.times_reminded}×)</small>` : 'never',
       `<div style="display:flex;gap:6px;justify-content:flex-end">
-        ${c.whatsapp_url ? `<button class="btn btn-primary btn-sm" data-wa="${esc(c.party_id)}">WhatsApp</button>` : ''}
+        ${c.phone ? `<button class="btn btn-primary btn-sm" data-send="${esc(c.party_id)}" title="Sent from the business WhatsApp number">Send now</button>` : ''}
+        ${c.whatsapp_url ? `<button class="btn btn-secondary btn-sm" data-wa="${esc(c.party_id)}" title="Opens the chat; you press send">Open chat</button>` : ''}
         <button class="btn btn-secondary btn-sm" data-mark="${esc(c.party_id)}" title="Note that you reminded them another way">Mark reminded</button>
       </div>`]), { right: [1, 2, 3] })}
     ${r.suppliers.length ? `<h4 style="margin:18px 0 8px">Suppliers you owe</h4>${table(['Supplier', 'Overdue', 'Total owed', 'Oldest'], r.suppliers.map(s => [`<b>${esc(s.party)}</b>`, rupees(s.overdue_paise), rupees(s.outstanding_paise), `${s.oldest_days} days`]), { right: [1, 2, 3] })}` : ''}`;
@@ -246,6 +248,14 @@ async function remindersTab(body) {
   };
   body.querySelectorAll('[data-wa]').forEach(b => {
     b.onclick = () => { window.open(byId.get(b.dataset.wa).whatsapp_url, '_blank', 'noopener'); mark(b.dataset.wa, 'whatsapp'); };
+  });
+  body.querySelectorAll('[data-send]').forEach(b => {
+    b.onclick = async () => {
+      const c = byId.get(b.dataset.send);
+      if (!confirm(`Send a payment reminder for ${rupees(c.outstanding_paise)} to ${c.party} (${c.phone}) on WhatsApp?`)) return;
+      b.disabled = true;
+      if (await sendWhatsapp('payment-reminder', { party_id: c.party_id })) load(); else b.disabled = false;
+    };
   });
   body.querySelectorAll('[data-mark]').forEach(b => { b.onclick = () => mark(b.dataset.mark, 'call'); });
   setExport(`reminders-${state.asOn}.csv`, r.customers.map(c => ({ Customer: c.party, Phone: c.phone || '', Overdue: plain(c.overdue_paise), Total: plain(c.outstanding_paise), 'Oldest days': c.oldest_days, Message: c.message })));

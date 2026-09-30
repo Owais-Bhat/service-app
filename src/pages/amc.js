@@ -11,6 +11,7 @@ import { toast } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 import { warrantyChip } from './devices.js';
+import { sendWhatsapp } from './whatsapp-send.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
   ? '/api'
@@ -202,20 +203,29 @@ function paintRenewals(body) {
             <td style="text-align:right"><b>${rupees(c.amount_paise)}</b></td>
             <td style="font-size:0.76rem;color:var(--text-dim)">${c.reminders_sent ? `${c.reminders_sent}× · ${esc(day(c.last_reminded_at))}` : 'not yet'}</td>
             <td style="white-space:nowrap;text-align:right">
-              ${c.whatsapp_url ? `<button class="btn btn-secondary" data-wa="${esc(c.id)}" style="padding:6px 10px">WhatsApp</button>` : ''}
+              ${c.whatsapp_url ? `<button class="btn btn-secondary" data-send="${esc(c.id)}" style="padding:6px 10px" title="Sent from the business WhatsApp number">Send now</button>
+              <button class="btn btn-secondary" data-wa="${esc(c.id)}" style="padding:6px 10px" title="Opens the chat in WhatsApp; you press send">Open chat</button>` : ''}
               <button class="btn btn-primary" data-renew="${esc(c.id)}" style="padding:6px 10px">Renew</button>
             </td>
           </tr>`;
   }).join('')}
       </tbody>
     </table></div>
-    <p class="at2-note">WhatsApp opens the customer's chat with the message written for you; it is sent from your own phone. Renewing starts the next term the day after this one ends.</p>`;
+    <p class="at2-note"><b>Send now</b> goes out from the business WhatsApp number (needs the template set up in Business Settings → WhatsApp). <b>Open chat</b> opens the customer's chat with the message written for you, and you press send from your own phone. Renewing starts the next term the day after this one ends.</p>`;
 
   body.querySelectorAll('[data-wa]').forEach(btn => {
     btn.onclick = async () => {
       const c = renewals.find(r => r.id === btn.dataset.wa);
       window.open(c.whatsapp_url, '_blank', 'noopener');
       try { await api('POST', `/amc/contracts/${encodeURIComponent(c.id)}/reminded`); await reload(); } catch { /* the chat is open; the count can wait */ }
+    };
+  });
+  body.querySelectorAll('[data-send]').forEach(btn => {
+    btn.onclick = async () => {
+      const c = renewals.find(r => r.id === btn.dataset.send);
+      if (!confirm(`Send the renewal reminder for ${c.contract_no} to ${c.party_name} (${c.party_phone}) on WhatsApp?`)) return;
+      btn.disabled = true;
+      if (await sendWhatsapp('amc-renewal', { contract_id: c.id })) await reload(); else btn.disabled = false;
     };
   });
   body.querySelectorAll('[data-renew]').forEach(btn => { btn.onclick = () => openRenew(btn.dataset.renew); });

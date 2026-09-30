@@ -248,9 +248,10 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
         res.json(await sales.loadDocument(conn, req.params.id));
     }));
 
-    app.get('/api/sales/documents/:id/pdf', authenticateToken, requireCap('invoice.view'), handle(async (req, res, conn) => {
+    // The printed document, by whichever door it is asked for.
+    const sendPdf = async (res, conn, id) => {
         const businessId = await business(conn);
-        const loaded = await sales.loadDocument(conn, req.params.id);
+        const loaded = await sales.loadDocument(conn, id);
         if (!loaded) return res.status(404).json({ error: 'No such document' });
         const [[biz]] = await conn.query('SELECT * FROM businesses WHERE id = ? LIMIT 1', [businessId]);
 
@@ -268,6 +269,19 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
             `inline; filename="${(loaded.document.doc_no || loaded.document.doc_type).replace(/[^\w.-]/g, '_')}.pdf"`
         );
         res.send(pdf);
+    };
+
+    app.get('/api/sales/documents/:id/pdf', authenticateToken, requireCap('invoice.view'), handle(async (req, res, conn) => {
+        await sendPdf(res, conn, req.params.id);
+    }));
+
+    // The same PDF for someone with a link and no login — a customer opening
+    // what was sent to their WhatsApp. The token is the only key; it expires,
+    // and a cancelled document stops opening.
+    app.get('/api/public/documents/:token/pdf', handle(async (req, res, conn) => {
+        const documentId = await sales.resolveShareLink(conn, req.params.token);
+        if (!documentId) return res.status(404).type('text/plain').send('This link has expired or is not valid.');
+        await sendPdf(res, conn, documentId);
     }));
 
     // ── payments ────────────────────────────────────────────────────────

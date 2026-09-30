@@ -95,6 +95,7 @@ const TABS = [
   { key: 'numbering', label: 'Numbering' },
   { key: 'tax', label: 'Tax Rates' },
   { key: 'service', label: 'Service Income' },
+  { key: 'whatsapp', label: 'WhatsApp' },
 ];
 
 const state = { tab: 'business' };
@@ -119,6 +120,7 @@ export async function renderBusinessSettingsTab(container) {
 async function loadTab() {
   if (state.tab === 'numbering') series = await api('GET', '/accounting/series');
   if (state.tab === 'tax') taxRates = await api('GET', '/accounting/tax-rates');
+  if (state.tab === 'whatsapp') await loadWhatsapp();
   if (state.tab === 'service') {
     serviceInfo = null;
     serviceError = '';
@@ -176,6 +178,7 @@ function paintBody(container) {
   if (state.tab === 'numbering') return paintNumbering(container, body);
   if (state.tab === 'tax') return paintTax(container, body);
   if (state.tab === 'service') return paintService(container, body);
+  if (state.tab === 'whatsapp') return paintWhatsapp(container, body);
 }
 
 function paintBusiness(container, body) {
@@ -627,4 +630,112 @@ function openTaxModal(container, supersedes = null) {
       btn.disabled = false;
     }
   };
+}
+
+// ── WhatsApp ────────────────────────────────────────────────────────────
+// Fast2SMS's WhatsApp API sends only pre-approved templates, so this tab holds
+// the id of each template and shows the wording to register it with.
+let wa = null;
+let waLog = [];
+let waError = '';
+
+async function loadWhatsapp() {
+  wa = null; waLog = []; waError = '';
+  try {
+    [wa, waLog] = await Promise.all([api('GET', '/whatsapp/settings'), api('GET', '/whatsapp/log?limit=15')]);
+  } catch (err) { waError = err.message; }
+}
+
+function paintWhatsapp(container, body) {
+  if (!wa) { body.innerHTML = `<div class="at2-empty">${esc(waError || 'Could not load')}</div>`; return; }
+  const ready = wa.enabled && wa.phone_number_id && wa.api_key_set && wa.templates.some(t => t.message_id && t.enabled);
+  const PURPOSE_NAME = Object.fromEntries(wa.templates.map(t => [t.purpose, t.label]));
+  const stamp = (v) => v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><span class="card-title">WhatsApp sending (Fast2SMS)</span>
+        <span class="at2-chip ${ready ? 'ok' : 'warn'}" style="margin-left:8px">${ready ? 'Ready' : 'Not set up'}</span></div>
+      <div style="padding:14px;font-size:0.86rem;line-height:1.7;color:var(--text-soft)">
+        WhatsApp lets a business start a chat only with a <b>template it has had approved</b>. So: create each template below in your
+        Fast2SMS dashboard (WhatsApp → Templates) using the suggested wording, wait for Meta's approval, then paste its <b>template id</b> here.
+        Messages cost per send, from your Fast2SMS wallet.
+        ${wa.api_key_set ? '' : '<div class="at2-notice danger" style="margin-top:8px">The Fast2SMS API key (<code>SMS_API</code>) is not set on the server, so nothing can be sent.</div>'}
+      </div>
+      <div style="padding:0 14px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;align-items:end">
+        <label class="at2-check"><input type="checkbox" id="wa-on" ${wa.enabled ? 'checked' : ''}> Sending is switched on</label>
+        <div class="form-group" style="margin:0"><label>WhatsApp phone number id</label>
+          <input type="text" id="wa-pnid" value="${esc(wa.phone_number_id)}" placeholder="e.g. 579519398574288" inputmode="numeric">
+          <small style="color:var(--text-dim);font-size:0.75rem">The long number shown against your WhatsApp number in Fast2SMS</small></div>
+      </div>
+    </div>
+
+    ${wa.templates.map(t => `
+    <div class="card" style="margin-bottom:14px" data-purpose="${esc(t.purpose)}">
+      <div class="card-header"><span class="card-title">${esc(t.label)}</span>
+        <span class="at2-chip ${t.message_id && t.enabled ? 'ok' : 'muted'}" style="margin-left:8px">${t.message_id ? (t.enabled ? 'Template set' : 'Turned off') : 'No template yet'}</span></div>
+      <div style="padding:14px;display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:14px">
+        <div>
+          <div class="form-group"><label>Template id</label>
+            <input type="text" class="wa-mid" value="${esc(t.message_id)}" placeholder="e.g. 9"></div>
+          <label class="at2-check"><input type="checkbox" class="wa-ten" ${t.enabled ? 'checked' : ''}> Use it</label>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <input type="tel" class="wa-testphone" placeholder="Your mobile, to test" style="flex:1;min-width:0">
+            <button class="btn btn-secondary wa-test" type="button">Test</button>
+          </div>
+        </div>
+        <div style="font-size:0.82rem;line-height:1.6">
+          <div style="font-weight:800;font-size:0.7rem;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-dim)">Variables, in this order</div>
+          ${t.vars.map((v, i) => `<div><code>{{${i + 1}}}</code> ${esc(v)}</div>`).join('')}
+          ${t.header ? `<div style="margin-top:4px"><b>${esc(t.header)}</b></div>` : ''}
+          <div style="font-weight:800;font-size:0.7rem;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-dim);margin-top:8px">Suggested wording</div>
+          <div style="padding:8px 10px;border-radius:10px;background:rgba(127,127,127,0.1);user-select:all">${esc(t.suggested)}</div>
+        </div>
+      </div>
+    </div>`).join('')}
+
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-primary" id="wa-save">Save WhatsApp settings</button></div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Recent messages</span></div>
+      ${waLog.length ? `<div class="table-wrap"><table class="at2-tbl">
+        <thead><tr><th>When</th><th>Message</th><th>To</th><th>Result</th></tr></thead>
+        <tbody>${waLog.map(m => `<tr>
+          <td style="white-space:nowrap">${esc(stamp(m.created_at))}</td>
+          <td>${esc(PURPOSE_NAME[m.purpose] || m.purpose)}${m.party_name ? `<div style="font-size:0.74rem;color:var(--text-dim)">${esc(m.party_name)}</div>` : ''}</td>
+          <td>${esc(m.phone)}</td>
+          <td>${m.status === 'sent' ? '<span class="at2-chip ok">Accepted</span>' : m.status === 'failed' ? `<span class="at2-chip danger">Failed</span><div style="font-size:0.74rem;color:var(--text-dim)">${esc(m.error || '')}</div>` : '<span class="at2-chip muted">Queued</span>'}</td>
+        </tr>`).join('')}</tbody></table></div>
+        <p class="at2-note" style="padding:0 14px 12px">"Accepted" means Fast2SMS took it. Delivery to the phone is shown in your Fast2SMS dashboard.</p>` : '<div style="padding:14px;color:var(--text-dim);font-size:0.84rem">Nothing sent yet.</div>'}
+    </div>`;
+
+  const collect = () => ({
+    enabled: body.querySelector('#wa-on').checked,
+    phone_number_id: body.querySelector('#wa-pnid').value.trim(),
+    templates: [...body.querySelectorAll('[data-purpose]')].map(card => ({
+      purpose: card.dataset.purpose,
+      message_id: card.querySelector('.wa-mid').value.trim(),
+      enabled: card.querySelector('.wa-ten').checked,
+    })),
+  });
+  const save = async () => { wa = { ...wa, ...(await api('PUT', '/whatsapp/settings', collect())) }; };
+
+  body.querySelector('#wa-save').onclick = async () => {
+    try { await save(); toast('WhatsApp settings saved', 'success'); paintWhatsapp(container, body); } catch (err) { toast(err.message, 'error'); }
+  };
+  body.querySelectorAll('.wa-test').forEach(btn => {
+    btn.onclick = async () => {
+      const card = btn.closest('[data-purpose]');
+      const phone = card.querySelector('.wa-testphone').value.trim();
+      if (!phone) return toast('Type your own mobile number to receive the test', 'warning');
+      btn.disabled = true;
+      try {
+        await save();
+        await api('POST', '/whatsapp/test', { purpose: card.dataset.purpose, phone });
+        toast('Test sent — check your WhatsApp', 'success');
+      } catch (err) { toast(err.message, 'error'); }
+      await loadWhatsapp();
+      paintWhatsapp(container, body);
+    };
+  });
 }

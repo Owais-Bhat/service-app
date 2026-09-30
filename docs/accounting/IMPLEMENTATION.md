@@ -483,6 +483,39 @@ build; the technician's web view is unchanged. There is no Excel import for devi
 
 ---
 
+## WhatsApp through Fast2SMS
+
+`server/modules/whatsapp/`, page `src/pages/whatsapp-send.js`, settings in Business & Tax Setup → **WhatsApp**.
+Uses Fast2SMS's WhatsApp API (`GET https://www.fast2sms.com/dev/whatsapp` with `message_id`, `phone_number_id`,
+`numbers`, `variables_values` joined by `|`, and `media_url` / `document_filename` for a PDF header), authorised
+with the same key the SMS features use (`SMS_API`; `WHATSAPP_API_KEY` overrides it if set).
+
+- **Only approved templates can start a chat**, so nothing is free text. Each kind of message has a fixed variable
+  order — *Invoice / quotation* (customer, document no., total, business; PDF header), *Payment reminder*
+  (customer, amount due, days overdue, business), *AMC renewal* (customer, contract no., end date, amount, business
+  phone). The tab shows the order and wording to register in the Fast2SMS dashboard; the owner pastes back each
+  **template id** and the WhatsApp **phone number id**, and switches sending on.
+- **Nothing is sent** unless it is switched on, the number id and that template's id are set, and the key exists; the
+  refusal says which step is missing. A duplicate to the same number within 2 minutes asks first. A provider refusal
+  (HTTP error, `status:false`, unreachable) is logged as *failed* with what it said — never reported as sent.
+  "Accepted" means Fast2SMS took it; delivery to the phone is in the Fast2SMS dashboard (webhooks are not used).
+- **Where the buttons are:** *Send on WhatsApp* on an issued invoice / quotation / proforma; *Send now* in AMC → Renewals Due
+  (beside *Open chat*, the older wa.me link); *Send now* in Reports → Reminders. The wa.me buttons still work with no
+  setup. A sent AMC or payment reminder is recorded in the same reminder history as before.
+- **The PDF link.** WhatsApp fetches the PDF from a public URL, so an issued document gets an unguessable link,
+  `/api/public/documents/<token>/pdf`, valid 30 days and closed when the document is cancelled. Only a SHA-256 of the
+  token is stored, and the link is not written to the message log. Needs the public https address: taken from
+  `PUBLIC_BASE_URL` if set, else from the request (`x-forwarded-proto` + host).
+- **Test button** per message sends the template with sample details to a number of the owner's choosing (for the
+  invoice one it attaches the newest real issued invoice's PDF).
+- Tables `whatsapp_settings`, `whatsapp_templates`, `whatsapp_messages`, `document_share_links`. Sends are gated by
+  `invoice.create`, `payment.record` and `amc.manage`; settings by `business.manage`.
+
+Not automatic: nothing goes out on its own yet (no scheduled AMC or payment sends, no "technician on the way"). Those
+are the next step once the templates are approved.
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

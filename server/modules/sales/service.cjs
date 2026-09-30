@@ -12,7 +12,7 @@
 //   * An estimate converts into an invoice once. A second attempt returns the
 //     invoice that already exists rather than making another.
 
-const { randomUUID } = require('crypto');
+const { randomUUID, randomBytes, createHash } = require('crypto');
 const money = require('../money.cjs');
 const { computeDocument } = require('../tax-engine.cjs');
 const posting = require('../ledger/posting.cjs');
@@ -689,7 +689,42 @@ async function loadPayment(conn, id) {
     };
 }
 
+// ── share links ─────────────────────────────────────────────────────────
+const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+
+/**
+ * A link to the PDF of an issued document, good for `days`. The token is
+ * returned once; only its hash is stored.
+ */
+async function createShareLink(conn, { documentId, user, days = 30 }) {
+    const [[doc]] = await conn.query('SELECT id, status, doc_no FROM sales_documents WHERE id = ? LIMIT 1', [documentId]);
+    if (!doc) throw new SalesError('No such document', 'not_found', 404);
+    if (doc.status === 'draft') throw new SalesError('Issue the document before sending it', 'not_issued', 409);
+    if (doc.status === 'cancelled') throw new SalesError('A cancelled document is not sent to anyone', 'cancelled', 409);
+    const token = randomBytes(24).toString('hex');
+    await conn.query('INSERT INTO document_share_links SET ?', [{
+        id: randomUUID(), document_id: documentId, token_hash: sha256(token),
+        expires_at: new Date(Date.now() + days * 86400000), created_by: user?.id || null,
+    }]);
+    return { token, document: doc };
+}
+
+/** The document a token opens, or null when it is unknown, expired, or the document was cancelled. */
+async function resolveShareLink(conn, token) {
+    if (!/^[a-f0-9]{48}$/.test(String(token || ''))) return null;
+    const [[row]] = await conn.query(
+        `SELECT l.id, l.document_id FROM document_share_links l JOIN sales_documents d ON d.id = l.document_id
+          WHERE l.token_hash = ? AND l.expires_at > NOW() AND d.status NOT IN ('draft', 'cancelled') LIMIT 1`,
+        [sha256(token)]
+    );
+    if (!row) return null;
+    await conn.query('UPDATE document_share_links SET opens = opens + 1, last_opened_at = NOW() WHERE id = ?', [row.id]);
+    return row.document_id;
+}
+
 module.exports = {
+    createShareLink,
+    resolveShareLink,
     SalesError,
     loadDocument,
     loadPayment,
