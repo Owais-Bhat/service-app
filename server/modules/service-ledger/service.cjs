@@ -174,6 +174,38 @@ async function resolveParty(conn, businessId, row, stateCode) {
     return id;
 }
 
+// Installation contacts become customers, so an invoice can be raised to them
+// without first waiting for the installation to be billed. A person is matched
+// on the last ten digits of the phone, exactly as a ticket is, so running this
+// again (or the ticket being billed later) never makes a second record.
+async function syncInstallationContacts(conn, businessId) {
+    const [[biz]] = await conn.query('SELECT state_code FROM businesses WHERE id = ? LIMIT 1', [businessId]);
+    const [known] = await conn.query(
+        'SELECT phone FROM parties WHERE business_id = ? AND merged_into_id IS NULL AND phone IS NOT NULL', [businessId]
+    );
+    const have = new Set(known.map((p) => digits(p.phone)).filter((d) => d.length >= 7));
+
+    const [contacts] = await conn.query(
+        `SELECT full_name, phone FROM installations
+          WHERE phone IS NOT NULL AND phone <> '' ORDER BY created_at DESC`
+    );
+    let created = 0;
+    for (const c of contacts) {
+        const d = digits(c.phone);
+        if (d.length < 7 || have.has(d)) continue;
+        have.add(d);
+        await conn.query('INSERT INTO parties SET ?', [{
+            id: randomUUID(), business_id: businessId, kind: 'customer',
+            display_name: String(c.full_name || 'Customer').trim().slice(0, 200),
+            phone: String(c.phone).trim().slice(0, 20),
+            gst_treatment: 'consumer', place_of_supply_state_code: biz?.state_code || null,
+            notes: 'Created automatically from an installation contact',
+        }]);
+        created += 1;
+    }
+    return { created };
+}
+
 // ── posting ─────────────────────────────────────────────────────────────
 
 const ACCOUNTS = { receivable: '1100', cash: '1000', bank: '1010', technician: '1020', discount: '4900',
@@ -436,4 +468,4 @@ async function sweep(getConn, { limit = 300, userId = null } = {}) {
     }
 }
 
-module.exports = { ensureServiceLedgerSchema, describe, syncTicket, sweep, resolveParty, ymd, KINDS };
+module.exports = { ensureServiceLedgerSchema, describe, syncTicket, sweep, resolveParty, syncInstallationContacts, ymd, KINDS };

@@ -5,9 +5,10 @@
 // customer is quoted and what the invoice carries are the same numbers from the
 // same engine.
 //
-// What the screen refuses to let you do is deliberate — an issued document has
-// no edit button, only cancel; a paid one has neither. That is not the UI being
-// awkward, it is what keeps the books worth reading.
+// An issued invoice can be corrected in place — it keeps its number, the old
+// entry in the books is reversed and the corrected one posted, with a reason on
+// record. It cannot be deleted, only cancelled. That is what keeps the books
+// worth reading.
 import { toast, exportToCSV } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
@@ -86,6 +87,8 @@ let taxRates = [];
 export async function renderSalesTab(container) {
   container.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
   try {
+    // Installation contacts are customers too — bring in any not yet on the list.
+    await api('POST', '/parties/sync-installation-contacts').catch(() => {});
     [parties, items, taxRates] = await Promise.all([
       api('GET', '/parties?kind=all&limit=1000'),
       api('GET', '/inventory/items?all=1').catch(() => []),
@@ -344,8 +347,12 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   const doc = existing?.document || null;
-  // A quotation that has already gone out is revised, not edited as a draft.
-  const revising = !!(doc && doc.status !== 'draft');
+  // A quotation that has already gone out is revised, not edited as a draft; an
+  // issued invoice is corrected in place, keeping its number.
+  const amending = !!(doc && doc.status === 'issued' && doc.doc_type !== 'estimate');
+  const estimateRevising = !!(doc && doc.status !== 'draft' && doc.doc_type === 'estimate');
+  const revising = estimateRevising || amending;
+  const docLabel = doc ? (doc.doc_type === 'estimate' ? 'quotation' : doc.doc_type.replace('_', ' ')) : '';
   const gstOptions = taxRates.filter(t => t.treatment === 'gst' && !t.effective_to);
 
   const lineRow = (line = {}) => `
@@ -374,11 +381,14 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   overlay.innerHTML = `
     <div class="modal at2-modal" style="max-width:940px">
       <div class="modal-header">
-        <span class="modal-title">${revising ? `Revise quotation ${esc(doc.doc_no || '')}` : doc ? `Edit ${esc(doc.doc_type === 'estimate' ? 'quotation' : doc.doc_type.replace('_', ' '))}` : `New ${docType === 'estimate' ? 'quotation' : docType.replace('_', ' ')}`}</span>
+        <span class="modal-title">${amending ? `Edit ${esc(docLabel)} ${esc(doc.doc_no || '')}` : estimateRevising ? `Revise quotation ${esc(doc.doc_no || '')}` : doc ? `Edit ${esc(docLabel)}` : `New ${docType === 'estimate' ? 'quotation' : docType.replace('_', ' ')}`}</span>
         <button class="modal-close" id="sl-close">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        ${revising ? `<div class="at2-notice warn">This quotation has already gone out. Saving keeps its number (<b>${esc(doc.doc_no || '')}</b>) and marks it <b>revision ${Number(doc.revision_no || 0) + 1}</b>.
+        ${amending ? `<div class="at2-notice warn">Saving corrects this ${esc(docLabel)} in place — it keeps its number (<b>${esc(doc.doc_no || '')}</b>), the old entry in the books is reversed and the corrected one posted, and both stay on record with your reason.
+          <div class="form-group" style="margin:8px 0 0"><label>What is being corrected? *</label>
+            <input type="text" id="sl-reason" placeholder="e.g. wrong rate on line 2, customer changed"></div></div>` : ''}
+        ${estimateRevising ? `<div class="at2-notice warn">This quotation has already gone out. Saving keeps its number (<b>${esc(doc.doc_no || '')}</b>) and marks it <b>revision ${Number(doc.revision_no || 0) + 1}</b>.
           ${doc.status === 'accepted' ? 'The customer had accepted the earlier version, so it goes back to <b>sent</b> until they agree to this one.' : ''}</div>` : ''}
         ${unitDatalist('sl-units')}
         <datalist id="sl-items">
@@ -392,7 +402,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
                 <option value="">— Choose —</option>
                 ${parties.map(p => `<option value="${esc(p.id)}"${doc?.party_id === p.id ? ' selected' : ''}>${esc(p.display_name)}${p.phone ? ` · ${esc(p.phone)}` : ''}</option>`).join('')}
               </select>
-              ${revising ? '' : `<button type="button" class="at2-plus" id="sl-newparty" title="Add a new customer">${ICONS.plus}<span>New</span></button>`}
+              ${estimateRevising ? '' : `<button type="button" class="at2-plus" id="sl-newparty" title="Add a new customer">${ICONS.plus}<span>New</span></button>`}
             </div></div>
           <div class="form-group"><label>Date</label>
             <input type="date" id="sl-date" value="${doc ? ymd(doc.doc_date) : ymd(new Date())}"></div>
@@ -433,7 +443,9 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="sl-cancel">Cancel</button>
-        ${revising
+        ${amending
+      ? '<button class="btn btn-primary" id="sl-amend">Save correction</button>'
+      : estimateRevising
       ? '<button class="btn btn-primary" id="sl-revise">Save revision</button>'
       : '<button class="btn btn-secondary" id="sl-save">Save draft</button><button class="btn btn-primary" id="sl-issue">Save &amp; issue</button>'}
       </div>
@@ -587,7 +599,28 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
       btn.disabled = false;
     }
   };
-  if (revising) {
+  if (amending) {
+    $('#sl-amend').onclick = async () => {
+      const payload = collect();
+      payload.reason = $('#sl-reason').value.trim();
+      if (!payload.reason) { $('#sl-reason').focus(); return toast('Say what is being corrected', 'warning'); }
+      if (!payload.party_id) return toast('Choose the customer', 'warning');
+      if (!payload.lines.length) return toast('Add at least one line', 'warning');
+      const btn = $('#sl-amend');
+      btn.disabled = true;
+      try {
+        await api('POST', `/sales/documents/${doc.id}/amend`, payload);
+        toast(`${doc.doc_no} corrected`, 'success');
+        close();
+        await loadTab();
+        paint(container);
+        openDetail(container, doc.id);
+      } catch (err) {
+        toast(err.message, 'error');
+        btn.disabled = false;
+      }
+    };
+  } else if (estimateRevising) {
     $('#sl-revise').onclick = async () => {
       const payload = collect();
       if (!payload.party_id) return toast('Choose the customer', 'warning');
@@ -699,6 +732,7 @@ async function openDetail(container, id) {
         ${isDraft ? '<button class="btn btn-secondary" id="sd-edit">Edit</button>' : ''}
         ${doc.doc_type === 'estimate' && ['issued', 'accepted', 'rejected', 'expired'].includes(doc.status) && !doc.converted_to_id
       ? '<button class="btn btn-secondary" id="sd-revise">Edit / revise</button>' : ''}
+        ${doc.status === 'issued' && doc.doc_type !== 'estimate' ? '<button class="btn btn-secondary" id="sd-revise">Edit</button>' : ''}
         ${isDraft ? '<button class="btn btn-primary" id="sd-issue">Issue</button>' : ''}
         ${doc.doc_type === 'estimate' && ['issued', 'accepted'].includes(doc.status) && !doc.converted_to_id
       ? '<button class="btn btn-secondary" id="sd-accept">Mark accepted</button><button class="btn btn-primary" id="sd-convert">Convert to invoice</button>' : ''}

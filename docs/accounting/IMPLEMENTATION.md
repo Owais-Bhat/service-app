@@ -301,11 +301,12 @@ Stock screen → **Template** downloads `stock-import-template.xlsx` (sheet `Ite
 
 - Columns: Item Name*, SKU, Category, HSN/SAC, Unit, Purchase Rate*, Selling Rate*, GST %, Opening Qty, Opening Rate, Min Stock, Location, Brand, Model, Warranty (months), Track Serial, Serial Numbers. Heading spellings are forgiving (`Selling Price (₹)`, `Qty`, `Code`).
 - All-or-nothing: any row with a problem stops the whole file; the errors name the row. Item, opening movement, serials and journal are one transaction.
-- Match on SKU (or name when there is no SKU): existing item is **updated**, new one **created**. A row that gives Opening Qty for an item that already has stock or history is refused, so the same file uploaded twice cannot double the shelf.
+- Match on SKU, else name: existing item is **updated**, new one **created**. A blank cell leaves the saved value alone (a blank SKU/category/brand does not wipe it). A name taken by an item under a *different* SKU is refused.
+- **Re-importing updates stock** (added later): for an item that already holds stock, Opening Qty is read as "how many I have now" and the stock is brought to it — the difference moves as `count_up`/`count_down` through `stock.move()` and one journal posts the net: **Dr 1200 Inventory / Cr 5010 Shrinkage** (found more) or the reverse (found less), the same account a stock count uses. A blank qty leaves stock alone; the same file twice changes nothing the second time. The preview shows `5 → 8 (+3)` per row, with a tick-box (`update_stock`, default on) to switch quantities off. Taking more off than the location holds is refused. Serial-tracked items: only serial numbers not yet on record are added (others are ignored), which raises the stock by that many.
 - Opening stock goes through `stock.move()` (type `opening`) at the Opening Rate (blank = Purchase Rate); one journal per import: **Dr 1200 Inventory / Cr 3100 Opening Balance Equity**. Refused in a locked period.
 - Serial-tracked items: serial count must equal Opening Qty; a serial already on record is refused.
 - Needs `item.manage` and `stock.adjust`. Limit 1000 rows per file (request body cap is 1 MB).
-- Tests: `tests/stock-import.test.mjs` (13). Code: `server/modules/stock/importer.cjs`, `src/pages/stock.js`.
+- Tests: `tests/stock-import.test.mjs` (17). Code: `server/modules/stock/importer.cjs`, `src/pages/stock.js`.
 
 ## Service income in the books (built, tested locally, **not deployed**)
 
@@ -587,6 +588,23 @@ what was missing was a way to *do* it from the screen, and a way to find an item
   device into the named place (reverses the cost). Stock the technician simply carries back to the shop is a **Take back** transfer.
 - New endpoint `GET /api/jobs/search?q=` (stock.view); the job summary now also returns the assigned technician.
 - The existing on-hand and serial-number searches on the Stock page are unchanged.
+
+---
+
+## Correcting an issued invoice, and installation contacts as customers
+
+- **Edit invoice** (`POST /api/sales/documents/:id/amend`, needs `invoice.cancel`): an issued invoice, credit note or proforma can be
+  corrected in place instead of cancelled and re-raised. It **keeps its number** (no hole in the series); its journal is reversed on the
+  day it was first posted (so no other period moves) and a corrected journal is posted (idempotency key `invoice:<id>:r<n>`);
+  `revision_no` goes up and prints as "(Revision n)". A **reason is required** and goes to the audit log with before/after.
+  Payments already received stay against it as long as the corrected total still covers them (`below_paid` otherwise — raise a credit
+  note). Cancelled invoices, drafts and quotations are refused (quotations keep their own *revise*). Cancel still exists and is unchanged.
+  Code: `reviseIssued` in `sales/service.cjs`, `src/pages/sales.js` (Edit button on the invoice detail).
+- **Installation contacts as customers** (`POST /api/parties/sync-installation-contacts`, needs `invoice.create`): every installation
+  with a usable phone that is not already a customer (matched on the last ten digits) becomes a customer, once. The Sales screen calls it
+  when it opens, so the invoice customer list always includes them; a later bill of the same installation reuses the same customer.
+  Code: `syncInstallationContacts` in `service-ledger/service.cjs`. Tests: `tests/installation-contacts.test.mjs`, three new cases in
+  `tests/sales-stage2.test.mjs`.
 
 ---
 

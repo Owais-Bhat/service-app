@@ -194,6 +194,24 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
         res.json(await sales.loadDocument(conn, req.params.id));
     }));
 
+    // Correct an issued invoice in place: same number, journal redone, reason kept.
+    app.post('/api/sales/documents/:id/amend', authenticateToken, requireCap('invoice.cancel'), handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const reason = clean(req.body?.reason, 500);
+        await conn.beginTransaction();
+        const out = await sales.reviseIssued(conn, { businessId, user: req.user, id: req.params.id, payload: req.body || {}, reason });
+        await conn.commit();
+
+        audit.record({
+            actor: req.user, action: 'document.amend', entityType: 'sales_document', entityId: req.params.id,
+            reason,
+            before: { doc_no: out.before.doc_no, total_paise: out.before.total_paise, party_id: out.before.party_id, revision_no: out.before.revision_no },
+            after: { doc_no: out.after.doc_no, total_paise: out.after.total_paise, party_id: out.after.party_id, revision_no: out.after.revision_no },
+            ip: req.ip,
+        });
+        res.json(await sales.loadDocument(conn, req.params.id));
+    }));
+
     app.post('/api/sales/documents/:id/cancel', authenticateToken, requireCap('invoice.cancel'), handle(async (req, res, conn) => {
         const reason = clean(req.body?.reason, 500);
         await conn.beginTransaction();

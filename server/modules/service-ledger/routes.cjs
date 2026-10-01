@@ -109,6 +109,12 @@ function mountServiceLedger({ app, getConn, authenticateToken, permissions, audi
         res.json(await runSweep(req.user.id));
     }));
 
+    // Whoever can raise an invoice may bring installation contacts in as customers.
+    app.post('/api/parties/sync-installation-contacts', authenticateToken, requireCap('invoice.create'), handle(async (req, res, conn) => {
+        const businessId = await defaultBusinessId(conn);
+        res.json(await service.syncInstallationContacts(conn, businessId));
+    }));
+
     console.log('[service-ledger] routes mounted');
     return { syncSoon, startSweeper, runSweep };
 }

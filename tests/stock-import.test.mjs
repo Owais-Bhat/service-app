@@ -212,15 +212,87 @@ test('opening stock reaches the shelf, the serials and the ledger together', { s
   assert.equal(Number(mv.v), 435000);
 });
 
-test('uploading the same file again does not double the shelf', { skip }, async () => {
+test('uploading the same file again changes nothing — items are found, not duplicated', { skip }, async () => {
   const before = await ledgerInventory();
+  const count = await countZZ();
   const r = await call('POST', '/stock/import', {
     rows: [HEADER, row(), cableRow()], dry_run: false, opening_date: '2026-04-01',
   });
-  assert.equal(r.status, 422);
-  assert.ok(r.body.errors.some((e) => /already has stock or history/.test(e)), JSON.stringify(r.body.errors));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.done.created, 0);
+  assert.equal(r.body.done.updated, 2);
+  assert.equal(r.body.done.restocked, 0, 'the numbers already match');
+  assert.equal(r.body.done.journal_id, null);
   assert.equal(Number((await itemBySku(`${PREFIX}CAM`)).quantity), 3);
+  assert.equal(await countZZ(), count);
   assert.equal(await ledgerInventory(), before);
+});
+
+test('a changed quantity in the file updates stock already held, and the books follow', { skip }, async () => {
+  const start = await ledgerInventory();
+  const dry = await call('POST', '/stock/import', { rows: [HEADER, cableRow({ 8: 100 })], dry_run: true });
+  assert.equal(dry.body.ok, true, JSON.stringify(dry.body.errors));
+  assert.equal(dry.body.rows[0].stock_mode, 'set');
+  assert.equal(dry.body.rows[0].stock_before, 90.5);
+  assert.equal(dry.body.rows[0].stock_delta, 9.5);
+  assert.equal(dry.body.summary.restock_up, 1);
+  assert.equal(Number((await itemBySku(`${PREFIX}CBL`)).quantity), 90.5, 'a checking run changes nothing');
+
+  const up = await call('POST', '/stock/import', { rows: [HEADER, cableRow({ 8: 100 })], dry_run: false, opening_date: '2026-04-02' });
+  assert.equal(up.status, 201, JSON.stringify(up.body));
+  made.journals.push(up.body.done.restock_journal_id);
+  assert.equal(up.body.done.restocked, 1);
+  assert.equal(Number((await itemBySku(`${PREFIX}CBL`)).quantity), 100);
+  assert.equal(await ledgerInventory() - start, Math.round(9.5 * 2200), 'the ledger grew by the value of what was found');
+
+  const down = await call('POST', '/stock/import', { rows: [HEADER, cableRow({ 8: 40 })], dry_run: false, opening_date: '2026-04-02' });
+  assert.equal(down.status, 201, JSON.stringify(down.body));
+  made.journals.push(down.body.done.restock_journal_id);
+  assert.equal(Number((await itemBySku(`${PREFIX}CBL`)).quantity), 40);
+  assert.equal(await ledgerInventory() - start, Math.round(9.5 * 2200) - 60 * 2200, 'and shrank by what went missing');
+  const [[mv]] = await db.query('SELECT SUM(quantity) AS q FROM inventory_movements WHERE item_id = ?', [(await itemBySku(`${PREFIX}CBL`)).id]);
+  assert.equal(Number(mv.q), 40, 'the movement ledger agrees with the item');
+
+  const off = await call('POST', '/stock/import', { rows: [HEADER, cableRow({ 8: 5 })], dry_run: false, opening_date: '2026-04-02', update_stock: false });
+  assert.equal(off.status, 201, JSON.stringify(off.body));
+  assert.equal(off.body.done.restocked, 0);
+  assert.equal(Number((await itemBySku(`${PREFIX}CBL`)).quantity), 40, 'with the option off, stock is left alone');
+
+  const blank = await call('POST', '/stock/import', { rows: [HEADER, cableRow({ 8: '' })], dry_run: false, opening_date: '2026-04-02' });
+  assert.equal(blank.status, 201, JSON.stringify(blank.body));
+  assert.equal(Number((await itemBySku(`${PREFIX}CBL`)).quantity), 40, 'a blank quantity keeps the stock');
+});
+
+test('an item is found by its name when the sheet has no SKU, and blank cells change nothing', { skip }, async () => {
+  const r = await call('POST', '/stock/import', {
+    rows: [HEADER, cableRow({ 1: '', 2: '', 3: '', 6: 33, 8: '', 12: '' })], dry_run: false, opening_date: '2026-04-02',
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.done.created, 0, 'matched by name, not duplicated');
+  const item = await itemBySku(`${PREFIX}CBL`);
+  assert.equal(Number(item.selling_rate), 33, 'the price was updated');
+  assert.equal(item.sku, `${PREFIX}CBL`, 'a blank SKU does not wipe the saved one');
+  assert.equal(item.category, 'Cables', 'a blank category does not wipe the saved one');
+  assert.equal(item.brand, 'D-Link', 'a blank brand does not wipe the saved one');
+
+  const clash = await call('POST', '/stock/import', { rows: [HEADER, cableRow({ 1: `${PREFIX}OTHER` })], dry_run: true });
+  assert.ok(clash.body.errors.some((e) => /already exists under a different SKU/.test(e)), JSON.stringify(clash.body.errors));
+});
+
+test('serial numbers already on the item are not an error on a second upload; new ones are added', { skip }, async () => {
+  const again = await call('POST', '/stock/import', { rows: [HEADER, row()], dry_run: true });
+  assert.equal(again.body.ok, true, JSON.stringify(again.body.errors));
+  assert.equal(again.body.rows[0].stock_mode, 'none');
+
+  const more = await call('POST', '/stock/import', {
+    rows: [HEADER, row({ 8: 4, 16: 'ZZSN-1, ZZSN-2, ZZSN-3, ZZSN-4' })], dry_run: false, opening_date: '2026-04-02',
+  });
+  assert.equal(more.status, 201, JSON.stringify(more.body));
+  made.journals.push(more.body.done.restock_journal_id);
+  assert.equal(more.body.done.serials, 1, 'only the new serial was received');
+  assert.equal(Number((await itemBySku(`${PREFIX}CAM`)).quantity), 4);
+  const [serials] = await db.query('SELECT serial_no FROM item_serials WHERE item_id = ?', [(await itemBySku(`${PREFIX}CAM`)).id]);
+  assert.equal(serials.length, 4);
 });
 
 test('the same file with the stock columns cleared updates details only', { skip }, async () => {
@@ -233,7 +305,7 @@ test('the same file with the stock columns cleared updates details only', { skip
   assert.equal(r.body.done.journal_id, null, 'no stock came in, so nothing is posted');
   const camera2 = await itemBySku(`${PREFIX}CAM`);
   assert.equal(Number(camera2.selling_rate), 2750, 'the price was updated');
-  assert.equal(Number(camera2.quantity), 3, 'the stock was not touched');
+  assert.equal(Number(camera2.quantity), 4, 'the stock was not touched (4 after the extra serial added above)');
 });
 
 test('a serial already on record is refused', { skip }, async () => {
@@ -278,6 +350,15 @@ test('a location that exists is honoured', { skip }, async () => {
   const item = await itemBySku(`${PREFIX}SHED`);
   const [[mv]] = await db.query('SELECT location_id FROM inventory_movements WHERE item_id = ?', [item.id]);
   assert.equal(mv.location_id, shed.body.id, 'the stock went to the named location (matched without regard to case)');
+});
+
+test('a sheet cannot take more off a location than it holds', { skip }, async () => {
+  // The shed item holds 10 at "ZZ Import Shed"; a sheet with no Location points at the default store, which holds none of it.
+  const r = await call('POST', '/stock/import', {
+    rows: [HEADER, cableRow({ 0: 'ZZ Shed Cable', 1: `${PREFIX}SHED`, 8: 0 })], dry_run: true,
+  });
+  assert.equal(r.body.ok, false);
+  assert.ok(r.body.errors.some((e) => /only 0 is held at/.test(e)), JSON.stringify(r.body.errors));
 });
 
 test.after(async () => {

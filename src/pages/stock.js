@@ -691,14 +691,14 @@ async function readSheet(file) {
 const GUIDE = [
   ['Column', 'Needed?', 'What to write'],
   ['Item Name', 'Yes', 'The name as it should print on a bill.'],
-  ['SKU', 'No', 'Your own code. Must be unique. If a SKU already exists, that item is updated instead of a new one being made.'],
+  ['SKU', 'No', 'Your own code. Must be unique. An item already saved (same SKU, or same name) is updated instead of a new one being made.'],
   ['Category', 'No', 'Any word — Cameras, Cables, Accessories.'],
   ['HSN/SAC', 'No', 'Tax code, 4 to 8 digits. Prints on GST bills.'],
   ['Unit', 'No', 'pcs, m, roll, box, set. Left empty = pcs.'],
   ['Purchase Rate', 'Yes', 'What one unit costs you, in rupees, without GST. Numbers only — no ₹ sign.'],
   ['Selling Rate', 'Yes', 'What you charge for one unit, in rupees, without GST.'],
   ['GST %', 'No', '0, 5, 12, 18 or 28. Left empty = 18.'],
-  ['Opening Qty', 'No', 'How many you have right now. Up to 3 decimals (90.5 metres). Only for items that have no stock yet.'],
+  ['Opening Qty', 'No', 'How many you have right now. Up to 3 decimals (90.5 metres). For an item that already has stock, its quantity is set to this number (you see the change before importing). Blank = leave stock as it is.'],
   ['Opening Rate', 'No', 'Cost of one unit of the stock you have. Left empty = Purchase Rate.'],
   ['Min Stock', 'No', 'You get a low-stock warning below this number.'],
   ['Location', 'No', 'Where it is kept — must already exist under Locations & Vans. Left empty = Main Store.'],
@@ -710,7 +710,7 @@ const GUIDE = [
   ['Rules'],
   ['Keep the first row (the headings) exactly as it is. Delete the three sample rows before you add your own.'],
   ['One row is one item. Nothing is saved until every row is correct — you will see the problems first.'],
-  ['Opening Qty is only for items that have no stock yet. To change stock later, use Adjust or a Stock Count.'],
+  ['Uploading a sheet again is safe: items already there are updated, and stock is only changed where the number differs.'],
 ];
 
 async function downloadTemplate() {
@@ -768,25 +768,45 @@ async function openImportModal(container, file) {
   const go = $('#im-go');
   let table;
   let check;
+  // Items already holding stock are brought to the file's quantity unless this is unticked.
+  let updateStock = true;
+  const checkFile = () => api('POST', '/stock/import', { rows: table, dry_run: true, file_name: file.name, update_stock: updateStock });
   try {
     table = await readSheet(file);
-    check = await api('POST', '/stock/import', { rows: table, dry_run: true, file_name: file.name });
+    check = await checkFile();
   } catch (err) {
     body.innerHTML = `<div class="at2-empty" style="color:var(--danger)">${esc(err.message)}</div>`;
     return;
   }
 
+  const stockCell = (r) => {
+    if (r.stock_mode === 'opening') return `<b>${r.opening_qty}</b> <small style="color:var(--text-dim)">opening</small>`;
+    if (r.stock_mode === 'set') {
+      const after = Math.round((r.stock_before + r.stock_delta) * 1000) / 1000;
+      return `${r.stock_before} → <b>${after}</b> <span class="at2-chip ${r.stock_delta > 0 ? 'ok' : 'warn'}" style="margin-left:4px">${r.stock_delta > 0 ? '+' : ''}${r.stock_delta}</span>`;
+    }
+    return r.action === 'update' && r.stock_before ? `<span style="color:var(--text-dim)">${r.stock_before} (no change)</span>` : '—';
+  };
+
+  const show = () => {
   const sm = check.summary;
   const problemRows = check.rows.filter(r => r.problems.length);
   body.innerHTML = `
     <div class="at2-chiprow" style="display:flex;margin:0 0 12px">
       <span class="at2-chip ok">${sm.rows} row${sm.rows === 1 ? '' : 's'}</span>
       <span class="at2-chip ok">${sm.create} new</span>
-      <span class="at2-chip warn">${sm.update} updated</span>
+      <span class="at2-chip warn">${sm.update} already there — updated</span>
       <span class="at2-chip ok">${sm.with_stock} with opening stock</span>
+      ${sm.restock ? `<span class="at2-chip warn">${sm.restock} stock count${sm.restock === 1 ? '' : 's'} changed (${sm.restock_up} up, ${sm.restock_down} down)</span>` : ''}
       ${canSeeCost ? `<span class="at2-chip ok">stock value ${rupees(sm.total_value_paise)}</span>` : ''}
       ${problemRows.length ? `<span class="at2-chip danger">${problemRows.length} row${problemRows.length === 1 ? '' : 's'} with problems</span>` : ''}
     </div>
+
+    <label class="at2-check" style="margin:0 0 12px">
+      <input type="checkbox" id="im-update-stock" ${updateStock ? 'checked' : ''}>
+      Items already in stock: set their quantity to the Opening Qty in this file
+      <small style="color:var(--text-dim);display:block;margin-left:22px">Leave a quantity blank to keep that item's stock as it is. Details (rates, GST, category…) of items already there are always updated; blank cells change nothing.</small>
+    </label>
 
     ${check.errors.length ? `
       <div class="at2-notice danger" style="max-height:190px;overflow:auto">
@@ -804,7 +824,7 @@ async function openImportModal(container, file) {
     <div class="table-wrap" style="max-height:340px;overflow:auto"><table class="at2-tbl">
       <thead><tr><th>Row</th><th></th><th>Item</th><th>SKU</th><th>Unit</th>
         <th style="text-align:right">Purchase</th><th style="text-align:right">Selling</th><th style="text-align:right">GST</th>
-        <th style="text-align:right">Opening</th><th>Location</th></tr></thead>
+        <th style="text-align:right">Stock</th><th>Location</th></tr></thead>
       <tbody>
         ${check.rows.slice(0, 300).map(r => `
           <tr${r.problems.length ? ' style="background:rgba(239,68,68,0.07)"' : ''}>
@@ -815,7 +835,7 @@ async function openImportModal(container, file) {
             <td style="text-align:right">${r.purchase_rate ?? '—'}</td>
             <td style="text-align:right">${r.selling_rate ?? '—'}</td>
             <td style="text-align:right">${r.gst_rate}%</td>
-            <td style="text-align:right">${r.opening_qty > 0 ? `<b>${r.opening_qty}</b>` : '—'}</td>
+            <td style="text-align:right;white-space:nowrap">${stockCell(r)}</td>
             <td>${esc(r.location || '—')}</td>
           </tr>`).join('')}
       </tbody>
@@ -824,23 +844,36 @@ async function openImportModal(container, file) {
 
     ${check.ok ? `
       <div class="form-group" style="margin-top:14px;max-width:280px">
-        <label>Opening stock counts from *</label>
+        <label>Stock counts from *</label>
         <input type="date" id="im-date" value="${ymd(new Date())}">
       </div>
-      <p class="at2-note">${sm.with_stock ? 'The stock value is recorded once in the books as Inventory against Opening Balance Equity, so the stock and the accounts start in agreement. ' : ''}Importing the same file again will not add stock twice.</p>` : ''}`;
+      <p class="at2-note">${sm.with_stock ? 'Opening stock is recorded once in the books as Inventory against Opening Balance Equity. ' : ''}${sm.restock ? 'Changes to stock already held are posted to the books as a stock adjustment. ' : ''}Importing the same file again changes nothing the second time.</p>` : ''}`;
 
+  const toggle = body.querySelector('#im-update-stock');
+  toggle.onchange = async () => {
+    updateStock = toggle.checked;
+    toggle.disabled = true;
+    try {
+      check = await checkFile();
+      show();
+    } catch (err) {
+      toast(err.message, 'error');
+      toggle.disabled = false;
+    }
+  };
+
+  go.disabled = !check.ok;
   if (!check.ok) return;
-  go.disabled = false;
   go.textContent = `Import ${sm.rows} item${sm.rows === 1 ? '' : 's'}`;
   go.onclick = async () => {
     const date = $('#im-date').value;
-    if (!date) return toast('Choose the opening stock date', 'warning');
+    if (!date) return toast('Choose the stock date', 'warning');
     go.disabled = true;
     go.textContent = 'Importing…';
     try {
-      const out = await api('POST', '/stock/import', { rows: table, dry_run: false, opening_date: date, file_name: file.name });
+      const out = await api('POST', '/stock/import', { rows: table, dry_run: false, opening_date: date, file_name: file.name, update_stock: updateStock });
       const d = out.done;
-      toast(`Done — ${d.created} added, ${d.updated} updated, ${d.stocked} with opening stock`, 'success');
+      toast(`Done — ${d.created} added, ${d.updated} updated, ${d.stocked} with opening stock${d.restocked ? `, ${d.restocked} stock counts changed` : ''}`, 'success');
       close();
       await loadTab();
       paint(container);
@@ -850,6 +883,8 @@ async function openImportModal(container, file) {
       go.textContent = `Import ${sm.rows} item${sm.rows === 1 ? '' : 's'}`;
     }
   };
+  };
+  show();
 }
 
 function openLocationModal(container) {

@@ -6,8 +6,9 @@
 //   * A draft is editable and posts nothing. An issued document is a record —
 //     it takes its number, snapshots the customer and the items, and posts to
 //     the ledger in the same transaction.
-//   * An issued document is never edited or deleted. It is cancelled, which
-//     reverses its journal and says why.
+//   * An issued document is never deleted. It is cancelled, which reverses its
+//     journal and says why — or corrected (reviseIssued), which does the same
+//     and posts the corrected figures under the same number.
 //   * Payment status is derived from allocations, never set by hand.
 //   * An estimate converts into an invoice once. A second attempt returns the
 //     invoice that already exists rather than making another.
@@ -160,7 +161,7 @@ async function priceDocument(conn, businessId, payload) {
     return { priced, placeOfSupply: placeOfSupply || biz.state_code };
 }
 
-async function saveDraft(conn, { businessId, user, payload, existingId = null, revising = false }) {
+async function saveDraft(conn, { businessId, user, payload, existingId = null, revising = false, amending = false }) {
     const docType = payload.doc_type || 'invoice';
     if (!DOC_TYPES.has(docType)) throw new SalesError('Unknown document type', 'bad_type', 400);
 
@@ -171,8 +172,13 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
         // A quotation moves no money, so an issued one may be revised; anything
         // that posted to the books may not.
         const revisable = revising && existing.doc_type === 'estimate' && REVISABLE.has(existing.status);
-        if (existing.status !== 'draft' && !revisable) {
-            throw new SalesError('An issued document cannot be edited — cancel it and raise a new one', 'not_draft');
+        // An invoice is only rewritten through reviseIssued, which also redoes its journal.
+        const amendable = amending && AMENDABLE.has(existing.doc_type) && existing.status === 'issued';
+        if (existing.status !== 'draft' && !revisable && !amendable) {
+            throw new SalesError('An issued document cannot be edited — use Edit invoice, or cancel it and raise a new one', 'not_draft');
+        }
+        if (payload.doc_type && payload.doc_type !== existing.doc_type && existing.status !== 'draft') {
+            throw new SalesError('The type of an issued document cannot change', 'type_locked', 400);
         }
     }
 
@@ -382,7 +388,7 @@ function addDays(date, days) {
 // income and the tax the business now owes; a credit note does the same in
 // reverse. Which income account depends on what was sold, so services and goods
 // can be told apart in a P&L.
-async function postDocumentJournal(conn, { businessId, user, doc, lines, docNo }) {
+async function postDocumentJournal(conn, { businessId, user, doc, lines, docNo, revisionNo = 0 }) {
     const isCredit = doc.doc_type === 'credit_note';
     const sign = isCredit ? -1 : 1;
 
@@ -434,9 +440,65 @@ async function postDocumentJournal(conn, { businessId, user, doc, lines, docNo }
         sourceType: isCredit ? 'credit_note' : 'invoice',
         sourceId: doc.id,
         lines: entries,
-        idempotencyKey: `${doc.doc_type}:${doc.id}`,
+        idempotencyKey: revisionNo ? `${doc.doc_type}:${doc.id}:r${revisionNo}` : `${doc.doc_type}:${doc.id}`,
         postedBy: user?.id || null,
     });
+}
+
+// ── editing an issued invoice ───────────────────────────────────────────
+// An invoice keeps its number when it is corrected: its journal is reversed on
+// the day it was first posted and a new one is posted in its place, so the books
+// show the old figures, the correction and who made it — and the numbering has
+// no hole. Money already received stays against it, as long as the corrected
+// total still covers it; a smaller total is a credit note's job.
+const AMENDABLE = new Set(['invoice', 'credit_note', 'proforma']);
+
+async function reviseIssued(conn, { businessId, user, id, payload, reason }) {
+    if (!reason) throw new SalesError('Say what was wrong — a correction needs a reason', 'no_reason', 400);
+    const before = await loadDocument(conn, id);
+    if (!before) throw new SalesError('No such document', 'not_found', 404);
+    const cur = before.document;
+    if (!AMENDABLE.has(cur.doc_type)) {
+        throw new SalesError(cur.doc_type === 'estimate' ? 'A quotation is revised, not corrected' : 'This document cannot be edited', 'not_amendable');
+    }
+    if (cur.status === 'draft') throw new SalesError('A draft is edited, not corrected', 'is_draft', 400);
+    if (cur.status !== 'issued') throw new SalesError('A cancelled document cannot be edited', 'not_issued');
+
+    await saveDraft(conn, {
+        businessId, user, existingId: id, amending: true,
+        payload: { ...payload, doc_type: cur.doc_type, source_type: cur.source_type, source_id: cur.source_id },
+    });
+    const loaded = await loadDocument(conn, id);
+    const doc = loaded.document;
+    if (!doc.party_id) throw new SalesError('Choose the customer', 'no_party', 400);
+    if (!loaded.lines.length) throw new SalesError('A document needs at least one line', 'no_lines', 400);
+    if (before.paid_paise > Number(doc.total_paise)) {
+        throw new SalesError(
+            `Payments of ${money.formatINR(before.paid_paise)} are already recorded, which is more than the corrected total. Raise a credit note for the difference instead.`,
+            'below_paid'
+        );
+    }
+
+    // The old figures come off on the day they went on, so no other period moves.
+    if (cur.journal_id) {
+        await posting.reverseJournal(conn, {
+            journalId: cur.journal_id, date: cur.doc_date, reason: `corrected — ${reason}`, postedBy: user?.id || null,
+        });
+    }
+
+    const { snapshot, party } = await freezeDocument(conn, loaded);
+    const revisionNo = Number(cur.revision_no || 0) + 1;
+    let journalId = null;
+    if (POSTS_TO_LEDGER.has(doc.doc_type)) {
+        const journal = await postDocumentJournal(conn, { businessId, user, doc, lines: loaded.lines, docNo: doc.doc_no, revisionNo });
+        journalId = journal.id;
+    }
+    const dueDate = doc.due_date || (party.credit_days ? addDays(doc.doc_date, Number(party.credit_days)) : null);
+    await conn.query(
+        'UPDATE sales_documents SET revision_no = ?, journal_id = ?, party_snapshot = ?, due_date = ? WHERE id = ?',
+        [revisionNo, journalId, JSON.stringify(snapshot), dueDate, id]
+    );
+    return { before: cur, after: (await loadDocument(conn, id)).document };
 }
 
 // ── cancelling ──────────────────────────────────────────────────────────
@@ -730,6 +792,7 @@ module.exports = {
     loadPayment,
     saveDraft,
     issueDocument,
+    reviseIssued,
     cancelDocument,
     convertDocument,
     recordPayment,

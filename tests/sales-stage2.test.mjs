@@ -454,6 +454,118 @@ test('a long document runs to several pages with the header repeated', { skip },
   assert.equal(rupees(issued.body.document.total_paise), '10620.00');
 });
 
+const issueInvoice = async (rate, date = '2026-09-18') => {
+  const draft = await call('POST', '/sales/documents', {
+    doc_type: 'invoice', party_id: customer.id, doc_date: date,
+    lines: [{ description: 'ZZ test — to be corrected', quantity: 1, rate: String(rate), tax_rate_bps: 1800 }],
+  });
+  made.docs.push(draft.body.document.id);
+  const issued = await call('POST', `/sales/documents/${draft.body.document.id}/issue`);
+  assert.equal(issued.status, 200, JSON.stringify(issued.body));
+  return issued.body.document;
+};
+const receivableNet = async (docId) => {
+  const [[row]] = await db.query(
+    `SELECT COALESCE(SUM(l.debit_paise),0) - COALESCE(SUM(l.credit_paise),0) AS net
+       FROM journal_lines l JOIN accounts a ON a.id = l.account_id JOIN journals j ON j.id = l.journal_id
+      WHERE j.source_id = ? AND j.source_type = 'invoice' AND a.code = '1100'`, [docId]
+  );
+  return Number(row.net);
+};
+
+test('an issued invoice is corrected in place — same number, the books redone, the reason kept', { skip }, async () => {
+  const before = await issueInvoice(1000);
+  assert.equal(Number(before.total_paise), 118000);
+
+  const noReason = await call('POST', `/sales/documents/${before.id}/amend`, {
+    party_id: customer.id, doc_date: '2026-09-18', lines: [{ description: 'x', quantity: 1, rate: '1500', tax_rate_bps: 1800 }],
+  });
+  assert.equal(noReason.status, 400);
+  assert.equal(noReason.body.code, 'no_reason');
+
+  const denied = await call('POST', `/sales/documents/${before.id}/amend`, { reason: 'x' }, 'employee');
+  assert.equal(denied.status, 403);
+
+  const fixed = await call('POST', `/sales/documents/${before.id}/amend`, {
+    reason: 'ZZ test — wrong rate',
+    party_id: customer.id, doc_date: '2026-09-18',
+    lines: [{ description: 'ZZ test — to be corrected', quantity: 2, rate: '1500', tax_rate_bps: 1800 }],
+  });
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.body));
+  const after = fixed.body.document;
+  assert.equal(after.doc_no, before.doc_no, 'the number does not change');
+  assert.equal(after.status, 'issued');
+  assert.equal(Number(after.revision_no), 1);
+  assert.equal(Number(after.total_paise), 354000, '2 × ₹1500 + 18%');
+  assert.notEqual(after.journal_id, before.journal_id, 'a new journal carries the corrected figures');
+  assert.equal(fixed.body.lines.length, 1);
+
+  const [[old]] = await db.query('SELECT status, reversed_by_id FROM journals WHERE id = ?', [before.journal_id]);
+  assert.equal(old.status, 'reversed', 'the old entry is reversed, not edited');
+  assert.ok(old.reversed_by_id);
+  assert.equal(await receivableNet(before.id), 354000, 'the customer owes exactly the corrected total — nothing left over from the old figure');
+
+  const [[sums]] = await db.query('SELECT SUM(debit_paise) d, SUM(credit_paise) c FROM journal_lines WHERE journal_id = ?', [after.journal_id]);
+  assert.equal(Number(sums.d), Number(sums.c), 'the new journal balances');
+
+  const [[audited]] = await db.query("SELECT reason FROM audit_log WHERE action = 'document.amend' AND entity_id = ? ORDER BY created_at DESC LIMIT 1", [before.id]).catch(() => [[null]]);
+  if (audited) assert.match(audited.reason, /wrong rate/);
+
+  // Corrected twice: a second revision, still the same number, still one live journal.
+  const again = await call('POST', `/sales/documents/${before.id}/amend`, {
+    reason: 'ZZ test — second look', party_id: customer.id, doc_date: '2026-09-18',
+    lines: [{ description: 'ZZ test — to be corrected', quantity: 1, rate: '2000', tax_rate_bps: 1800 }],
+  });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(Number(again.body.document.revision_no), 2);
+  assert.equal(again.body.document.doc_no, before.doc_no);
+  assert.equal(await receivableNet(before.id), 236000);
+});
+
+test('an invoice with payments can be corrected, but not below what has been paid', { skip }, async () => {
+  const inv = await issueInvoice(1000, '2026-09-19');
+  const paid = 50000;
+  const pay = await call('POST', '/payments', {
+    party_id: customer.id, payment_date: '2026-09-19', method: 'upi', amount_paise: paid, reference: 'ZZ-AMEND',
+    allocations: [{ document_id: inv.id, amount_paise: paid }],
+  });
+  assert.equal(pay.status, 201, JSON.stringify(pay.body));
+  made.payments.push(pay.body.payment.id);
+
+  const tooLow = await call('POST', `/sales/documents/${inv.id}/amend`, {
+    reason: 'ZZ test — too low', party_id: customer.id, doc_date: '2026-09-19',
+    lines: [{ description: 'ZZ test — to be corrected', quantity: 1, rate: '100', tax_rate_bps: 1800 }],
+  });
+  assert.equal(tooLow.status, 422);
+  assert.equal(tooLow.body.code, 'below_paid');
+  const unchanged = (await call('GET', `/sales/documents/${inv.id}`)).body;
+  assert.equal(Number(unchanged.document.total_paise), 118000, 'a refused correction leaves the invoice as it was');
+  assert.equal(unchanged.document.journal_id, inv.journal_id);
+
+  const ok = await call('POST', `/sales/documents/${inv.id}/amend`, {
+    reason: 'ZZ test — added a line', party_id: customer.id, doc_date: '2026-09-19',
+    lines: [{ description: 'ZZ test — to be corrected', quantity: 1, rate: '1000', tax_rate_bps: 1800 }, { description: 'ZZ test — extra', quantity: 1, rate: '500', tax_rate_bps: 1800 }],
+  });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.paid_paise, paid, 'the money already received stays against it');
+  assert.equal(ok.body.balance_paise, Number(ok.body.document.total_paise) - paid);
+});
+
+test('a cancelled invoice, a quotation and a draft are not corrected this way', { skip }, async () => {
+  const inv = await issueInvoice(300, '2026-09-21');
+  await call('POST', `/sales/documents/${inv.id}/cancel`, { reason: 'ZZ test — cancelled first' });
+  const body = { reason: 'ZZ test', party_id: customer.id, lines: [{ description: 'x', quantity: 1, rate: '1', tax_rate_bps: 0 }] };
+  assert.equal((await call('POST', `/sales/documents/${inv.id}/amend`, body)).status, 422, 'cancelled');
+
+  const draft = await call('POST', '/sales/documents', { doc_type: 'invoice', party_id: customer.id, lines: body.lines });
+  made.docs.push(draft.body.document.id);
+  assert.equal((await call('POST', `/sales/documents/${draft.body.document.id}/amend`, body)).body.code, 'is_draft');
+
+  const estimateId = made.docs[0];
+  const est = await call('POST', `/sales/documents/${estimateId}/amend`, body);
+  assert.equal(est.body.code, 'not_amendable', 'a quotation is revised, not corrected');
+});
+
 test('permissions hold on the sales side too', { skip }, async () => {
   const create = await call('POST', '/sales/documents', {
     doc_type: 'invoice', party_id: customer.id,

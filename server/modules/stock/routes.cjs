@@ -336,7 +336,8 @@ function mountStock({ app, getConn, authenticateToken, permissions, audit }) {
     const importHandler = handle(async (req, res, conn) => {
         const businessId = await business(conn);
         const b = req.body || {};
-        const checked = await importer.validateRows(conn, businessId, b.rows);
+        // Items already holding stock are brought to the file's quantity unless the caller says not to.
+        const checked = await importer.validateRows(conn, businessId, b.rows, { updateStock: b.update_stock !== false });
         const shaped = {
             ok: checked.ok,
             errors: checked.errors,
@@ -346,6 +347,7 @@ function mountStock({ app, getConn, authenticateToken, permissions, audit }) {
                 row: r.row, action: r.action, name: r.name, sku: r.sku, unit: r.unit,
                 purchase_rate: r.purchase_rate, selling_rate: r.selling_rate, gst_rate: r.gst_rate,
                 opening_qty: r.opening_qty, opening_rate: r.opening_rate, location: r.location_name,
+                stock_mode: r.stock_mode, stock_before: r.stock_before, stock_delta: r.stock_delta,
                 serials: r.serials.length, problems: r.problems,
             })),
         };

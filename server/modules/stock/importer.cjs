@@ -1,6 +1,6 @@
 'use strict';
 
-// Bulk item + opening-stock import.
+// Bulk item + stock import.
 //
 // One function checks the rows (`validateRows`) and one writes them
 // (`importRows`). The screen's preview and the real import both go through
@@ -9,12 +9,16 @@
 // The rules that matter:
 //   • Nothing is saved unless every row is clean — a half-imported stock list
 //     is harder to fix than an unimported one.
+//   • An item is found by its SKU, else by its name. One that is already there
+//     is updated, never duplicated, and a blank cell leaves what is saved alone.
+//   • An item with no stock yet gets opening stock. One that already holds
+//     stock has its quantity brought to the file's number (when asked to), as a
+//     count: the difference moves through `stock.move()` and is posted to the
+//     books against stock adjustments, so the shelf and the ledger still agree.
+//     The same file uploaded twice changes nothing the second time.
 //   • Opening stock goes in through the same `stock.move()` door as every other
 //     movement, and one journal (Dr Inventory / Cr Opening Balance Equity)
-//     carries the whole value, so the ledger and the stock valuation agree.
-//   • A row for an item that already holds stock may update its details but
-//     never adds stock again — uploading the same file twice must not double
-//     the shelf.
+//     carries the whole value.
 
 const { createHash, randomUUID } = require('crypto');
 const money = require('../money.cjs');
@@ -90,9 +94,11 @@ const NO = new Set(['n', 'no', 'false', '0', '']);
  * @param {object} conn
  * @param {string} businessId
  * @param {Array<Array>} table  the sheet as rows of cells; the first row is the header
+ * @param {{updateStock?: boolean}} [options]  updateStock (default true): bring the
+ *        quantity of items that already hold stock to the file's number
  * @returns {Promise<{ok: boolean, rows: object[], errors: string[], summary: object}>}
  */
-async function validateRows(conn, businessId, table) {
+async function validateRows(conn, businessId, table, { updateStock = true } = {}) {
     const errors = [];
     const fail = (message) => ({ ok: false, rows: [], errors: [message], summary: emptySummary() });
 
@@ -108,7 +114,7 @@ async function validateRows(conn, businessId, table) {
     }
 
     const [existingItems] = await conn.query(
-        'SELECT id, sku, name, quantity FROM inventory_items'
+        'SELECT id, sku, name, quantity, track_serial FROM inventory_items'
     );
     const bySku = new Map();
     const byName = new Map();
@@ -126,10 +132,11 @@ async function validateRows(conn, businessId, table) {
     const [usedMovement] = await conn.query('SELECT DISTINCT item_id FROM inventory_movements');
     const hasHistory = new Set(usedMovement.map((r) => r.item_id));
 
-    const [serialRows] = await conn.query('SELECT serial_no FROM item_serials WHERE business_id = ?', [businessId]);
-    const serialsOnRecord = new Set(serialRows.map((r) => r.serial_no.toLowerCase()));
+    const [serialRows] = await conn.query('SELECT serial_no, item_id FROM item_serials WHERE business_id = ?', [businessId]);
+    const serialOwner = new Map(serialRows.map((r) => [r.serial_no.toLowerCase(), r.item_id]));
 
     const seenKeys = new Map();      // sku or name within this file → row number
+    const claimed = new Map();       // saved item id → row number that found it
     const seenSerials = new Map();   // serial → row number
     const rows = [];
 
@@ -171,33 +178,72 @@ async function validateRows(conn, businessId, table) {
         }
 
         const sku = text(cell('sku'), 60);
-        const unit = text(cell('unit'), UNIT_MAX) || 'pcs';
+        const unitGiven = text(cell('unit'), UNIT_MAX);
+        const unit = unitGiven || 'pcs';
+
+        // Which saved item is this row about? The SKU first, then the name. A
+        // name that is taken by an item under a different SKU would make two
+        // items that look identical on an invoice.
+        let existing = sku ? bySku.get(sku.toLowerCase()) || null : null;
+        if (!existing && name) {
+            const named = byName.get(name.toLowerCase());
+            if (named && (!sku || !named.sku)) existing = named;
+            else if (named) add(`An item called "${name}" already exists under a different SKU (${named.sku})`);
+        }
+        if (existing) {
+            if (claimed.has(existing.id)) add(`Is the same item as row ${claimed.get(existing.id)}`);
+            else claimed.set(existing.id, rowNo);
+        }
 
         const serialFlag = text(cell('track_serial')).toLowerCase();
         if (!YES.has(serialFlag) && !NO.has(serialFlag)) add(`Track Serial "${text(cell('track_serial'), 10)}" should be Y or N`);
-        const trackSerial = YES.has(serialFlag);
+        const serialFlagGiven = serialFlag !== '';
+        // A blank Track Serial leaves a saved item as it is.
+        const trackSerial = serialFlagGiven ? YES.has(serialFlag) : !!(existing && Number(existing.track_serial));
 
         const serials = String(cell('serials') ?? '')
             .split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
         if (serials.length && !trackSerial) add('Serial Numbers are filled but Track Serial is not Y');
-        if (trackSerial && (openingQty || 0) > 0) {
+
+        const hadStock = !!existing && (Number(existing.quantity) > 0 || hasHistory.has(existing.id));
+        const given = openingQty !== null;
+
+        // What happens to the shelf: first stock ('opening'), a count against
+        // stock already held ('set'), or nothing.
+        let stockMode = 'none';
+        let newSerials = serials;
+        let before = existing ? Number(existing.quantity) : 0;
+        let delta = 0;
+        if (!existing || !hadStock) {
+            stockMode = (openingQty || 0) > 0 ? 'opening' : 'none';
+        } else if (trackSerial) {
+            // Each piece has its own number, so only numbers not yet on record change the stock.
+            newSerials = serials.filter((s) => serialOwner.get(s.toLowerCase()) !== existing.id);
+            if (updateStock && newSerials.length) { stockMode = 'set'; delta = newSerials.length; }
+        } else if (given && updateStock) {
+            delta = Math.round((openingQty - before) * 1000) / 1000;
+            if (delta !== 0) stockMode = 'set';
+        }
+
+        if (stockMode === 'opening' && trackSerial) {
             if (!Number.isInteger(openingQty)) add('A serial-tracked item needs a whole Opening Qty');
             else if (serials.length !== openingQty) {
                 add(`Opening Qty is ${openingQty} but ${serials.length} serial number${serials.length === 1 ? ' is' : 's are'} listed`);
             }
         }
-        if (trackSerial && !(openingQty > 0) && serials.length) add('Serial Numbers need an Opening Qty');
-        for (const serial of serials) {
+        if (trackSerial && !(openingQty > 0) && serials.length && stockMode === 'none' && !hadStock) add('Serial Numbers need an Opening Qty');
+        for (const serial of newSerials) {
             const key = serial.toLowerCase();
-            if (serialsOnRecord.has(key)) add(`Serial ${serial} is already on record`);
+            if (serialOwner.has(key)) add(`Serial ${serial} is already on record`);
             else if (seenSerials.has(key)) add(`Serial ${serial} is repeated (also in row ${seenSerials.get(key)})`);
             else seenSerials.set(key, rowNo);
         }
+        if (stockMode === 'none') newSerials = [];
 
         // Where does the stock go?
         let location = null;
         const locationName = text(cell('location'));
-        if (openingQty > 0) {
+        if (stockMode !== 'none') {
             location = locationName ? locationByName.get(locationName.toLowerCase()) : defaultLocation;
             if (!location) {
                 add(locationName
@@ -207,21 +253,18 @@ async function validateRows(conn, businessId, table) {
         } else if (locationName && !locationByName.has(locationName.toLowerCase())) {
             add(`Location "${locationName}" does not exist`);
         }
+        if (stockMode === 'set' && delta < 0 && location) {
+            const held = await stock.locationQuantity(conn, existing.id, location.id, { includeUnassigned: !!location.is_default });
+            if (held < -delta) {
+                add(`"${existing.name}": the file takes ${-delta} off, but only ${held} is held at ${location.name}`);
+            }
+        }
 
-        // Duplicates inside the file, then against what is already saved.
+        // Duplicates inside the file.
         const fileKey = (sku || name).toLowerCase();
         if (fileKey) {
             if (seenKeys.has(fileKey)) add(`Repeats row ${seenKeys.get(fileKey)} (${sku ? 'same SKU' : 'same name'})`);
             else seenKeys.set(fileKey, rowNo);
-        }
-        const existing = (sku && bySku.get(sku.toLowerCase())) || (!sku && byName.get(name.toLowerCase())) || null;
-        // A SKU that is new but whose name is taken would create two items
-        // that look identical on an invoice.
-        if (!existing && sku && byName.has(name.toLowerCase())) {
-            add(`An item called "${name}" already exists under a different SKU`);
-        }
-        if (existing && (openingQty || 0) > 0 && (Number(existing.quantity) > 0 || hasHistory.has(existing.id))) {
-            add(`"${existing.name}" already has stock or history — clear Opening Qty (use Adjust or a Stock Count to change stock)`);
         }
 
         if (problems.length) {
@@ -236,15 +279,22 @@ async function validateRows(conn, businessId, table) {
             category: text(cell('category'), 120) || null,
             hsn_sac: text(cell('hsn_sac'), 10) || null,
             unit,
+            unit_given: !!unitGiven,
             purchase_rate: purchaseRate,
             selling_rate: sellingRate,
             gst_rate: gstRate === null ? 18 : gstRate,
+            gst_given: gstRate !== null,
             min_stock: minStock || 0,
+            min_stock_given: minStock !== null,
             brand: text(cell('brand'), 120) || null,
             model: text(cell('model'), 120) || null,
             warranty_months: warranty,
             track_serial: trackSerial,
-            serials,
+            track_serial_given: serialFlagGiven,
+            serials: newSerials,
+            stock_mode: stockMode,
+            stock_before: before,
+            stock_delta: delta,
             opening_qty: openingQty || 0,
             opening_rate: openingRate !== null ? openingRate : purchaseRate,
             location_id: location?.id || null,
@@ -265,7 +315,10 @@ async function validateRows(conn, businessId, table) {
 }
 
 function emptySummary() {
-    return { rows: 0, create: 0, update: 0, with_stock: 0, total_qty: 0, total_value_paise: 0 };
+    return {
+        rows: 0, create: 0, update: 0, with_stock: 0, total_qty: 0, total_value_paise: 0,
+        restock: 0, restock_up: 0, restock_down: 0,
+    };
 }
 
 function summarise(rows) {
@@ -273,10 +326,13 @@ function summarise(rows) {
     for (const r of rows) {
         summary.rows += 1;
         summary[r.action] += 1;
-        if (r.opening_qty > 0) {
+        if (r.stock_mode === 'opening') {
             summary.with_stock += 1;
             summary.total_qty += r.opening_qty;
             summary.total_value_paise += Math.round(money.toPaise(r.opening_rate || 0) * r.opening_qty);
+        } else if (r.stock_mode === 'set') {
+            summary.restock += 1;
+            if (r.stock_delta > 0) summary.restock_up += 1; else summary.restock_down += 1;
         }
     }
     summary.total_qty = Math.round(summary.total_qty * 1000) / 1000;
@@ -285,7 +341,7 @@ function summarise(rows) {
 
 /**
  * Write a validated file. Everything happens in one transaction: the items,
- * the opening movements, the serials and the journal all land, or none do.
+ * the stock movements, the serials and the journals all land, or none do.
  */
 async function importRows(conn, { businessId, rows, openingDate, userId, fileName = null }) {
     if (rows.some((r) => r.problems.length)) {
@@ -293,12 +349,15 @@ async function importRows(conn, { businessId, rows, openingDate, userId, fileNam
     }
     const date = String(openingDate || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        throw new stock.StockError('Choose the date the opening stock counts from', 'no_date', 400);
+        throw new stock.StockError('Choose the date the stock counts from', 'no_date', 400);
     }
 
     await conn.beginTransaction();
     try {
-        const result = { created: 0, updated: 0, stocked: 0, serials: 0, total_value_paise: 0, journal_id: null };
+        const result = {
+            created: 0, updated: 0, stocked: 0, serials: 0, total_value_paise: 0, journal_id: null,
+            restocked: 0, restock_up_paise: 0, restock_down_paise: 0, restock_journal_id: null,
+        };
 
         for (const r of rows) {
             const details = {
@@ -312,7 +371,16 @@ async function importRows(conn, { businessId, rows, openingDate, userId, fileNam
 
             let itemId = r.existing_id;
             if (itemId) {
-                await conn.query('UPDATE inventory_items SET ? WHERE id = ?', [details, itemId]);
+                // A blank cell in the file leaves what is saved alone.
+                const keep = { ...details };
+                for (const field of ['sku', 'category', 'hsn_sac', 'brand', 'model', 'warranty_months']) {
+                    if (keep[field] === null) delete keep[field];
+                }
+                if (!r.unit_given) { delete keep.unit; delete keep.base_unit; }
+                if (!r.gst_given) delete keep.gst_rate;
+                if (!r.min_stock_given) delete keep.min_stock;
+                if (!r.track_serial_given) delete keep.track_serial;
+                await conn.query('UPDATE inventory_items SET ? WHERE id = ?', [keep, itemId]);
                 result.updated += 1;
             } else {
                 itemId = randomUUID();
@@ -320,7 +388,7 @@ async function importRows(conn, { businessId, rows, openingDate, userId, fileNam
                 result.created += 1;
             }
 
-            if (r.opening_qty > 0) {
+            if (r.stock_mode === 'opening') {
                 const cost = money.toPaise(r.opening_rate);
                 const made = await stock.move(conn, {
                     businessId, itemId, type: 'opening', quantity: r.opening_qty,
@@ -337,15 +405,35 @@ async function importRows(conn, { businessId, rows, openingDate, userId, fileNam
                     });
                     result.serials += made.length;
                 }
+            } else if (r.stock_mode === 'set') {
+                const up = r.stock_delta > 0;
+                const cost = money.toPaise(r.opening_rate);
+                const made = await stock.move(conn, {
+                    businessId, itemId, type: up ? 'count_up' : 'count_down', quantity: Math.abs(r.stock_delta),
+                    unitCostPaise: up ? cost : null, locationId: r.location_id,
+                    sourceType: 'count', note: 'Stock updated (Excel import)', createdBy: userId,
+                });
+                if (up) result.restock_up_paise += Math.abs(made.value_paise);
+                else result.restock_down_paise += Math.abs(made.value_paise);
+                result.restocked += 1;
+
+                if (r.serials.length) {
+                    const got = await stock.receiveSerials(conn, {
+                        businessId, itemId, serials: r.serials, locationId: r.location_id,
+                        costPaise: cost, warrantyMonths: r.warranty_months, createdBy: userId,
+                    });
+                    result.serials += got.length;
+                }
             }
         }
+
+        const fingerprint = (kind) => createHash('sha256').update(JSON.stringify([kind, date, rows.map((x) => [x.name, x.sku, x.opening_qty, x.opening_rate, x.stock_delta])])).digest('hex').slice(0, 32);
 
         if (result.total_value_paise > 0) {
             const inventory = await posting.accountByCode(conn, businessId, '1200');
             const equity = await posting.accountByCode(conn, businessId, '3100');
             // The same file on the same date is the same import; the key stops a
             // double-click from posting the value twice.
-            const fingerprint = createHash('sha256').update(JSON.stringify([date, rows.map((x) => [x.name, x.sku, x.opening_qty, x.opening_rate])])).digest('hex').slice(0, 32);
             const journal = await posting.postJournal(conn, {
                 businessId, date,
                 narration: `Opening stock — Excel import${fileName ? ` (${fileName})` : ''}`,
@@ -354,10 +442,35 @@ async function importRows(conn, { businessId, rows, openingDate, userId, fileNam
                     { account_id: inventory.id, debit_paise: result.total_value_paise, memo: `${result.stocked} item(s) brought in` },
                     { account_id: equity.id, credit_paise: result.total_value_paise, memo: 'Opening stock' },
                 ],
-                idempotencyKey: `stock-import:${fingerprint}`,
+                idempotencyKey: `stock-import:${fingerprint('opening')}`,
                 postedBy: userId,
             });
             result.journal_id = journal.id;
+        }
+
+        // Counts against stock already held: the net difference goes to the same
+        // account a stock count uses, so it is visible in the accounts.
+        const net = result.restock_up_paise - result.restock_down_paise;
+        if (net !== 0) {
+            const inventory = await posting.accountByCode(conn, businessId, '1200');
+            const shrinkage = await posting.accountByCode(conn, businessId, '5010');
+            const journal = await posting.postJournal(conn, {
+                businessId, date,
+                narration: `Stock updated — Excel import${fileName ? ` (${fileName})` : ''}`,
+                sourceType: 'stock', sourceId: null,
+                lines: net > 0
+                    ? [
+                        { account_id: inventory.id, debit_paise: net, memo: `${result.restocked} item(s) found more` },
+                        { account_id: shrinkage.id, credit_paise: net, memo: 'Import stock update' },
+                    ]
+                    : [
+                        { account_id: shrinkage.id, debit_paise: -net, memo: `${result.restocked} item(s) found less` },
+                        { account_id: inventory.id, credit_paise: -net, memo: 'Import stock update' },
+                    ],
+                idempotencyKey: `stock-import:${fingerprint('update')}`,
+                postedBy: userId,
+            });
+            result.restock_journal_id = journal.id;
         }
 
         await conn.commit();
