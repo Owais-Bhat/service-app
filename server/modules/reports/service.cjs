@@ -300,6 +300,7 @@ async function salesRegister(conn, businessId, { from, to }) {
            FROM sales_documents d
            LEFT JOIN parties p ON p.id = d.party_id
           WHERE d.business_id = ? AND d.status = 'issued' AND d.doc_type IN ('invoice', 'credit_note', 'debit_note')
+            AND d.bill_type <> 'non_gst'
             AND d.doc_date BETWEEN ? AND ?
           ORDER BY d.doc_date, d.doc_no`,
         [businessId, from, to]
@@ -410,6 +411,7 @@ async function hsnSummary(conn, businessId, { from, to }) {
            FROM sales_document_lines l
            JOIN sales_documents d ON d.id = l.document_id
           WHERE d.business_id = ? AND d.status = 'issued' AND d.doc_type IN ('invoice', 'credit_note', 'debit_note')
+            AND d.bill_type <> 'non_gst'
             AND d.doc_date BETWEEN ? AND ?
           GROUP BY l.hsn_sac, l.unit, l.tax_rate_bps
           ORDER BY l.hsn_sac, l.tax_rate_bps`,

@@ -608,6 +608,26 @@ what was missing was a way to *do* it from the screen, and a way to find an item
 
 ---
 
+## Three kinds of bill, and a self-adding item line
+
+`sales_documents.bill_type` (`gst` | `non_gst` | `service`, default `gst`; the column is added on boot to an existing table).
+Chosen at the top of the invoice / quotation editor; a credit note is always `gst`.
+
+- **GST invoice** — titled *Tax Invoice*; the GST columns (CGST+SGST, or IGST for another state) are always printed.
+- **Non-GST bill** — titled *Invoice*; every line is forced to `non_gst` / 0% on the server whatever the screen sent, the Tax and HSN
+  columns, "rates include tax", the business GSTIN and place of supply are left off the screen and the PDF, a regular-registered
+  business without a GSTIN may still issue it, and it is **excluded from the GST sales register and HSN summary** (so it never
+  lands in a return). It still posts to the ledger (Dr customer / Cr sales) like any invoice.
+- **Service bill** — for services; a **Charge GST** tick (default on). On: GST columns, titled *Tax Invoice (Services)*. Off: lines go
+  as non-GST, no tax columns, titled *Service Invoice*.
+- The type is kept through quotation → invoice conversion and through *Edit invoice*; the list shows a Non-GST / Service chip.
+- Numbering is one INV series for all three. A separate series for non-GST bills is a one-line change in `DEFAULT_PREFIXES` if wanted.
+- Documents issued before this existed read as `gst`, so one that carried no tax now prints its (empty) GST columns.
+- Item entry: an empty line always waits at the bottom of the editor; Enter on a line's last field jumps to the next line's item.
+- Tests: `tests/sales-stage2.test.mjs` (two new), `tests/quotation-revise.test.mjs` (unchanged, still green).
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

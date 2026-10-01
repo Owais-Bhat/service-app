@@ -91,7 +91,9 @@ const dayLabel = (v) => (v ? new Date(v).toLocaleDateString('en-IN', { day: '2-d
 function tableColumns({ doc, lines, width }) {
     const W = width;
     const taxTotal = ['cgst_paise', 'sgst_paise', 'utgst_paise', 'igst_paise'].reduce((n, k) => n + Number(doc[k] || 0), 0);
-    const hasTax = taxTotal > 0 || lines.some((l) => Number(l.tax_rate_bps) > 0);
+    // GST bill: the tax columns are always there. Non-GST: never. Service bill: only if it was taxed.
+    const taxed = taxTotal > 0 || lines.some((l) => Number(l.tax_rate_bps) > 0);
+    const hasTax = doc.bill_type === 'non_gst' ? false : doc.bill_type === 'gst' ? true : taxed;
     const inter = doc.supply_type === 'inter';
     // [key, heading, share of the page width in %, alignment] — the shares add up to 100,
     // so the last column always ends at the right margin.
@@ -111,6 +113,19 @@ function tableColumns({ doc, lines, width }) {
 
 const NUMBER_LABEL = { invoice: 'Invoice No.', credit_note: 'Credit Note No.', estimate: 'Quotation No.', proforma: 'Proforma No.' };
 const HEADING = { invoice: 'Tax Invoice', credit_note: 'Credit Note', estimate: 'Quotation', proforma: 'Proforma Invoice' };
+
+// What the page calls itself. Only an invoice changes with the bill type: a bill
+// with no GST is not a "Tax Invoice", and a service bill says what it is.
+function headingOf(doc) {
+    if (doc.doc_type === 'invoice') {
+        if (doc.bill_type === 'non_gst') return 'Invoice';
+        if (doc.bill_type === 'service') {
+            const taxed = ['cgst_paise', 'sgst_paise', 'utgst_paise', 'igst_paise'].some((k) => Number(doc[k] || 0) > 0);
+            return taxed ? 'Tax Invoice (Services)' : 'Service Invoice';
+        }
+    }
+    return HEADING[doc.doc_type] || 'Document';
+}
 const TINT = '#eaf6ef';
 
 /**
@@ -179,7 +194,7 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
             [business.city, business.pincode].filter(Boolean).join(' ') + (business.state_name ? `, ${business.state_name}` : ''),
             business.phone && `Phone no.: ${business.phone}`,
             business.email && `Email: ${business.email}`,
-            business.gstin && `GSTIN: ${business.gstin}`,
+            business.gstin && doc.bill_type !== 'non_gst' && `GSTIN: ${business.gstin}`,
         ].filter((l) => l && String(l).replace(/[,\s]/g, ''));
         pdf.font(reg).fontSize(8.5).fillColor(INK).text(addressLines.join('\n'), 40, y, { width: textW, lineGap: 1.5 });
         let headEnd = pdf.y;
@@ -197,7 +212,7 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
 
         // ── the title, centred, in the brand green ──────────────────────
         y += 10;
-        pdf.font(bold).fontSize(14).fillColor(BRAND).text(HEADING[doc.doc_type] || 'Document', 40, y, { width: W, align: 'center' });
+        pdf.font(bold).fontSize(14).fillColor(BRAND).text(headingOf(doc), 40, y, { width: W, align: 'center' });
         y = pdf.y + 10;
 
         // ── bill to (left) and the document's details (right) ───────────
@@ -215,7 +230,7 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
         const leftEnd = pdf.y;
 
         const rightX = 40 + colW;
-        pdf.font(bold).fontSize(9.5).fillColor(INK).text(`${(HEADING[doc.doc_type] || 'Document').replace('Tax ', '')} Details`, rightX, y, { width: colW, align: 'right' });
+        pdf.font(bold).fontSize(9.5).fillColor(INK).text(`${headingOf(doc).replace(/^Tax /, '').replace(/ \(.*\)$/, '')} Details`, rightX, y, { width: colW, align: 'right' });
         const detailLines = [
             doc.doc_no
                 ? `${NUMBER_LABEL[doc.doc_type] || 'No.'}: ${doc.doc_no}${Number(doc.revision_no) > 0 ? ` (Revision ${doc.revision_no})` : ''}`
@@ -224,7 +239,8 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
             doc.due_date && doc.doc_type !== 'estimate' ? `Due date: ${dayLabel(doc.due_date)}` : null,
             doc.valid_until ? `Valid until: ${dayLabel(doc.valid_until)}` : null,
             doc.reference ? `Ref: ${doc.reference}` : null,
-            `Place of supply: ${snapshot.address?.state_name || gst.stateName(doc.place_of_supply_state_code) || doc.place_of_supply_state_code || '—'}`,
+            doc.bill_type === 'non_gst' ? null
+                : `Place of supply: ${snapshot.address?.state_name || gst.stateName(doc.place_of_supply_state_code) || doc.place_of_supply_state_code || '—'}`,
         ].filter(Boolean);
         pdf.font(reg).fontSize(9).fillColor(INK).text(detailLines.join('\n'), rightX, pdf.y + 3, { width: colW, align: 'right', lineGap: 1.5 });
         y = Math.max(leftEnd, pdf.y) + 14;
@@ -412,4 +428,4 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
     });
 }
 
-module.exports = { renderDocumentPdf, HAS_UNICODE, inWords, tableColumns, upiLink };
+module.exports = { renderDocumentPdf, HAS_UNICODE, inWords, tableColumns, headingOf, upiLink };

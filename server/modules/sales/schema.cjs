@@ -17,6 +17,8 @@ const SALES_TABLES = [
         business_id VARCHAR(36) NOT NULL,
         doc_type VARCHAR(20) NOT NULL
             COMMENT 'estimate | proforma | invoice | credit_note — a quotation and a proforma never post to the ledger',
+        bill_type VARCHAR(12) NOT NULL DEFAULT 'gst'
+            COMMENT 'gst = GST invoice with tax columns | non_gst = no GST at all, kept out of GST returns | service = a service bill, GST optional',
         doc_no VARCHAR(40) NULL COMMENT 'allocated when the document is issued, never while it is a draft',
         doc_date DATE NOT NULL,
         due_date DATE NULL,
@@ -170,6 +172,13 @@ const SALES_TABLES = [
 async function ensureSalesSchema(connection) {
     for (const statement of SALES_TABLES) {
         await connection.query(statement);
+    }
+    // Tables made before the bill type existed get the column, once.
+    const [have] = await connection.query("SHOW COLUMNS FROM sales_documents LIKE 'bill_type'");
+    if (!have.length) {
+        await connection.query(
+            "ALTER TABLE sales_documents ADD COLUMN bill_type VARCHAR(12) NOT NULL DEFAULT 'gst' COMMENT 'gst | non_gst | service' AFTER doc_type"
+        );
     }
 }
 

@@ -42,6 +42,9 @@ const ymd = (d) => {
 };
 
 const DOC_TYPES = new Set(['estimate', 'proforma', 'invoice', 'credit_note']);
+// gst = a GST invoice; non_gst = no GST at all (and kept out of the GST returns);
+// service = a service bill where GST is optional.
+const BILL_TYPES = new Set(['gst', 'non_gst', 'service']);
 // Which documents are a financial event and which are a piece of paper. A
 // quotation or a proforma must not touch the books simply because it was
 // printed.
@@ -120,6 +123,10 @@ async function priceDocument(conn, businessId, payload) {
         placeOfSupply = party?.place_of_supply_state_code || null;
     }
 
+    // A non-GST bill carries no tax whatever the lines say; a service bill is taxed
+    // only if its lines are (the screen sends them as non-GST when GST is switched off).
+    const noTax = payload.bill_type === 'non_gst';
+
     const lines = (payload.lines || [])
         .filter((l) => String(l.description || '').trim() || l.item_id)
         .map((l) => ({
@@ -132,8 +139,8 @@ async function priceDocument(conn, businessId, payload) {
             cost_rate_paise: l.cost_rate === undefined && l.cost_rate_paise === undefined
                 ? null : paiseOf(l.cost_rate, l.cost_rate_paise),
             discount_bps: Number(l.discount_bps) || 0,
-            tax_rate_bps: Number(l.tax_rate_bps) || 0,
-            tax_treatment: l.tax_treatment || 'gst',
+            tax_rate_bps: noTax ? 0 : Number(l.tax_rate_bps) || 0,
+            tax_treatment: noTax ? 'non_gst' : l.tax_treatment || 'gst',
         }));
 
     if (!lines.length) throw new SalesError('A document needs at least one line', 'no_lines', 400);
@@ -143,14 +150,14 @@ async function priceDocument(conn, businessId, payload) {
         .map((c) => ({
             label: String(c.label || 'Charge').slice(0, 120),
             amount_paise: paiseOf(c.amount, c.amount_paise),
-            tax_rate_bps: Number(c.tax_rate_bps) || 0,
-            tax_treatment: c.tax_treatment || 'gst',
+            tax_rate_bps: noTax ? 0 : Number(c.tax_rate_bps) || 0,
+            tax_treatment: noTax ? 'non_gst' : c.tax_treatment || 'gst',
         }));
 
     const priced = computeDocument({
         lines,
         charges,
-        prices_include_tax: !!payload.prices_include_tax,
+        prices_include_tax: noTax ? false : !!payload.prices_include_tax,
         doc_discount_paise: paiseOf(payload.doc_discount, payload.doc_discount_paise),
         doc_discount_bps: Number(payload.doc_discount_bps) || 0,
         supplier_state_code: biz.state_code,
@@ -167,7 +174,7 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
 
     let existing = null;
     if (existingId) {
-        [[existing]] = await conn.query('SELECT status, doc_type, source_type, source_id FROM sales_documents WHERE id = ? LIMIT 1', [existingId]);
+        [[existing]] = await conn.query('SELECT status, doc_type, bill_type, source_type, source_id FROM sales_documents WHERE id = ? LIMIT 1', [existingId]);
         if (!existing) throw new SalesError('No such document', 'not_found', 404);
         // A quotation moves no money, so an issued one may be revised; anything
         // that posted to the books may not.
@@ -182,13 +189,18 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
         }
     }
 
-    const { priced, placeOfSupply } = await priceDocument(conn, businessId, payload);
+    // A credit note is always a GST document; anything else takes the type it was given, else keeps its own.
+    const billType = docType === 'credit_note' ? 'gst' : (payload.bill_type || existing?.bill_type || 'gst');
+    if (!BILL_TYPES.has(billType)) throw new SalesError('Bill type must be gst, non_gst or service', 'bad_bill_type', 400);
+
+    const { priced, placeOfSupply } = await priceDocument(conn, businessId, { ...payload, bill_type: billType });
     const t = priced.totals;
     const id = existingId || randomUUID();
 
     const row = {
         business_id: businessId,
         doc_type: docType,
+        bill_type: billType,
         doc_date: ymd(payload.doc_date || new Date()),
         due_date: payload.due_date ? ymd(payload.due_date) : null,
         valid_until: payload.valid_until ? ymd(payload.valid_until) : null,
@@ -274,7 +286,7 @@ async function issueDocument(conn, { businessId, user, id }) {
                 'business_not_confirmed', 400
             );
         }
-        if (biz.registration_type === 'regular' && !biz.gstin) {
+        if (biz.registration_type === 'regular' && !biz.gstin && doc.bill_type !== 'non_gst') {
             throw new SalesError('A GST-registered business needs its GSTIN on file before issuing', 'no_gstin', 400);
         }
     }
@@ -548,6 +560,7 @@ async function convertDocument(conn, { businessId, user, id, toType = 'invoice' 
 
     const payload = {
         doc_type: toType,
+        bill_type: source.bill_type,
         doc_date: new Date(),
         party_id: source.party_id,
         place_of_supply_state_code: source.place_of_supply_state_code,

@@ -257,7 +257,7 @@ function paintBody(container) {
     const [pTone, pLabel] = PAYMENT_CHIP[r.payment_status] || ['muted', ''];
     return `
           <tr data-open="${esc(r.id)}" style="cursor:pointer">
-            <td><code style="font-size:0.72rem">${esc(r.doc_no || 'draft')}</code></td>
+            <td><code style="font-size:0.72rem">${esc(r.doc_no || 'draft')}</code>${r.bill_type === 'non_gst' ? ' <span class="at2-chip muted">Non-GST</span>' : r.bill_type === 'service' ? ' <span class="at2-chip muted">Service</span>' : ''}</td>
             <td style="white-space:nowrap">${esc(day(r.doc_date))}</td>
             <td><b>${esc(r.party_name || '—')}</b>${r.reference ? `<div style="font-size:0.72rem;color:var(--text-dim)">${esc(r.reference)}</div>` : ''}</td>
             <td>
@@ -355,18 +355,26 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   const docLabel = doc ? (doc.doc_type === 'estimate' ? 'quotation' : doc.doc_type.replace('_', ' ')) : '';
   const gstOptions = taxRates.filter(t => t.treatment === 'gst' && !t.effective_to);
 
+  // Three kinds of bill: GST (tax columns), non-GST (none), service (GST optional).
+  const hasBillTypes = docType !== 'credit_note';
+  let billType = hasBillTypes ? (doc?.bill_type || 'gst') : 'gst';
+  let serviceGst = doc?.bill_type === 'service'
+    ? Number(doc.cgst_paise) + Number(doc.sgst_paise) + Number(doc.utgst_paise) + Number(doc.igst_paise) > 0
+    : true;
+  const noTax = () => billType === 'non_gst' || (billType === 'service' && !serviceGst);
+
   const lineRow = (line = {}) => `
     <tr class="sl-line">
       <td>
         <input type="text" class="sl-desc" list="sl-items" value="${esc(line.description || '')}" placeholder="Item or work done" style="min-width:160px">
         <input type="hidden" class="sl-item-id" value="${esc(line.item_id || '')}">
       </td>
-      <td><input type="text" class="sl-hsn" value="${esc(line.hsn_sac || '')}" placeholder="HSN" style="width:70px"></td>
+      <td class="sl-c-hsn"><input type="text" class="sl-hsn" value="${esc(line.hsn_sac || '')}" placeholder="HSN" style="width:70px"></td>
       <td><input type="number" class="sl-qty" step="0.001" min="0" value="${line.quantity ?? 1}" style="width:70px"></td>
       <td><input type="text" class="sl-unit" list="sl-units" value="${esc(line.unit || (line.description ? '' : DEFAULT_UNIT))}" placeholder="Unit" autocomplete="off" style="width:76px"></td>
       <td><input type="number" class="sl-rate" step="0.01" min="0" value="${line.rate_paise !== undefined ? Number(line.rate_paise) / 100 : ''}" style="width:90px"></td>
       <td><input type="number" class="sl-disc" step="0.01" min="0" max="100" value="${line.discount_bps ? Number(line.discount_bps) / 100 : ''}" placeholder="0" style="width:60px"></td>
-      <td>
+      <td class="sl-c-tax">
         <select class="sl-tax" style="width:90px">
           ${gstOptions.map(t => `<option value="${t.rate_bps}"${Number(line.tax_rate_bps) === Number(t.rate_bps) ? ' selected' : ''}>${Number(t.rate_bps) / 100}%</option>`).join('')}
           <option value="exempt"${line.tax_treatment === 'exempt' ? ' selected' : ''}>Exempt</option>
@@ -415,13 +423,28 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
             <input type="text" id="sl-ref" value="${esc(doc?.reference || '')}" placeholder="Their PO / job no"></div>
         </div>
 
-        <label class="at2-check" style="margin-bottom:10px">
+        ${hasBillTypes ? `
+        <div class="form-group" style="margin-bottom:10px"><label>Type of bill</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${[['gst', 'GST invoice'], ['non_gst', 'Non-GST bill'], ['service', 'Service bill']].map(([v, label]) => `
+              <label class="at2-check" style="margin:0;padding:6px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+                <input type="radio" name="sl-billtype" value="${v}"${billType === v ? ' checked' : ''}> ${label}
+              </label>`).join('')}
+          </div>
+          <div id="sl-billtype-hint" style="font-size:0.78rem;color:var(--text-dim);margin-top:4px"></div>
+          <label class="at2-check" id="sl-svcgst-wrap" style="margin:8px 0 0;display:none">
+            <input type="checkbox" id="sl-svcgst" ${serviceGst ? 'checked' : ''}> Charge GST on this bill
+          </label>
+        </div>` : ''}
+
+        <label class="at2-check" id="sl-inclusive-wrap" style="margin-bottom:10px">
           <input type="checkbox" id="sl-inclusive" ${doc?.prices_include_tax ? 'checked' : ''}>
           The rates below already include tax
         </label>
 
-        <div class="table-wrap"><table class="at2-tbl">
-          <thead><tr><th>Description</th><th>HSN</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Disc %</th><th>Tax</th><th style="text-align:right">Amount</th><th></th></tr></thead>
+        <style>.sl-notax .sl-c-tax, .sl-nohsn .sl-c-hsn { display: none; }</style>
+        <div class="table-wrap"><table class="at2-tbl" id="sl-table">
+          <thead><tr><th>Description</th><th class="sl-c-hsn">HSN</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Disc %</th><th class="sl-c-tax">Tax</th><th style="text-align:right">Amount</th><th></th></tr></thead>
           <tbody id="sl-lines">
             ${(existing?.lines?.filter(l => l.kind === 'item') || [{}]).map(lineRow).join('')}
           </tbody>
@@ -460,7 +483,8 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
 
   const collect = () => {
     const lines = [...overlay.querySelectorAll('.sl-line')].map(tr => {
-      const taxValue = tr.querySelector('.sl-tax').value;
+      // With no GST on the bill, every line goes as non-GST whatever the hidden box holds.
+      const taxValue = noTax() ? 'non_gst' : tr.querySelector('.sl-tax').value;
       const isTreatment = Number.isNaN(Number(taxValue));
       return {
         item_id: tr.querySelector('.sl-item-id').value || null,
@@ -477,12 +501,13 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
 
     return {
       doc_type: doc?.doc_type || docType,
+      bill_type: billType,
       party_id: $('#sl-party').value || null,
       doc_date: $('#sl-date').value,
       due_date: $('#sl-due')?.value || null,
       valid_until: $('#sl-valid')?.value || null,
       reference: $('#sl-ref').value.trim(),
-      prices_include_tax: $('#sl-inclusive').checked,
+      prices_include_tax: !noTax() && $('#sl-inclusive').checked,
       doc_discount: $('#sl-docdisc').value || 0,
       notes: $('#sl-notes').value.trim(),
       terms: $('#sl-terms').value.trim(),
@@ -570,6 +595,26 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     ensureTrailingLine();
     (row.nextElementSibling || row).querySelector('.sl-desc').focus();
   });
+  const HINTS = {
+    gst: 'GST columns (CGST/SGST or IGST) are shown on the bill and it counts in the GST returns.',
+    non_gst: 'No GST anywhere on the bill, and it stays out of the GST returns.',
+    service: 'For services. Tick "Charge GST" to show GST on it, or leave it off for a plain service bill.',
+  };
+  const applyBillType = () => {
+    $('#sl-table').classList.toggle('sl-notax', noTax());
+    $('#sl-table').classList.toggle('sl-nohsn', billType === 'non_gst');
+    $('#sl-inclusive-wrap').style.display = noTax() ? 'none' : '';
+    if (hasBillTypes) {
+      $('#sl-billtype-hint').textContent = HINTS[billType];
+      $('#sl-svcgst-wrap').style.display = billType === 'service' ? '' : 'none';
+    }
+    queueReprice();
+  };
+  overlay.querySelectorAll('input[name=sl-billtype]').forEach(r => {
+    r.onchange = () => { billType = r.value; applyBillType(); };
+  });
+  if ($('#sl-svcgst')) $('#sl-svcgst').onchange = (e) => { serviceGst = e.target.checked; applyBillType(); };
+  applyBillType();
   $('#sl-party').onchange = queueReprice;
   if ($('#sl-newparty')) {
     $('#sl-newparty').onclick = () => openQuickParty({
