@@ -186,6 +186,39 @@ test('an invoice goes out with its PDF link, the right variables, and is logged'
   assert.ok(!JSON.stringify(row).includes('/api/public/documents/'), 'the bearer link is not written to the log');
 });
 
+test('a quotation goes out the same way, with its own PDF and number', { skip }, async () => {
+  await setup();
+  const d = await call('POST', '/sales/documents', { doc_type: 'estimate', party_id: party.id, doc_date: inDays(0), valid_until: inDays(10), lines: [{ description: 'ZZ quoted item', quantity: 2, unit: 'Nos', rate: '500', tax_rate_bps: 1800 }] });
+  assert.equal(d.status, 201, JSON.stringify(d.body));
+  made.docs.push(d.body.document.id);
+
+  // A draft has no number and cannot be sent.
+  const { seen: none, fetchImpl: f0 } = recorder();
+  await assert.rejects(() => wa.sendDocument(db, { businessId, user: null, documentId: d.body.document.id, baseUrl: 'https://portal.example', fetchImpl: f0, apiKey: KEY }), (e) => e.code === 'not_issued');
+  assert.equal(none.length, 0);
+
+  const issued = await call('POST', `/sales/documents/${d.body.document.id}/issue`);
+  assert.equal(issued.status, 200, JSON.stringify(issued.body));
+  const est = issued.body.document;
+  assert.match(est.doc_no, /^EST-/);
+
+  const { seen, fetchImpl } = recorder();
+  const out = await wa.sendDocument(db, { businessId, user: null, documentId: est.id, baseUrl: 'https://portal.example', fetchImpl, apiKey: KEY });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  const u = seen[0].url;
+  const vars = u.searchParams.get('variables_values').split('|');
+  assert.equal(vars[1], est.doc_no, 'the quotation number');
+  assert.equal(vars[2], '₹1,180', '2 × ₹500 + 18% GST');
+  assert.equal(u.searchParams.get('document_filename'), `${est.doc_no}.pdf`);
+  const link = u.searchParams.get('media_url');
+  assert.match(link, /\/api\/public\/documents\/[a-f0-9]{48}\/pdf$/);
+
+  // And the customer can open that link without logging in — it is the quotation's PDF.
+  const res = await fetch(`${API}/public/documents/${link.split('/')[6]}/pdf`);
+  assert.equal(res.status, 200);
+  assert.equal((await res.arrayBuffer()).byteLength > 2000, true);
+});
+
 test('the same message to the same number twice in a row is refused, unless forced', { skip }, async () => {
   const { seen, fetchImpl } = recorder();
   const send = (force) => wa.sendDocument(db, { businessId, user: null, documentId: invoice.id, baseUrl: 'https://portal.example', fetchImpl, force, apiKey: KEY });

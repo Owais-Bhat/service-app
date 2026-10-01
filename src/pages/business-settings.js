@@ -660,6 +660,12 @@ function paintWhatsapp(container, body) {
         WhatsApp lets a business start a chat only with a <b>template it has had approved</b>. So: create each template below in your
         Fast2SMS dashboard (WhatsApp → Templates) using the suggested wording, wait for Meta's approval, then paste its <b>template id</b> here.
         Messages cost per send, from your Fast2SMS wallet.
+        <ol style="margin:8px 0 0 18px;padding:0">
+          <li>Paste the <b>WhatsApp phone number id</b> below and each approved <b>template id</b> (Fast2SMS → WhatsApp → Templates).</li>
+          <li>Tick <b>Sending is switched on</b> and press <b>Save WhatsApp settings</b>.</li>
+          <li>On a template's card, type <b>your own mobile</b> and press <b>Send test</b> — a sample arrives on your WhatsApp.</li>
+          <li>To send a real one: open an issued <b>invoice or quotation</b> in Sales and press <b>Send on WhatsApp</b> — the customer gets the PDF.</li>
+        </ol>
         ${wa.api_key_set ? '' : '<div class="at2-notice danger" style="margin-top:8px">The Fast2SMS API key (<code>SMS_API</code>) is not set on the server, so nothing can be sent.</div>'}
       </div>
       <div style="padding:0 14px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;align-items:end">
@@ -679,9 +685,13 @@ function paintWhatsapp(container, body) {
           <div class="form-group"><label>Template id</label>
             <input type="text" class="wa-mid" value="${esc(t.message_id)}" placeholder="e.g. 9"></div>
           <label class="at2-check"><input type="checkbox" class="wa-ten" ${t.enabled ? 'checked' : ''}> Use it</label>
-          <div style="margin-top:10px;display:flex;gap:6px">
-            <input type="tel" class="wa-testphone" placeholder="Your mobile, to test" style="flex:1;min-width:0">
-            <button class="btn btn-secondary wa-test" type="button">Test</button>
+          <div style="margin-top:12px">
+            <label style="font-size:0.74rem;font-weight:700">Try it on your own phone</label>
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <input type="tel" class="wa-testphone" placeholder="Your 10-digit mobile" inputmode="numeric" style="flex:1;min-width:0">
+              <button class="btn btn-secondary wa-test" type="button">Send test</button>
+            </div>
+            <small style="color:var(--text-dim);font-size:0.72rem;display:block;margin-top:4px">Sends a sample message to this number — nothing goes to a customer.${t.media ? ' It attaches the PDF of your latest issued invoice or quotation.' : ''}</small>
           </div>
         </div>
         <div style="font-size:0.82rem;line-height:1.6">
