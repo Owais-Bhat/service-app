@@ -609,6 +609,14 @@ test('three kinds of bill: GST, non-GST, and service with GST optional', { skip 
   made.docs.push(cn.body.document.id);
   assert.equal(cn.body.document.bill_type, 'gst');
 
+  // The list can be narrowed to one kind of bill.
+  const onlyPlain = (await call('GET', '/sales/documents?doc_type=invoice&bill_type=non_gst&status=all')).body.map((d) => d.id);
+  assert.ok(onlyPlain.includes(plain.id) && !onlyPlain.includes(gstDoc.id), 'the non-GST filter shows only non-GST bills');
+  const onlyGst = (await call('GET', '/sales/documents?doc_type=invoice&bill_type=gst&status=all')).body.map((d) => d.id);
+  assert.ok(onlyGst.includes(gstDoc.id) && !onlyGst.includes(plain.id) && !onlyGst.includes(svcGst.id), 'the GST filter shows only GST invoices');
+  const onlySvc = (await call('GET', '/sales/documents?doc_type=invoice&bill_type=service&status=all')).body.map((d) => d.id);
+  assert.ok(onlySvc.includes(svcGst.id) && onlySvc.includes(svcPlain.id) && !onlySvc.includes(plain.id), 'the service filter shows service bills');
+
   // They issue, post to the ledger, and the type survives a correction.
   const issued = await call('POST', `/sales/documents/${plain.id}/issue`);
   assert.equal(issued.status, 200, JSON.stringify(issued.body));

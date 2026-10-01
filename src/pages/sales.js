@@ -76,7 +76,7 @@ const fyStart = () => {
   return `${year}-04-01`;
 };
 
-const state = { tab: 'invoice', from: fyStart(), to: ymd(new Date()), q: '', status: 'all' };
+const state = { tab: 'invoice', from: fyStart(), to: ymd(new Date()), q: '', status: 'all', billType: 'all' };
 let rows = [];
 let receipts = [];
 let receivables = null;
@@ -109,7 +109,8 @@ async function loadTab() {
   } else if (state.tab === 'receivables') {
     receivables = await api('GET', `/sales/receivables?as_on=${state.to}`);
   } else {
-    rows = await api('GET', `/sales/documents?doc_type=${state.tab}&status=${state.status}&${range}&q=${encodeURIComponent(state.q)}`);
+    const kind = ['invoice', 'estimate'].includes(state.tab) && state.billType !== 'all' ? `&bill_type=${state.billType}` : '';
+    rows = await api('GET', `/sales/documents?doc_type=${state.tab}&status=${state.status}${kind}&${range}&q=${encodeURIComponent(state.q)}`);
   }
 }
 
@@ -146,6 +147,11 @@ function paint(container) {
               ${[['all', 'All states'], ['draft', 'Drafts'], ['issued', 'Issued'], ['accepted', 'Accepted'], ['converted', 'Converted'], ['cancelled', 'Cancelled']]
       .map(([v, l]) => `<option value="${v}"${state.status === v ? ' selected' : ''}>${l}</option>`).join('')}
             </select>` : ''}
+          ${['invoice', 'estimate'].includes(state.tab) ? `
+            <select id="sl-billtype-filter" title="Show only one kind of bill" style="padding:8px 10px;border-radius:9px">
+              ${[['all', 'All bill types'], ['gst', 'GST invoices'], ['non_gst', 'Non-GST bills'], ['service', 'Service bills']]
+      .map(([v, l]) => `<option value="${v}"${state.billType === v ? ' selected' : ''}>${l}</option>`).join('')}
+            </select>` : ''}
           <span class="at2-scope">${esc(scopeLine())}</span>
         </div>
         <div class="at2-body" id="sl-body"></div>
@@ -179,6 +185,8 @@ function paint(container) {
   }
   const status = container.querySelector('#sl-status');
   if (status) status.onchange = async () => { state.status = status.value; await loadTab(); paintBody(container); };
+  const kindFilter = container.querySelector('#sl-billtype-filter');
+  if (kindFilter) kindFilter.onchange = async () => { state.billType = kindFilter.value; await loadTab(); paintBody(container); };
 
   container.querySelector('#sl-new').onclick = () => openEditor(container, {
     doc_type: ['estimate', 'credit_note'].includes(state.tab) ? state.tab : 'invoice',
@@ -425,11 +433,9 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
 
         ${hasBillTypes ? `
         <div class="form-group" style="margin-bottom:10px"><label>Type of bill</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="at2-tabs" id="sl-billtypes">
             ${[['gst', 'GST invoice'], ['non_gst', 'Non-GST bill'], ['service', 'Service bill']].map(([v, label]) => `
-              <label class="at2-check" style="margin:0;padding:6px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
-                <input type="radio" name="sl-billtype" value="${v}"${billType === v ? ' checked' : ''}> ${label}
-              </label>`).join('')}
+              <button type="button" class="at2-tab${billType === v ? ' on' : ''}" data-bt="${v}">${label}</button>`).join('')}
           </div>
           <div id="sl-billtype-hint" style="font-size:0.78rem;color:var(--text-dim);margin-top:4px"></div>
           <label class="at2-check" id="sl-svcgst-wrap" style="margin:8px 0 0;display:none">
@@ -610,8 +616,12 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     }
     queueReprice();
   };
-  overlay.querySelectorAll('input[name=sl-billtype]').forEach(r => {
-    r.onchange = () => { billType = r.value; applyBillType(); };
+  overlay.querySelectorAll('#sl-billtypes [data-bt]').forEach(btn => {
+    btn.onclick = () => {
+      billType = btn.dataset.bt;
+      overlay.querySelectorAll('#sl-billtypes [data-bt]').forEach(b => b.classList.toggle('on', b === btn));
+      applyBillType();
+    };
   });
   if ($('#sl-svcgst')) $('#sl-svcgst').onchange = (e) => { serviceGst = e.target.checked; applyBillType(); };
   applyBillType();

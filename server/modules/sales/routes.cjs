@@ -76,6 +76,7 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
         const params = [businessId];
         if (docType && docType !== 'all') { where.push('d.doc_type = ?'); params.push(docType); }
         if (status && status !== 'all') { where.push('d.status = ?'); params.push(status); }
+        if (req.query.bill_type && req.query.bill_type !== 'all') { where.push('d.bill_type = ?'); params.push(String(req.query.bill_type)); }
         if (partyId) { where.push('d.party_id = ?'); params.push(partyId); }
         if (from) { where.push('d.doc_date >= ?'); params.push(ymd(from)); }
         if (to) { where.push('d.doc_date <= ?'); params.push(ymd(to)); }
