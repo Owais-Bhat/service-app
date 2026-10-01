@@ -2683,6 +2683,57 @@ async function autoAssignUnassignedInquiries() {
     }
 }
 
+// The Razorpay webhook is the fast path, but it only works when
+// RAZORPAY_WEBHOOK_SECRET is set and the webhook is registered in Razorpay's
+// dashboard. This is the safety net: every couple of minutes, ask Razorpay about
+// each payment link that was sent and is still unpaid, and settle the ones that
+// have been paid — exactly as the webhook would have. A customer who paid then
+// never waits on someone remembering to press "check payment".
+const PAYMENT_SWEEP_EVERY_MS = 2 * 60 * 1000;
+let paymentSweepRunning = false;
+
+async function sweepRazorpayLinks() {
+    if (!razorpay || paymentSweepRunning) return { checked: 0, settled: 0 };
+    paymentSweepRunning = true;
+    let connection;
+    const out = { checked: 0, settled: 0 };
+    try {
+        connection = await getConn();
+        const [pending] = await connection.query(
+            `SELECT id, ticket_no, payment_link_id FROM inquiries
+              WHERE payment_link_id IS NOT NULL AND payment_link_id <> ''
+                AND COALESCE(payment_status, 'unpaid') NOT IN ('paid', 'foc')
+                AND created_at >= (NOW() - INTERVAL 45 DAY)
+              ORDER BY created_at DESC LIMIT 60`
+        );
+        for (const row of pending) {
+            out.checked += 1;
+            try {
+                const link = await razorpay.paymentLink.fetch(row.payment_link_id);
+                const paid = link?.status === 'paid' || Number(link?.amount_paid || 0) > 0;
+                if (!paid) continue;
+                await markTicketPaid(connection, row.ticket_no, link?.amount_paid);
+                out.settled += 1;
+                console.log(`[PaymentSweep] ${row.ticket_no} was paid on Razorpay — marked paid and resolved`);
+            } catch (err) {
+                console.warn(`[PaymentSweep] could not check ${row.ticket_no}:`, err.error?.description || err.message);
+            }
+        }
+    } catch (err) {
+        console.error('[PaymentSweep] failed —', err.message);
+    } finally {
+        if (connection) { try { connection.release(); } catch {} }
+        paymentSweepRunning = false;
+    }
+    return out;
+}
+
+function startPaymentSweep() {
+    if (!razorpay) return;
+    setTimeout(() => sweepRazorpayLinks().catch(() => {}), 45 * 1000).unref?.();
+    setInterval(() => sweepRazorpayLinks().catch(() => {}), PAYMENT_SWEEP_EVERY_MS).unref?.();
+}
+
 async function markTicketPaid(connection, ticket_no, amountPaise = null) {
     const [priorRows] = await connection.execute(
         'SELECT payment_status FROM inquiries WHERE ticket_no = ? LIMIT 1', [ticket_no]
@@ -9126,6 +9177,7 @@ app.post('/api/webhook/razorpay', async (req, res) => {
 
                 // Broadcast DB change + targeted notifications.
                 if (freshRows[0]) broadcastChange('UPDATE', 'inquiries', freshRows[0]);
+                if (freshRows[0]) serviceLedger.syncSoon('inquiry', freshRows[0].id);
                 if (ticketId) broadcastChange('UPDATE', 'tickets', { id: ticketId, status: 'resolved' });
 
                 const amount = amountPaise ? Math.round(amountPaise / 100) : (inqRow?.bill_amount || 0);
@@ -9529,6 +9581,7 @@ async function startServer() {
         await loadAppSettings(connection);
         connection.release();
         serviceLedger.startSweeper();
+        startPaymentSweep();
         migration.startDigestJob();
         amcJobs.startRenewalJob();
         campaignJobs.startSender();
