@@ -63,7 +63,9 @@ STEP 5.  FAST2SMS ME WHATSAPP SETUP  (fast2sms.com dashboard)
 [ ] "Phone number id" note karo - WhatsApp number ke saamne wala lamba number
 [ ] PART B ke templates banao (neeche). Meta ka approval aane me kuch ghante
     ya 1-2 din lag sakte hain.
-[ ] Har approved template ka "template id" (message id) note karo.
+[ ] Har approved template ka chhota "MESSAGE ID" note karo (jaise 35143).
+    Fast2SMS me do number dikhte hain: lamba TEMPLATE ID (galat wala) aur chhota
+    MESSAGE ID (yahi portal me jaata hai).
 
 
 STEP 6.  PORTAL ME WHATSAPP JODO  (Management -> Business & Tax Setup -> "WhatsApp" tab)
@@ -175,8 +177,8 @@ Sabke liye:
                       portal isi order me bharta hai)
   - Sample values   : Meta approval ke liye har variable ka ek namuna bharna
                       padta hai (neeche diya hai)
-  - Approval ke baad "template id" (message id) note karo aur portal ke
-    WhatsApp tab me daalo.
+  - Approval ke baad chhota "MESSAGE ID" (jaise 35143, lamba Template ID nahi)
+    note karo aur portal ke WhatsApp tab me daalo.
 
 ---------------------------------------------------------------------
 TEMPLATE 1 :  INVOICE / QUOTATION  (PDF ke saath)

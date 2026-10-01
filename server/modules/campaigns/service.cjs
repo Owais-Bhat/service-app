@@ -249,7 +249,13 @@ function normalise(payload, { partial = false } = {}) {
     }
     if (!partial || has('message_id')) {
         out.message_id = clean(payload.message_id, 40);
-        if (!out.message_id || !/^[\w-]{1,40}$/.test(out.message_id)) throw new CampaignError('Enter the template id from Fast2SMS', 'bad_message_id', 400);
+        if (!out.message_id || !/^[\w-]{1,40}$/.test(out.message_id)) throw new CampaignError('Enter the Message ID of the template from Fast2SMS', 'bad_message_id', 400);
+        if (/^\d{12,}$/.test(out.message_id)) {
+            throw new CampaignError(
+                `${out.message_id} is the long Template ID. Use the short MESSAGE ID shown beside it in Fast2SMS (WhatsApp Manager → Templates), a number like 35147`,
+                'long_template_id', 400
+            );
+        }
     }
     if (has('variables')) out.variables = JSON.stringify(normaliseVariables(payload.variables));
     if (has('media_path')) {

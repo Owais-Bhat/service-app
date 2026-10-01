@@ -661,7 +661,7 @@ function paintWhatsapp(container, body) {
         Fast2SMS dashboard (WhatsApp → Templates) using the suggested wording, wait for Meta's approval, then paste its <b>template id</b> here.
         Messages cost per send, from your Fast2SMS wallet.
         <ol style="margin:8px 0 0 18px;padding:0">
-          <li>Paste the <b>WhatsApp phone number id</b> below and each approved <b>template id</b> (Fast2SMS → WhatsApp → Templates).</li>
+          <li>Paste the <b>WhatsApp phone number id</b> below (Fast2SMS → WhatsApp Manager → Numbers) and, for each approved template, its <b>MESSAGE ID</b> — the short number (like 35143) in WhatsApp Manager → Templates. <b>Not</b> the long Template ID.</li>
           <li>Tick <b>Sending is switched on</b> and press <b>Save WhatsApp settings</b>.</li>
           <li>On a template's card, type <b>your own mobile</b> and press <b>Send test</b> — a sample arrives on your WhatsApp.</li>
           <li>To send a real one: open an issued <b>invoice or quotation</b> in Sales and press <b>Send on WhatsApp</b> — the customer gets the PDF.</li>
@@ -682,8 +682,9 @@ function paintWhatsapp(container, body) {
         <span class="at2-chip ${t.message_id && t.enabled ? 'ok' : 'muted'}" style="margin-left:8px">${t.message_id ? (t.enabled ? 'Template set' : 'Turned off') : 'No template yet'}</span></div>
       <div style="padding:14px;display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:14px">
         <div>
-          <div class="form-group"><label>Template id</label>
-            <input type="text" class="wa-mid" value="${esc(t.message_id)}" placeholder="e.g. 9"></div>
+          <div class="form-group"><label>Message ID</label>
+            <input type="text" class="wa-mid" value="${esc(t.message_id)}" placeholder="e.g. 35143" inputmode="numeric">
+            <small style="color:var(--text-dim);font-size:0.72rem">The short <b>MESSAGE ID</b> in Fast2SMS — not the long Template ID</small></div>
           <label class="at2-check"><input type="checkbox" class="wa-ten" ${t.enabled ? 'checked' : ''}> Use it</label>
           <div style="margin-top:12px">
             <label style="font-size:0.74rem;font-weight:700">Try it on your own phone</label>

@@ -186,6 +186,16 @@ test('an invoice goes out with its PDF link, the right variables, and is logged'
   assert.ok(!JSON.stringify(row).includes('/api/public/documents/'), 'the bearer link is not written to the log');
 });
 
+test('the long Template ID is refused with a pointer to the short Message ID', { skip }, async () => {
+  await assert.rejects(
+    () => wa.saveSettings(db, { businessId, user: null, payload: { enabled: true, phone_number_id: '579519398574288', templates: [{ purpose: 'document', message_id: '2084036299216205' }] } }),
+    (e) => e.code === 'long_template_id' && /MESSAGE ID/.test(e.message)
+  );
+  await setup(); // a short Message ID is fine
+  const s = await wa.getSettings(db, businessId);
+  assert.equal(s.templates.find((t) => t.purpose === 'document').message_id, '11');
+});
+
 test('a quotation goes out the same way, with its own PDF and number', { skip }, async () => {
   await setup();
   const d = await call('POST', '/sales/documents', { doc_type: 'estimate', party_id: party.id, doc_date: inDays(0), valid_until: inDays(10), lines: [{ description: 'ZZ quoted item', quantity: 2, unit: 'Nos', rate: '500', tax_rate_bps: 1800 }] });

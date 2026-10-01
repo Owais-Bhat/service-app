@@ -179,7 +179,13 @@ async function saveSettings(conn, { businessId, user, payload }) {
     for (const t of payload.templates || []) {
         if (!PURPOSES[t.purpose]) continue;
         const messageId = String(t.message_id ?? '').trim();
-        if (messageId && !/^[\w-]{1,40}$/.test(messageId)) throw new WhatsappError(`"${messageId}" does not look like a template id`, 'bad_message_id', 400);
+        if (messageId && !/^[\w-]{1,40}$/.test(messageId)) throw new WhatsappError(`"${messageId}" does not look like a message id`, 'bad_message_id', 400);
+        if (/^\d{12,}$/.test(messageId)) {
+            throw new WhatsappError(
+                `${messageId} is the long Template ID. Sending needs the short MESSAGE ID shown beside it in Fast2SMS (WhatsApp Manager → Templates), a number like 35143`,
+                'long_template_id', 400
+            );
+        }
         await conn.query(
             `INSERT INTO whatsapp_templates (business_id, purpose, message_id, enabled) VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE message_id = VALUES(message_id), enabled = VALUES(enabled)`,

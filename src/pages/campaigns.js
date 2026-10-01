@@ -182,8 +182,9 @@ function openEditor(existing = null) {
         <div class="form-group"><label>Campaign name * <small>(for you — customers do not see it)</small></label>
           <input type="text" id="ce-name" value="${esc(c?.name || '')}" placeholder="Diwali AMC offer"></div>
 
-        <div class="form-group"><label>Marketing template id *</label>
-          <input type="text" id="ce-mid" value="${esc(c?.message_id || '')}" placeholder="e.g. 14">
+        <div class="form-group"><label>Marketing template — Message ID *</label>
+          <input type="text" id="ce-mid" value="${esc(c?.message_id || '')}" placeholder="e.g. 35147" inputmode="numeric">
+          <small style="color:var(--text-dim);font-size:0.72rem">The short <b>MESSAGE ID</b> of the approved template in Fast2SMS, not the long Template ID</small>
           <small style="color:var(--text-dim);font-size:0.76rem">In Fast2SMS → WhatsApp → Templates, create a template in the <b>Marketing</b> category, wait for approval, and paste its id. Include a line such as “Reply STOP to unsubscribe”.</small></div>
 
         <div class="form-group"><label>What fills the blanks in the template <small>(in the order of {{1}}, {{2}}…)</small></label>
@@ -312,7 +313,7 @@ function openEditor(existing = null) {
       payload.recurrence = { type: 'monthly', day: Number($('#ce-day').value), time: $('#ce-time').value, fresh_offer_required: $('#ce-fresh').checked };
     }
     if (!payload.name) return toast('Give the campaign a name', 'warning');
-    if (!payload.message_id) return toast('Enter the template id from Fast2SMS', 'warning');
+    if (!payload.message_id) return toast('Enter the Message ID of the template from Fast2SMS', 'warning');
     $('#ce-save').disabled = true;
     try {
       const saved = c ? await api('PATCH', `/campaigns/${encodeURIComponent(c.id)}`, payload) : await api('POST', '/campaigns', payload);
