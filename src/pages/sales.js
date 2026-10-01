@@ -519,9 +519,21 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   };
   const queueReprice = () => { clearTimeout(priceTimer); priceTimer = setTimeout(reprice, 300); };
 
+  // There is always an empty line waiting at the bottom: the moment the last one
+  // gets an item, the next appears, so nobody has to press "Add line".
+  const ensureTrailingLine = () => {
+    const rows = overlay.querySelectorAll('.sl-line');
+    const last = rows[rows.length - 1];
+    if (last && last.querySelector('.sl-desc').value.trim()) {
+      $('#sl-lines').insertAdjacentHTML('beforeend', lineRow());
+      wireLines();
+    }
+  };
+
   const wireLines = () => {
     overlay.querySelectorAll('.sl-line').forEach(tr => {
       tr.querySelectorAll('input, select').forEach(el => { el.oninput = queueReprice; el.onchange = queueReprice; });
+      tr.querySelector('.sl-desc').oninput = () => { ensureTrailingLine(); queueReprice(); };
       // Picking a known item fills its rate, HSN and tax from the catalogue.
       tr.querySelector('.sl-desc').onchange = (e) => {
         const match = items.find(i => i.name === e.target.value);
@@ -538,6 +550,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         } else {
           tr.querySelector('.sl-item-id').value = '';
         }
+        ensureTrailingLine();
         queueReprice();
       };
       tr.querySelector('.sl-del').onclick = () => {
@@ -548,6 +561,15 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     });
   };
   wireLines();
+  ensureTrailingLine();
+  // Enter on the last field of a line goes straight to the next line's item.
+  $('#sl-lines').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.matches('.sl-disc, .sl-tax')) return;
+    e.preventDefault();
+    const row = e.target.closest('.sl-line');
+    ensureTrailingLine();
+    (row.nextElementSibling || row).querySelector('.sl-desc').focus();
+  });
   $('#sl-party').onchange = queueReprice;
   if ($('#sl-newparty')) {
     $('#sl-newparty').onclick = () => openQuickParty({
