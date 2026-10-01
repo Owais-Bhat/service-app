@@ -540,6 +540,99 @@ function mountStock({ app, getConn, authenticateToken, permissions, audit }) {
         });
     }));
 
+    // One supplier's dealings in one place: what was bought (by item and by bill),
+    // what has been paid, and what is still owed. Bought and paid come from the
+    // documents; the balance comes from the ledger, so it cannot disagree with the accounts.
+    app.get('/api/purchases/suppliers/:id/summary', authenticateToken, requireCap('purchase.view'), handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const [[party]] = await conn.query('SELECT id, display_name, phone, kind FROM parties WHERE id = ? LIMIT 1', [req.params.id]);
+        if (!party) return res.status(404).json({ error: 'No such supplier' });
+
+        const [bills] = await conn.query(
+            `SELECT d.id, d.doc_no, d.supplier_ref, d.doc_date, d.due_date, d.total_paise,
+                    COALESCE(al.paid_paise, 0) AS paid_paise
+               FROM purchase_documents d
+               LEFT JOIN (
+                    SELECT a.document_id, SUM(a.amount_paise) paid_paise
+                      FROM purchase_allocations a
+                      JOIN payments pay ON pay.id = a.payment_id AND pay.status = 'posted'
+                     GROUP BY a.document_id
+               ) al ON al.document_id = d.id
+              WHERE d.business_id = ? AND d.party_id = ? AND d.doc_type = 'supplier_bill' AND d.status = 'issued'
+              ORDER BY d.doc_date DESC, d.created_at DESC LIMIT 500`,
+            [businessId, party.id]
+        );
+        const billIds = bills.map((b) => b.id);
+        const [lines] = billIds.length ? await conn.query(
+            `SELECT l.document_id, l.item_id, l.description, l.quantity, l.unit, l.rate_paise, l.amount_paise
+               FROM purchase_document_lines l WHERE l.document_id IN (?) AND l.kind = 'item' ORDER BY l.line_no`, [billIds]
+        ) : [[]];
+
+        const [[returned]] = await conn.query(
+            `SELECT COALESCE(SUM(total_paise), 0) AS total FROM purchase_documents
+              WHERE business_id = ? AND party_id = ? AND doc_type = 'purchase_return' AND status = 'issued'`,
+            [businessId, party.id]
+        );
+        const [payments] = await conn.query(
+            `SELECT id, payment_no, payment_date, method, reference, amount_paise FROM payments
+              WHERE business_id = ? AND party_id = ? AND direction = 'out' AND status = 'posted'
+              ORDER BY payment_date DESC, created_at DESC LIMIT 500`,
+            [businessId, party.id]
+        );
+
+        // What was bought, item by item — newest bill first, so the first rate seen is the latest.
+        const billDate = new Map(bills.map((b) => [b.id, b.doc_date]));
+        const itemMap = new Map();
+        const linesByBill = new Map();
+        for (const l of lines) {
+            const key = l.item_id || `d:${String(l.description).trim().toLowerCase()}`;
+            const row = itemMap.get(key) || {
+                item_id: l.item_id, name: l.description, unit: l.unit, quantity: 0, spent_paise: 0,
+                last_rate_paise: Number(l.rate_paise), last_date: billDate.get(l.document_id), bills: new Set(),
+            };
+            row.quantity = Math.round((row.quantity + Number(l.quantity)) * 1000) / 1000;
+            row.spent_paise += Number(l.amount_paise);
+            row.bills.add(l.document_id);
+            itemMap.set(key, row);
+            if (!linesByBill.has(l.document_id)) linesByBill.set(l.document_id, []);
+            linesByBill.get(l.document_id).push({
+                name: l.description, quantity: Number(l.quantity), unit: l.unit,
+                rate_paise: Number(l.rate_paise), amount_paise: Number(l.amount_paise),
+            });
+        }
+        const items = [...itemMap.values()]
+            .map((r) => ({ ...r, bills: r.bills.size }))
+            .sort((a, b) => b.spent_paise - a.spent_paise);
+
+        const boughtPaise = bills.reduce((s, b) => s + Number(b.total_paise), 0);
+        const paidPaise = payments.reduce((s, p) => s + Number(p.amount_paise), 0);
+        const { receivable_paise: net } = await posting.partyBalance(conn, businessId, party.id);
+        const billedDue = bills.reduce((s, b) => s + Number(b.total_paise) - Number(b.paid_paise), 0);
+
+        res.json({
+            party,
+            totals: {
+                bought_paise: boughtPaise,
+                returned_paise: Number(returned.total),
+                paid_paise: paidPaise,
+                // From the ledger: positive = we owe the supplier, negative = they hold our advance.
+                owing_paise: -net,
+                // The part of that which is on a supplier bill…
+                billed_due_paise: billedDue,
+                // …and the rest: positive = goods delivered but not yet billed (or an opening balance),
+                // negative = money paid that is not yet put against a bill.
+                other_paise: -net - billedDue,
+                bills: bills.length,
+            },
+            items,
+            bills: bills.map((b) => ({
+                ...b, total_paise: Number(b.total_paise), paid_paise: Number(b.paid_paise),
+                balance_paise: Number(b.total_paise) - Number(b.paid_paise), lines: linesByBill.get(b.id) || [],
+            })),
+            payments: payments.map((p) => ({ ...p, amount_paise: Number(p.amount_paise) })),
+        });
+    }));
+
     console.log('[stock] Stage 3 routes mounted (purchases, locations, transfers, serials, counts)');
 }
 

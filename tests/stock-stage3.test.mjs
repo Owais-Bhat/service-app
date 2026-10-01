@@ -459,6 +459,38 @@ test('paying the supplier clears the payable', { skip }, async () => {
   assert.equal(over.body.code, 'over_paid');
 });
 
+test("a supplier's page shows what was bought, what was paid and what is still owed", { skip }, async () => {
+  const s = await call('GET', `/purchases/suppliers/${supplier.id}/summary`);
+  assert.equal(s.status, 200, JSON.stringify(s.body));
+
+  assert.equal(s.body.totals.bought_paise, 708000, 'the one supplier bill, tax included');
+  assert.equal(s.body.totals.paid_paise, 354000, 'the half already paid');
+  assert.equal(s.body.totals.billed_due_paise, 354000, 'half of the bill is still due');
+  // The ledger also counts deliveries not yet billed (the other receipts above), so it owes more than the bill alone.
+  assert.ok(s.body.totals.owing_paise >= 354000);
+  assert.equal(s.body.totals.owing_paise, s.body.totals.billed_due_paise + s.body.totals.other_paise, 'the two parts add up to the ledger balance');
+  assert.ok(s.body.totals.other_paise > 0, 'goods delivered but not billed show up as the rest');
+  assert.equal(s.body.totals.bills, 1);
+
+  const cam = s.body.items.find((i) => i.item_id === camera.id);
+  assert.ok(cam, 'the camera is in the list of what was bought');
+  assert.equal(cam.quantity, 4);
+  assert.equal(cam.spent_paise, 708000, 'what the goods cost on the bill, GST included');
+  assert.equal(cam.last_rate_paise, 150000);
+
+  const bill = s.body.bills[0];
+  assert.equal(bill.supplier_ref, 'ZZ-SUP-INV-77');
+  assert.equal(bill.paid_paise, 354000);
+  assert.equal(bill.balance_paise, 354000);
+  assert.equal(bill.lines[0].name, 'ZZ Bullet Camera');
+
+  assert.equal(s.body.payments.length, 1);
+  assert.equal(s.body.payments[0].reference, 'ZZ-NEFT-1');
+
+  assert.equal((await call('GET', '/purchases/suppliers/does-not-exist/summary')).status, 404);
+  assert.equal((await call('GET', `/purchases/suppliers/${supplier.id}/summary`, undefined, 'employee')).status, 403);
+});
+
 test('the stock ledger and the valuation agree', { skip }, async () => {
   const valuation = (await call('GET', '/stock/valuation')).body;
   assert.equal(valuation.method, 'moving average cost');

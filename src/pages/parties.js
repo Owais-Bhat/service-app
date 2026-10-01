@@ -443,10 +443,20 @@ async function openPartyDetail(container, id) {
   const { party, addresses = [], receivable_paise: balance = 0 } = payload;
   const stateName = (STATES.find(s => s[0] === party.place_of_supply_state_code) || [])[1];
 
+  // A supplier's whole history — what was bought, what was paid, what is owed.
+  const isSupplier = party.kind === 'supplier' || party.kind === 'both';
+  let dealings = null;
+  if (isSupplier) {
+    try { dealings = await api('GET', `/purchases/suppliers/${encodeURIComponent(party.id)}/summary`); } catch { dealings = null; }
+  }
+  // For a supplier, a negative balance is what we owe them, not an advance.
+  const weOwe = party.kind === 'supplier' && balance <= 0;
+  const dayText = (v) => (v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal at2-modal" style="max-width:560px">
+    <div class="modal at2-modal" style="max-width:${dealings ? 820 : 560}px">
       <div class="modal-header">
         <span class="modal-title">${esc(party.display_name)}</span>
         <button class="modal-close" id="pd-close">${ICONS.close}</button>
@@ -458,7 +468,8 @@ async function openPartyDetail(container, id) {
             <div style="font-size:1.3rem;font-weight:800;color:${balance > 0 ? 'var(--warning)' : 'var(--primary)'}">
               ${rupees(Math.abs(balance))}
             </div>
-            <small style="color:var(--text-dim)">${balance > 0 ? 'receivable' : balance < 0 ? 'in advance' : 'settled'} · from the ledger</small>
+            <small style="color:var(--text-dim)">${weOwe ? (balance < 0 ? 'we owe them' : 'settled')
+    : balance > 0 ? 'receivable' : balance < 0 ? 'in advance' : 'settled'} · from the ledger</small>
           </div>
           <div>
             <div class="at2-kpi-label">Terms</div>
@@ -475,6 +486,58 @@ async function openPartyDetail(container, id) {
           <tr><td>Place of supply</td><td>${esc(stateName || '—')}</td></tr>
           <tr><td>Opening balance</td><td>${rupees(party.opening_balance_paise)} ${esc(party.opening_balance_type)}${party.opening_balance_on ? ` on ${esc(new Date(party.opening_balance_on).toLocaleDateString('en-IN'))}` : ''}</td></tr>
         </tbody></table></div>
+
+        ${dealings ? `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 4px">
+          ${[['Bought (bills)', dealings.totals.bought_paise, ''], ['Paid', dealings.totals.paid_paise, ''],
+    ['Due on bills', dealings.totals.billed_due_paise, 'var(--warning)'],
+    ...(dealings.totals.other_paise > 0 ? [['Delivered, not billed yet', dealings.totals.other_paise, '']] : []),
+    ...(dealings.totals.other_paise < 0 ? [['Paid in advance', -dealings.totals.other_paise, '']] : []),
+    ...(dealings.totals.returned_paise ? [['Returned', dealings.totals.returned_paise, '']] : [])]
+    .map(([label, v, colour]) => `
+            <div style="flex:1;min-width:120px;padding:10px 12px;border:1px solid var(--border);border-radius:10px">
+              <div class="at2-kpi-label">${label}</div>
+              <div style="font-size:1.1rem;font-weight:800;${colour ? `color:${colour}` : ''}">${rupees(v)}</div>
+            </div>`).join('')}
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-header"><span class="card-title">What you bought (${dealings.items.length} item${dealings.items.length === 1 ? '' : 's'})</span></div>
+          ${dealings.items.length ? `<div class="table-wrap" style="max-height:240px;overflow:auto"><table class="at2-tbl">
+            <thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Last rate</th><th style="text-align:right">Total spent (with GST)</th><th>Last bought</th></tr></thead>
+            <tbody>${dealings.items.map(i => `
+              <tr><td><b>${esc(i.name)}</b></td>
+                <td style="text-align:right">${i.quantity} ${esc(i.unit || '')}</td>
+                <td style="text-align:right">${rupees(i.last_rate_paise)}</td>
+                <td style="text-align:right"><b>${rupees(i.spent_paise)}</b></td>
+                <td>${esc(dayText(i.last_date))}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="at2-empty" style="padding:14px">No supplier bill entered yet. Enter one under Purchases → Bills.</div>'}
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-header"><span class="card-title">Bills (${dealings.bills.length})</span></div>
+          ${dealings.bills.length ? `<div class="table-wrap" style="max-height:260px;overflow:auto"><table class="at2-tbl">
+            <thead><tr><th>Date</th><th>Bill</th><th>Items</th><th style="text-align:right">Amount</th><th style="text-align:right">Paid</th><th style="text-align:right">Due</th></tr></thead>
+            <tbody>${dealings.bills.map(b => `
+              <tr><td>${esc(dayText(b.doc_date))}</td>
+                <td><code style="font-size:0.72rem">${esc(b.doc_no || '')}</code>${b.supplier_ref ? `<div style="font-size:0.72rem;color:var(--text-dim)">${esc(b.supplier_ref)}</div>` : ''}</td>
+                <td style="font-size:0.8rem">${esc(b.lines.map(l => `${l.name} × ${l.quantity}`).join(', ') || '—')}</td>
+                <td style="text-align:right">${rupees(b.total_paise)}</td>
+                <td style="text-align:right">${rupees(b.paid_paise)}</td>
+                <td style="text-align:right;${b.balance_paise > 0 ? 'color:var(--warning);font-weight:700' : ''}">${b.balance_paise > 0 ? rupees(b.balance_paise) : '—'}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="at2-empty" style="padding:14px">No bills.</div>'}
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-header"><span class="card-title">Payments you made (${dealings.payments.length})</span></div>
+          ${dealings.payments.length ? `<div class="table-wrap" style="max-height:220px;overflow:auto"><table class="at2-tbl">
+            <thead><tr><th>Date</th><th>No.</th><th>How</th><th>Reference</th><th style="text-align:right">Amount</th></tr></thead>
+            <tbody>${dealings.payments.map(p => `
+              <tr><td>${esc(dayText(p.payment_date))}</td><td><code style="font-size:0.72rem">${esc(p.payment_no || '')}</code></td>
+                <td>${esc(p.method || '')}</td><td>${esc(p.reference || '—')}</td>
+                <td style="text-align:right"><b>${rupees(p.amount_paise)}</b></td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="at2-empty" style="padding:14px">No payment made yet. Use Purchases → Pay.</div>'}
+        </div>` : ''}
 
         ${addresses.length ? `
         <div class="card" style="margin-top:14px">

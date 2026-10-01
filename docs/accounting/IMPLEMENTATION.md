@@ -628,6 +628,21 @@ Chosen at the top of the invoice / quotation editor; a credit note is always `gs
 
 ---
 
+## Supplier (distributor) dealings on the supplier's page
+
+Customers & Suppliers → click a supplier (kind `supplier` or `both`) → besides the details, the page now shows, from
+`GET /api/purchases/suppliers/:id/summary` (needs `purchase.view`):
+- **Bought** (issued supplier bills), **Paid** (posted payments out, advances included), **Due on bills** (bills less allocations),
+  **Delivered, not billed yet** / **Paid in advance** (the rest of the ledger balance — goods received but not yet billed sit in
+  Goods Received Not Billed, which belongs to the supplier's balance) and **Returned**.
+- **What you bought** — item by item: total quantity, last rate, total spent (GST included), last bought date.
+- **Bills** with the items on each, paid and due; **Payments you made** with date, number, method and reference.
+- The balance's label now reads "we owe them" for a supplier instead of "in advance".
+- Entering the data is unchanged: Purchases → Bills for what was bought, Purchases → Pay for what was paid (also Payables for what is due).
+- Test: `tests/stock-stage3.test.mjs` ("a supplier's page shows what was bought…").
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,
