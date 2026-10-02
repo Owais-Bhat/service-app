@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const { formatINR } = require('../money.cjs');
 const gst = require('../gst.cjs');
+const { informationalGst } = require('../tax-engine.cjs');
 
 let PDFDocument = null;
 try {
@@ -95,9 +96,13 @@ function tableColumns({ doc, lines, width }) {
     const taxed = taxTotal > 0 || lines.some((l) => Number(l.tax_rate_bps) > 0);
     const hasTax = doc.bill_type === 'non_gst' ? false : doc.bill_type === 'gst' ? true : taxed;
     const inter = doc.supply_type === 'inter';
+    // A non-GST bill may print the GST contained in its prices — one "GST %" column, for information.
+    const info = doc.bill_type === 'non_gst' && !!Number(doc.show_gst);
     // [key, heading, share of the page width in %, alignment] — the shares add up to 100,
     // so the last column always ends at the right margin.
-    const spec = !hasTax
+    const spec = info
+        ? [['sn', '#', 4, 'left'], ['desc', 'Item name', 36, 'left'], ['hsn', 'HSN/SAC', 11, 'left'], ['qty', 'Quantity', 8, 'right'], ['unit', 'Unit', 7, 'left'], ['rate', 'Price/unit', 12, 'right'], ['gstpct', 'GST %', 8, 'right'], ['amount', 'Amount', 14, 'right']]
+        : !hasTax
         ? [['sn', '#', 4, 'left'], ['desc', 'Item name', 40, 'left'], ['hsn', 'HSN/SAC', 12, 'left'], ['qty', 'Quantity', 9, 'right'], ['unit', 'Unit', 8, 'left'], ['rate', 'Price/unit', 13, 'right'], ['amount', 'Amount', 14, 'right']]
         : inter
             ? [['sn', '#', 3, 'left'], ['desc', 'Item name', 22, 'left'], ['hsn', 'HSN', 9, 'left'], ['qty', 'Qty', 6, 'right'], ['unit', 'Unit', 7, 'left'], ['rate', 'Price/unit', 11, 'right'], ['taxable', 'Taxable', 13, 'right'], ['igst', 'IGST', 13, 'right'], ['amount', 'Amount', 16, 'right']]
@@ -108,7 +113,7 @@ function tableColumns({ doc, lines, width }) {
         used += w;
         return { key, label, w, align };
     });
-    return { cols, hasTax };
+    return { cols, hasTax, info };
 }
 
 const NUMBER_LABEL = { invoice: 'Invoice No.', credit_note: 'Credit Note No.', estimate: 'Quotation No.', proforma: 'Proforma No.' };
@@ -246,7 +251,7 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
         y = Math.max(leftEnd, pdf.y) + 14;
 
         // ── the table ───────────────────────────────────────────────────
-        const { cols, hasTax } = tableColumns({ doc, lines, width: W });
+        const { cols, hasTax, info: tableInfo } = tableColumns({ doc, lines, width: W });
         const descCol = cols.find((c) => c.key === 'desc');
 
         const drawHead = (top) => {
@@ -286,6 +291,7 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
                 cgst: Number(line.tax_rate_bps) > 0 ? `${rupees(line.cgst_paise)}\n${Number(line.tax_rate_bps) / 200}%` : '—',
                 sgst: Number(line.tax_rate_bps) > 0 ? `${rupees(line.sgst_paise)}\n${Number(line.tax_rate_bps) / 200}%` : '—',
                 igst: Number(line.tax_rate_bps) > 0 ? `${rupees(line.igst_paise)}\n${Number(line.tax_rate_bps) / 100}%` : '—',
+                gstpct: Number(line.info_tax_bps) > 0 ? `${Number(line.info_tax_bps) / 100}%` : '—',
                 amount: rupees(line.amount_paise),
             };
 
@@ -306,10 +312,21 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
 
         // ── summary: words and terms on the left, the totals on the right ─
         const discount = Number(doc.line_discount_paise) + Number(doc.doc_discount_paise);
+        // The GST contained in a non-GST bill's prices, worked out for printing only.
+        const infoGst = tableInfo
+            ? informationalGst({ lines, supplier_state_code: business.state_code, place_of_supply_state_code: doc.place_of_supply_state_code })
+            : null;
+        const infoRows = infoGst && infoGst.tax_paise > 0 ? [
+            ['Value excl. GST', rupees(infoGst.taxable_paise)],
+            infoGst.cgst_paise ? ['CGST (included)', rupees(infoGst.cgst_paise)] : null,
+            infoGst.sgst_paise ? ['SGST (included)', rupees(infoGst.sgst_paise)] : null,
+            infoGst.igst_paise ? ['IGST (included)', rupees(infoGst.igst_paise)] : null,
+        ] : [];
         const totalsRows = [
             ['Sub total', rupees(Number(doc.taxable_paise) + discount)],
             discount ? ['Discount', `- ${rupees(discount)}`] : null,
             discount ? ['Taxable value', rupees(doc.taxable_paise)] : null,
+            ...infoRows,
             Number(doc.cgst_paise) ? ['CGST', rupees(doc.cgst_paise)] : null,
             Number(doc.sgst_paise) ? ['SGST', rupees(doc.sgst_paise)] : null,
             Number(doc.utgst_paise) ? ['UTGST', rupees(doc.utgst_paise)] : null,
@@ -318,7 +335,7 @@ function renderDocumentPdf({ business, document: doc, lines, allocations = [], p
         ].filter(Boolean);
 
         const leftW = W - 250;
-        const termsText = [FOOTNOTES[doc.doc_type], doc.notes, doc.terms, business.payment_instructions].filter(Boolean).join('\n');
+        const termsText = [FOOTNOTES[doc.doc_type], tableInfo ? 'The GST shown is contained in the prices above, for your information. No GST is charged separately on this bill.' : null, doc.notes, doc.terms, business.payment_instructions].filter(Boolean).join('\n');
         pdf.font(reg).fontSize(8);
         const leftH = 12 + 12 + pdf.heightOfString(inWords(doc.total_paise), { width: leftW, lineGap: 1.5 })
             + (termsText ? 24 + pdf.heightOfString(termsText, { width: leftW, lineGap: 2 }) : 0);

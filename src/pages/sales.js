@@ -370,6 +370,9 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     ? Number(doc.cgst_paise) + Number(doc.sgst_paise) + Number(doc.utgst_paise) + Number(doc.igst_paise) > 0
     : true;
   const noTax = () => billType === 'non_gst' || (billType === 'service' && !serviceGst);
+  // A non-GST bill can still *show* the GST contained in its prices — for the customer to see, never charged.
+  let showGstInfo = billType === 'non_gst' && !!Number(doc?.show_gst);
+  const infoGst = () => billType === 'non_gst' && showGstInfo;
 
   const lineRow = (line = {}) => `
     <tr class="sl-line">
@@ -384,7 +387,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
       <td><input type="number" class="sl-disc" step="0.01" min="0" max="100" value="${line.discount_bps ? Number(line.discount_bps) / 100 : ''}" placeholder="0" style="width:60px"></td>
       <td class="sl-c-tax">
         <select class="sl-tax" style="width:90px">
-          ${gstOptions.map(t => `<option value="${t.rate_bps}"${Number(line.tax_rate_bps) === Number(t.rate_bps) ? ' selected' : ''}>${Number(t.rate_bps) / 100}%</option>`).join('')}
+          ${gstOptions.map(t => `<option value="${t.rate_bps}"${Number(line.info_tax_bps || line.tax_rate_bps) === Number(t.rate_bps) ? ' selected' : ''}>${Number(t.rate_bps) / 100}%</option>`).join('')}
           <option value="exempt"${line.tax_treatment === 'exempt' ? ' selected' : ''}>Exempt</option>
           <option value="nil_rated"${line.tax_treatment === 'nil_rated' ? ' selected' : ''}>Nil rated</option>
           <option value="non_gst"${line.tax_treatment === 'non_gst' ? ' selected' : ''}>Non-GST</option>
@@ -441,6 +444,9 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
           <label class="at2-check" id="sl-svcgst-wrap" style="margin:8px 0 0;display:none">
             <input type="checkbox" id="sl-svcgst" ${serviceGst ? 'checked' : ''}> Charge GST on this bill
           </label>
+          <label class="at2-check" id="sl-showgst-wrap" style="margin:8px 0 0;display:none">
+            <input type="checkbox" id="sl-showgst" ${showGstInfo ? 'checked' : ''}> Show GST on the bill <small style="color:var(--text-dim)">(for information only — the prices stay as typed, nothing is added)</small>
+          </label>
         </div>` : ''}
 
         <label class="at2-check" id="sl-inclusive-wrap" style="margin-bottom:10px">
@@ -490,7 +496,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   const collect = () => {
     const lines = [...overlay.querySelectorAll('.sl-line')].map(tr => {
       // With no GST on the bill, every line goes as non-GST whatever the hidden box holds.
-      const taxValue = noTax() ? 'non_gst' : tr.querySelector('.sl-tax').value;
+      const taxValue = noTax() && !infoGst() ? 'non_gst' : tr.querySelector('.sl-tax').value;
       const isTreatment = Number.isNaN(Number(taxValue));
       return {
         item_id: tr.querySelector('.sl-item-id').value || null,
@@ -508,6 +514,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     return {
       doc_type: doc?.doc_type || docType,
       bill_type: billType,
+      show_gst: infoGst(),
       party_id: $('#sl-party').value || null,
       doc_date: $('#sl-date').value,
       due_date: $('#sl-due')?.value || null,
@@ -542,8 +549,13 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         ${t.cgst_paise ? `<div class="row"><span>CGST</span><b>${rupees(t.cgst_paise)}</b></div><div class="row"><span>${t.utgst_paise ? 'UTGST' : 'SGST'}</span><b>${rupees(t.sgst_paise + t.utgst_paise)}</b></div>` : ''}
         ${t.igst_paise ? `<div class="row"><span>IGST</span><b>${rupees(t.igst_paise)}</b></div>` : ''}
         ${t.round_off_paise ? `<div class="row"><span>Rounding</span><b>${rupees(t.round_off_paise)}</b></div>` : ''}
+        ${priced.info && priced.info.tax_paise > 0 ? `
+          <div class="row"><span>Value excl. GST</span><b>${rupees(priced.info.taxable_paise)}</b></div>
+          ${priced.info.cgst_paise ? `<div class="row"><span>CGST (included)</span><b>${rupees(priced.info.cgst_paise)}</b></div>` : ''}
+          ${priced.info.sgst_paise ? `<div class="row"><span>SGST (included)</span><b>${rupees(priced.info.sgst_paise)}</b></div>` : ''}
+          ${priced.info.igst_paise ? `<div class="row"><span>IGST (included)</span><b>${rupees(priced.info.igst_paise)}</b></div>` : ''}` : ''}
         <div class="grand"><span>Total</span><b>${rupees(t.total_paise)}</b></div>
-        <div class="hint">${priced.supply_type === 'inter' ? 'Inter-state supply — IGST' : 'Intra-state supply — CGST + SGST'}</div>`;
+        <div class="hint">${priced.info ? 'GST shown for information — it is inside the total, not added to it' : priced.supply_type === 'inter' ? 'Inter-state supply — IGST' : 'Intra-state supply — CGST + SGST'}</div>`;
     } catch (err) {
       $('#sl-totals').innerHTML = `<div class="bad">${esc(err.message)}</div>`;
     }
@@ -603,16 +615,18 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   });
   const HINTS = {
     gst: 'GST columns (CGST/SGST or IGST) are shown on the bill and it counts in the GST returns.',
-    non_gst: 'No GST anywhere on the bill, and it stays out of the GST returns.',
+    non_gst: 'No GST is charged, and the bill stays out of the GST returns. Tick "Show GST" only if the customer should see the GST inside the price.',
     service: 'For services. Tick "Charge GST" to show GST on it, or leave it off for a plain service bill.',
   };
   const applyBillType = () => {
-    $('#sl-table').classList.toggle('sl-notax', noTax());
-    $('#sl-table').classList.toggle('sl-nohsn', billType === 'non_gst');
+    // With "Show GST" ticked the Tax column comes back: it holds the rate that is inside the price.
+    $('#sl-table').classList.toggle('sl-notax', noTax() && !infoGst());
+    $('#sl-table').classList.toggle('sl-nohsn', billType === 'non_gst' && !infoGst());
     $('#sl-inclusive-wrap').style.display = noTax() ? 'none' : '';
     if (hasBillTypes) {
       $('#sl-billtype-hint').textContent = HINTS[billType];
       $('#sl-svcgst-wrap').style.display = billType === 'service' ? '' : 'none';
+      $('#sl-showgst-wrap').style.display = billType === 'non_gst' ? '' : 'none';
     }
     queueReprice();
   };
@@ -624,6 +638,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     };
   });
   if ($('#sl-svcgst')) $('#sl-svcgst').onchange = (e) => { serviceGst = e.target.checked; applyBillType(); };
+  if ($('#sl-showgst')) $('#sl-showgst').onchange = (e) => { showGstInfo = e.target.checked; applyBillType(); };
   applyBillType();
   $('#sl-party').onchange = queueReprice;
   if ($('#sl-newparty')) {

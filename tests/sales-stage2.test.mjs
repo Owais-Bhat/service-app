@@ -668,6 +668,77 @@ test('what the printed bill shows follows its type', { skip }, async () => {
   assert.equal(pdf.buffer.subarray(0, 5).toString(), '%PDF-');
 });
 
+test('a non-GST bill can show the GST inside its prices without charging it', { skip }, async () => {
+  const lines = [{ description: 'ZZ test — shown GST', quantity: 2, rate: '1000', tax_rate_bps: 1800 }];
+
+  // The editor's preview: the total stays at what was typed, the GST is worked out inside it.
+  const preview = await call('POST', '/sales/preview', { doc_type: 'invoice', bill_type: 'non_gst', show_gst: true, party_id: customer.id, lines });
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert.equal(preview.body.totals.total_paise, 200000, 'nothing is added on top');
+  assert.equal(preview.body.totals.cgst_paise + preview.body.totals.sgst_paise + preview.body.totals.igst_paise, 0, 'no tax is charged');
+  assert.equal(preview.body.info.taxable_paise + preview.body.info.tax_paise, 200000, 'value excl. GST + GST = what the customer pays');
+  assert.equal(preview.body.info.tax_paise, 30508, '₹2,000 contains ₹305.08 of GST at 18%');
+  assert.equal(preview.body.info.cgst_paise + preview.body.info.sgst_paise, 30508);
+
+  const off = await call('POST', '/sales/preview', { doc_type: 'invoice', bill_type: 'non_gst', party_id: customer.id, lines });
+  assert.equal(off.body.info, null, 'without the tick there is nothing to show');
+  // The tick means nothing on a GST bill.
+  const onGst = await call('POST', '/sales/preview', { doc_type: 'invoice', bill_type: 'gst', show_gst: true, party_id: customer.id, lines });
+  assert.equal(onGst.body.info, null);
+  assert.equal(onGst.body.totals.total_paise, 236000, 'a GST bill still adds its GST');
+
+  const draft = await call('POST', '/sales/documents', { doc_type: 'invoice', bill_type: 'non_gst', show_gst: true, party_id: customer.id, doc_date: '2026-09-23', lines });
+  assert.equal(draft.status, 201, JSON.stringify(draft.body));
+  made.docs.push(draft.body.document.id);
+  assert.equal(Number(draft.body.document.show_gst), 1);
+  assert.equal(Number(draft.body.document.total_paise), 200000);
+  assert.equal(Number(draft.body.lines[0].info_tax_bps), 1800, 'the rate shown is kept beside the line');
+  assert.equal(Number(draft.body.lines[0].tax_rate_bps), 0, 'but the line carries no tax');
+  assert.equal(draft.body.lines[0].tax_treatment, 'non_gst');
+
+  // Issued, it posts the plain total — no tax account is touched — and stays out of the GST register.
+  const issued = await call('POST', `/sales/documents/${draft.body.document.id}/issue`);
+  assert.equal(issued.status, 200, JSON.stringify(issued.body));
+  const [taxLines] = await db.query(
+    `SELECT a.code FROM journal_lines l JOIN accounts a ON a.id = l.account_id WHERE l.journal_id = ? AND a.code IN ('2100', '2110', '2120')`,
+    [issued.body.document.journal_id]
+  );
+  assert.equal(taxLines.length, 0, 'no GST liability is created');
+  assert.equal(await receivableNet(draft.body.document.id), 200000);
+  const register = await call('GET', '/reports/gst/sales-register?from=2026-09-01&to=2026-09-30');
+  if (register.status === 200) assert.ok(!register.body.rows.map((r) => r.doc_no).includes(issued.body.document.doc_no), 'not in the GST register');
+
+  // A correction keeps it, and the PDF prints a GST % column and the breakdown.
+  const fixed = await call('POST', `/sales/documents/${draft.body.document.id}/amend`, {
+    reason: 'ZZ test — qty', party_id: customer.id, doc_date: '2026-09-23',
+    lines: [{ description: 'ZZ test — shown GST', quantity: 3, rate: '1000', tax_rate_bps: 1800 }],
+  });
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.body));
+  assert.equal(Number(fixed.body.document.show_gst), 1, 'a correction keeps what the bill showed');
+  assert.equal(Number(fixed.body.lines[0].info_tax_bps), 1800);
+  assert.equal(Number(fixed.body.document.total_paise), 300000);
+
+  const { tableColumns } = require('../server/modules/sales/pdf.cjs');
+  const cols = tableColumns({ doc: { bill_type: 'non_gst', show_gst: 1 }, lines: fixed.body.lines, width: 500 });
+  assert.equal(cols.info, true);
+  assert.ok(cols.cols.some((c) => c.key === 'gstpct') && !cols.cols.some((c) => ['cgst', 'sgst', 'igst', 'taxable'].includes(c.key)));
+  assert.equal(cols.cols.reduce((n, c) => n + c.w, 0), 500, 'the columns still fill the page');
+  const pdf = await call('GET', `/sales/documents/${draft.body.document.id}/pdf`);
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.buffer.subarray(0, 5).toString(), '%PDF-');
+
+  // Converting a quotation keeps it too.
+  const est = await call('POST', '/sales/documents', { doc_type: 'estimate', bill_type: 'non_gst', show_gst: true, party_id: customer.id, valid_until: '2026-12-01', lines });
+  made.docs.push(est.body.document.id);
+  await call('POST', `/sales/documents/${est.body.document.id}/issue`);
+  const conv = await call('POST', `/sales/documents/${est.body.document.id}/convert`, { to: 'invoice' });
+  assert.equal(conv.status, 201, JSON.stringify(conv.body));
+  made.docs.push(conv.body.document.id);
+  assert.equal(Number(conv.body.document.show_gst), 1);
+  assert.equal(Number(conv.body.lines[0].info_tax_bps), 1800);
+  assert.equal(Number(conv.body.document.total_paise), 200000);
+});
+
 test('permissions hold on the sales side too', { skip }, async () => {
   const create = await call('POST', '/sales/documents', {
     doc_type: 'invoice', party_id: customer.id,

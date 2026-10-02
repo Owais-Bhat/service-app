@@ -15,7 +15,7 @@
 
 const { randomUUID, randomBytes, createHash } = require('crypto');
 const money = require('../money.cjs');
-const { computeDocument } = require('../tax-engine.cjs');
+const { computeDocument, informationalGst } = require('../tax-engine.cjs');
 const posting = require('../ledger/posting.cjs');
 
 class SalesError extends Error {
@@ -126,6 +126,9 @@ async function priceDocument(conn, businessId, payload) {
     // A non-GST bill carries no tax whatever the lines say; a service bill is taxed
     // only if its lines are (the screen sends them as non-GST when GST is switched off).
     const noTax = payload.bill_type === 'non_gst';
+    // A non-GST bill may still *show* the GST contained in its prices. That is for
+    // printing only: the rate is kept beside the line and nothing is charged or posted.
+    const showGst = noTax && !!payload.show_gst;
 
     const lines = (payload.lines || [])
         .filter((l) => String(l.description || '').trim() || l.item_id)
@@ -141,6 +144,7 @@ async function priceDocument(conn, businessId, payload) {
             discount_bps: Number(l.discount_bps) || 0,
             tax_rate_bps: noTax ? 0 : Number(l.tax_rate_bps) || 0,
             tax_treatment: noTax ? 'non_gst' : l.tax_treatment || 'gst',
+            info_tax_bps: showGst && (!l.tax_treatment || l.tax_treatment === 'gst') ? Number(l.tax_rate_bps) || 0 : 0,
         }));
 
     if (!lines.length) throw new SalesError('A document needs at least one line', 'no_lines', 400);
@@ -165,6 +169,10 @@ async function priceDocument(conn, businessId, payload) {
         round_to_rupee: payload.round_to_rupee !== false,
     });
 
+    priced.info = showGst
+        ? informationalGst({ lines: priced.lines, supplier_state_code: biz.state_code, place_of_supply_state_code: placeOfSupply || biz.state_code })
+        : null;
+
     return { priced, placeOfSupply: placeOfSupply || biz.state_code };
 }
 
@@ -174,7 +182,7 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
 
     let existing = null;
     if (existingId) {
-        [[existing]] = await conn.query('SELECT status, doc_type, bill_type, source_type, source_id FROM sales_documents WHERE id = ? LIMIT 1', [existingId]);
+        [[existing]] = await conn.query('SELECT status, doc_type, bill_type, show_gst, source_type, source_id FROM sales_documents WHERE id = ? LIMIT 1', [existingId]);
         if (!existing) throw new SalesError('No such document', 'not_found', 404);
         // A quotation moves no money, so an issued one may be revised; anything
         // that posted to the books may not.
@@ -193,7 +201,10 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
     const billType = docType === 'credit_note' ? 'gst' : (payload.bill_type || existing?.bill_type || 'gst');
     if (!BILL_TYPES.has(billType)) throw new SalesError('Bill type must be gst, non_gst or service', 'bad_bill_type', 400);
 
-    const { priced, placeOfSupply } = await priceDocument(conn, businessId, { ...payload, bill_type: billType });
+    // Only a non-GST bill can show GST for information; a correction keeps what it had unless told otherwise.
+    const showGst = billType === 'non_gst' && (payload.show_gst !== undefined ? !!payload.show_gst : !!existing?.show_gst);
+
+    const { priced, placeOfSupply } = await priceDocument(conn, businessId, { ...payload, bill_type: billType, show_gst: showGst });
     const t = priced.totals;
     const id = existingId || randomUUID();
 
@@ -201,6 +212,7 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
         business_id: businessId,
         doc_type: docType,
         bill_type: billType,
+        show_gst: showGst ? 1 : 0,
         doc_date: ymd(payload.doc_date || new Date()),
         due_date: payload.due_date ? ymd(payload.due_date) : null,
         valid_until: payload.valid_until ? ymd(payload.valid_until) : null,
@@ -247,7 +259,7 @@ async function saveDraft(conn, { businessId, user, payload, existingId = null, r
             quantity: l.quantity, unit: l.unit || null, rate_paise: l.rate_paise,
             cost_rate_paise: l.cost_rate_paise, discount_bps: l.discount_bps || 0,
             line_discount_paise: l.line_discount_paise, doc_discount_share_paise: l.doc_discount_share_paise,
-            tax_treatment: l.tax_treatment, tax_rate_bps: l.tax_rate_bps,
+            tax_treatment: l.tax_treatment, tax_rate_bps: l.tax_rate_bps, info_tax_bps: l.info_tax_bps || 0,
             taxable_paise: l.taxable_paise, cgst_paise: l.cgst_paise, sgst_paise: l.sgst_paise,
             utgst_paise: l.utgst_paise, igst_paise: l.igst_paise, amount_paise: l.amount_paise,
         }]);
@@ -561,6 +573,7 @@ async function convertDocument(conn, { businessId, user, id, toType = 'invoice' 
     const payload = {
         doc_type: toType,
         bill_type: source.bill_type,
+        show_gst: !!source.show_gst,
         doc_date: new Date(),
         party_id: source.party_id,
         place_of_supply_state_code: source.place_of_supply_state_code,
@@ -580,8 +593,9 @@ async function convertDocument(conn, { businessId, user, id, toType = 'invoice' 
             rate_paise: Number(l.rate_paise),
             cost_rate_paise: l.cost_rate_paise === null ? undefined : Number(l.cost_rate_paise),
             discount_bps: Number(l.discount_bps),
-            tax_rate_bps: Number(l.tax_rate_bps),
-            tax_treatment: l.tax_treatment,
+            // A bill that only shows GST carries its rate beside the line; it is read back as that rate.
+            tax_rate_bps: source.show_gst ? Number(l.info_tax_bps) || 0 : Number(l.tax_rate_bps),
+            tax_treatment: source.show_gst ? 'gst' : l.tax_treatment,
         })),
         charges: loaded.lines.filter((l) => l.kind === 'charge').map((l) => ({
             label: l.description,

@@ -19,6 +19,8 @@ const SALES_TABLES = [
             COMMENT 'estimate | proforma | invoice | credit_note — a quotation and a proforma never post to the ledger',
         bill_type VARCHAR(12) NOT NULL DEFAULT 'gst'
             COMMENT 'gst = GST invoice with tax columns | non_gst = no GST at all, kept out of GST returns | service = a service bill, GST optional',
+        show_gst TINYINT(1) NOT NULL DEFAULT 0
+            COMMENT 'non-GST bills only: print the GST contained in the prices, for information. It is not charged, not posted, not in any return',
         doc_no VARCHAR(40) NULL COMMENT 'allocated when the document is issued, never while it is a draft',
         doc_date DATE NOT NULL,
         due_date DATE NULL,
@@ -97,6 +99,7 @@ const SALES_TABLES = [
         doc_discount_share_paise BIGINT DEFAULT 0,
         tax_treatment VARCHAR(20) DEFAULT 'gst',
         tax_rate_bps INT DEFAULT 0,
+        info_tax_bps INT NOT NULL DEFAULT 0 COMMENT 'the GST rate printed for information on a non-GST bill; never charged',
         taxable_paise BIGINT DEFAULT 0,
         cgst_paise BIGINT DEFAULT 0,
         sgst_paise BIGINT DEFAULT 0,
@@ -173,13 +176,14 @@ async function ensureSalesSchema(connection) {
     for (const statement of SALES_TABLES) {
         await connection.query(statement);
     }
-    // Tables made before the bill type existed get the column, once.
-    const [have] = await connection.query("SHOW COLUMNS FROM sales_documents LIKE 'bill_type'");
-    if (!have.length) {
-        await connection.query(
-            "ALTER TABLE sales_documents ADD COLUMN bill_type VARCHAR(12) NOT NULL DEFAULT 'gst' COMMENT 'gst | non_gst | service' AFTER doc_type"
-        );
-    }
+    // Tables made before these columns existed get them, once.
+    const addColumn = async (table, column, definition) => {
+        const [have] = await connection.query(`SHOW COLUMNS FROM ${table} LIKE ?`, [column]);
+        if (!have.length) await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    };
+    await addColumn('sales_documents', 'bill_type', "VARCHAR(12) NOT NULL DEFAULT 'gst' COMMENT 'gst | non_gst | service' AFTER doc_type");
+    await addColumn('sales_documents', 'show_gst', "TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'non-GST bills: GST printed for information only'");
+    await addColumn('sales_document_lines', 'info_tax_bps', "INT NOT NULL DEFAULT 0 COMMENT 'GST rate printed for information on a non-GST bill'");
 }
 
 module.exports = { SALES_TABLES, ensureSalesSchema };

@@ -194,4 +194,35 @@ function computeDocument(input) {
     };
 }
 
-module.exports = { computeDocument, toMilli };
+/**
+ * The GST contained in the prices of a non-GST bill that is asked to show it:
+ * each line's amount is read as tax-inclusive at its `info_tax_bps` and the tax
+ * is taken back out, so net + tax is exactly the amount the customer pays.
+ *
+ * This is for printing only. Nothing here is charged, posted to the ledger or
+ * reported — the document's own tax columns stay zero.
+ */
+function informationalGst({ lines = [], supplier_state_code: supplierStateCode, place_of_supply_state_code: placeOfSupply }) {
+    const supply = supplyType({ supplierStateCode, placeOfSupplyStateCode: placeOfSupply });
+    if (supply.error) return null;
+
+    const out = { taxable_paise: 0, cgst_paise: 0, sgst_paise: 0, igst_paise: 0, tax_paise: 0, lines: [], intra: supply.intra };
+    for (const l of lines) {
+        const amount = Number(l.amount_paise) || 0;
+        const bps = Number(l.info_tax_bps) || 0;
+        const { net, tax } = bps ? extractInclusive(amount, bps) : { net: amount, tax: 0 };
+        const split = splitTax(tax, supply.components);
+        const cgst = split.cgst || 0;
+        const sgst = (split.sgst || 0) + (split.utgst || 0);
+        const igst = split.igst || 0;
+        out.lines.push({ bps, net_paise: net, tax_paise: tax, cgst_paise: cgst, sgst_paise: sgst, igst_paise: igst });
+        out.taxable_paise += net;
+        out.cgst_paise += cgst;
+        out.sgst_paise += sgst;
+        out.igst_paise += igst;
+        out.tax_paise += tax;
+    }
+    return out;
+}
+
+module.exports = { computeDocument, toMilli, informationalGst };

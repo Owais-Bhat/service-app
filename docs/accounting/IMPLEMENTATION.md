@@ -620,6 +620,12 @@ Chosen at the top of the invoice / quotation editor; a credit note is always `gs
   lands in a return). It still posts to the ledger (Dr customer / Cr sales) like any invoice.
 - **Service bill** — for services; a **Charge GST** tick (default on). On: GST columns, titled *Tax Invoice (Services)*. Off: lines go
   as non-GST, no tax columns, titled *Service Invoice*.
+- **Non-GST bill + "Show GST"** (`sales_documents.show_gst`, `sales_document_lines.info_tax_bps`): a tick on a non-GST bill that prints the
+  GST *contained in* the prices, for the customer to see. The prices stay as typed (the total never changes), the Tax column returns to
+  pick the rate that is inside the price, and the PDF gets a "GST %" column plus *Value excl. GST / CGST (included) / SGST (included)* rows
+  (IGST for another state) and a footnote saying no GST is charged separately. It is **display only**: the document's tax columns stay
+  zero, the journal posts the plain total with no tax account, and the bill stays out of the GST register. The rate lives in
+  `info_tax_bps`; the split is worked out by `informationalGst()` in `tax-engine.cjs`. Kept through corrections and quotation → invoice.
 - The type is kept through quotation → invoice conversion and through *Edit invoice*; the list shows a Non-GST / Service chip.
 - Numbering is one INV series for all three. A separate series for non-GST bills is a one-line change in `DEFAULT_PREFIXES` if wanted.
 - Documents issued before this existed read as `gst`, so one that carried no tax now prints its (empty) GST columns.
