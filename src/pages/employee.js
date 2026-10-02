@@ -2784,6 +2784,9 @@ export async function renderEmployeeInstallations(container) {
     `}
   `;
 
+  // The full job — customer, address, instructions — is on screen, so it has been seen.
+  active.forEach((x) => pingAssignmentSeen('installation', x.id));
+
   container.querySelectorAll('.inst-action-btn').forEach((btn) => {
     btn.onclick = async () => {
       btn.disabled = true;
@@ -3456,6 +3459,15 @@ export async function renderEmployeeTasks(container) {
   }
 }
 
+// Tell the server the assigned person has opened this job (it ignores anyone else). Fire and forget.
+function pingAssignmentSeen(kind, id) {
+  if (!id) return;
+  const token = localStorage.getItem('auth_token') || '';
+  fetch(`/api/assignments/${kind}/${encodeURIComponent(id)}/seen`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => {});
+}
+
 function openTaskModal(taskId, inqId, currentStatus, onDone) {
   return (async () => {
     const { data: pricing } = await supabase.from('service_pricing').select('*').order('category');
@@ -3481,6 +3493,8 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         paymentState = { status: inqSnap.payment_status || 'unpaid', received_at: inqSnap.payment_received_at || null };
       }
     }
+    // Opening the job is how the office learns it has been seen.
+    pingAssignmentSeen('inquiry', inqId);
     // Employee profile + most recent attendance (for technician name and clock-in coords).
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const empProfile = authUser ? (await supabase.from('profiles').select('*').eq('id', authUser.id).single()).data : null;

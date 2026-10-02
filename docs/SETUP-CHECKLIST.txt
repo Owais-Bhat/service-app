@@ -275,6 +275,42 @@ Aur kuch marketing templates chaho to (optional):
 
 
 =====================================================================
+ PART C - ASSIGNMENT TRACKER (kisne job dekhi, kisne nahi)
+=====================================================================
+Jab bhi koi service ya installation kisi employee ko assign hoti hai, usko SMS ke
+saath WhatsApp bhi jaata hai, aur portal me "Operations -> Assignment Tracker" me
+dikhta hai ki usne dekha ya nahi.
+
+TEMPLATE 5 (Utility)  - name: job_assignment
+  Wording : Hello {{1}}, a new service job {{2}} has been assigned to you. Customer: {{3}}, phone {{4}}. Address: {{5}}. Please open the NEST portal and accept it.
+  Variables (is order me):
+    {{1}} Technician name   sample: Rashid
+    {{2}} Ticket number     sample: TKT-0001
+    {{3}} Customer name     sample: Sample Customer
+    {{4}} Customer phone    sample: 9876543210
+    {{5}} Address / place   sample: Rajbagh, Srinagar
+  Approve hone par uska chhota MESSAGE ID portal me Business & Tax Setup ->
+  WhatsApp -> "Job assigned to a technician" card me daalo.
+
+FAST2SMS ME WEBHOOK (isse "Delivered / Read" dikhta hai):
+[ ] Fast2SMS -> Webhooks -> WhatsApp tab -> ADD WEBHOOK
+      URL    : https://services.networkingexperts.in/api/webhook/fast2sms-whatsapp?key=KOI_LAMBA_SECRET
+      Method : POST     Content-Type: application/json
+      Event  : All      Status: Active
+[ ] Wahi KOI_LAMBA_SECRET Hostinger me FAST2SMS_WEBHOOK_SECRET naam se daalo.
+    (Bina secret ke Delivered/Read chalta hai, par customer ka "STOP" apne aap
+    opt-out tabhi hota hai jab secret set ho.)
+[ ] Check: ek job assign karo -> Assignment Tracker me WhatsApp "Sent" ->
+    kuch der me "Delivered", padhne par "Read".
+
+DHYAN: WhatsApp ka "Read" tabhi dikhta hai jab employee ne apne WhatsApp me
+read receipts on rakhe ho. "Opened in portal" hamesha pakka hai.
+
+GROUP ME DAALNA: Assignment Tracker me job ke saamne "Share to group" dabao ->
+WhatsApp khulta hai, message likha hua -> group chuno -> send.
+
+
+=====================================================================
  YAAD RAKHNE WALI BAATEIN
 =====================================================================
 * WhatsApp par business pehle sirf approved template bhej sakta hai -

@@ -855,6 +855,12 @@ const { ensureWhatsappSchema } = require('./modules/whatsapp/service.cjs');
 const { mountWhatsapp } = require('./modules/whatsapp/routes.cjs');
 const { ensureCampaignSchema } = require('./modules/campaigns/service.cjs');
 const { mountCampaigns } = require('./modules/campaigns/routes.cjs');
+const assignmentTracker = require('./modules/assignments/service.cjs');
+const { mountAssignments } = require('./modules/assignments/routes.cjs');
+// Whenever a job is given to someone: forget that it was seen and WhatsApp them. Never blocks or fails the assignment.
+const announceAssignment = (kind, id, employeeId) => {
+    assignmentTracker.announce(getConn, { kind, id, employeeId }).catch(() => {});
+};
 let campaignJobs = { startSender() {} };
 let amcJobs = { startRenewalJob() {} };
 
@@ -2541,6 +2547,7 @@ async function autoAssignInquiry(inquiryId) {
                     smsVar(inq.location, 'See app', 100),
                 ]);
             }
+            announceAssignment('inquiry', inq.id, chosen.id);
             if (inq.phone && inq.ticket_no) {
                 const slaDeadlineText = formatSlaDeadlineForSms(calculateSlaDeadline(inq.assigned_at || new Date()));
                 smsNotify(inq.phone, 'SMS_TID_TICKET', [
@@ -6269,6 +6276,7 @@ app.post('/api/admin/inquiries/:id/transfer', authenticateToken, async (req, res
                 smsVar(row.location, 'See app', 100),
             ]);
         }
+        announceAssignment('inquiry', row.id, employeeId);
 
         audit.record({
             actor: req.user, action: 'ticket.transfer', entityType: 'inquiry', entityId: row.id,
@@ -7355,6 +7363,7 @@ app.post('/api/installations/:id/assign', authenticateToken, async (req, res) =>
                     smsVar(row.address || row.location, 'See app', 100),
                 ]);
             }
+            announceAssignment('installation', row.id, employeeId);
         }
         res.json(await loadInstallation(connection, req.params.id));
     } catch (err) {
@@ -8406,6 +8415,7 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                     audience: { userId: empIdToNotify },
                     data: { inquiry_id: row.id, ticket_no: row.ticket_no },
                 }).catch(() => {});
+                announceAssignment('inquiry', row.id, empIdToNotify);
                 (async () => {
                     try {
                         const conn = await getConn();
@@ -8479,7 +8489,8 @@ app.patch('/api/data/:table', dataAuth, async (req, res) => {
                     audience: { userId: empIdToNotify },
                     data: { installation_id: row.id, ticket_no: row.ticket_no },
                 }).catch(() => {});
-                
+                announceAssignment('installation', row.id, empIdToNotify);
+
                 (async () => {
                     try {
                         const conn = await getConn();
@@ -9520,6 +9531,7 @@ amcJobs = mountAmc({ app, getConn, authenticateToken, permissions, audit, record
 mountDevices({ app, getConn, authenticateToken, permissions, audit });
 mountWhatsapp({ app, getConn, authenticateToken, permissions, audit });
 campaignJobs = mountCampaigns({ app, getConn, authenticateToken, permissions, audit, recordNotification });
+mountAssignments({ app, getConn, authenticateToken, permissions });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9572,6 +9584,7 @@ async function startServer() {
             await ensureDeviceSchema(connection);
             await ensureWhatsappSchema(connection);
             await ensureCampaignSchema(connection);
+            await assignmentTracker.ensureAssignmentSchema(connection);
         } catch (err) {
             console.error('❌ Accounting schema migration failed — accounting features will not work.');
             console.error('   The rest of the portal is unaffected. Fix this and restart.');

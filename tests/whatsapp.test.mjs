@@ -342,7 +342,7 @@ test('settings can be read and saved by the owner only, and the routes refuse po
   assert.equal(put.status, 200, JSON.stringify(put.body));
   assert.equal(put.body.phone_number_id, '123456789');
   assert.equal(put.body.templates.find((t) => t.purpose === 'document').message_id, '7');
-  assert.deepEqual(put.body.templates.map((t) => t.purpose), ['document', 'payment_reminder', 'amc_renewal']);
+  assert.deepEqual(put.body.templates.map((t) => t.purpose), ['document', 'payment_reminder', 'job_assignment', 'amc_renewal']);
 
   const off = await call('POST', '/whatsapp/send/document', { document_id: invoice.id });
   assert.equal(off.status, 409, 'switched off');

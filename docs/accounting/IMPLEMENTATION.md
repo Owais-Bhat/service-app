@@ -649,6 +649,33 @@ Customers & Suppliers → click a supplier (kind `supplier` or `both`) → besid
 
 ---
 
+## Assignment tracker — did the technician see the job?
+
+When a service request or an installation is given to someone (auto-assign, admin assign, transfer, either generic PATCH), the
+existing SMS still goes and, now also, a WhatsApp template message (`job_assignment`, 5 variables: technician, ticket, customer,
+customer phone, address). `announce()` in `modules/assignments/service.cjs` also clears `assignment_seen_at` so every new
+assignment starts unseen; it never blocks or fails the assignment (WhatsApp not set up → the job is tracked as "not sent").
+
+A job is **seen** when any of these has happened: the WhatsApp message was **read** (Fast2SMS webhook), the technician **opened the
+job** (`POST /api/assignments/:kind/:id/seen`, called by the employee page when the task modal opens or My Installations is shown;
+only the assignee's own call counts — the Android app does not call it yet), or the job was **accepted**.
+
+- **Operations → Assignment Tracker** (`GET /api/assignments/tracker?filter=not_seen|not_accepted|all`, admin): every open assigned job
+  from the last 14 days, longest-waiting first, with WhatsApp state (not sent / sent / delivered / read / failed + reason), opened,
+  accepted. **Share to group** opens `wa.me/?text=…` with the message written — the owner picks the WhatsApp group and sends (WhatsApp's
+  business API cannot post into groups). **Send WhatsApp again** resends (forced).
+- **Webhook** `POST /api/webhook/fast2sms-whatsapp`: `status_update` (sent/delivered/read/failed) is matched to our message by the
+  provider message id, else — for the first update — by the recipient number and the newest message to it that has no provider id yet;
+  states only move forward. `incoming_message` "STOP" opts the number out of marketing offers, **only from a request that carries the
+  secret** (`FAST2SMS_WEBHOOK_SECRET`, sent as header `webhook_secret_key` or `?key=` on the URL). Without the secret set, receipts are
+  accepted and STOP is ignored.
+- `whatsapp_messages` gained `provider_message_id, delivery, delivered_at, read_at, delivery_error`; `inquiries` and `installations`
+  gained `assignment_seen_at` (all added on boot).
+- Not built: automatic reminders to someone who has not seen a job after N minutes; the Android app's "opened" ping.
+- Tests: `tests/assignments.test.mjs` (13).
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

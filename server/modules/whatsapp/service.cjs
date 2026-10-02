@@ -54,6 +54,14 @@ const PURPOSES = {
         suggested: 'Hello {{1}}, a payment of {{2}} has been pending for {{3}} days. Please pay {{4}} by UPI or bank transfer at your earliest. Thank you.',
         sample: ['Sample Customer', '₹5,000', '45', 'Networking Experts'],
     },
+    job_assignment: {
+        label: 'Job assigned to a technician',
+        media: false,
+        cap: 'business.manage',
+        vars: ['Technician name', 'Ticket number', 'Customer name', 'Customer phone', 'Address / place'],
+        suggested: 'Hello {{1}}, a new service job {{2}} has been assigned to you. Customer: {{3}}, phone {{4}}. Address: {{5}}. Please open the NEST portal and accept it.',
+        sample: ['Rashid', 'TKT-0001', 'Sample Customer', '9876543210', 'Rajbagh, Srinagar'],
+    },
     amc_renewal: {
         label: 'AMC renewal reminder',
         media: false,
@@ -101,8 +109,24 @@ const TABLES = [
     )`,
 ];
 
+// What the provider later reports about a message: delivered, read, failed. Added to
+// the log on boot where missing.
+const MESSAGE_COLUMNS = [
+    ['provider_message_id', "VARCHAR(120) NULL COMMENT 'the wamid the provider reports in its status webhooks'"],
+    ['delivery', "VARCHAR(12) NULL COMMENT 'sent | delivered | read | failed — what the phone did, from the webhook'"],
+    ['delivered_at', 'TIMESTAMP NULL'],
+    ['read_at', 'TIMESTAMP NULL'],
+    ['delivery_error', 'VARCHAR(300) NULL'],
+];
+
 async function ensureWhatsappSchema(conn) {
     for (const ddl of TABLES) await conn.query(ddl);
+    for (const [name, definition] of MESSAGE_COLUMNS) {
+        const [have] = await conn.query('SHOW COLUMNS FROM whatsapp_messages LIKE ?', [name]);
+        if (!have.length) await conn.query(`ALTER TABLE whatsapp_messages ADD COLUMN ${name} ${definition}`);
+    }
+    const [idx] = await conn.query("SHOW INDEX FROM whatsapp_messages WHERE Key_name = 'idx_wa_phone'");
+    if (!idx.length) await conn.query('ALTER TABLE whatsapp_messages ADD INDEX idx_wa_phone (phone, created_at)');
 }
 
 // ── the provider ────────────────────────────────────────────────────────
