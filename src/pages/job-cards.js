@@ -119,24 +119,34 @@ async function renderVerify(body, container) {
   }
   const dueLabel = (iso) => {
     const due = new Date(iso), now = new Date();
+    const when = due.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    if (due <= now) return `<span style="color:var(--danger);font-weight:700;">Call now</span><div style="font-size:0.72rem;color:var(--text-dim)">was due ${esc(when)}</div>`;
     const days = Math.ceil((due - now) / 86400000);
-    if (days < 0) return `<span style="color:var(--danger);font-weight:700;">Overdue</span>`;
-    if (days === 0) return `<span style="color:var(--danger);font-weight:700;">Due today</span>`;
-    return `Due in ${days} day${days === 1 ? '' : 's'}`;
+    if (days <= 1) return `<span style="font-weight:700;">Today / tomorrow</span><div style="font-size:0.72rem;color:var(--text-dim)">${esc(when)}</div>`;
+    return `Due in ${days} days<div style="font-size:0.72rem;color:var(--text-dim)">${esc(when)}</div>`;
+  };
+  // What happened on the last try, so the next person to call knows.
+  const lastCall = (r) => {
+    if (!r.verification_call_status) return '<span style="color:var(--text-dim)">Not called yet</span>';
+    const label = r.verification_call_status === 'call_later' ? 'Asked to call later' : 'Did not pick up';
+    const tries = Number(r.verification_attempts) || 1;
+    return `<b>${label}</b> · ${tries} ${tries === 1 ? 'try' : 'tries'}
+      ${r.verification_call_note ? `<div style="font-size:0.78rem;color:var(--text-dim)">${esc(r.verification_call_note)}</div>` : ''}`;
   };
   body.innerHTML = `
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Ticket</th><th>Customer</th><th>Phone</th><th>Call due</th><th></th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Customer</th><th>Phone</th><th>Last call</th><th>Call due</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td><strong>${esc(r.ticket_no || '—')}</strong></td>
                 <td>${esc(r.full_name || 'Client')}</td>
                 <td>${esc(r.phone || '—')}</td>
+                <td>${lastCall(r)}</td>
                 <td>${dueLabel(r.verification_due_at)}</td>
-                <td><button class="btn btn-secondary btn-sm jc-log-call" data-id="${esc(r.id)}" data-name="${esc(r.full_name || '')}" data-phone="${esc(r.phone || '')}">Log call →</button></td>
+                <td><button class="btn btn-secondary btn-sm jc-log-call" data-id="${esc(r.id)}" data-name="${esc(r.full_name || '')}" data-phone="${esc(r.phone || '')}">${r.verification_call_status ? 'Call again →' : 'Log call →'}</button></td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -161,10 +171,18 @@ function openVerificationModal(inquiryId, name, phone, onDone) {
         <select id="jc-vc-status" style="width:100%;padding:8px;margin-bottom:12px;">
           <option value="confirmed_ok">Confirmed OK</option>
           <option value="issue_found">Issue found</option>
-          <option value="unreachable">Could not reach customer</option>
+          <option value="call_later">Customer asked to wait — call again later</option>
+          <option value="unreachable">Did not pick up — try again</option>
         </select>
-        <label style="display:block;margin-bottom:8px;font-weight:600;">Rating (1-5)</label>
-        <input id="jc-vc-rating" type="number" min="1" max="5" style="width:100%;padding:8px;margin-bottom:12px;"/>
+        <div id="jc-vc-final">
+          <label style="display:block;margin-bottom:8px;font-weight:600;">Rating (1-5)</label>
+          <input id="jc-vc-rating" type="number" min="1" max="5" style="width:100%;padding:8px;margin-bottom:12px;"/>
+        </div>
+        <div id="jc-vc-retry" style="display:none">
+          <label style="display:block;margin-bottom:8px;font-weight:600;">Call again on</label>
+          <input id="jc-vc-again" type="datetime-local" style="width:100%;padding:8px;margin-bottom:6px;"/>
+          <p style="margin:0 0 12px;font-size:0.8rem;color:var(--text-dim)">The job stays in <b>Awaiting Verification</b> and comes up again at this time.</p>
+        </div>
         <label style="display:block;margin-bottom:8px;font-weight:600;">Note</label>
         <textarea id="jc-vc-note" rows="3" style="width:100%;padding:8px;"></textarea>
       </div>
@@ -177,15 +195,34 @@ function openVerificationModal(inquiryId, name, phone, onDone) {
   const close = () => modal.remove();
   modal.querySelector('#jc-vc-close').onclick = close;
   modal.querySelector('#jc-vc-cancel').onclick = close;
+  // A call that did not finish is booked again — by default tomorrow at 11:00 — instead of closing the job.
+  const pad = (n) => String(n).padStart(2, '0');
+  const tomorrow = new Date(Date.now() + 86400000);
+  modal.querySelector('#jc-vc-again').value = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}T11:00`;
+  const statusEl = modal.querySelector('#jc-vc-status');
+  const syncStatus = () => {
+    const retry = ['call_later', 'unreachable'].includes(statusEl.value);
+    modal.querySelector('#jc-vc-final').style.display = retry ? 'none' : '';
+    modal.querySelector('#jc-vc-retry').style.display = retry ? '' : 'none';
+  };
+  statusEl.onchange = syncStatus;
+  syncStatus();
+
   modal.querySelector('#jc-vc-save').onclick = async () => {
-    const status = modal.querySelector('#jc-vc-status').value;
+    const status = statusEl.value;
+    const retry = ['call_later', 'unreachable'].includes(status);
     const ratingVal = modal.querySelector('#jc-vc-rating').value;
     const note = modal.querySelector('#jc-vc-note').value.trim();
+    const again = modal.querySelector('#jc-vc-again').value;
+    if (retry && !again) return toast('Choose when to call again', 'warning');
     try {
       await apiPost(`/inquiries/${inquiryId}/verification-call`, {
-        status, rating: ratingVal ? Number(ratingVal) : null, note,
+        status, rating: !retry && ratingVal ? Number(ratingVal) : null, note,
+        ...(retry ? { call_again_at: again.replace('T', ' ') } : {}),
       });
-      toast('Verification call logged', 'success');
+      toast(retry
+        ? `Saved — it stays in Awaiting Verification and comes up again on ${new Date(again).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`
+        : 'Verification call logged', 'success');
       close();
       onDone?.();
     } catch (err) {

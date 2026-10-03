@@ -701,6 +701,23 @@ Seen as `ERR_CONNECTION_CLOSED` on `/api/data/*`, HTTP 500 on saving a job card,
 
 ---
 
+## Verification call: "call later" and "did not pick up" keep the job in the queue
+
+Job Cards → Awaiting Verification lists jobs whose job card is filled and whose 3-day call has not reached a result. It used to list
+only those with `verification_call_status IS NULL`, so logging "could not reach customer" made the job vanish from every screen.
+
+- Outcomes: `confirmed_ok` / `issue_found` are final (they need the 1–5 rating, take the job out of the list and set the rating).
+  `unreachable` ("did not pick up") and the new `call_later` ("customer asked to wait") are **retries**: the job stays in the list,
+  `verification_due_at` moves to the **Call again on** time given (default tomorrow 11:00; a `call_again_at` of `YYYY-MM-DD HH:MM`),
+  `verification_reminder_sent` is cleared so the admin is reminded again then, `verification_attempts` counts the tries, and no
+  rating is touched.
+- The list shows the last outcome, the note and the number of tries; the button reads *Call again →* once a try has been made.
+- The reminder job and the dashboard's "awaiting verification" count include retry jobs. Jobs already stored as `unreachable`
+  (the ones that went missing) come back on their own — no data fix needed.
+- Tests: `tests/verification-call.test.mjs` (7).
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

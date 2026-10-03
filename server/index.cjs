@@ -866,6 +866,9 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
     console.error('[process] uncaught exception —', err.stack || err.message);
 });
+// A verification call that did not reach a result: the customer did not pick up, or asked to be called
+// later. The job stays in "Awaiting Verification" (with a new date to call) until a real outcome is logged.
+const VERIFICATION_RETRY_STATUSES = ['unreachable', 'call_later'];
 const DATA_LIST_CAP = 5000;     // rows a newest-first list returns unless it asks for a different limit
 const DATA_MAX_ROWS = 20000;    // the most any list may ask for
 
@@ -1280,10 +1283,11 @@ async function runVerificationCallReminders() {
             `SELECT id, ticket_no, full_name, phone
                FROM inquiries
               WHERE job_card_filled_at IS NOT NULL
-                AND verification_call_status IS NULL
+                AND (verification_call_status IS NULL OR verification_call_status IN (?))
                 AND COALESCE(verification_reminder_sent, 0) = 0
                 AND verification_due_at IS NOT NULL
-                AND verification_due_at <= NOW()`
+                AND verification_due_at <= NOW()`,
+            [VERIFICATION_RETRY_STATUSES]
         );
         for (const r of rows) {
             await connection.query('UPDATE inquiries SET verification_reminder_sent = 1 WHERE id = ?', [r.id]);
@@ -1609,7 +1613,8 @@ const requiredColumns = {
         { name: 'job_card_filled_by', definition: 'VARCHAR(36) DEFAULT NULL' },
         { name: 'job_card_filled_at', definition: 'TIMESTAMP NULL' },
         { name: 'verification_due_at', definition: 'TIMESTAMP NULL' },
-        { name: 'verification_call_status', definition: "VARCHAR(20) DEFAULT NULL COMMENT \"'confirmed_ok' | 'issue_found' | 'unreachable'\"" },
+        { name: 'verification_call_status', definition: "VARCHAR(20) DEFAULT NULL COMMENT \"'confirmed_ok' | 'issue_found' (final) | 'unreachable' | 'call_later' (try again — the job stays in the queue)\"" },
+        { name: 'verification_attempts', definition: "INT NOT NULL DEFAULT 0 COMMENT 'how many times the verification call has been tried'" },
         { name: 'verification_call_note', definition: 'TEXT' },
         { name: 'verification_call_at', definition: 'TIMESTAMP NULL' },
         { name: 'verification_reminder_sent', definition: 'TINYINT(1) DEFAULT 0' },
@@ -4892,7 +4897,7 @@ async function computeFinanceSummary(from, to) {
             pool.query(
                 `SELECT
                     SUM(CASE WHEN job_card_filled_at IS NOT NULL AND DATE_FORMAT(job_card_filled_at, '%Y-%m') = ? THEN 1 ELSE 0 END) AS logged,
-                    SUM(CASE WHEN job_card_filled_at IS NOT NULL AND verification_call_status IS NULL THEN 1 ELSE 0 END) AS awaitingVerification,
+                    SUM(CASE WHEN job_card_filled_at IS NOT NULL AND (verification_call_status IS NULL OR verification_call_status IN ('unreachable','call_later')) THEN 1 ELSE 0 END) AS awaitingVerification,
                     SUM(CASE WHEN verification_call_status IN ('confirmed_ok','issue_found') AND DATE_FORMAT(job_card_filled_at, '%Y-%m') = ? THEN 1 ELSE 0 END) AS verified
                    FROM inquiries`,
                 [nowMonth, nowMonth]
@@ -7600,13 +7605,16 @@ app.get('/api/job-cards', authenticateToken, async (req, res) => {
             );
             return res.json(rows);
         }
+        // Still to be called: never called, or tried and put off ("call later", "did not pick up").
         const [rows] = await connection.query(
-            `SELECT i.id, i.ticket_no, i.full_name, i.phone, i.verification_due_at
+            `SELECT i.id, i.ticket_no, i.full_name, i.phone, i.verification_due_at,
+                    i.verification_call_status, i.verification_call_note, i.verification_call_at, i.verification_attempts
                FROM inquiries i
               WHERE i.job_card_filled_at IS NOT NULL
-                AND i.verification_call_status IS NULL
+                AND (i.verification_call_status IS NULL OR i.verification_call_status IN (?))
               ORDER BY i.verification_due_at ASC
-              LIMIT 200`
+              LIMIT 200`,
+            [VERIFICATION_RETRY_STATUSES]
         );
         res.json(rows);
     } catch (err) {
@@ -7623,16 +7631,32 @@ app.get('/api/job-cards', authenticateToken, async (req, res) => {
 app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const { id } = req.params;
-    const { status, rating, note } = req.body || {};
+    const { status, rating, note, call_again_at: callAgainAt } = req.body || {};
 
-    if (!['confirmed_ok', 'issue_found', 'unreachable'].includes(status)) {
-        return res.status(400).json({ error: 'status must be confirmed_ok, issue_found, or unreachable' });
+    if (!['confirmed_ok', 'issue_found', ...VERIFICATION_RETRY_STATUSES].includes(status)) {
+        return res.status(400).json({ error: 'status must be confirmed_ok, issue_found, unreachable or call_later' });
     }
+    const retry = VERIFICATION_RETRY_STATUSES.includes(status);
     let r = null;
-    if (status !== 'unreachable') {
+    if (!retry) {
         r = Number(rating);
         if (!Number.isInteger(r) || r < 1 || r > 5) {
             return res.status(400).json({ error: 'rating must be an integer from 1 to 5' });
+        }
+    }
+
+    // A call that did not finish is booked again. The date comes as the clock reads where the admin is
+    // ("2026-10-04 11:00"); with none given it is tomorrow, the same time.
+    let nextCall = null;
+    if (retry) {
+        if (callAgainAt) {
+            const m = String(callAgainAt).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?/);
+            if (!m || Number.isNaN(new Date(`${m[1]}T${m[2]}:00`).getTime())) {
+                return res.status(400).json({ error: 'call_again_at must be a date and time, like 2026-10-04 11:00' });
+            }
+            nextCall = `${m[1]} ${m[2]}:${m[3] || '00'}`;
+        } else {
+            nextCall = sqlDateTime(new Date(Date.now() + 24 * 60 * 60 * 1000));
         }
     }
 
@@ -7642,15 +7666,20 @@ app.post('/api/inquiries/:id/verification-call', authenticateToken, async (req, 
         const [existing] = await connection.query('SELECT id FROM inquiries WHERE id = ? LIMIT 1', [id]);
         if (!existing.length) return res.status(404).json({ error: 'Job not found' });
 
+        // A final outcome closes the call and the rating counts; a retry keeps the job in the queue, due again
+        // at the new time (and the reminder is allowed to fire again), without touching any rating.
         await connection.query(
             `UPDATE inquiries SET
                 verification_call_status = ?,
                 verification_call_note = ?,
                 verification_call_at = NOW(),
-                feedback_rating = CASE WHEN ? = 'unreachable' THEN feedback_rating ELSE ? END,
+                verification_attempts = COALESCE(verification_attempts, 0) + 1,
+                verification_due_at = CASE WHEN ? IS NULL THEN verification_due_at ELSE ? END,
+                verification_reminder_sent = CASE WHEN ? IS NULL THEN verification_reminder_sent ELSE 0 END,
+                feedback_rating = CASE WHEN ? IS NULL THEN ? ELSE feedback_rating END,
                 rework_required = CASE WHEN ? = 'issue_found' THEN 1 ELSE rework_required END
              WHERE id = ?`,
-            [status, note || null, status, r || null, status, id]
+            [status, note || null, nextCall, nextCall, nextCall, nextCall, r || null, status, id]
         );
 
         const [freshRows] = await connection.query('SELECT * FROM inquiries WHERE id = ? LIMIT 1', [id]);
