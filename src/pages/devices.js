@@ -5,7 +5,7 @@
 // that site, its disk, its last fault — and so the right part goes out on the
 // first visit. A device is never deleted: a swapped one is marked *replaced* and
 // points at what took its place, so a site's history stays readable.
-import { toast } from '../utils.js';
+import { toast, makeSearchableSelect } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 
@@ -66,7 +66,7 @@ export async function renderDevicesTab(container) {
   root = container;
   container.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
   try {
-    parties = await api('GET', '/parties?kind=all&limit=1000');
+    parties = await api('GET', '/parties?kind=all&limit=5000');
     await load();
   } catch (err) {
     container.innerHTML = `<div class="card" style="padding:30px;text-align:center;color:var(--danger)">${esc(err.message)}</div>`;
@@ -239,6 +239,7 @@ export function openEditor(existing = null, { partyId = null, onSaved = null } =
       if (!site.value && sites.length === 1) site.value = sites[0].id;
     } catch { /* the pickers stay empty; the rest of the form still works */ }
   };
+  makeSearchableSelect($('#de-party'));
   loadFor(d?.party_id || partyId, d || {});
   $('#de-party').onchange = () => loadFor($('#de-party').value);
 

@@ -7,7 +7,7 @@
 // A contract's invoice is an ordinary sales invoice — it appears in Sales, ages,
 // is chased and is paid like any other. Nothing is calculated here that the
 // server does not also decide.
-import { toast } from '../utils.js';
+import { toast, makeSearchableSelect } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 import { warrantyChip } from './devices.js';
@@ -60,7 +60,7 @@ export async function renderAmcTab(container) {
   container.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
   try {
     [parties, taxRates] = await Promise.all([
-      api('GET', '/parties?kind=all&limit=1000'),
+      api('GET', '/parties?kind=all&limit=5000'),
       api('GET', '/accounting/tax-rates').catch(() => []),
     ]);
     await load();
@@ -298,6 +298,7 @@ function openEditor(existing = null) {
   $('#ae-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
+  makeSearchableSelect($('#ae-party'));
   if ($('#ae-newparty')) {
     $('#ae-newparty').onclick = () => openQuickParty({
       kind: 'customer',

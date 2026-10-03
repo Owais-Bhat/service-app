@@ -94,6 +94,46 @@ export function formatTime(dateStr) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 }
 
+// A long <select> (a thousand customers) is unusable by scrolling. This puts a search box above it that narrows the
+// options as you type; the chosen one always stays in the list, and options added later (a "New customer") are kept.
+export function makeSearchableSelect(select, { max = 150 } = {}) {
+  if (!select || select.dataset.searchable) return;
+  select.dataset.searchable = '1';
+  const all = new Map(); // value -> label, in the order first seen
+  const absorb = () => { for (const o of select.options) if (o.value) all.set(o.value, o.textContent); };
+  absorb();
+  if (all.size < 15) return; // short lists don't need it
+  const box = document.createElement('input');
+  box.type = 'search';
+  box.placeholder = `Search ${all.size} by name or phone…`;
+  box.autocomplete = 'off';
+  box.style.cssText = 'width:100%;margin-bottom:6px';
+  select.parentNode.insertBefore(box, select);
+  const fill = () => {
+    absorb();
+    const keep = select.value;
+    const needle = box.value.trim().toLowerCase();
+    const hits = [];
+    for (const [value, label] of all) {
+      if (!needle || label.toLowerCase().includes(needle) || value === keep) hits.push([value, label]);
+    }
+    const shown = hits.slice(0, max);
+    if (keep && !shown.some(([v]) => v === keep) && all.has(keep)) shown.unshift([keep, all.get(keep)]);
+    select.innerHTML = '';
+    select.appendChild(new Option('— Choose —', ''));
+    for (const [value, label] of shown) select.appendChild(new Option(label, value, false, value === keep));
+    if (hits.length > shown.length) {
+      const more = new Option(`… ${hits.length - shown.length} more — type to narrow`, '');
+      more.disabled = true;
+      select.appendChild(more);
+    }
+    select.value = keep;
+  };
+  box.oninput = fill;
+  // Picking something clears the search so the whole list is there next time.
+  select.addEventListener('change', () => { if (box.value) { box.value = ''; fill(); } });
+}
+
 export function debounce(fn, delay = 300) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };

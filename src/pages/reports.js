@@ -345,7 +345,7 @@ async function ledger(body) {
 }
 
 async function statement(body) {
-  if (!parties.length) parties = await api('/parties?limit=1000');
+  if (!parties.length) parties = await api('/parties?limit=5000');
   if (!state.party && parties[0]) state.party = parties[0].id;
   const picker = `<select id="rp-party" style="padding:7px 10px;border-radius:9px;min-width:240px">
     ${parties.map(p => `<option value="${esc(p.id)}"${p.id === state.party ? ' selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select>`;

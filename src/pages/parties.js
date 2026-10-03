@@ -61,7 +61,9 @@ const STATES = [
 
 const state = { tab: 'customers', q: '', showInactive: false };
 let rows = [];
+let summary = { count: 0, owing_count: 0, credit_count: 0, net_paise: 0 };
 let duplicates = [];
+const PAGE = 200;
 
 export async function renderPartiesTab(container) {
   container.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
@@ -74,17 +76,29 @@ export async function renderPartiesTab(container) {
   paint(container);
 }
 
-async function load() {
+function filterQuery() {
   const kind = state.tab === 'suppliers' ? 'supplier' : 'customer';
-  rows = await api('GET', `/parties?kind=${kind}&active=${state.showInactive ? 'all' : '1'}&q=${encodeURIComponent(state.q)}`);
+  return `kind=${kind}&active=${state.showInactive ? 'all' : '1'}&q=${encodeURIComponent(state.q)}`;
+}
+
+// The first page plus totals over everybody who matches — the numbers on top must not depend on how many rows
+// happen to be on screen.
+async function load() {
+  const query = filterQuery();
+  [rows, summary] = await Promise.all([
+    api('GET', `/parties?${query}&limit=${PAGE}`),
+    api('GET', `/parties/summary?${query}`),
+  ]);
   if (state.tab === 'duplicates') duplicates = await api('GET', '/parties/duplicates/suggest');
 }
 
+async function loadMore() {
+  const more = await api('GET', `/parties?${filterQuery()}&limit=${PAGE}&offset=${rows.length}`);
+  rows = rows.concat(more);
+}
+
 function kpis() {
-  const owing = rows.filter(r => Number(r.balance_paise) > 0);
-  const owed = rows.filter(r => Number(r.balance_paise) < 0);
-  const total = rows.reduce((sum, r) => sum + Number(r.balance_paise || 0), 0);
-  return { count: rows.length, owing: owing.length, owed: owed.length, total };
+  return { count: summary.count, owing: summary.owing_count, owed: summary.credit_count, total: summary.net_paise };
 }
 
 function paint(container) {
@@ -216,7 +230,22 @@ function paintBody(container) {
           </tr>`;
   }).join('')}
       </tbody>
-    </table></div>`;
+    </table></div>
+    <div style="text-align:center;padding:14px">
+      <span style="color:var(--text-dim);font-size:0.8rem">Showing ${rows.length} of ${summary.count}</span>
+      ${rows.length < summary.count ? `<button class="btn btn-secondary" id="pt-more" style="margin-left:12px">Show ${Math.min(PAGE, summary.count - rows.length)} more</button>` : ''}
+    </div>`;
+
+  const moreBtn = body.querySelector('#pt-more');
+  if (moreBtn) {
+    moreBtn.onclick = async () => {
+      moreBtn.disabled = true;
+      try { await loadMore(); } catch (err) { toast(err.message, 'error'); }
+      const y = window.scrollY;
+      paintBody(container);
+      window.scrollTo(0, y);
+    };
+  }
 
   body.querySelectorAll('[data-open]').forEach(tr => {
     tr.onclick = (e) => {
@@ -587,9 +616,11 @@ async function openPartyDetail(container, id) {
   overlay.querySelectorAll('[data-past]').forEach(tr => { tr.onclick = () => past.open(tr.dataset.past); });
 }
 
-function exportRows() {
-  if (!rows.length) return toast('Nothing to export', 'info');
-  exportToCSV(`${state.tab}-${new Date().toISOString().slice(0, 10)}.csv`, rows.map(r => ({
+async function exportRows() {
+  let all;
+  try { all = await api('GET', `/parties?${filterQuery()}&limit=5000`); } catch (err) { return toast(err.message, 'error'); }
+  if (!all.length) return toast('Nothing to export', 'info');
+  exportToCSV(`${state.tab}-${new Date().toISOString().slice(0, 10)}.csv`, all.map(r => ({
     Name: r.display_name || '',
     'Legal name': r.legal_name || '',
     Phone: r.phone || '',

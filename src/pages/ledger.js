@@ -87,7 +87,7 @@ async function loadTab() {
   if (state.tab === 'audit') audit = await api('GET', '/accounting/audit?limit=200');
   if (state.tab === 'opening') {
     accounts = await api('GET', '/accounting/accounts');
-    parties = await api('GET', '/parties?kind=all&limit=1000');
+    parties = await api('GET', '/parties?kind=all&limit=5000');
   }
 }
 

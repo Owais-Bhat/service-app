@@ -9,7 +9,7 @@
 // entry in the books is reversed and the corrected one posted, with a reason on
 // record. It cannot be deleted, only cancelled. That is what keeps the books
 // worth reading.
-import { toast, exportToCSV } from '../utils.js';
+import { toast, exportToCSV, makeSearchableSelect } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 import { unitDatalist, tidyUnit, DEFAULT_UNIT } from './units.js';
@@ -90,7 +90,7 @@ export async function renderSalesTab(container) {
     // Installation contacts are customers too — bring in any not yet on the list.
     await api('POST', '/parties/sync-installation-contacts').catch(() => {});
     [parties, items, taxRates] = await Promise.all([
-      api('GET', '/parties?kind=all&limit=1000'),
+      api('GET', '/parties?kind=all&limit=5000'),
       api('GET', '/inventory/items?all=1').catch(() => []),
       api('GET', '/accounting/tax-rates').catch(() => []),
     ]);
@@ -640,6 +640,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
   if ($('#sl-svcgst')) $('#sl-svcgst').onchange = (e) => { serviceGst = e.target.checked; applyBillType(); };
   if ($('#sl-showgst')) $('#sl-showgst').onchange = (e) => { showGstInfo = e.target.checked; applyBillType(); };
   applyBillType();
+  makeSearchableSelect($('#sl-party'));
   $('#sl-party').onchange = queueReprice;
   if ($('#sl-newparty')) {
     $('#sl-newparty').onclick = () => openQuickParty({
@@ -985,6 +986,7 @@ async function openReceiptModal(container, { document: doc = null, balance = 0 }
   $('#rc-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
+  makeSearchableSelect($('#rc-party'));
   // Choosing an invoice fills in what it still owes and who it belongs to.
   const docPicker = $('#rc-doc');
   if (docPicker) {

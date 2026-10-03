@@ -6,7 +6,7 @@
 // records what is owed and touches no stock, and a return sends goods back.
 // Receiving against an order only ever offers what is still outstanding, so a
 // partial delivery cannot be over-received.
-import { toast, exportToCSV } from '../utils.js';
+import { toast, exportToCSV, makeSearchableSelect } from '../utils.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 
@@ -76,7 +76,7 @@ export async function renderPurchasesTab(container) {
   container.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
   try {
     [suppliers, items, locations] = await Promise.all([
-      api('GET', '/parties?kind=supplier&limit=1000'),
+      api('GET', '/parties?kind=supplier&limit=5000'),
       api('GET', '/inventory/items?all=1').catch(() => []),
       api('GET', '/stock/locations').catch(() => []),
     ]);
@@ -426,6 +426,7 @@ function openEditor(container, { docType = 'purchase_order', existing = null, gr
       <div class="hint">The server works out the exact figure when you save</div>`;
   }
 
+  makeSearchableSelect($('#pu-party'));
   $('#pu-newparty').onclick = () => openQuickParty({
     kind: 'supplier',
     onCreated: (p) => {

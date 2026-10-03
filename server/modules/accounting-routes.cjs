@@ -116,10 +116,8 @@ function mountAccounting({ app, getConn, authenticateToken, permissions, audit }
     }));
 
     // ── parties ─────────────────────────────────────────────────────────
-    app.get('/api/parties', authenticateToken, requireCap('party.view'), handle(async (req, res, conn) => {
-        const businessId = await business(conn);
-        const { kind, q, active = '1', limit = '200' } = req.query;
-
+    // Who matches a request: the kind of party, active or not, and a search over name, phone, GSTIN and email.
+    function partyFilter(businessId, { kind, q, active = '1' }) {
         const where = ['p.business_id = ?', 'p.merged_into_id IS NULL'];
         const params = [businessId];
         if (kind && kind !== 'all') { where.push("(p.kind = ? OR p.kind = 'both')"); params.push(kind); }
@@ -129,23 +127,52 @@ function mountAccounting({ app, getConn, authenticateToken, permissions, audit }
             const like = `%${q}%`;
             params.push(like, like, like, like);
         }
+        return { where: where.join(' AND '), params };
+    }
 
-        // The balance comes from the ledger, not from a stored field, so it can
-        // never disagree with the accounts.
+    // The balance comes from the ledger, not from a stored field, so it can never disagree with the accounts.
+    const BALANCE_JOINS = `
+               LEFT JOIN journal_lines l ON l.party_id = p.id
+               LEFT JOIN journals j ON j.id = l.journal_id
+               LEFT JOIN accounts a ON a.id = l.account_id AND a.subtype IN ('receivable', 'payable')`;
+
+    // One page of parties, in name order. `offset` walks through the rest; the page size is up to 5000 (a picker
+    // that wants everyone asks for that).
+    app.get('/api/parties', authenticateToken, requireCap('party.view'), handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const { where, params } = partyFilter(businessId, req.query);
         const [rows] = await conn.query(
             `SELECT p.*,
                     COALESCE(SUM(l.debit_paise), 0) - COALESCE(SUM(l.credit_paise), 0) AS balance_paise
-               FROM parties p
-               LEFT JOIN journal_lines l ON l.party_id = p.id
-               LEFT JOIN journals j ON j.id = l.journal_id
-               LEFT JOIN accounts a ON a.id = l.account_id AND a.subtype IN ('receivable', 'payable')
-              WHERE ${where.join(' AND ')}
+               FROM parties p ${BALANCE_JOINS}
+              WHERE ${where}
               GROUP BY p.id
               ORDER BY p.display_name
-              LIMIT ?`,
-            [...params, Math.min(Number(limit) || 200, 1000)]
+              LIMIT ? OFFSET ?`,
+            [...params, Math.min(Number(req.query.limit) || 200, 5000), Math.max(Number(req.query.offset) || 0, 0)]
         );
         res.json(rows);
+    }));
+
+    // How many, and what they owe in all — over *every* matching party, not just the page on screen.
+    app.get('/api/parties/summary', authenticateToken, requireCap('party.view'), handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const { where, params } = partyFilter(businessId, req.query);
+        const [[s]] = await conn.query(
+            `SELECT COUNT(*) AS count,
+                    COALESCE(SUM(b > 0), 0) AS owing_count, COALESCE(SUM(CASE WHEN b > 0 THEN b ELSE 0 END), 0) AS owing_paise,
+                    COALESCE(SUM(b < 0), 0) AS credit_count, COALESCE(SUM(CASE WHEN b < 0 THEN -b ELSE 0 END), 0) AS credit_paise,
+                    COALESCE(SUM(b), 0) AS net_paise
+               FROM (SELECT p.id, COALESCE(SUM(l.debit_paise), 0) - COALESCE(SUM(l.credit_paise), 0) AS b
+                       FROM parties p ${BALANCE_JOINS}
+                      WHERE ${where}
+                      GROUP BY p.id) t`,
+            params
+        );
+        res.json({
+            count: Number(s.count), owing_count: Number(s.owing_count), owing_paise: Number(s.owing_paise),
+            credit_count: Number(s.credit_count), credit_paise: Number(s.credit_paise), net_paise: Number(s.net_paise),
+        });
     }));
 
     app.get('/api/parties/:id', authenticateToken, requireCap('party.view'), handle(async (req, res, conn) => {
