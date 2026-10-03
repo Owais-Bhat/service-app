@@ -108,7 +108,12 @@ export function makeSearchableSelect(select, { max = 150 } = {}) {
   box.placeholder = `Search ${all.size} by name or phone…`;
   box.autocomplete = 'off';
   box.style.cssText = 'width:100%;margin-bottom:6px';
-  select.parentNode.insertBefore(box, select);
+  // Box and select share one column, so a flex row (select + "New" button) can't squeeze the select to nothing.
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'flex:1;min-width:0';
+  select.parentNode.insertBefore(wrap, select);
+  wrap.append(box, select);
+  select.style.width = '100%';
   const fill = () => {
     absorb();
     const keep = select.value;
@@ -128,10 +133,12 @@ export function makeSearchableSelect(select, { max = 150 } = {}) {
       select.appendChild(more);
     }
     select.value = keep;
+    // While searching, show the matches as an open list so they are seen without a click.
+    if (needle) select.size = Math.min(shown.length + 1, 8); else select.removeAttribute('size');
   };
   box.oninput = fill;
   // Picking something clears the search so the whole list is there next time.
-  select.addEventListener('change', () => { if (box.value) { box.value = ''; fill(); } });
+  select.addEventListener('change', () => { if (box.value) { box.value = ''; fill(); } select.removeAttribute('size'); });
 }
 
 export function debounce(fn, delay = 300) {
