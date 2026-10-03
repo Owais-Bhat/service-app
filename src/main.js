@@ -168,6 +168,7 @@ function getNavItems(role) {
       type: 'group', key: 'sales', icon: ICONS.receipt, label: 'Sales',
       children: [
         { id: 'sales', label: 'Invoices & Quotations' },
+        { id: 'past-records', label: 'Past Records (Vyapar)' },
       ],
     },
     {
@@ -312,6 +313,7 @@ const PAGE_LOADERS = {
     'fin-reports': () => import('./pages/reports.js').then(m => m.renderReportsTab),
     migration: () => import('./pages/migration.js').then(m => m.renderMigrationTab),
     sales: () => import('./pages/sales.js').then(m => m.renderSalesTab),
+    'past-records': () => import('./pages/past-records.js').then(m => m.renderPastRecordsTab),
     purchases: () => import('./pages/purchases.js').then(m => m.renderPurchasesTab),
     stock: () => import('./pages/stock.js').then(m => m.renderStockTab),
     'job-costing': () => import('./pages/job-costing.js').then(m => m.renderJobCostingTab),

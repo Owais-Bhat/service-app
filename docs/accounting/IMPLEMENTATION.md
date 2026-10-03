@@ -736,6 +736,42 @@ Before bringing outside data (Vyapar, say) in, take a copy of everything already
 
 ---
 
+## Coming over from Vyapar (Accounts → Data Migration → From Vyapar)
+
+Upload the Vyapar backup (`.vyb`: a ZIP holding a SQLite file; read with `sql.js`, no native module, so it runs on the host) and bring it in
+as three separate, re-runnable steps. The decision taken: **opening balances + old records to look at** — the books start from today's
+balances, and the history is kept but never posted (posting it too would count everything twice and disturb the GST registers).
+
+- **Reading** (`modules/vyapar/reader.cjs`, no database): parties (`kb_names`; name_type 2 are expense heads and are skipped), items,
+  every transaction with its lines, the payment-to-invoice and quotation-to-invoice links. Prices are converted to before-tax; a GSTIN that
+  fails its check digit is dropped with a warning; phones are normalised; the state comes from the GSTIN, else the state name. The upload
+  is kept in memory for an hour under a session id (no disk); the preview carries counts and totals, never customers.
+- **A. Parties** — new `parties` with `kind` from what was done with them (sold to / bought from / both), the Vyapar balance as the
+  **opening balance** (positive = receivable, negative = payable) dated *as on*, a billing address. Someone already here under the same
+  phone or name is **recognised and filled in, never overwritten or duplicated**; two Vyapar parties that share a phone stay two accounts
+  (merging them would merge their balances — a bug found and fixed on the real file). A balance is set once; a second run moves nothing.
+- **B. Items** — through the existing stock importer (`stock/importer.cjs`, chunks of 400, `updateStock: false`): catalogue with HSN,
+  unit, before-tax rates, and the GST rate the item was most often sold at. **Only positive stock is imported** as opening stock (one
+  journal: Dr Inventory / Cr Opening Balance Equity); negative stock — purchases never entered in Vyapar — comes in as 0 and is counted in
+  the result, to be recounted. Items already here keep their stock.
+- **C. Old records** — `legacy_documents` / `legacy_document_lines` (invoices, quotations, payments in/out, purchases, returns, expenses,
+  challans), with the document number, party, items, serials, extra charges and links. **Read by nothing else**: no ledger, report, GST
+  register or number series. The set is replaced as a whole on a re-run, so it cannot be doubled. Per-invoice "balance" is kept as
+  Vyapar had it but is not reliable (payments were often recorded against the party, not the invoice) — the party balance is the truth.
+- **D. Post the opening balances** — the existing `POST /api/accounting/opening-balances` (one entry for every party/account opening
+  balance; same date twice changes nothing). The wizard calls it on request, after the numbers have been checked.
+- **Reading the history**: Sales → **Past Records (Vyapar)** (type tabs, search, date range, record detail with lines and linked
+  records) and a *Past records from Vyapar* table on each customer/supplier page. `GET /api/vyapar/history[/:id]` needs `invoice.view`;
+  everything that imports is admin-only. Dates are sent as plain `YYYY-MM-DD` (a `DATE` serialised as JSON showed the previous day).
+- Not imported, by design: bank and cash balances (enter the real ones under Accounts), expense heads, loyalty/cheque details,
+  logos and attachments, per-batch stock tracking.
+- Run on the real backup: 1094 parties (owed to us ₹25,41,339 / by us ₹3,58,707 — equal to Vyapar's own totals), 2000 items (209 in
+  stock, ₹35.7 L at cost; 1268 with negative stock), 2776 records with 12,184 lines; all three steps in about 3 seconds.
+- Tests: `tests/vyapar-import.test.mjs` (12), using a made-up backup from `tests/helpers/vyapar-fixture.mjs`; no real data is in the repo.
+- Libraries: `sql.js` (added to the root `package.json`, the one the host installs).
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

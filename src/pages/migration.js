@@ -30,6 +30,7 @@ const when = (v) => v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', mo
 
 const TABS = [
   { key: 'backup', label: 'Backup' },
+  { key: 'vyapar', label: 'From Vyapar' },
   { key: 'tickets', label: 'Older Tickets' },
   { key: 'stock', label: 'Stock on the Shelf' },
   { key: 'log', label: 'Service Register' },
@@ -61,7 +62,163 @@ function paint() {
       <div class="at2-panel"><div class="at2-body" id="mg-body"></div></div>
     </div>`;
   root.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { state.tab = b.dataset.tab; paint(); }; });
-  ({ backup, tickets, stock, log, history, auto }[state.tab])(root.querySelector('#mg-body'));
+  ({ backup, vyapar, tickets, stock, log, history, auto }[state.tab])(root.querySelector('#mg-body'));
+}
+
+// ── 0b. from Vyapar ─────────────────────────────────────────────────────
+// Three steps, each run on its own, checked, and safe to run again: parties with what they owe today,
+// items with the stock really on the shelf, and the old records to look at. The old records are never posted
+// to the books — the opening balances already hold the money.
+
+const vy = { session: null, file: '', summary: null, status: null, asOn: ymd(new Date()), results: {} };
+const TYPE_NAMES = {
+  sale: 'Invoices', estimate: 'Quotations', payment_in: 'Payments received', purchase: 'Purchases', payment_out: 'Payments made',
+  sale_return: 'Credit notes', purchase_return: 'Purchase returns', expense: 'Expenses', delivery_challan: 'Delivery challans', other: 'Other',
+};
+
+async function vyapar(body) {
+  try { vy.status = await api('GET', '/vyapar/status'); } catch { vy.status = null; }
+  const done = (step) => vy.status?.last?.[step];
+  const doneLine = (step) => {
+    const d = done(step);
+    return d ? `<div class="at2-note" style="color:var(--primary)">✔ Done ${esc(when(d.at))}${d.as_on ? ` (as on ${esc(day(d.as_on))})` : ''} — run again any time; nothing is counted twice.</div>` : '';
+  };
+
+  body.innerHTML = `
+    ${intro('Bring your Vyapar data in: customers and suppliers with what they owe today, items with the stock really on the shelf, and every old invoice, quotation, payment and purchase to look up. Do <b>Backup</b> first.')}
+    ${notice('primary', `<b>How the money is handled.</b> Each party's balance as it stands in Vyapar today becomes its <i>opening balance</i>, and the stock on the shelf becomes <i>opening stock</i>. The old invoices and payments are kept as <b>Past Records</b> to read — they are not posted again, so nothing is counted twice and your GST returns are not disturbed.`)}
+
+    <div class="at2-h">1. Choose the Vyapar backup file</div>
+    <div class="at2-filters" style="gap:10px;flex-wrap:wrap">
+      <input type="file" id="vy-file" accept=".vyb,.vyp,.zip">
+      <span class="at2-note" id="vy-reading" style="margin:0"></span>
+    </div>
+    <p class="at2-note">In Vyapar: <b>Backup → Backup to device</b>. The file ends in <code>.vyb</code>. It is read here and kept only for an hour; it is not saved on the server.</p>
+
+    <div id="vy-after"></div>`;
+
+  const file = body.querySelector('#vy-file');
+  const reading = body.querySelector('#vy-reading');
+  const after = body.querySelector('#vy-after');
+
+  const paintSummary = () => {
+    if (!vy.summary) { after.innerHTML = ''; return; }
+    const m = vy.summary;
+    const types = Object.entries(m.documents.by_type).sort((a, b) => b[1].count - a[1].count);
+    after.innerHTML = `
+      <div class="at2-h">What is in <b>${esc(vy.file)}</b></div>
+      ${stats(
+        stat('Customers & suppliers', m.parties.count),
+        stat('They owe you', rupees(m.parties.owe_us.paise)),
+        stat('You owe them', rupees(m.parties.we_owe.paise)),
+        stat('Items', m.items.count),
+        stat('Items with stock', m.items.with_stock),
+        stat('Stock value (at cost)', rupees(m.items.stock_value_paise)),
+        stat('Old records', m.documents.count),
+      )}
+      ${m.items.negative_stock ? notice('warn', `<b>${m.items.negative_stock} items show negative stock in Vyapar</b> (${Math.abs(m.items.negative_units).toLocaleString('en-IN')} units in all) — usually purchases that were never entered. They come in with <b>0</b> stock; only the ${m.items.with_stock} items really in stock get opening stock. Count the shelf and use Stock → Stock Count to correct the rest.`) : ''}
+      ${m.items.without_price ? `<p class="at2-note">${m.items.without_price} items have no selling price in Vyapar and come in with ₹0.</p>` : ''}
+      ${m.parties.with_phone < m.parties.count ? `<p class="at2-note">${(m.parties.count - m.parties.with_phone).toLocaleString('en-IN')} of ${m.parties.count.toLocaleString('en-IN')} parties have no phone number in Vyapar (WhatsApp reminders and campaigns need one).</p>` : ''}
+      ${m.warnings_total ? notice('warn', `<b>${m.warnings_total} thing${m.warnings_total === 1 ? '' : 's'} to check:</b><ul>${m.warnings.slice(0, 8).map(w => `<li>${esc(w)}</li>`).join('')}${m.warnings_total > 8 ? `<li>…and ${m.warnings_total - 8} more</li>` : ''}</ul>`) : ''}
+      ${table(['Old records', 'Count', 'From', 'To', 'Amount'], types.map(([k, v]) => [esc(TYPE_NAMES[k] || k), v.count.toLocaleString('en-IN'), esc(day(v.from)), esc(day(v.to)), rupees(v.total_paise)]), [1, 4])}
+
+      <div class="at2-h" style="margin-top:18px">2. Bring it in — in this order</div>
+      <div class="at2-filters"><label style="font-size:0.78rem;color:var(--text-dim)">Balances and stock are as on <input type="date" id="vy-ason" value="${esc(vy.asOn)}"></label>
+        <span class="at2-note" style="margin:0">Use the day the backup was taken (or the day you stop using Vyapar).</span></div>
+
+      <div class="card" style="margin:10px 0"><div style="padding:14px">
+        <b>A. Customers & suppliers, with what they owe today</b>
+        <div class="at2-note">Creates ${m.parties.count.toLocaleString('en-IN')} parties. Someone already here under the same phone number or name is recognised and filled in, never duplicated. Two shops that share a phone stay two accounts.</div>
+        ${doneLine('parties')}<div id="vy-r-parties">${vy.results.parties || ''}</div>
+        <button class="btn btn-primary" id="vy-parties" style="margin-top:8px">Bring in the parties</button>
+      </div></div>
+
+      <div class="card" style="margin:10px 0"><div style="padding:14px">
+        <b>B. Items, with the stock really on the shelf</b>
+        <div class="at2-note">Creates ${m.items.count.toLocaleString('en-IN')} items and opening stock for the ${m.items.with_stock} that are in stock (${rupees(m.items.stock_value_paise)} at cost), as one entry: Inventory against Opening Balance Equity.</div>
+        ${doneLine('items')}<div id="vy-r-items">${vy.results.items || ''}</div>
+        <button class="btn btn-primary" id="vy-items" style="margin-top:8px">Bring in the items and stock</button>
+      </div></div>
+
+      <div class="card" style="margin:10px 0"><div style="padding:14px">
+        <b>C. Old invoices, quotations, payments and purchases — to look up</b>
+        <div class="at2-note">Keeps ${m.documents.count.toLocaleString('en-IN')} records with their ${m.documents.lines.toLocaleString('en-IN')} item lines under <b>Sales → Past Records (Vyapar)</b>, tied to the customer. Not posted to the books.</div>
+        ${doneLine('history')}<div id="vy-r-history">${vy.results.history || ''}</div>
+        <button class="btn btn-primary" id="vy-history" style="margin-top:8px">Keep the old records</button>
+      </div></div>
+
+      <div class="card" style="margin:10px 0"><div style="padding:14px">
+        <b>D. Put the opening balances into the books</b>
+        <div class="at2-note">After A and B: posts <i>one</i> entry for every party's opening balance (Receivable / Payable against Opening Balance Equity), dated as above. Doing it twice for the same date changes nothing. Do this once you have checked the numbers; also enter the real bank and cash balances under Accounts.</div>
+        <div id="vy-r-open">${vy.results.open || ''}</div>
+        <button class="btn btn-secondary" id="vy-open" style="margin-top:8px">Post the opening balances</button>
+      </div></div>`;
+
+    body.querySelector('#vy-ason').onchange = (e) => { vy.asOn = e.target.value || vy.asOn; };
+
+    const run = (id, key, path, label, confirmText, render) => {
+      const btn = body.querySelector(`#${id}`);
+      btn.onclick = async () => {
+        if (confirmText && !confirm(confirmText)) return;
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = 'Working…';
+        try {
+          const out = await api('POST', path, { as_on: vy.asOn });
+          vy.results[key] = `<div class="at2-notice" style="margin:8px 0">${render(out)}</div>`;
+          body.querySelector(`#vy-r-${key}`).innerHTML = vy.results[key];
+          toast(`${label} — done`, 'success');
+        } catch (err) { toast(err.message, 'error'); }
+        btn.disabled = false;
+        btn.textContent = original;
+      };
+    };
+    run('vy-parties', 'parties', `/vyapar/${vy.session}/parties`, 'Parties',
+      `Bring in the parties, with their balances as on ${day(vy.asOn)}?`,
+      (o) => `<b>${o.created.toLocaleString('en-IN')} parties added</b>${o.matched_existing ? `, ${o.matched_existing} recognised as already here` : ''}. ${o.with_opening_balance.toLocaleString('en-IN')} have an opening balance: they owe you <b>${rupees(o.owe_us_paise)}</b>, you owe <b>${rupees(o.we_owe_paise)}</b>.${o.kept_existing_balance ? ` ${o.kept_existing_balance} already had a balance here and kept it.` : ''} <i>These balances reach the books when you do step D.</i>`);
+    run('vy-items', 'items', `/vyapar/${vy.session}/items`, 'Items',
+      `Bring in the items and the stock as on ${day(vy.asOn)}?`,
+      (o) => `<b>${o.created.toLocaleString('en-IN')} items added</b>; ${o.with_stock} with opening stock worth <b>${rupees(o.stock_value_paise)}</b>.${o.negative_stock ? ` ${o.negative_stock} had negative stock in Vyapar and start at 0 — count them.` : ''}${o.skipped.length ? ` <b>${o.skipped.length} skipped:</b> ${o.skipped.slice(0, 3).map(x => esc(`${x.name} — ${x.why}`)).join('; ')}.` : ''}`);
+    run('vy-history', 'history', `/vyapar/${vy.session}/history`, 'Old records', null,
+      (o) => `<b>${o.documents.toLocaleString('en-IN')} records</b> (${o.lines.toLocaleString('en-IN')} lines) kept; ${o.matched_party.toLocaleString('en-IN')} tied to a customer or supplier. See them under Sales → Past Records.`);
+
+    const open = body.querySelector('#vy-open');
+    open.onclick = async () => {
+      if (!confirm(`Post the opening balances as on ${day(vy.asOn)}? Check the parties and items first. Posting the same date twice changes nothing.`)) return;
+      open.disabled = true;
+      try {
+        const out = await api('POST', '/accounting/opening-balances', { as_on: vy.asOn });
+        vy.results.open = `<div class="at2-notice" style="margin:8px 0"><b>${out.reused ? 'Already posted for this date.' : 'Posted.'}</b> ${out.lines} lines in one entry.</div>`;
+        body.querySelector('#vy-r-open').innerHTML = vy.results.open;
+        toast('Opening balances posted', 'success');
+      } catch (err) { toast(err.message, 'error'); }
+      open.disabled = false;
+    };
+  };
+
+  file.onchange = async () => {
+    const f = file.files[0];
+    if (!f) return;
+    reading.textContent = `Reading ${f.name} (${(f.size / 1048576).toFixed(1)} MB)…`;
+    try {
+      const res = await fetch(`${API}/vyapar/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`, 'Content-Type': 'application/octet-stream', 'X-File-Name': f.name },
+        body: f,
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || 'Could not read that file');
+      Object.assign(vy, { session: out.session, file: f.name, summary: out.summary, results: {} });
+      reading.textContent = '';
+      paintSummary();
+    } catch (err) {
+      reading.textContent = '';
+      toast(err.message, 'error');
+    }
+  };
+
+  // Coming back to the tab after a re-paint: the file is still held on the server for an hour.
+  if (vy.session && vy.summary) paintSummary();
 }
 
 // ── 0. a copy of everything, before anything is brought in ──────────────

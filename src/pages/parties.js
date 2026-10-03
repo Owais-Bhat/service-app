@@ -449,6 +449,13 @@ async function openPartyDetail(container, id) {
   if (isSupplier) {
     try { dealings = await api('GET', `/purchases/suppliers/${encodeURIComponent(party.id)}/summary`); } catch { dealings = null; }
   }
+  // Old invoices, quotations and payments brought over from Vyapar, if there are any for this party.
+  let past = null;
+  try {
+    const m = await import('./past-records.js');
+    const out = await m.recordsOfParty(party.id, 15);
+    if (out.total) past = { ...out, label: m.TYPE_LABEL, open: m.openRecord };
+  } catch { past = null; }
   // For a supplier, a negative balance is what we owe them, not an advance.
   const weOwe = party.kind === 'supplier' && balance <= 0;
   const dayText = (v) => (v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -456,7 +463,7 @@ async function openPartyDetail(container, id) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal at2-modal" style="max-width:${dealings ? 820 : 560}px">
+    <div class="modal at2-modal" style="max-width:${dealings || past ? 820 : 560}px">
       <div class="modal-header">
         <span class="modal-title">${esc(party.display_name)}</span>
         <button class="modal-close" id="pd-close">${ICONS.close}</button>
@@ -539,6 +546,18 @@ async function openPartyDetail(container, id) {
     : '<div class="at2-empty" style="padding:14px">No payment made yet. Use Purchases → Pay.</div>'}
         </div>` : ''}
 
+        ${past ? `
+        <div class="card" style="margin-top:14px">
+          <div class="card-header"><span class="card-title">Past records from Vyapar (${past.total.toLocaleString('en-IN')})</span></div>
+          <div class="table-wrap" style="max-height:260px;overflow:auto"><table class="at2-tbl">
+            <thead><tr><th>Date</th><th>Type</th><th>No.</th><th style="text-align:right">Amount</th></tr></thead>
+            <tbody>${past.rows.map(r => `
+              <tr data-past="${esc(r.id)}" style="cursor:pointer"><td>${esc(dayText(r.doc_date))}</td><td>${esc(past.label[r.doc_type] || r.doc_type)}</td>
+                <td><code style="font-size:0.72rem">${esc(r.doc_no || '—')}</code></td><td style="text-align:right"><b>${rupees(r.total_paise)}</b></td></tr>`).join('')}</tbody>
+          </table></div>
+          ${past.total > past.rows.length ? `<p class="at2-note" style="padding:0 14px 12px">Showing the latest ${past.rows.length}. All of them: Sales → Past Records (Vyapar), searched by this name.</p>` : ''}
+        </div>` : ''}
+
         ${addresses.length ? `
         <div class="card" style="margin-top:14px">
           <div class="card-header"><span class="card-title">Addresses</span></div>
@@ -565,6 +584,7 @@ async function openPartyDetail(container, id) {
   overlay.querySelector('#pd-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   overlay.querySelector('#pd-edit').onclick = () => { close(); openPartyModal(container, party); };
+  overlay.querySelectorAll('[data-past]').forEach(tr => { tr.onclick = () => past.open(tr.dataset.past); });
 }
 
 function exportRows() {

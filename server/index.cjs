@@ -903,6 +903,8 @@ const { mountCampaigns } = require('./modules/campaigns/routes.cjs');
 const assignmentTracker = require('./modules/assignments/service.cjs');
 const { mountAssignments } = require('./modules/assignments/routes.cjs');
 const { mountBackup } = require('./modules/backup/routes.cjs');
+const { ensureVyaparSchema } = require('./modules/vyapar/schema.cjs');
+const { mountVyapar } = require('./modules/vyapar/routes.cjs');
 // Whenever a job is given to someone: forget that it was seen and WhatsApp them. Never blocks or fails the assignment.
 const announceAssignment = (kind, id, employeeId) => {
     assignmentTracker.announce(getConn, { kind, id, employeeId }).catch(() => {});
@@ -9673,6 +9675,7 @@ mountWhatsapp({ app, getConn, authenticateToken, permissions, audit });
 campaignJobs = mountCampaigns({ app, getConn, authenticateToken, permissions, audit, recordNotification });
 mountAssignments({ app, getConn, authenticateToken, permissions });
 mountBackup({ app, getConn, authenticateToken, audit, recordNotification });
+mountVyapar({ app, getConn, authenticateToken, permissions, audit });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {
@@ -9726,6 +9729,7 @@ async function startServer() {
             await ensureWhatsappSchema(connection);
             await ensureCampaignSchema(connection);
             await assignmentTracker.ensureAssignmentSchema(connection);
+            await ensureVyaparSchema(connection);
         } catch (err) {
             console.error('❌ Accounting schema migration failed — accounting features will not work.');
             console.error('   The rest of the portal is unaffected. Fix this and restart.');
