@@ -143,4 +143,15 @@ function notifyComplaintEmail(complaint) {
     return sendMail(`⚠️ New Complaint — Ticket ${complaint.ticket_no || ''}`, html);
 }
 
-module.exports = { notifyServiceRequestEmail, notifyInstallationEmail, notifyComplaintEmail };
+/**
+ * Send one message to a chosen address, with attachments. Unlike the alerts above this reports failure:
+ * whoever asked for it (a backup, say) needs to know it did not arrive.
+ */
+async function sendMailTo({ to, subject, html, attachments = [] }) {
+    if (!MAIL_ENABLED) throw new Error('Email is not set up on this server (SMTP_USER / SMTP_PASS are missing)');
+    if (!to) throw new Error('There is no address to send it to');
+    await transporter.sendMail({ from: `"Networking Experts Portal" <${SMTP_USER}>`, to, subject, html, attachments });
+    console.log(`[mail] sent to ${to}: ${subject}`);
+}
+
+module.exports = { notifyServiceRequestEmail, notifyInstallationEmail, notifyComplaintEmail, sendMailTo, MAIL_ENABLED, NOTIFY_TO };

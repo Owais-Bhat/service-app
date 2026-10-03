@@ -902,6 +902,7 @@ const { ensureCampaignSchema } = require('./modules/campaigns/service.cjs');
 const { mountCampaigns } = require('./modules/campaigns/routes.cjs');
 const assignmentTracker = require('./modules/assignments/service.cjs');
 const { mountAssignments } = require('./modules/assignments/routes.cjs');
+const { mountBackup } = require('./modules/backup/routes.cjs');
 // Whenever a job is given to someone: forget that it was seen and WhatsApp them. Never blocks or fails the assignment.
 const announceAssignment = (kind, id, employeeId) => {
     assignmentTracker.announce(getConn, { kind, id, employeeId }).catch(() => {});
@@ -9671,6 +9672,7 @@ mountDevices({ app, getConn, authenticateToken, permissions, audit });
 mountWhatsapp({ app, getConn, authenticateToken, permissions, audit });
 campaignJobs = mountCampaigns({ app, getConn, authenticateToken, permissions, audit, recordNotification });
 mountAssignments({ app, getConn, authenticateToken, permissions });
+mountBackup({ app, getConn, authenticateToken, audit, recordNotification });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {

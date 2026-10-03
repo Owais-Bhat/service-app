@@ -29,6 +29,7 @@ const day = (v) => v ? new Date(`${String(v).slice(0, 10)}T00:00:00`).toLocaleDa
 const when = (v) => v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 const TABS = [
+  { key: 'backup', label: 'Backup' },
   { key: 'tickets', label: 'Older Tickets' },
   { key: 'stock', label: 'Stock on the Shelf' },
   { key: 'log', label: 'Service Register' },
@@ -36,7 +37,7 @@ const TABS = [
   { key: 'auto', label: 'Evening Summary' },
 ];
 
-const state = { tab: 'tickets', from: '' };
+const state = { tab: 'backup', from: '' };
 let root = null;
 
 export async function renderMigrationTab(container) {
@@ -60,7 +61,50 @@ function paint() {
       <div class="at2-panel"><div class="at2-body" id="mg-body"></div></div>
     </div>`;
   root.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { state.tab = b.dataset.tab; paint(); }; });
-  ({ tickets, stock, log, history, auto }[state.tab])(root.querySelector('#mg-body'));
+  ({ backup, tickets, stock, log, history, auto }[state.tab])(root.querySelector('#mg-body'));
+}
+
+// ── 0. a copy of everything, before anything is brought in ──────────────
+
+function backup(body) {
+  body.innerHTML = `${intro('Make a copy of all the data in the portal — every table as a spreadsheet (CSV) inside one ZIP file — before moving anything new in. Passwords and login tokens are never included.')}
+    <div class="at2-filters" style="gap:10px;flex-wrap:wrap">
+      ${button('bk-download', 'Download backup (ZIP)', 'primary')}
+      ${button('bk-email', 'Email it to me', 'secondary')}
+    </div>
+    <p class="at2-note" id="bk-status" style="margin-top:12px"></p>
+    <p class="at2-note">"Email it to me" sends the ZIP to the address you log in with. If the file is too big for email (about 20 MB), use Download. Making a backup takes up to a minute; one at a time.</p>`;
+  const status = body.querySelector('#bk-status');
+  const dl = body.querySelector('#bk-download');
+  const mail = body.querySelector('#bk-email');
+
+  dl.onclick = async () => {
+    dl.disabled = true; mail.disabled = true;
+    status.textContent = 'Making the backup — this can take up to a minute…';
+    try {
+      const res = await fetch(`${API}/admin/backup/download`, { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not make the backup');
+      const blob = await res.blob();
+      const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'backup.zip';
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), { href: url, download: name });
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      status.textContent = `Downloaded ${name} (${(blob.size / 1048576).toFixed(1)} MB).`;
+      toast('Backup downloaded', 'success');
+    } catch (err) { status.textContent = ''; toast(err.message, 'error'); }
+    dl.disabled = false; mail.disabled = false;
+  };
+
+  mail.onclick = async () => {
+    mail.disabled = true;
+    try {
+      const out = await api('POST', '/admin/backup/email', {});
+      status.textContent = `Being prepared — it will arrive at ${out.to} in a minute or two. You will also get a notification here.`;
+      toast('Backup is on its way to your email', 'success');
+    } catch (err) { toast(err.message, 'error'); mail.disabled = false; }
+    // One at a time on the server; give the button back after a minute.
+    setTimeout(() => { mail.disabled = false; }, 60000);
+  };
 }
 
 // ── shared pieces ───────────────────────────────────────────────────────

@@ -718,6 +718,24 @@ only those with `verification_call_status IS NULL`, so logging "could not reach 
 
 ---
 
+## Data backup (Data Migration → Backup)
+
+Before bringing outside data (Vyapar, say) in, take a copy of everything already here.
+
+- **Download backup (ZIP)** (`GET /api/admin/backup/download`) and **Email it to me** (`POST /api/admin/backup/email`; admin only). The ZIP
+  holds every table as a CSV in `tables/` (UTF-8 with a byte-order mark so Excel reads ₹ and Hindi) and a `README.txt` listing each
+  table's row count and what was left out. Built by `modules/backup/service.cjs`, a page of rows at a time, compressed as it goes.
+- **Left out on purpose**: columns that hold a secret (`password`/`passwd`/`pass`, `*hash*`, `*token*`, `*secret*`, `otp`, `api_key`,
+  `face_descriptor`, `reference_selfie`, `authorization`), the `push_subscriptions` table, and the *contents* of stored files
+  (`uploaded_files.data` — names and sizes are kept). A backup that travels by email must not carry a way into the portal.
+- **Email** goes only to the address the admin logs in with (fallback `NOTIFY_EMAIL_TO`) — never to an address in the request — through
+  the existing SMTP account (`SMTP_USER`/`SMTP_PASS`); it is made in the background and the admin gets a notification when it is sent or
+  if it fails. Over about 20 MB it is not attached; the mail says to use Download.
+- One backup at a time and one a minute; each is written to the audit log (`backup.download`, `backup.email`).
+- Tests: `tests/backup.test.mjs` (7). Library: `fflate` (added to the root `package.json`, which is the one the host installs).
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,
