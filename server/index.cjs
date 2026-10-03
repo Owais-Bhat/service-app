@@ -13,6 +13,7 @@ const { verifySamePerson } = require('./vision-verify.cjs');
 // const { initializeWhatsApp } = require('./whatsapp.cjs');
 // const { initCronJobs } = require('./cron.cjs');
 const path = require('path');
+const compression = require('compression');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const {
@@ -186,6 +187,13 @@ if (PDFDocument) console.log(`[bills] Invoice currency glyph: ${INVOICE_UNICODE_
 
 const app = express();
 app.set('trust proxy', 1);
+
+// The lists the portal downloads are large, repetitive JSON; compressed they are a fraction of the size
+// and load several times faster on a phone. (The live-update stream sets "no-transform" and is skipped.)
+app.use(compression({
+    threshold: 1024,
+    filter: (req, res) => !String(res.getHeader('Content-Type') || '').includes('text/event-stream') && compression.filter(req, res),
+}));
 
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -825,7 +833,41 @@ const pool = mysql.createPool({
     enableKeepAlive: true,
     keepAliveInitialDelay: 30000,
 });
-async function getConn() { return pool.getConnection(); }
+// Every route takes a connection and must give it back. The pool has only a few dozen, so one route
+// that forgets (on an error path, say) quietly uses them up and then *everything* stalls or fails.
+// This makes giving back safe to do twice, and gives back — loudly — one that was kept for five minutes.
+const CONN_HELD_TOO_LONG_MS = 5 * 60 * 1000;
+async function getConn() {
+    const conn = await pool.getConnection();
+    const where = (new Error().stack || '').split('\n')[2]?.trim() || 'unknown caller';
+    const realRelease = conn.release.bind(conn);
+    let released = false;
+    const timer = setTimeout(() => {
+        if (released) return;
+        released = true;
+        console.error(`[pool] a connection was held for 5 minutes and has been taken back — never released by ${where}`);
+        try { realRelease(); } catch { /* already gone */ }
+    }, CONN_HELD_TOO_LONG_MS);
+    timer.unref?.();
+    conn.release = () => {
+        if (released) return;
+        released = true;
+        clearTimeout(timer);
+        realRelease();
+    };
+    return conn;
+}
+
+// A stray error in a background task must not take the whole site down with it: that closes every
+// open connection at once (the browser shows ERR_CONNECTION_CLOSED) until the host restarts the app.
+process.on('unhandledRejection', (reason) => {
+    console.error('[process] unhandled rejection —', reason instanceof Error ? reason.stack || reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[process] uncaught exception —', err.stack || err.message);
+});
+const DATA_LIST_CAP = 5000;     // rows a newest-first list returns unless it asks for a different limit
+const DATA_MAX_ROWS = 20000;    // the most any list may ask for
 
 // ── Accounting & masters (Stage 1) ───────────────────────────────────────
 // Kept in server/modules/ rather than inlined here: the ledger has its own
@@ -1556,6 +1598,7 @@ const requiredColumns = {
         { name: 'gig_payout_amount', definition: 'DECIMAL(10, 2) DEFAULT NULL' },
         { name: 'gig_payout_status', definition: "VARCHAR(20) DEFAULT 'unpaid'" },
         { name: 'gig_payout_paid_at', definition: 'TIMESTAMP NULL' },
+        { name: 'category', definition: "VARCHAR(80) DEFAULT NULL COMMENT 'Kind of work, chosen on the job card (CCTV, Networking, …). The job-card save writes it; without this column every save fails'" },
         { name: 'job_card_type', definition: "VARCHAR(20) DEFAULT NULL COMMENT \"'service' or 'installation'\"" },
         { name: 'secondary_employee_id', definition: 'VARCHAR(36) DEFAULT NULL' },
         { name: 'job_start_time', definition: 'TIMESTAMP NULL' },
@@ -7998,6 +8041,50 @@ app.post('/api/admin/leaderboard/:month/award', authenticateToken, async (req, r
 });
 
 // Basic endpoint to handle generic Supabase-like queries (Simplified)
+// What the admin dashboard needs, and no more. The dashboard used to download every inquiry, installation,
+// complaint and every attendance row ever written — on opening, every minute, and on every change anyone made —
+// to show a few counts and the open jobs. This sends the open jobs, the latest finished ones, today's
+// attendance and the open complaints.
+const DASH_OPEN = ['pending', 'open', 'assigned', 'in_progress', 'reopened', 'issue_not_resolved'];
+const DASH_DONE = ['resolved', 'closed', 'case_closed', 'foc'];
+app.get('/api/dashboard/admin-data', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.today || '')) ? String(req.query.today) : new Date().toISOString().slice(0, 10);
+    let connection;
+    try {
+        connection = await getConn();
+        const [open] = await connection.query(
+            'SELECT * FROM inquiries WHERE LOWER(COALESCE(status, \'\')) IN (?) ORDER BY created_at DESC', [DASH_OPEN]
+        );
+        const [done] = await connection.query(
+            'SELECT * FROM inquiries WHERE LOWER(COALESCE(status, \'\')) IN (?) ORDER BY created_at DESC LIMIT 300', [DASH_DONE]
+        );
+        const [[{ n: completedTotal }]] = await connection.query(
+            'SELECT COUNT(*) AS n FROM inquiries WHERE LOWER(COALESCE(status, \'\')) IN (?)', [DASH_DONE]
+        );
+        const [installations] = await connection.query('SELECT * FROM installations ORDER BY preferred_date DESC LIMIT 600');
+        const [complaints] = await connection.query(
+            'SELECT * FROM complaints WHERE LOWER(COALESCE(status, \'open\')) = \'open\' ORDER BY created_at DESC LIMIT 300'
+        );
+        const [attendance] = await connection.query(
+            `SELECT a.*, p.full_name AS _profile_name FROM attendance a LEFT JOIN profiles p ON p.id = a.user_id
+              WHERE a.date = ? OR DATE(a.clock_in) = ? ORDER BY a.clock_in DESC`, [today, today]
+        );
+        const [profiles] = await connection.query('SELECT id, full_name, role, phone FROM profiles');
+        res.json({
+            inquiries: [...open, ...done], completed_total: Number(completedTotal),
+            installations, complaints,
+            attendance: attendance.map(({ _profile_name, ...a }) => ({ ...a, profiles: { full_name: _profile_name } })),
+            profiles,
+        });
+    } catch (error) {
+        console.error('Dashboard data error:', error);
+        if (!res.headersSent) res.status(500).json({ error: error.message });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.get('/api/data/:table', dataAuth, async (req, res) => {
     const { table } = req.params;
     const { order, in: inFilter } = req.query;
@@ -8012,8 +8099,9 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
     if (parsed.error) return res.status(400).json({ error: parsed.error });
     const { columns: selectCols, relations } = parsed;
 
+    let connection;
     try {
-        const connection = await getConn();
+        connection = await getConn();
         // selectCols is either the literal '*' (built into the SQL) or a list of validated
         // identifiers; identifiers go through `??` for proper escaping.
         const selectSql = selectCols === '*' ? '*' : selectCols.map(() => '??').join(', ');
@@ -8039,7 +8127,6 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
         }
         const scopeErr = appendRoleScope({ table, user: req.user, method: 'GET', whereClauses, params });
         if (scopeErr?.error) {
-            connection.release();
             return res.status(403).json({ error: scopeErr.error });
         }
 
@@ -8047,17 +8134,31 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
             query += ' WHERE ' + whereClauses.join(' AND ');
         }
 
+        let newestFirst = false;
         if (order) {
             const [field, direction] = order.split(':');
             if (!SAFE_IDENT_RE.test(field)) {
-                connection.release();
                 return res.status(400).json({ error: `Invalid order column: ${field}` });
             }
+            newestFirst = direction === 'desc';
             query += ' ORDER BY ?? ' + (direction === 'desc' ? 'DESC' : 'ASC');
             params.push(field);
         }
 
-        const [rows] = await connection.query(query, params);
+        // A list sorted newest-first is a screen, not an export: it needs the recent rows, not every
+        // row ever written. Without a cap, a table that grows every day gets slower every day, and the
+        // browser has to download all of it before showing anything. `?limit=` asks for a different cap.
+        const asked = Number(req.query.limit);
+        const cap = Number.isInteger(asked) && asked > 0 ? Math.min(asked, DATA_MAX_ROWS) : (newestFirst ? DATA_LIST_CAP : null);
+        if (cap) {
+            query += ' LIMIT ?';
+            params.push(cap + 1); // one extra, to know whether there was more
+        }
+
+        const [fetched] = await connection.query(query, params);
+        const truncated = !!cap && fetched.length > cap;
+        const rows = truncated ? fetched.slice(0, cap) : fetched;
+        if (truncated) res.set('X-Truncated', String(cap));
 
         // Fetch relations if requested
         if (relations.length > 0 && rows.length > 0) {
@@ -8082,8 +8183,14 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
                         `SELECT ${relSelect} FROM ?? WHERE ?? IN (${ids.map(() => '?').join(', ')})`,
                         [...relSelectParams, relTable, fkInRel, ...ids]
                     );
+                    // Group once instead of filtering the whole child list for every row.
+                    const grouped = new Map();
+                    for (const r of relRows) {
+                        if (!grouped.has(r[fkInRel])) grouped.set(r[fkInRel], []);
+                        grouped.get(r[fkInRel]).push(r);
+                    }
                     rows.forEach(row => {
-                        row[relTable] = relRows.filter(r => r[fkInRel] === row.id);
+                        row[relTable] = grouped.get(row.id) || [];
                     });
                     continue;
                 }
@@ -8114,19 +8221,22 @@ app.get('/api/data/:table', dataAuth, async (req, res) => {
                         `SELECT ${relSelect} FROM ?? WHERE id IN (${ids.map(() => '?').join(', ')})`,
                         [...relSelectParams, relTable, ...ids]
                     );
+                    const byId = new Map(relRows.map(r => [r.id, r]));
                     rows.forEach(row => {
-                        row[relTable] = relRows.find(r => r.id === row[fkInTable]) || null;
+                        row[relTable] = byId.get(row[fkInTable]) || null;
                     });
                     continue;
                 }
             }
         }
 
-        connection.release();
         res.json(rows);
     } catch (error) {
         console.error('Error fetching data:', error);
-        res.status(500).json({ error: error.message });
+        if (!res.headersSent) res.status(500).json({ error: error.message });
+    } finally {
+        // Every way out of this handler — success, a 4xx, an exception — gives the connection back.
+        if (connection) connection.release();
     }
 });
 
@@ -9589,6 +9699,28 @@ async function startServer() {
             console.error('❌ Accounting schema migration failed — accounting features will not work.');
             console.error('   The rest of the portal is unaffected. Fix this and restart.');
             console.error(err);
+        }
+
+        // The lists sort newest-first and filter by status; without an index each load sorts the whole table.
+        // Each one is added only where missing, and a failure on one (a table that does not exist yet) is skipped.
+        for (const [table, name, columns] of [
+            ['inquiries', 'idx_inq_created', 'created_at'],
+            ['inquiries', 'idx_inq_status', 'status'],
+            ['installations', 'idx_inst_preferred', 'preferred_date'],
+            ['installations', 'idx_inst_created', 'created_at'],
+            ['complaints', 'idx_comp_created', 'created_at'],
+            ['attendance', 'idx_att_clock_in', 'clock_in'],
+            ['attendance', 'idx_att_date', 'date'],
+        ]) {
+            try {
+                const [have] = await connection.query(`SHOW INDEX FROM ?? WHERE Key_name = ?`, [table, name]);
+                if (!have.length) {
+                    await connection.query(`ALTER TABLE ?? ADD INDEX ?? (??)`, [table, name, columns]);
+                    console.log(`[db] added index ${name} on ${table}(${columns})`);
+                }
+            } catch (err) {
+                console.warn(`[db] index ${name} on ${table} skipped — ${err.message}`);
+            }
         }
 
         await loadAppSettings(connection);

@@ -676,6 +676,31 @@ only the assignee's own call counts — the Android app does not call it yet), o
 
 ---
 
+## Slow lists and dropped connections — what was wrong and what changed
+
+Seen as `ERR_CONNECTION_CLOSED` on `/api/data/*`, HTTP 500 on saving a job card, and lists that took long to load.
+
+- **A list request that failed kept its database connection for ever** (`GET /api/data/:table`: the error path and several early
+  returns never released it). The pool holds 25; reproduced locally — after 25 failed requests every other request hung. The handler
+  now releases in a `finally`.
+- **`getConn()` is now safe against that whole class**: releasing twice is harmless, and a connection held for 5 minutes is taken
+  back with a log line naming the caller that never released it. `unhandledRejection` / `uncaughtException` are logged instead of
+  taking the process (and every open connection) down.
+- **The admin dashboard** downloaded every inquiry, installation, complaint and every attendance row ever, on opening, every
+  minute and on every change anyone made. It now makes one request, `GET /api/dashboard/admin-data` (open jobs, the latest 300
+  finished ones plus the total count, installations (600 newest), open complaints, today's attendance, profiles), reloads at
+  most once per burst of changes (2.5 s), every 90 s, and not while the tab is hidden.
+- **Newest-first lists are capped** at 5000 rows (`?limit=` asks for fewer, up to 20000; the response carries `X-Truncated` when
+  rows were cut). Oldest-first and unsorted requests are never cut. The relation joins no longer scan the child list per row.
+- **Responses are gzip-compressed** (`compression`, added to the root `package.json` because the host installs only that one). The live
+  update stream is excluded.
+- **Indexes** on the columns the lists sort and filter by (`inquiries.created_at/status`, `installations.preferred_date/created_at`,
+  `complaints.created_at`, `attendance.clock_in/date`), added on boot where missing.
+- **Job card save always failed**: it writes `inquiries.category`, a column nothing ever created. Added to the required columns.
+- Tests: `tests/load-and-stability.test.mjs` (6).
+
+---
+
 ## Not yet started
 
 All six stages are built. What remains is operating them: filling in Business & Tax Setup,

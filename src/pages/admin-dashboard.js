@@ -76,14 +76,45 @@ export async function renderAdminDashboard(container) {
     showMorningPopup();
   }
 
+  // Several changes often arrive together (an assignment touches the job, its ticket, a notification…);
+  // reload once for the burst, not once for each.
+  let refreshTimer = null;
+  const refreshSoon = () => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => refresh(container), 2500);
+  };
   container._dashChannel = supabase.channel('admin-dash')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'inquiries' }, () => refresh(container))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'installations' }, () => refresh(container))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'inquiries' }, refreshSoon)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'installations' }, refreshSoon)
     .subscribe();
-  container._dashTimer = setInterval(() => refresh(container), 60000);
+  // A tab nobody is looking at does not need to keep reloading.
+  container._dashTimer = setInterval(() => { if (!document.hidden) refresh(container); }, 90000);
 }
 
+const DASH_API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? '/api'
+  : 'http://localhost:5000/api';
+
+// One light request for what the dashboard shows — the open jobs, the latest finished ones, today's attendance,
+// the open complaints — instead of five requests that each download a whole table.
 async function loadData() {
+  try {
+    const res = await fetch(`${DASH_API}/dashboard/admin-data?today=${todayKey()}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` },
+    });
+    if (res.ok) {
+      const d = await res.json();
+      data = {
+        inquiries: d.inquiries || [], installations: d.installations || [], complaints: d.complaints || [],
+        attendance: d.attendance || [], profiles: d.profiles || [], completedTotal: d.completed_total,
+      };
+      return;
+    }
+  } catch { /* fall back to the full lists below */ }
+  await loadAllData();
+}
+
+async function loadAllData() {
   const [inq, inst, comp, att, prof] = await Promise.all([
     supabase.from('inquiries').select('*').order('created_at', { ascending: false }),
     supabase.from('installations').select('*').order('preferred_date', { ascending: false }),
@@ -245,7 +276,11 @@ function paintPanel(container) {
   const b = buckets();
 
   container.querySelectorAll('.dash2-stat').forEach(el => el.classList.toggle('on', el.dataset.tab === state.tab));
-  container.querySelectorAll('[data-count]').forEach(el => { el.textContent = (b[el.dataset.count] || []).length; });
+  container.querySelectorAll('[data-count]').forEach(el => {
+    // "Completed" shows how many there are in all, though only the latest few hundred are loaded.
+    el.textContent = el.dataset.count === 'completed' && data.completedTotal != null
+      ? data.completedTotal : (b[el.dataset.count] || []).length;
+  });
 
   if (state.tab === 'installs') {
     paintInstallations(container, list, b.installs);
