@@ -324,3 +324,16 @@ WhatsApp khulta hai, message likha hua -> group chuno -> send.
 * Pehle hamesha Test button se apne number par dekho.
 * Ye file repo me docs/SETUP-CHECKLIST.txt par bhi rakhi hai.
 =====================================================================
+
+Part D - GST number lookup (Customers & Suppliers -> GSTIN field)
+-----------------------------------------------------------------
+The GST portal has no open API, so the portal's details (legal name, status, full address) come from a GST lookup
+service you have an account with. Set these in hPanel -> Node.js -> Environment variables, then redeploy:
+
+  GST_LOOKUP_URL         the service's address with {gstin} where the number goes
+                         (and {key} too if the service wants the key in the address),
+                         e.g.  https://example.com/gst/{gstin}?key={key}
+  GST_LOOKUP_KEY         your key for that service
+  GST_LOOKUP_KEY_HEADER  only if the service wants the key in a header, e.g.  X-API-Key
+
+Without them the GSTIN field still works as before (state from the number) and says the online lookup is not set up.

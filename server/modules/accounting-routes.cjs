@@ -154,6 +154,17 @@ function mountAccounting({ app, getConn, authenticateToken, permissions, audit }
         res.json(rows);
     }));
 
+    // What the GST portal holds for a number: names, status and the full address. Needs a lookup service configured
+    // (GST_LOOKUP_URL / GST_LOOKUP_KEY); without one it says so and the form carries on by hand.
+    app.get('/api/parties/gst-lookup/:gstin', authenticateToken, requireCap('party.view'), async (req, res) => {
+        try {
+            const out = await require('./gst-lookup/service.cjs').lookup(req.params.gstin);
+            res.json(out);
+        } catch (err) {
+            res.json({ configured: true, found: false, error: err.message });
+        }
+    });
+
     // How many, and what they owe in all — over *every* matching party, not just the page on screen.
     app.get('/api/parties/summary', authenticateToken, requireCap('party.view'), handle(async (req, res, conn) => {
         const businessId = await business(conn);

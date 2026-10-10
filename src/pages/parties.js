@@ -354,6 +354,10 @@ function openPartyModal(container, existing = null, defaultKind = 'customer') {
             </select></div>
           <div class="form-group"><label>GSTIN</label>
             <input type="text" id="pm-gstin" value="${esc(existing?.gstin || '')}" placeholder="15 characters" maxlength="15" style="text-transform:uppercase">
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+              <button type="button" class="btn btn-secondary" id="pm-gst-fetch" style="padding:4px 10px;font-size:0.8rem">Fetch from GST portal</button>
+              <small id="pm-gst-result" style="color:var(--text-dim);font-size:0.75rem"></small>
+            </div>
             <small id="pm-gstin-note" style="color:var(--text-dim);font-size:0.75rem"></small></div>
           <div class="form-group"><label>Place of supply</label>
             <select id="pm-state">
@@ -417,7 +421,37 @@ function openPartyModal(container, existing = null, defaultKind = 'customer') {
     const st = STATES.find(s => s[0] === code);
     note.textContent = st ? `Registered in ${st[1]}` : 'Unknown state code';
     if (st) { $('#pm-state').value = code; $('#pm-treatment').value = 'registered'; }
+    fetchGst();
   };
+
+  // The details the GST portal shows for this number, filled in without overwriting what was already typed.
+  let lastFetched = '';
+  async function fetchGst(force = false) {
+    const value = gstin.value.trim().toUpperCase();
+    const out = $('#pm-gst-result');
+    if (value.length !== 15) { if (force) out.textContent = 'Enter all 15 characters first'; return; }
+    if (!force && value === lastFetched) return;
+    lastFetched = value;
+    out.style.color = 'var(--text-dim)';
+    out.textContent = 'Fetching from the GST portal…';
+    let r;
+    try { r = await api('GET', `/parties/gst-lookup/${encodeURIComponent(value)}`); } catch (err) { r = { found: false, error: err.message }; }
+    if (gstin.value.trim().toUpperCase() !== value) return; // typed on meanwhile
+    if (!r.configured) { out.textContent = 'Online lookup is not set up yet (needs a GST lookup service key on the server).'; return; }
+    if (!r.found) { out.style.color = 'var(--danger)'; out.textContent = r.error || 'Nothing found for this GSTIN'; return; }
+    const d = r.details;
+    const setIfEmpty = (sel, v) => { const el = $(sel); if (el && v && !el.value.trim()) el.value = v; };
+    setIfEmpty('#pm-legal', d.legal_name);
+    setIfEmpty('#pm-name', d.trade_name || d.legal_name);
+    setIfEmpty('#pm-line1', d.address.line1);
+    setIfEmpty('#pm-city', d.address.city);
+    setIfEmpty('#pm-pin', d.address.pincode);
+    if (d.address.state_code && STATES.some(s => s[0] === d.address.state_code)) $('#pm-state').value = d.address.state_code;
+    const inactive = d.status && !/^active$/i.test(d.status);
+    out.style.color = inactive ? 'var(--danger)' : 'var(--primary)';
+    out.innerHTML = `${esc(d.legal_name)}${d.status ? ` · <b>${esc(d.status)}</b>` : ''}<br>${esc(d.address.full)}`;
+  }
+  $('#pm-gst-fetch').onclick = () => fetchGst(true);
 
   $('#pm-save').onclick = async () => {
     const body = {
