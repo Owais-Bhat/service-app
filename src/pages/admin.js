@@ -4890,6 +4890,34 @@ export async function renderSettingsTab(container) {
 
       <div class="settings-card">
         <div class="settings-card-head">
+          <span class="settings-card-icon">${ICONS.check}</span>
+          <div>
+            <h3>Who can book a service</h3>
+            <p>Customers with a payment still pending are asked to pay first, and bookings from too far away are refused. The pending-payment check also looks at Vyapar balances.</p>
+          </div>
+        </div>
+        <div class="settings-form-row" style="flex-direction:column;align-items:flex-start;gap:12px;">
+          <label style="margin:0;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="br-dues"> <span>Block new bookings while a previous payment is pending</span>
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span>Ignore pending amounts up to ₹</span>
+            <input type="number" id="br-min" min="0" step="1" class="settings-time-input" style="width:110px;">
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span>Serve only within (km of Srinagar, 0 = no limit)</span>
+            <input type="number" id="br-radius" min="0" max="2000" step="1" class="settings-time-input" style="width:110px;">
+          </label>
+          <small id="br-centre" style="opacity:.7"></small>
+          <button class="btn btn-primary settings-save-btn" id="br-save">
+            ${ICONS.check}
+            <span>Save Setting</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-head">
           <span class="settings-card-icon settings-card-icon-danger">${ICONS.block}</span>
           <div>
             <h3>Restrictions (${restrictedProfiles.length})</h3>
@@ -5203,6 +5231,46 @@ export async function renderSettingsTab(container) {
       restore();
     }
   };
+
+  // Who can book a service: pending payment and distance.
+  (async () => {
+    const dues = container.querySelector("#br-dues");
+    if (!dues) return;
+    const centreNote = container.querySelector("#br-centre");
+    const fill = (d) => {
+      dues.checked = !!d.blockOnDues;
+      container.querySelector("#br-min").value = d.minDuesRupees || 0;
+      container.querySelector("#br-radius").value = d.radiusKm || 0;
+      centreNote.textContent = `Measured from ${Number(d.centre.lat).toFixed(4)}, ${Number(d.centre.lng).toFixed(4)}${d.centreIsDefault ? " (the office location, or Srinagar if that is not set)" : ""}`;
+    };
+    try {
+      const res = await fetch(`${settingsApiBase}/settings/booking-rules`, { headers: authHeaders() });
+      if (res.ok) fill(await res.json());
+    } catch { /* the card just stays empty */ }
+    container.querySelector("#br-save").onclick = async () => {
+      const btn = container.querySelector("#br-save");
+      const restore = setButtonLoading(btn, "Saving");
+      try {
+        const res = await fetch(`${settingsApiBase}/settings/booking-rules`, {
+          method: "PUT",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            blockOnDues: dues.checked,
+            minDuesRupees: Number(container.querySelector("#br-min").value) || 0,
+            radiusKm: Number(container.querySelector("#br-radius").value) || 0,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Could not save");
+        fill(data);
+        toast("Saved", "success");
+      } catch (err) {
+        toast(err.message || "Could not save", "error");
+      } finally {
+        restore();
+      }
+    };
+  })();
 
   container.querySelectorAll(".reg-key-toggle").forEach((btn) => {
     btn.onclick = () => {

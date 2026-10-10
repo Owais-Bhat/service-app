@@ -791,3 +791,20 @@ screens are additions to the sidebar, not replacements.
 
 **Rollback:** the new tables are unreferenced by existing code paths, so
 reverting the commit is sufficient; no data migration has to be undone.
+
+## Who can book a service (pending payment, distance)
+
+Two rules on the public booking forms, both switched by an admin under Settings → "Who can book a service":
+
+- **Pending payment.** A phone number (matched on its last ten digits) with an unpaid service or installation bill, or a
+  receivable balance in the ledger (invoices, and what Vyapar brought in), is told "Please repay your previous payment
+  first" and cannot book. The total shown is the larger of the ticket bills and the ledger balance, since the same debt
+  can sit in both. "Ignore up to ₹X" lets a tiny balance through; a party can be marked "Let this customer book even with
+  a payment pending" (`parties.booking_exempt`).
+- **Distance.** With a radius above 0, a booking whose location is further than that many km (straight line) from the
+  service centre is refused. The location is the GPS point if the customer shared one, else the `GPS: lat, lng` text, else
+  the typed address looked up on OpenStreetMap (if the lookup fails the booking goes through). The centre is the office
+  location (attendance geofence) or Srinagar. Radius 0 = no limit, which is the default.
+
+The form asks `POST /api/booking/precheck` right after the OTP; the save (`POST /api/data/inquiries|installations`) asks
+again and answers 422 with `code` `PENDING_PAYMENT` or `OUT_OF_AREA`. Settings: `GET|PUT /api/settings/booking-rules`.

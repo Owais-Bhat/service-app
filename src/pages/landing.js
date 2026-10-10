@@ -1,5 +1,6 @@
 import { supabase } from '../supabase.js';
 import { toggleTheme, calculateSLA, toast } from '../utils.js';
+import { precheckBooking, showBookingBlocked } from '../booking-block.js';
 import { ICONS } from '../icons.js';
 import { AdCarousel } from '../ad-carousel.js';
 import '../ad-carousel.css';
@@ -23,7 +24,7 @@ async function postPublicApi(path, body) {
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'Request failed' };
+    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'Request failed', code: data.code, details: data };
   } catch (err) {
     return { ok: false, error: err.message || 'Network request failed' };
   }
@@ -1267,6 +1268,14 @@ export function renderLandingPage(container, onPortalClick) {
       btn.innerHTML = `<span class="srf-spin"></span><span>Verifying...</span>`;
       const res = await verifySmsOTP('+91' + state.phone, entered);
       if (!res.ok) { toast(res.error || 'Incorrect code', 'error'); render(); return; }
+      // A customer with a payment still pending is told now, not after filling in the whole form.
+      const verdict = await precheckBooking({ phone: '+91' + state.phone });
+      if (!verdict.ok) {
+        showBookingBlocked(verdict);
+        state.step = 1;
+        render();
+        return;
+      }
       state.step = 3;
       render();
     });
@@ -1430,7 +1439,8 @@ export function renderLandingPage(container, onPortalClick) {
       });
 
       if (!booking.ok) {
-        toast(booking.error || 'Could not submit - please try again', 'error');
+        if (booking.code) showBookingBlocked(booking.details);
+        else toast(booking.error || 'Could not submit - please try again', 'error');
         console.error(booking);
         render();
         return;

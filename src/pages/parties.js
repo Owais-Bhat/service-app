@@ -385,6 +385,7 @@ function openPartyModal(container, existing = null, defaultKind = 'customer') {
         </div>`}
 
         <div class="form-group"><label>Notes</label><textarea id="pm-notes" rows="2">${esc(existing?.notes || '')}</textarea></div>
+        <div class="form-group"><label class="at2-check"><input type="checkbox" id="pm-exempt" ${existing?.booking_exempt ? 'checked' : ''}> Let this customer book a new service even with a payment pending</label></div>
         ${isEdit ? `
         <div class="form-group"><label>Reason for this change <small style="color:var(--text-dim)">(kept in the audit trail)</small></label>
           <input type="text" id="pm-reason"></div>
@@ -433,6 +434,7 @@ function openPartyModal(container, existing = null, defaultKind = 'customer') {
       opening_balance: $('#pm-open').value || 0,
       opening_balance_type: $('#pm-open-type').value,
       notes: $('#pm-notes').value.trim(),
+      booking_exempt: $('#pm-exempt').checked,
     };
     if (!body.display_name) return toast('A name is required', 'warning');
 

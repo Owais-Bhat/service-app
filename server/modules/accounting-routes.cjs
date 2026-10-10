@@ -218,6 +218,8 @@ function mountAccounting({ app, getConn, authenticateToken, permissions, audit }
             opening_balance_type: b.opening_balance_type === 'payable' ? 'payable' : 'receivable',
             opening_balance_on: b.opening_balance_on ? ymd(b.opening_balance_on) : null,
             notes: clean(b.notes, 2000),
+            // Lets this customer book a new service even with a payment pending (the owner's call).
+            booking_exempt: b.booking_exempt === undefined ? (existing?.booking_exempt ? 1 : 0) : (b.booking_exempt ? 1 : 0),
             active: b.active === undefined ? (existing?.active ?? 1) : (b.active ? 1 : 0),
         };
         if (!row.display_name) throw Object.assign(new Error('A name is required'), { status: 400 });

@@ -1,5 +1,6 @@
 import { toggleTheme, toast } from '../utils.js';
 import { ICONS } from '../icons.js';
+import { showBookingBlocked } from '../booking-block.js';
 
 const LOGO = new URL('../assets/logo.png', import.meta.url).href;
 
@@ -20,7 +21,7 @@ async function postPublicApi(path, body) {
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'Request failed' };
+    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || 'Request failed', code: data.code, details: data };
   } catch (err) {
     return { ok: false, error: err.message || 'Network request failed' };
   }
@@ -619,6 +620,8 @@ function openBookingModal(installType) {
       state.ticketNo = ticketNo;
       renderModalBody();
       toast('Installation request booked!', 'success');
+    } else if (res.code) {
+      showBookingBlocked(res.details);
     } else {
       toast(res.error || 'Could not register installation. Please try again.', 'error');
     }
