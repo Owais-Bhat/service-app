@@ -12,6 +12,12 @@ const { defaultBusinessId } = require('../ledger/schema.cjs');
 function mountInstallationMaterials({ app, getConn, authenticateToken, permissions, audit, recordNotification }) {
   const { can } = permissions;
 
+  // The installation price column; handlers wait for it so the first request after a deploy never trips on it.
+  const ready = (async () => {
+    const conn = await getConn();
+    try { await svc.ensureSchema(conn); } finally { conn.release(); }
+  })().catch((err) => console.error('[installation-materials] schema —', err.message));
+
   const baseUrl = (req) => {
     if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL;
     const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
@@ -48,21 +54,24 @@ function mountInstallationMaterials({ app, getConn, authenticateToken, permissio
   const moneyVisible = async (req) => req.user.role === 'admin' || (await can(req.user, 'invoice.view'));
 
   app.get('/api/installations/:id/materials', authenticateToken, handle(async (req, res, conn) => {
+    await ready;
     const businessId = await defaultBusinessId(conn);
     const { job } = await authorise(req, conn);
     res.json(await svc.state(conn, { businessId, job, moneyVisible: await moneyVisible(req) }));
   }));
 
   app.put('/api/installations/:id/materials', authenticateToken, handle(async (req, res, conn) => {
+    await ready;
     const businessId = await defaultBusinessId(conn);
     const { job, manager } = await authorise(req, conn);
     if (!Array.isArray(req.body?.lines)) return res.status(400).json({ error: 'lines must be a list' });
 
     const out = await svc.setMaterials(conn, {
-      businessId, user: req.user, job, lines: req.body.lines, isManager: manager, baseUrl: baseUrl(req),
+      businessId, user: req.user, job, lines: req.body.lines, installationCharge: req.body.installation_charge,
+      isManager: manager, baseUrl: baseUrl(req),
     });
 
-    if (out.moved) {
+    if (out.moved || out.charge_changed) {
       audit.record({
         actor: req.user, action: 'installation.materials_set', entityType: 'installation', entityId: job.id,
         after: { lines: req.body.lines.length, invoice: out.invoice_action }, ip: req.ip,
@@ -83,7 +92,7 @@ function mountInstallationMaterials({ app, getConn, authenticateToken, permissio
     const fresh = await svc.state(conn, { businessId, job, moneyVisible: await moneyVisible(req) });
     res.json({
       ...fresh,
-      saved: { moved: out.moved, bill_sent: !!out.delivery?.sent },
+      saved: { moved: out.moved, charge_changed: out.charge_changed, bill_sent: !!out.delivery?.sent },
       // The office needs the reason; the technician needs to know only that the office must look.
       problem: out.invoice_error ? (await moneyVisible(req) ? out.invoice_error : 'The bill could not be made — the office has been told') : null,
       bill_error: out.delivery && !out.delivery.sent && (await moneyVisible(req)) ? out.delivery.error : null,
@@ -92,6 +101,7 @@ function mountInstallationMaterials({ app, getConn, authenticateToken, permissio
 
   // The office: make the bill if it does not exist yet, and send it (again) to the customer.
   app.post('/api/installations/:id/send-invoice', authenticateToken, handle(async (req, res, conn) => {
+    await ready;
     const businessId = await defaultBusinessId(conn);
     const { job, manager } = await authorise(req, conn);
     if (!manager) return res.status(403).json({ error: 'Only the office can send the bill' });

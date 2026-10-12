@@ -441,6 +441,20 @@ async function invoiceLinesFor(conn, jobType, jobId, payload = {}) {
         amount_paise: Number(c.amount_paise),
         tax_rate_bps: payload.charge_tax_rate_bps === undefined ? 1800 : Number(payload.charge_tax_rate_bps),
     }));
+    // What the installer wrote as his installation price is the customer's charge, not a cost to us.
+    if (jobType === 'installation') {
+        try {
+            const [[inst]] = await conn.query('SELECT installation_charge_paise FROM installations WHERE id = ? LIMIT 1', [jobId]);
+            const fee = Number(inst?.installation_charge_paise || 0);
+            if (fee > 0) {
+                charges.push({
+                    label: 'Installation charges',
+                    amount_paise: fee,
+                    tax_rate_bps: payload.charge_tax_rate_bps === undefined ? 1800 : Number(payload.charge_tax_rate_bps),
+                });
+            }
+        } catch { /* the column is added at start-up; until then there is no such charge */ }
+    }
     return { invoiceLines, charges };
 }
 

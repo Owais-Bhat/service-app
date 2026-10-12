@@ -30,6 +30,13 @@ class MaterialsError extends Error {
 
 const q3 = (n) => Math.round(Number(n) * 1000) / 1000;
 
+async function ensureSchema(conn) {
+  const [cols] = await conn.query("SHOW COLUMNS FROM installations LIKE 'installation_charge_paise'");
+  if (!cols.length) {
+    await conn.query("ALTER TABLE installations ADD COLUMN installation_charge_paise BIGINT NOT NULL DEFAULT 0");
+  }
+}
+
 async function vanFor(conn, businessId, employeeId) {
   const [[van]] = await conn.query(
     "SELECT id, name FROM stock_locations WHERE business_id = ? AND kind = 'van' AND employee_id = ? AND active = 1 LIMIT 1",
@@ -112,6 +119,8 @@ async function state(conn, { businessId, job, moneyVisible }) {
     items: [...items.values()].sort((a, b) => a.name.localeCompare(b.name)),
     used,
     invoice,
+    // What the installer wrote as the installation price (the customer's bill carries it as a charge).
+    installation_charge: Number(job.installation_charge_paise || 0) / 100,
     locked,
     locked_reason: lockedReason,
     // The screen shows rates and totals only to people who may see them.
@@ -182,18 +191,12 @@ async function sendInvoice(conn, { businessId, user, documentId, baseUrl, force 
  * Set the items on an installation. `lines` is what is on the job now — [{ item_id, quantity }] — and anything
  * not listed is taken to be zero. Only the difference from what was recorded moves stock.
  */
-async function setMaterials(conn, { businessId, user, job, lines, isManager, baseUrl }) {
+async function setMaterials(conn, { businessId, user, job, lines, installationCharge, isManager, baseUrl }) {
   if (job.status === 'cancelled') throw new MaterialsError('This installation was cancelled', 'cancelled');
   const employeeId = job.assigned_employee_id;
   if (!employeeId) throw new MaterialsError('Assign this installation to a technician first', 'no_technician');
 
   const van = await vanFor(conn, businessId, employeeId);
-  if (!van) {
-    throw new MaterialsError(
-      `No stock has been issued to ${job.employee_name || 'this technician'} yet — give them stock from Stock → Transfers first`,
-      'no_van'
-    );
-  }
 
   const before = await findInvoice(conn, job.id);
   if (before && !isManager) {
@@ -227,6 +230,12 @@ async function setMaterials(conn, { businessId, user, job, lines, isManager, bas
     if (delta === 0) continue;
     const item = await stock.loadItem(conn, itemId);
     const line = { item_id: itemId, description: item.name, quantity: Math.abs(delta), unit: item.base_unit || item.unit || null };
+    if (!van) {
+      throw new MaterialsError(
+        `No stock has been issued to ${job.employee_name || 'this technician'} yet — give them stock from Stock → Transfers first`,
+        'no_van'
+      );
+    }
     if (delta > 0) {
       const held = await stock.locationQuantity(conn, itemId, van.id);
       if (delta > held) {
@@ -235,6 +244,19 @@ async function setMaterials(conn, { businessId, user, job, lines, isManager, bas
       used.push(line);
     } else {
       returned.push(line);
+    }
+  }
+
+  // The installation price: part of the bill, so a change in it is a change to the bill.
+  let chargeChanged = false;
+  if (installationCharge !== undefined && installationCharge !== null && installationCharge !== '') {
+    const rupees = Number(installationCharge);
+    if (!(rupees >= 0) || rupees > 10000000) throw new MaterialsError('The installation price must be 0 or more', 'bad_charge', 400);
+    const paise = Math.round(rupees * 100);
+    if (paise !== Number(job.installation_charge_paise || 0)) {
+      await conn.query('UPDATE installations SET installation_charge_paise = ? WHERE id = ?', [paise, job.id]);
+      job.installation_charge_paise = paise;
+      chargeChanged = true;
     }
   }
 
@@ -263,7 +285,7 @@ async function setMaterials(conn, { businessId, user, job, lines, isManager, bas
   // The bill follows the items. A problem here must not undo the stock that did move.
   let invoice = { action: 'none' };
   let invoiceError = null;
-  if (moved || !before) {
+  if (moved || chargeChanged || !before) {
     try {
       await conn.beginTransaction();
       invoice = await syncInvoice(conn, { businessId, user, job });
@@ -278,7 +300,7 @@ async function setMaterials(conn, { businessId, user, job, lines, isManager, bas
   if (invoice.id && ['created', 'revised'].includes(invoice.action)) {
     delivery = await sendInvoice(conn, { businessId, user, documentId: invoice.id, baseUrl, force: true });
   }
-  return { moved, invoice_action: invoice.action, invoice_id: invoice.id || null, invoice_error: invoiceError, delivery };
+  return { moved, charge_changed: chargeChanged, invoice_action: invoice.action, invoice_id: invoice.id || null, invoice_error: invoiceError, delivery };
 }
 
-module.exports = { MaterialsError, vanFor, netUsed, findInvoice, state, syncInvoice, sendInvoice, setMaterials };
+module.exports = { MaterialsError, ensureSchema, vanFor, netUsed, findInvoice, state, syncInvoice, sendInvoice, setMaterials };

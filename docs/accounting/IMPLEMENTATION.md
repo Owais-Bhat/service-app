@@ -828,3 +828,8 @@ The installer records the items he fitted; the customer's invoice follows from t
 - **Endpoints.** `GET|PUT /api/installations/:id/materials`, `POST /api/installations/:id/send-invoice` (office only).
 - **Payment** is recorded as for any invoice (Sales → Receipts); the old per-installation "Mark paid" applies only to bills
   made the old way.
+
+**Installation charge.** The same "Items used" screen has an "Installation charge (₹)" box. What the technician writes there
+is stored on the installation (`installation_charge_paise`) and billed as a charge line ("Installation charges", 18% GST like
+other billable charges) on the customer's invoice; changing it corrects the bill like changing an item does. It is the
+customer's charge, not a cost, so it does not touch the cost side of the job.

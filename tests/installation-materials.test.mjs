@@ -146,6 +146,27 @@ test('he cannot put on a job more than his van holds', { skip }, async () => {
   assert.equal(await held(van.id), 5);
 });
 
+test('the installation price he writes is added to the customer’s bill, and he is not shown the total', { skip }, async () => {
+  const r = await call('PUT', `/installations/${inst}/materials`, { lines: [{ item_id: item.id, quantity: 1 }], installation_charge: 1500 }, techToken);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.installation_charge, 1500, 'he sees the figure he entered');
+  assert.equal(r.body.invoice.total_paise, undefined);
+  assert.equal(r.body.saved.charge_changed, true);
+
+  const office = await call('GET', `/installations/${inst}/materials`);
+  assert.equal(office.body.invoice.id, invoiceId, 'the same bill, corrected');
+  // (1 × ₹2,500 + ₹1,500 installation) + 18% GST
+  assert.equal(office.body.invoice.total_paise, 472000);
+
+  // Changing only the price still corrects the bill; with no items at all the price alone is billed.
+  const higher = await call('PUT', `/installations/${inst}/materials`, { lines: [{ item_id: item.id, quantity: 1 }], installation_charge: 2000 }, techToken);
+  assert.equal(higher.status, 200);
+  assert.equal((await call('GET', `/installations/${inst}/materials`)).body.invoice.total_paise, 531000);
+
+  const negative = await call('PUT', `/installations/${inst}/materials`, { lines: [{ item_id: item.id, quantity: 1 }], installation_charge: -5 }, techToken);
+  assert.equal(negative.status, 400);
+});
+
 test('another technician cannot touch it; the office can', { skip }, async () => {
   assert.equal((await call('GET', `/installations/${inst}/materials`, null, otherToken)).status, 403);
   assert.equal((await put([{ item_id: item.id, quantity: 1 }], otherToken)).status, 403);

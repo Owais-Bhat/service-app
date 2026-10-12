@@ -79,6 +79,13 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
             </tbody>
           </table></div>` : (noVan ? '' : '<div class="at2-empty">Nothing in the van to put on this job.</div>')}
 
+          <div class="form-group" style="margin-top:14px">
+            <label>Installation charge (₹)</label>
+            <input type="number" id="im-charge" min="0" step="1" value="${d.installation_charge || ''}" placeholder="What you charge for the installation"
+              style="max-width:220px" ${d.locked ? 'disabled' : ''}>
+            <small style="color:var(--text-dim)">Added to the customer's bill.</small>
+          </div>
+
           ${d.invoice ? `
           <div style="margin-top:16px;padding:12px 14px;border:1px solid var(--border);border-radius:12px">
             <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
@@ -102,7 +109,7 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" id="im-cancel">Close</button>
-          ${d.locked || noVan ? '' : `<button class="btn btn-primary" id="im-save">${ICONS.check}<span>Save${office ? '' : ' & send bill'}</span></button>`}
+          ${d.locked ? '' : `<button class="btn btn-primary" id="im-save">${ICONS.check}<span>Save${office ? '' : ' & send bill'}</span></button>`}
         </div>
       </div>`;
 
@@ -115,9 +122,11 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
         const lines = [...overlay.querySelectorAll('.im-qty')].map(i => ({ item_id: i.dataset.item, quantity: Number(i.value) || 0 }));
         save.disabled = true;
         try {
-          const out = await api('PUT', `/installations/${encodeURIComponent(installationId)}/materials`, { lines });
+          const out = await api('PUT', `/installations/${encodeURIComponent(installationId)}/materials`, {
+            lines, installation_charge: overlay.querySelector('#im-charge')?.value,
+          });
           if (out.problem) toast(out.problem, 'warning');
-          else if (!out.saved.moved) toast('Nothing changed', 'info');
+          else if (!out.saved.moved && !out.saved.charge_changed) toast('Nothing changed', 'info');
           else toast(out.saved.bill_sent ? 'Saved — bill sent to the customer' : 'Saved — the bill will be sent by the office', 'success');
           if (onDone) onDone();
           paint(out);
