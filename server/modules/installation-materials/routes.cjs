@@ -99,6 +99,31 @@ function mountInstallationMaterials({ app, getConn, authenticateToken, permissio
     });
   }));
 
+  // The office decides which kind of bill: GST, non-GST, or service (GST optional).
+  app.put('/api/installations/:id/bill-type', authenticateToken, handle(async (req, res, conn) => {
+    await ready;
+    const businessId = await defaultBusinessId(conn);
+    const { job, manager } = await authorise(req, conn);
+    if (!manager) return res.status(403).json({ error: 'Only the office decides the kind of bill' });
+
+    const out = await svc.setBillType(conn, {
+      businessId, user: req.user, job, billType: req.body?.bill_type,
+      showGst: !!req.body?.show_gst, serviceGst: req.body?.service_gst === undefined ? true : !!req.body.service_gst,
+    });
+    audit.record({
+      actor: req.user, action: 'installation.bill_type', entityType: 'installation', entityId: job.id,
+      after: { bill_type: job.bill_type, show_gst: job.show_gst, service_gst: job.service_gst, invoice: out.invoice_action }, ip: req.ip,
+    });
+
+    // A corrected bill goes to the customer again.
+    let delivery = null;
+    if (out.invoice_id && ['created', 'revised'].includes(out.invoice_action)) {
+      delivery = await svc.sendInvoice(conn, { businessId, user: req.user, documentId: out.invoice_id, baseUrl: baseUrl(req), force: true });
+    }
+    const fresh = await svc.state(conn, { businessId, job, moneyVisible: true });
+    res.json({ ...fresh, saved: { invoice_action: out.invoice_action, bill_sent: !!delivery?.sent }, bill_error: delivery && !delivery.sent ? delivery.error : null });
+  }));
+
   // The office: make the bill if it does not exist yet, and send it (again) to the customer.
   app.post('/api/installations/:id/send-invoice', authenticateToken, handle(async (req, res, conn) => {
     await ready;

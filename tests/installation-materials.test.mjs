@@ -167,6 +167,40 @@ test('the installation price he writes is added to the customer’s bill, and he
   assert.equal(negative.status, 400);
 });
 
+test('the office decides the kind of bill; the bill is corrected to match, and the technician cannot', { skip }, async () => {
+  const total = async () => (await call('GET', `/installations/${inst}/materials`)).body.invoice.total_paise;
+  const kind = (body, tk = adminToken) => call('PUT', `/installations/${inst}/bill-type`, body, tk);
+  assert.equal(await total(), 531000, 'GST bill: ₹2,500 + ₹2,000, plus 18%');
+
+  const nonGst = await kind({ bill_type: 'non_gst', show_gst: true });
+  assert.equal(nonGst.status, 200, JSON.stringify(nonGst.body));
+  assert.equal(nonGst.body.bill.type, 'non_gst');
+  assert.equal(nonGst.body.saved.invoice_action, 'revised');
+  assert.equal(await total(), 450000, 'no tax charged on a non-GST bill');
+
+  const serviceFree = await kind({ bill_type: 'service', service_gst: false });
+  assert.equal(serviceFree.status, 200, JSON.stringify(serviceFree.body));
+  assert.equal(await total(), 450000, 'a service bill with GST switched off charges none');
+
+  const serviceTaxed = await kind({ bill_type: 'service', service_gst: true });
+  assert.equal(serviceTaxed.status, 200);
+  assert.equal(await total(), 531000, 'a service bill with GST charges it');
+
+  // The technician is never told, and cannot change it.
+  const asTech = await call('GET', `/installations/${inst}/materials`, null, techToken);
+  assert.equal(asTech.body.bill, undefined);
+  assert.equal((await kind({ bill_type: 'non_gst' }, techToken)).status, 403);
+  assert.equal((await kind({ bill_type: 'cheque' })).status, 400);
+
+  // His own edits keep the kind the office chose.
+  await kind({ bill_type: 'non_gst' });
+  const edit = await put([{ item_id: item.id, quantity: 1 }]);
+  assert.equal(edit.status, 200);
+  assert.equal(await total(), 450000);
+  await kind({ bill_type: 'gst' });
+  assert.equal(await total(), 531000);
+});
+
 test('another technician cannot touch it; the office can', { skip }, async () => {
   assert.equal((await call('GET', `/installations/${inst}/materials`, null, otherToken)).status, 403);
   assert.equal((await put([{ item_id: item.id, quantity: 1 }], otherToken)).status, 403);

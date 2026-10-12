@@ -833,3 +833,9 @@ The installer records the items he fitted; the customer's invoice follows from t
 is stored on the installation (`installation_charge_paise`) and billed as a charge line ("Installation charges", 18% GST like
 other billable charges) on the customer's invoice; changing it corrects the bill like changing an item does. It is the
 customer's charge, not a cost, so it does not touch the cost side of the job.
+
+**Kind of bill for an installation.** The office decides, never the technician. In Installations → job → "Items used &
+customer bill" there are three buttons: GST bill (tax charged), Non-GST bill (no tax; optional "show the GST" tick, for the
+customer to see only) and Service bill (GST optional via "Charge GST"). It is stored on the installation (`bill_type`,
+`show_gst`, `service_gst`; NULL = GST bill). Choosing before the technician submits sets how the first bill is made; choosing
+afterwards corrects the existing unpaid bill and sends it again. `PUT /api/installations/:id/bill-type`, office only.

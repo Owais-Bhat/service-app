@@ -31,10 +31,38 @@ class MaterialsError extends Error {
 const q3 = (n) => Math.round(Number(n) * 1000) / 1000;
 
 async function ensureSchema(conn) {
-  const [cols] = await conn.query("SHOW COLUMNS FROM installations LIKE 'installation_charge_paise'");
-  if (!cols.length) {
-    await conn.query("ALTER TABLE installations ADD COLUMN installation_charge_paise BIGINT NOT NULL DEFAULT 0");
+  const wanted = [
+    ['installation_charge_paise', 'BIGINT NOT NULL DEFAULT 0'],
+    // Which kind of bill the customer gets, decided by the office: gst | non_gst | service (NULL = gst).
+    ['bill_type', 'VARCHAR(12) NULL'],
+    ['show_gst', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['service_gst', 'TINYINT(1) NOT NULL DEFAULT 1'],
+  ];
+  for (const [name, definition] of wanted) {
+    const [cols] = await conn.query('SHOW COLUMNS FROM installations LIKE ?', [name]);
+    if (!cols.length) await conn.query(`ALTER TABLE installations ADD COLUMN ${name} ${definition}`);
   }
+}
+
+const BILL_TYPES = new Set(['gst', 'non_gst', 'service']);
+
+// What the office chose for this job, as the invoice needs it.
+function billChoice(job) {
+  const type = BILL_TYPES.has(job.bill_type) ? job.bill_type : 'gst';
+  return { type, show_gst: type === 'non_gst' && !!Number(job.show_gst), service_gst: type !== 'service' || !!Number(job.service_gst) };
+}
+
+// A service bill without GST has its lines and charges sent as non-GST, which is how the sales screen does it.
+function shapeForBill(job, { invoiceLines, charges }) {
+  const choice = billChoice(job);
+  const strip = choice.type === 'service' && !choice.service_gst;
+  const plain = (x) => (strip ? { ...x, tax_rate_bps: 0, tax_treatment: 'non_gst' } : x);
+  return {
+    bill_type: choice.type,
+    show_gst: choice.show_gst,
+    lines: invoiceLines.map(plain),
+    charges: charges.map(plain),
+  };
 }
 
 async function vanFor(conn, businessId, employeeId) {
@@ -121,6 +149,8 @@ async function state(conn, { businessId, job, moneyVisible }) {
     invoice,
     // What the installer wrote as the installation price (the customer's bill carries it as a charge).
     installation_charge: Number(job.installation_charge_paise || 0) / 100,
+    // Decided by the office. The technician is not told, so it is only sent to those who may see money.
+    bill: moneyVisible ? billChoice(job) : undefined,
     locked,
     locked_reason: lockedReason,
     // The screen shows rates and totals only to people who may see them.
@@ -130,8 +160,9 @@ async function state(conn, { businessId, job, moneyVisible }) {
 
 // Keep the customer's invoice in step with the items: make it, correct it, or take it back.
 async function syncInvoice(conn, { businessId, user, job }) {
-  const { invoiceLines, charges } = await jobs.invoiceLinesFor(conn, 'installation', job.id);
-  const empty = !invoiceLines.length && !charges.length;
+  const raw = await jobs.invoiceLinesFor(conn, 'installation', job.id);
+  const empty = !raw.invoiceLines.length && !raw.charges.length;
+  const shaped = shapeForBill(job, raw);
   const existing = await findInvoice(conn, job.id);
 
   if (!existing) {
@@ -147,7 +178,8 @@ async function syncInvoice(conn, { businessId, user, job }) {
       payload: {
         doc_type: 'invoice', doc_date: new Date(), party_id: partyId,
         source_type: 'installation', source_id: job.id, reference: job.ticket_no || null,
-        lines: invoiceLines, charges,
+        bill_type: shaped.bill_type, show_gst: shaped.show_gst,
+        lines: shaped.lines, charges: shaped.charges,
       },
     });
     await sales.issueDocument(conn, { businessId, user, id });
@@ -158,7 +190,8 @@ async function syncInvoice(conn, { businessId, user, job }) {
   const d = loaded.document;
   const payload = {
     doc_date: d.doc_date, party_id: d.party_id, notes: d.notes, terms: d.terms, reference: d.reference,
-    prices_include_tax: !!d.prices_include_tax, lines: invoiceLines, charges,
+    prices_include_tax: !!d.prices_include_tax, bill_type: shaped.bill_type, show_gst: shaped.show_gst,
+    lines: shaped.lines, charges: shaped.charges,
   };
 
   if (existing.status === 'draft') {
@@ -303,4 +336,39 @@ async function setMaterials(conn, { businessId, user, job, lines, installationCh
   return { moved, charge_changed: chargeChanged, invoice_action: invoice.action, invoice_id: invoice.id || null, invoice_error: invoiceError, delivery };
 }
 
-module.exports = { MaterialsError, ensureSchema, vanFor, netUsed, findInvoice, state, syncInvoice, sendInvoice, setMaterials };
+/**
+ * The office decides which kind of bill this customer gets. If a bill exists and is not paid it is corrected to the new
+ * kind (and the caller sends it again); if there is none yet, the choice is kept for when it is made.
+ */
+async function setBillType(conn, { businessId, user, job, billType, showGst, serviceGst }) {
+  if (!BILL_TYPES.has(billType)) throw new MaterialsError('Bill type must be gst, non_gst or service', 'bad_bill_type', 400);
+  const existing = await findInvoice(conn, job.id);
+  if (existing) {
+    const loaded = await sales.loadDocument(conn, existing.id);
+    if (Number(loaded.paid_paise || 0) > 0) {
+      throw new MaterialsError('The customer has already paid this bill, so its kind cannot be changed', 'paid');
+    }
+  }
+  const row = {
+    bill_type: billType,
+    show_gst: billType === 'non_gst' && showGst ? 1 : 0,
+    service_gst: billType === 'service' ? (serviceGst === false ? 0 : 1) : 1,
+  };
+  await conn.query('UPDATE installations SET ? WHERE id = ?', [row, job.id]);
+  Object.assign(job, row);
+
+  let invoice = { action: 'none' };
+  if (existing) {
+    await conn.beginTransaction();
+    try {
+      invoice = await syncInvoice(conn, { businessId, user, job });
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback().catch(() => {});
+      throw err;
+    }
+  }
+  return { invoice_action: invoice.action, invoice_id: invoice.id || existing?.id || null };
+}
+
+module.exports = { MaterialsError, setBillType, ensureSchema, vanFor, netUsed, findInvoice, state, syncInvoice, sendInvoice, setMaterials };

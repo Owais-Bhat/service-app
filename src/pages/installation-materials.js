@@ -86,6 +86,18 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
             <small style="color:var(--text-dim)">Added to the customer's bill.</small>
           </div>
 
+          ${office && d.bill ? `
+          <div style="margin-top:14px;padding:12px 14px;border:1px solid var(--border);border-radius:12px">
+            <label style="font-weight:700">Kind of bill <small style="color:var(--text-dim);font-weight:400">(you decide; the technician is not shown this)</small></label>
+            <div id="im-types" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+              ${[['gst', 'GST bill'], ['non_gst', 'Non-GST bill'], ['service', 'Service bill']].map(([k, label]) => `
+                <button type="button" class="btn ${d.bill.type === k ? 'btn-primary' : 'btn-secondary'}" data-type="${k}" ${d.locked ? 'disabled' : ''}>${label}</button>`).join('')}
+            </div>
+            ${d.bill.type === 'non_gst' ? `<label class="at2-check" style="margin-top:8px"><input type="checkbox" id="im-showgst" ${d.bill.show_gst ? 'checked' : ''} ${d.locked ? 'disabled' : ''}> Show the GST on the bill (for the customer to see, not charged)</label>` : ''}
+            ${d.bill.type === 'service' ? `<label class="at2-check" style="margin-top:8px"><input type="checkbox" id="im-svcgst" ${d.bill.service_gst ? 'checked' : ''} ${d.locked ? 'disabled' : ''}> Charge GST on this bill</label>` : ''}
+            <p class="at2-note" style="margin:8px 0 0">${d.invoice ? 'Changing this corrects the bill and sends it to the customer again.' : 'Applies when the bill is made, on the first save of items.'}</p>
+          </div>` : ''}
+
           ${d.invoice ? `
           <div style="margin-top:16px;padding:12px 14px;border:1px solid var(--border);border-radius:12px">
             <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
@@ -115,6 +127,27 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
 
     overlay.querySelector('#im-close').onclick = close;
     overlay.querySelector('#im-cancel').onclick = close;
+
+    // The office picking the kind of bill.
+    const applyType = async (type) => {
+      try {
+        const out = await api('PUT', `/installations/${encodeURIComponent(installationId)}/bill-type`, {
+          bill_type: type,
+          show_gst: type === 'non_gst' ? !!overlay.querySelector('#im-showgst')?.checked : false,
+          service_gst: type === 'service' ? overlay.querySelector('#im-svcgst')?.checked !== false : true,
+        });
+        toast(out.saved.invoice_action === 'revised'
+          ? (out.saved.bill_sent ? 'Bill corrected and sent again' : 'Bill corrected — not sent yet')
+          : 'Kind of bill saved', 'success');
+        if (onDone) onDone();
+        paint(out);
+      } catch (err) { toast(err.message, 'error'); }
+    };
+    overlay.querySelectorAll('#im-types [data-type]').forEach((b) => { b.onclick = () => applyType(b.dataset.type); });
+    const showGst = overlay.querySelector('#im-showgst');
+    if (showGst) showGst.onchange = () => applyType('non_gst');
+    const svcGst = overlay.querySelector('#im-svcgst');
+    if (svcGst) svcGst.onchange = () => applyType('service');
 
     const save = overlay.querySelector('#im-save');
     if (save) {
