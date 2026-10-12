@@ -552,6 +552,8 @@ async function openDetail(container, id) {
   const r = payload.installation;
   const items = payload.items || [];
   const itemsTotal = items.reduce((sum, it) => sum + Number(it.amount), 0);
+  // The older hand-made bill only matters where one exists; new work is billed from the items the technician used.
+  const legacyBill = items.length > 0 || Number(r.bill_total) > 0;
 
   const step = (label, at, note) => `
     <div class="inst-step${at ? ' done' : ''}">
@@ -592,7 +594,7 @@ async function openDetail(container, id) {
           ${step('Paid', r.payment_received_at, r.payment_method ? `${r.payment_method}${r.payment_note ? ' — ' + r.payment_note : ''}` : '')}
         </div>
 
-        <div class="card" style="margin-top:16px;">
+        <div class="card" style="margin-top:16px;${legacyBill ? '' : 'display:none;'}">
           <div class="card-header"><span class="card-title">Bill</span><span class="at2-count">${items.length} item${items.length === 1 ? '' : 's'}</span></div>
           <div class="table-wrap"><table class="at2-tbl">
             <tbody>
@@ -627,6 +629,7 @@ async function openDetail(container, id) {
       </div>
       <div class="modal-footer" style="gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary" id="ind-cancel">Close</button>
+        <button class="btn btn-primary" id="ind-items">Items used &amp; customer bill</button>
         <button class="btn btn-secondary" id="ind-edit">Edit booking</button>
         <button class="btn btn-secondary" id="ind-assign">Save assignment</button>
         ${Number(r.bill_total) > 0 ? (r.payment_status === 'paid'
@@ -640,6 +643,11 @@ async function openDetail(container, id) {
   $('#ind-close').onclick = close;
   $('#ind-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  $('#ind-items').onclick = async () => {
+    const { openInstallationMaterials } = await import('./installation-materials.js');
+    openInstallationMaterials({ installationId: r.id, onDone: () => renderInstallationsAdminTab(container) });
+  };
 
   $('#ind-edit').onclick = () => {
     close();

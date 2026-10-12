@@ -74,7 +74,7 @@ async function partyForJob(conn, businessId, job) {
  * business has said approval is not required — in which case this approves it
  * in the same breath, which is how the app behaved before approvals existed.
  */
-async function submitMaterials(conn, { businessId, user, payload }) {
+async function submitMaterials(conn, { businessId, user, payload, autoApprove = false }) {
     const { job_type: jobType, job_id: jobId } = payload;
     const job = await loadJob(conn, jobType, jobId);
 
@@ -132,7 +132,7 @@ async function submitMaterials(conn, { businessId, user, payload }) {
     }
 
     void job;
-    if (!biz?.require_material_approval) {
+    if (autoApprove || !biz?.require_material_approval) {
         return approveMaterials(conn, { businessId, user, id, auto: true });
     }
     return loadIssue(conn, id);
@@ -398,42 +398,9 @@ async function jobSummary(conn, { businessId, jobType, jobId }) {
     };
 }
 
-// ── turning the work into an invoice ────────────────────────────────────
-// Built from what was approved, priced at the selling rate, and prepared once.
-// A second attempt hands back the draft that already exists.
-async function invoiceFromJob(conn, { businessId, user, jobType, jobId, payload = {} }) {
-    const job = await loadJob(conn, jobType, jobId);
-
-    const [[existing]] = await conn.query(
-        `SELECT id FROM sales_documents
-          WHERE source_type = ? AND source_id = ? AND doc_type = 'invoice' AND status <> 'cancelled'
-          LIMIT 1`,
-        [jobType, jobId]
-    );
-    if (existing) {
-        return { ...(await sales.loadDocument(conn, existing.id)), reused: true };
-    }
-
-    const party = await partyForJob(conn, businessId, job);
-    if (!party) {
-        throw new JobError(
-            `${job.full_name || 'This job'} is not linked to a customer record — create or link the customer first`,
-            'no_party', 400
-        );
-    }
-
-    const [pending] = await conn.query(
-        `SELECT COUNT(*) AS c FROM job_material_issues
-          WHERE job_type = ? AND job_id = ? AND status = 'submitted'`,
-        [jobType, jobId]
-    );
-    if (Number(pending[0].c) > 0 && !payload.ignore_pending) {
-        throw new JobError(
-            'Some materials are still waiting for approval — approve or reject them before invoicing',
-            'pending_materials'
-        );
-    }
-
+// What a customer is to be charged for on this job: the materials used, less what was sent back, at the selling
+// rate, plus any billable costs. Used for a first invoice and again for a correction.
+async function invoiceLinesFor(conn, jobType, jobId, payload = {}) {
     const [lines] = await conn.query(
         `SELECT ml.*, i.kind, it.name AS item_name, it.hsn_sac, it.gst_rate, it.selling_rate
            FROM job_material_lines ml
@@ -474,6 +441,46 @@ async function invoiceFromJob(conn, { businessId, user, jobType, jobId, payload 
         amount_paise: Number(c.amount_paise),
         tax_rate_bps: payload.charge_tax_rate_bps === undefined ? 1800 : Number(payload.charge_tax_rate_bps),
     }));
+    return { invoiceLines, charges };
+}
+
+// ── turning the work into an invoice ────────────────────────────────────
+// Built from what was approved, priced at the selling rate, and prepared once.
+// A second attempt hands back the draft that already exists.
+async function invoiceFromJob(conn, { businessId, user, jobType, jobId, payload = {} }) {
+    const job = await loadJob(conn, jobType, jobId);
+
+    const [[existing]] = await conn.query(
+        `SELECT id FROM sales_documents
+          WHERE source_type = ? AND source_id = ? AND doc_type = 'invoice' AND status <> 'cancelled'
+          LIMIT 1`,
+        [jobType, jobId]
+    );
+    if (existing) {
+        return { ...(await sales.loadDocument(conn, existing.id)), reused: true };
+    }
+
+    const party = await partyForJob(conn, businessId, job);
+    if (!party) {
+        throw new JobError(
+            `${job.full_name || 'This job'} is not linked to a customer record — create or link the customer first`,
+            'no_party', 400
+        );
+    }
+
+    const [pending] = await conn.query(
+        `SELECT COUNT(*) AS c FROM job_material_issues
+          WHERE job_type = ? AND job_id = ? AND status = 'submitted'`,
+        [jobType, jobId]
+    );
+    if (Number(pending[0].c) > 0 && !payload.ignore_pending) {
+        throw new JobError(
+            'Some materials are still waiting for approval — approve or reject them before invoicing',
+            'pending_materials'
+        );
+    }
+
+    const { invoiceLines, charges } = await invoiceLinesFor(conn, jobType, jobId, payload);
 
     if (!invoiceLines.length && !charges.length) {
         throw new JobError('There is nothing approved on this job to invoice yet', 'nothing_to_invoice');
@@ -540,6 +547,7 @@ module.exports = {
     addJobCost,
     jobSummary,
     invoiceFromJob,
+    invoiceLinesFor,
     estimateFromQuotation,
     loadIssue,
     loadJob,

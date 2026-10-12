@@ -808,3 +808,23 @@ Two rules on the public booking forms, both switched by an admin under Settings 
 
 The form asks `POST /api/booking/precheck` right after the OTP; the save (`POST /api/data/inquiries|installations`) asks
 again and answers 422 with `code` `PENDING_PAYMENT` or `OUT_OF_AREA`. Settings: `GET|PUT /api/settings/booking-rules`.
+
+## Installation items from the technician's van, and the customer's bill
+
+The installer records the items he fitted; the customer's invoice follows from them.
+
+- **Where the items come from.** The technician's own van (Stock → Transfers sends stock to it). Saving "Items used" moves only
+  the difference from what was already on the job: more → stock leaves his van (cost of goods sold is posted), fewer → it
+  comes back to his van. There is no approval step for this; the van is his own stock. What is left stays with him until the
+  office takes it back (Items used & customer bill → "Take everything left back to the store", which is an ordinary
+  van → store transfer).
+- **The bill.** First save makes the invoice (source `installation`) at the item's selling rate and issues it; later saves
+  correct that same invoice (`reviseIssued`) and send the new one. A bill the customer has paid is locked for the technician.
+  The invoice is sent by WhatsApp through the existing document template; if that fails the bill still exists and the office
+  can send it again.
+- **What the technician sees.** Items, quantities and what is in his van. Never a rate, cost or total: the materials endpoint
+  leaves money out unless the caller has `invoice.view`, and `/api/jobs/:type/:id/summary` now strips selling rates, estimates
+  and document totals for such callers as well as costs.
+- **Endpoints.** `GET|PUT /api/installations/:id/materials`, `POST /api/installations/:id/send-invoice` (office only).
+- **Payment** is recorded as for any invoice (Sales → Receipts); the old per-installation "Mark paid" applies only to bills
+  made the old way.

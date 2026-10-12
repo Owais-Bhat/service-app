@@ -2766,6 +2766,7 @@ export async function renderEmployeeInstallations(container) {
         ${x.phone ? `<a class="btn btn-secondary btn-sm" href="tel:${escapeHtml(x.phone)}" style="text-decoration:none;">${ICONS.phone || ''}<span>Call</span></a>` : ''}
         <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.address || x.location || '')}" style="text-decoration:none;">${ICONS.pin || ''}<span>Directions</span></a>
         ${action ? `<button type="button" class="btn btn-primary btn-sm inst-action-btn" data-id="${x.id}" data-next="${action.next}">${action.label}</button>` : ''}
+        ${['in_progress', 'completed'].includes(x.status) ? `<button type="button" class="btn btn-secondary btn-sm inst-items-btn" data-id="${x.id}"><span>Items used</span></button>` : ''}
       </div>
     </div>`;
   };
@@ -2786,6 +2787,13 @@ export async function renderEmployeeInstallations(container) {
 
   // The full job — customer, address, instructions — is on screen, so it has been seen.
   active.forEach((x) => pingAssignmentSeen('installation', x.id));
+
+  container.querySelectorAll('.inst-items-btn').forEach((btn) => {
+    btn.onclick = async () => {
+      const { openInstallationMaterials } = await import('./installation-materials.js');
+      openInstallationMaterials({ installationId: btn.dataset.id });
+    };
+  });
 
   container.querySelectorAll('.inst-action-btn').forEach((btn) => {
     btn.onclick = async () => {

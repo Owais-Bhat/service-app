@@ -88,6 +88,15 @@ function mountJobs({ app, getConn, authenticateToken, permissions, audit }) {
             delete summary.totals.estimated_cost_paise;
             summary.material_lines = summary.material_lines.map(({ cost_paise: _c, unit_cost_paise: _u, ...rest }) => rest);
             summary.costs = [];
+            summary.issues = summary.issues.map(({ cost_paise: _c, ...rest }) => rest);
+        }
+        // What the customer is charged is just as much the office's: a technician sees the items and how many.
+        if (!(await can(req.user, 'invoice.view'))) {
+            delete summary.totals.revenue_paise;
+            delete summary.totals.estimated_sell_paise;
+            summary.estimates = [];
+            summary.documents = summary.documents.map(({ id, doc_no, doc_type, status, doc_date }) => ({ id, doc_no, doc_type, status, doc_date }));
+            summary.material_lines = summary.material_lines.map(({ sell_rate_paise: _s, ...rest }) => rest);
         }
         res.json(summary);
     }));

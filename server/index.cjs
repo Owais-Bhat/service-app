@@ -906,6 +906,7 @@ const { mountBackup } = require('./modules/backup/routes.cjs');
 const { ensureVyaparSchema } = require('./modules/vyapar/schema.cjs');
 const { mountVyapar } = require('./modules/vyapar/routes.cjs');
 const { mountBookingRules } = require('./modules/booking-rules/routes.cjs');
+const { mountInstallationMaterials } = require('./modules/installation-materials/routes.cjs');
 // Set when the routes are mounted at the bottom; until then (and if it ever fails) bookings are let through.
 let bookingRules = { check: async () => ({ ok: true }) };
 // Whenever a job is given to someone: forget that it was seen and WhatsApp them. Never blocks or fails the assignment.
@@ -9684,6 +9685,7 @@ mountAssignments({ app, getConn, authenticateToken, permissions });
 mountBackup({ app, getConn, authenticateToken, audit, recordNotification });
 mountVyapar({ app, getConn, authenticateToken, permissions, audit });
 bookingRules = mountBookingRules({ app, getConn, authenticateToken, appSettings, saveAppSetting, rateLimit });
+mountInstallationMaterials({ app, getConn, authenticateToken, permissions, audit, recordNotification });
 
 // Catch-all to serve index.html for SPA routing (Express 5 syntax)
 app.get('/assets/{*asset}', (req, res) => {

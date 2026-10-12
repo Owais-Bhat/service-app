@@ -5903,6 +5903,10 @@ export async function openInstallationDetail(id, employees, onDone) {
             <option value="cancelled" ${inst.status === "cancelled" ? "selected" : ""}>Cancelled</option>
           </select>
         </div>
+
+        <div style="margin-top:14px;">
+          <button class="btn btn-secondary" id="inst-items-btn" type="button"><span>Items used &amp; customer bill</span></button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="inst-detail-close-btn2">Close</button>
@@ -5917,6 +5921,11 @@ export async function openInstallationDetail(id, employees, onDone) {
   overlay.querySelector("#inst-detail-close-btn").onclick = close;
   overlay.querySelector("#inst-detail-close-btn2").onclick = close;
   
+  overlay.querySelector("#inst-items-btn").onclick = async () => {
+    const { openInstallationMaterials } = await import("./installation-materials.js");
+    openInstallationMaterials({ installationId: id });
+  };
+
   overlay.querySelector("#inst-save-btn").onclick = async () => {
     const assigned_employee_id = overlay.querySelector("#inst-assign-to").value || null;
     let status = overlay.querySelector("#inst-status-to").value;
