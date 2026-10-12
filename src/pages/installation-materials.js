@@ -1,8 +1,9 @@
 // Items fitted on an installation: what the technician took from his van, and the bill the customer gets for it.
 //
-// One screen for two people. The technician sees his van, types how many of each item are on this job, and saves —
-// he never sees a rate or a total. The office sees the same list plus the bill with its rates, can send it to the
-// customer again, and can take what is left in the technician's van back to the store.
+// One screen for two people. The technician sees his van, types how many of each item are on this job, and submits —
+// he never sees a rate or a total. The office is alerted, checks the record, and confirms: only then is the bill issued
+// and sent to the customer. The office also sees the bill with its rates, chooses its kind (GST / non-GST / service),
+// and can take what is left in the technician's van back to the store.
 import { toast } from '../utils.js';
 import { ICONS } from '../icons.js';
 
@@ -24,6 +25,10 @@ async function api(method, path, body) {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const rupees = (paise) => `₹${(Number(paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const when = (v) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
 
 /**
  * @param {{ installationId: string, onDone?: Function }} opts
@@ -36,9 +41,11 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
   const close = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
+  const url = (suffix) => `/installations/${encodeURIComponent(installationId)}/${suffix}`;
+
   let data;
   try {
-    data = await api('GET', `/installations/${encodeURIComponent(installationId)}/materials`);
+    data = await api('GET', url('materials'));
   } catch (err) {
     close();
     return toast(err.message, 'error');
@@ -50,6 +57,23 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
     const office = !!d.money_visible;
     const rows = d.items;
     const noVan = !d.van;
+    const submitted = d.materials_status === 'submitted';
+    const confirmed = d.materials_status === 'confirmed';
+    const inv = d.invoice;
+
+    const notices = [];
+    if (noVan) {
+      notices.push(['warn', d.technician
+        ? `No stock has been given to ${esc(d.technician.name || 'this technician')} yet. Stock → Transfers: send items to their van first.`
+        : 'Give this installation to a technician first.']);
+    }
+    if (d.locked) notices.push(['warn', esc(d.locked_reason || 'This bill cannot be changed.')]);
+    if (office && submitted) {
+      notices.push(['warn', `<b>The technician submitted this${d.submitted_at ? ` on ${esc(when(d.submitted_at))}` : ''}.</b> Check it — call the technician if you want to — then confirm. The bill goes to the customer only when you confirm.`]);
+    }
+    if (!office && submitted && !d.locked) {
+      notices.push(['info', 'Submitted. The office will check it. You can still change it until they confirm.']);
+    }
 
     overlay.innerHTML = `
       <div class="modal at2-modal" style="max-width:640px">
@@ -58,10 +82,7 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
           <button class="modal-close" id="im-close">${ICONS.close}</button>
         </div>
         <div class="modal-body">
-          ${noVan ? `<div class="at2-notice warn">${d.technician
-    ? `No stock has been given to ${esc(d.technician.name || 'this technician')} yet. Stock → Transfers: send items to their van first.`
-    : 'Give this installation to a technician first.'}</div>` : ''}
-          ${d.locked ? `<div class="at2-notice warn">${esc(d.locked_reason || 'This bill cannot be changed.')}</div>` : ''}
+          ${notices.map(([kind, html]) => `<div class="at2-notice ${kind}">${html}</div>`).join('')}
 
           ${rows.length ? `
           <div class="table-wrap"><table class="at2-tbl">
@@ -95,23 +116,30 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
             </div>
             ${d.bill.type === 'non_gst' ? `<label class="at2-check" style="margin-top:8px"><input type="checkbox" id="im-showgst" ${d.bill.show_gst ? 'checked' : ''} ${d.locked ? 'disabled' : ''}> Show the GST on the bill (for the customer to see, not charged)</label>` : ''}
             ${d.bill.type === 'service' ? `<label class="at2-check" style="margin-top:8px"><input type="checkbox" id="im-svcgst" ${d.bill.service_gst ? 'checked' : ''} ${d.locked ? 'disabled' : ''}> Charge GST on this bill</label>` : ''}
-            <p class="at2-note" style="margin:8px 0 0">${d.invoice ? 'Changing this corrects the bill and sends it to the customer again.' : 'Applies when the bill is made, on the first save of items.'}</p>
+            <p class="at2-note" style="margin:8px 0 0">${inv ? 'Changing this corrects the bill. It is sent to the customer when you confirm or send it.' : 'Applies when the bill is made, from the first items saved.'}</p>
           </div>` : ''}
 
-          ${d.invoice ? `
+          ${inv ? `
           <div style="margin-top:16px;padding:12px 14px;border:1px solid var(--border);border-radius:12px">
             <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
-              <div><b>Bill ${esc(d.invoice.doc_no || '')}</b>
-                <span class="at2-chip ${d.invoice.sent ? '' : 'muted'}" style="margin-left:6px">${d.invoice.sent ? 'Sent to customer' : 'Not sent yet'}</span>
-                ${d.invoice.paid ? '<span class="at2-chip" style="margin-left:6px">Paid</span>' : ''}</div>
-              ${office ? `<b>${rupees(d.invoice.total_paise)}</b>` : ''}
+              <div><b>${inv.status === 'draft' ? 'Bill (draft)' : `Bill ${esc(inv.doc_no || '')}`}</b>
+                ${inv.status === 'draft' ? '<span class="at2-chip muted" style="margin-left:6px">Not issued</span>' : ''}
+                <span class="at2-chip ${inv.sent ? '' : 'muted'}" style="margin-left:6px">${inv.sent ? 'Sent to customer' : 'Not sent yet'}</span>
+                ${inv.paid ? '<span class="at2-chip" style="margin-left:6px">Paid</span>' : ''}</div>
+              ${office ? `<b>${rupees(inv.total_paise)}</b>` : ''}
             </div>
-            ${office && d.invoice.lines?.length ? `
+            ${office && inv.lines?.length ? `
               <table class="at2-tbl" style="margin-top:8px"><tbody>
-                ${d.invoice.lines.map(l => `<tr><td>${esc(l.description)}</td><td style="text-align:right">${num(l.quantity)} × ${rupees(l.rate_paise)}</td><td style="text-align:right">${rupees(l.amount_paise)}</td></tr>`).join('')}
+                ${inv.lines.map(l => `<tr><td>${esc(l.description)}</td><td style="text-align:right">${num(l.quantity)} × ${rupees(l.rate_paise)}</td><td style="text-align:right">${rupees(l.amount_paise)}</td></tr>`).join('')}
               </tbody></table>` : ''}
-            ${office ? `<div style="margin-top:10px"><button class="btn btn-secondary" id="im-send">Send bill to customer again</button></div><p class="at2-note">Record the payment in Sales → Receipts when it arrives.</p>` : ''}
-          </div>` : (office ? '<p class="at2-note">No bill yet — it is made when items are saved.</p>' : '')}
+            ${office ? `
+              <div style="margin-top:10px">
+                ${confirmed && inv.status !== 'draft'
+    ? '<button class="btn btn-secondary" id="im-send">Send bill to customer again</button>'
+    : '<button class="btn btn-primary" id="im-confirm">Confirm &amp; send bill to customer</button>'}
+              </div>
+              <p class="at2-note">${confirmed ? 'Record the payment in Sales → Receipts when it arrives.' : 'Confirming issues the bill and sends it. The technician cannot change it after that.'}</p>` : ''}
+          </div>` : (office ? '<p class="at2-note">No bill yet — it is made when the technician saves items or a charge.</p>' : '')}
 
           ${office && d.van && rows.some(r => r.held_qty > 0) ? `
           <div style="margin-top:16px">
@@ -121,7 +149,7 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" id="im-cancel">Close</button>
-          ${d.locked ? '' : `<button class="btn btn-primary" id="im-save">${ICONS.check}<span>Save${office ? '' : ' & send bill'}</span></button>`}
+          ${d.locked ? '' : `<button class="btn btn-primary" id="im-save">${ICONS.check}<span>${office ? 'Save' : (submitted ? 'Submit again' : 'Submit to office')}</span></button>`}
         </div>
       </div>`;
 
@@ -131,14 +159,12 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
     // The office picking the kind of bill.
     const applyType = async (type) => {
       try {
-        const out = await api('PUT', `/installations/${encodeURIComponent(installationId)}/bill-type`, {
+        const out = await api('PUT', url('bill-type'), {
           bill_type: type,
           show_gst: type === 'non_gst' ? !!overlay.querySelector('#im-showgst')?.checked : false,
           service_gst: type === 'service' ? overlay.querySelector('#im-svcgst')?.checked !== false : true,
         });
-        toast(out.saved.invoice_action === 'revised'
-          ? (out.saved.bill_sent ? 'Bill corrected and sent again' : 'Bill corrected — not sent yet')
-          : 'Kind of bill saved', 'success');
+        toast(out.saved.invoice_action === 'revised' ? 'Bill corrected — send it to the customer again' : 'Kind of bill saved', 'success');
         if (onDone) onDone();
         paint(out);
       } catch (err) { toast(err.message, 'error'); }
@@ -155,12 +181,12 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
         const lines = [...overlay.querySelectorAll('.im-qty')].map(i => ({ item_id: i.dataset.item, quantity: Number(i.value) || 0 }));
         save.disabled = true;
         try {
-          const out = await api('PUT', `/installations/${encodeURIComponent(installationId)}/materials`, {
+          const out = await api('PUT', url('materials'), {
             lines, installation_charge: overlay.querySelector('#im-charge')?.value,
           });
           if (out.problem) toast(out.problem, 'warning');
           else if (!out.saved.moved && !out.saved.charge_changed) toast('Nothing changed', 'info');
-          else toast(out.saved.bill_sent ? 'Saved — bill sent to the customer' : 'Saved — the bill will be sent by the office', 'success');
+          else toast(out.saved.submitted ? 'Submitted — the office will check it' : 'Saved', 'success');
           if (onDone) onDone();
           paint(out);
         } catch (err) {
@@ -170,20 +196,23 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
       };
     }
 
+    // The office: confirm the record and send the bill (or send it again).
+    const sendNow = async (btn) => {
+      btn.disabled = true;
+      try {
+        const out = await api('POST', url('confirm'), {});
+        toast(out.sent ? 'Bill issued and sent to the customer' : `Bill issued, but not sent: ${out.error || 'WhatsApp is not set up'}`, out.sent ? 'success' : 'warning');
+        if (onDone) onDone();
+        paint(out.state);
+      } catch (err) {
+        toast(err.message, 'error');
+        btn.disabled = false;
+      }
+    };
+    const confirmBtn = overlay.querySelector('#im-confirm');
+    if (confirmBtn) confirmBtn.onclick = () => sendNow(confirmBtn);
     const send = overlay.querySelector('#im-send');
-    if (send) {
-      send.onclick = async () => {
-        send.disabled = true;
-        try {
-          const out = await api('POST', `/installations/${encodeURIComponent(installationId)}/send-invoice`, {});
-          toast(out.sent ? 'Bill sent to the customer' : `Not sent: ${out.error || 'WhatsApp is not set up'}`, out.sent ? 'success' : 'warning');
-          paint(await api('GET', `/installations/${encodeURIComponent(installationId)}/materials`));
-        } catch (err) {
-          toast(err.message, 'error');
-          send.disabled = false;
-        }
-      };
-    }
+    if (send) send.onclick = () => sendNow(send);
 
     const back = overlay.querySelector('#im-takeback');
     if (back) {
@@ -200,7 +229,7 @@ export async function openInstallationMaterials({ installationId, onDone } = {})
             note: `Taken back from ${d.technician?.name || 'technician'}`, lines,
           });
           toast('Back in the store', 'success');
-          paint(await api('GET', `/installations/${encodeURIComponent(installationId)}/materials`));
+          paint(await api('GET', url('materials')));
           if (onDone) onDone();
         } catch (err) {
           toast(err.message, 'error');

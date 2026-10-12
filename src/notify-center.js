@@ -26,6 +26,7 @@ const NAV_MAP = {
   eod_warning:              { employee: 'my-eod' },
   leaderboard_rank:         { employee: 'leaderboard' },
   finance_summary:          { admin: 'finance' },
+  installation_items_submitted: { admin: 'installations' },
 };
 
 function navTarget(subject) {
@@ -68,6 +69,10 @@ const SUBJECTS = {
   employee_clock_in: { icon: '🟢', label: 'Clock In', voice: (m) => m.body || 'An employee clocked in.' },
   employee_clock_out: { icon: '🔴', label: 'Clock Out', voice: (m) => m.body || 'An employee clocked out.' },
   finance_summary: { icon: '📊', label: 'Finance Summary', voice: () => 'The daily finance summary is ready.' },
+  installation_items_submitted: {
+    icon: '🧰', label: 'Installation items to check',
+    voice: (m) => m.data?.voice || 'A technician has submitted installation items. Please check.',
+  },
   feedback_received: { icon: '⭐', label: 'Feedback', voice: () => 'New customer feedback received.' },
 };
 

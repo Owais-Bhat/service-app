@@ -6,9 +6,12 @@
 //        ↓  only the difference from what was already recorded is moved
 //   stock leaves (or comes back to) HIS van — no approval step, it is his own stock
 //        ↓
-//   the customer's invoice is made from it, at the selling rate, and sent
+//   a DRAFT invoice is kept from it, at the selling rate — nothing is sent, nothing is posted yet
 //        ↓
-//   he can change it again; the invoice is corrected and the customer gets the new one
+//   the office is alerted; it checks (calls the technician if it wants), then confirms
+//        ↓
+//   confirming issues the invoice and sends it to the customer; the technician can change things
+//   until then, and not after
 //
 // The installer only ever sees items and quantities. Rates, costs and the bill's total are for people who may
 // see money (see `moneyVisible`).
@@ -37,6 +40,11 @@ async function ensureSchema(conn) {
     ['bill_type', 'VARCHAR(12) NULL'],
     ['show_gst', 'TINYINT(1) NOT NULL DEFAULT 0'],
     ['service_gst', 'TINYINT(1) NOT NULL DEFAULT 1'],
+    // Where the technician's record stands: NULL (not submitted) | submitted (waiting for the office) | confirmed.
+    ['materials_status', 'VARCHAR(12) NULL'],
+    ['materials_submitted_at', 'TIMESTAMP NULL'],
+    ['materials_confirmed_at', 'TIMESTAMP NULL'],
+    ['materials_confirmed_by', 'VARCHAR(36) NULL'],
   ];
   for (const [name, definition] of wanted) {
     const [cols] = await conn.query('SHOW COLUMNS FROM installations LIKE ?', [name]);
@@ -123,6 +131,9 @@ async function state(conn, { businessId, job, moneyVisible }) {
     const paid = Number(loaded.paid_paise || 0);
     invoice = { id: existing.id, doc_no: existing.doc_no, status: existing.status, paid: paid > 0 };
     if (paid > 0) { locked = true; lockedReason = 'The customer has already paid this bill. Ask the office to change it.'; }
+    if (!locked && job.materials_status === 'confirmed' && !moneyVisible) {
+      locked = true; lockedReason = 'The office has checked and sent this bill. Ask the office if something has to change.';
+    }
     const [[sentRow]] = await conn.query(
       `SELECT status, created_at FROM whatsapp_messages
         WHERE ref_type = 'sales_document' AND ref_id = ? AND purpose = 'document' ORDER BY created_at DESC LIMIT 1`,
@@ -149,6 +160,9 @@ async function state(conn, { businessId, job, moneyVisible }) {
     invoice,
     // What the installer wrote as the installation price (the customer's bill carries it as a charge).
     installation_charge: Number(job.installation_charge_paise || 0) / 100,
+    materials_status: job.materials_status || null,
+    submitted_at: job.materials_submitted_at || null,
+    confirmed_at: job.materials_confirmed_at || null,
     // Decided by the office. The technician is not told, so it is only sent to those who may see money.
     bill: moneyVisible ? billChoice(job) : undefined,
     locked,
@@ -158,8 +172,9 @@ async function state(conn, { businessId, job, moneyVisible }) {
   };
 }
 
-// Keep the customer's invoice in step with the items: make it, correct it, or take it back.
-async function syncInvoice(conn, { businessId, user, job }) {
+// Keep the customer's invoice in step with the items: make it, correct it, or take it back. A new invoice stays a
+// draft (nothing posted, nothing sent) until `issue` is set, which only the office's confirmation does.
+async function syncInvoice(conn, { businessId, user, job, issue = false }) {
   const raw = await jobs.invoiceLinesFor(conn, 'installation', job.id);
   const empty = !raw.invoiceLines.length && !raw.charges.length;
   const shaped = shapeForBill(job, raw);
@@ -182,8 +197,8 @@ async function syncInvoice(conn, { businessId, user, job }) {
         lines: shaped.lines, charges: shaped.charges,
       },
     });
-    await sales.issueDocument(conn, { businessId, user, id });
-    return { action: 'created', id };
+    if (issue) await sales.issueDocument(conn, { businessId, user, id });
+    return { action: issue ? 'created' : 'drafted', id };
   }
 
   const loaded = await sales.loadDocument(conn, existing.id);
@@ -195,10 +210,15 @@ async function syncInvoice(conn, { businessId, user, job }) {
   };
 
   if (existing.status === 'draft') {
-    if (empty) return { action: 'none', id: existing.id };
+    if (empty) {
+      // Everything was taken off: a draft with nothing in it is simply dropped.
+      await conn.query('DELETE FROM sales_document_lines WHERE document_id = ?', [existing.id]);
+      await conn.query("DELETE FROM sales_documents WHERE id = ? AND status = 'draft'", [existing.id]);
+      return { action: 'none' };
+    }
     await sales.saveDraft(conn, { businessId, user, existingId: existing.id, payload: { ...payload, doc_type: 'invoice' } });
-    await sales.issueDocument(conn, { businessId, user, id: existing.id });
-    return { action: 'created', id: existing.id };
+    if (issue) await sales.issueDocument(conn, { businessId, user, id: existing.id });
+    return { action: issue ? 'created' : 'drafted', id: existing.id };
   }
 
   if (empty) {
@@ -237,6 +257,9 @@ async function setMaterials(conn, { businessId, user, job, lines, installationCh
     if (Number(loaded.paid_paise || 0) > 0) {
       throw new MaterialsError('The customer has already paid this bill. Ask the office to change it.', 'paid');
     }
+  }
+  if (!isManager && job.materials_status === 'confirmed') {
+    throw new MaterialsError('The office has checked and sent this bill. Ask the office if something has to change.', 'confirmed');
   }
 
   const [[pending]] = await conn.query(
@@ -329,11 +352,52 @@ async function setMaterials(conn, { businessId, user, job, lines, installationCh
     }
   }
 
-  let delivery = null;
-  if (invoice.id && ['created', 'revised'].includes(invoice.action)) {
-    delivery = await sendInvoice(conn, { businessId, user, documentId: invoice.id, baseUrl, force: true });
+  // The technician's submission is what the office is waiting for; the office's own edits change nothing about that.
+  let submitted = false;
+  if (!isManager && (moved || chargeChanged)) {
+    await conn.query(
+      "UPDATE installations SET materials_status = 'submitted', materials_submitted_at = NOW() WHERE id = ?", [job.id]
+    );
+    job.materials_status = 'submitted';
+    submitted = true;
   }
-  return { moved, charge_changed: chargeChanged, invoice_action: invoice.action, invoice_id: invoice.id || null, invoice_error: invoiceError, delivery };
+
+  // Nothing goes to the customer from here: the office confirms first (see confirmAndSend).
+  return {
+    moved, charge_changed: chargeChanged, submitted,
+    invoice_action: invoice.action, invoice_id: invoice.id || null, invoice_error: invoiceError,
+  };
+}
+
+/**
+ * The office has checked the record (and called the technician, if it wanted to): issue the bill and send it.
+ * Asking again for a bill already issued just sends it once more.
+ */
+async function confirmAndSend(conn, { businessId, user, job, baseUrl }) {
+  let existing = await findInvoice(conn, job.id);
+  if (!existing || existing.status === 'draft') {
+    await conn.beginTransaction();
+    try {
+      await syncInvoice(conn, { businessId, user, job, issue: true });
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback().catch(() => {});
+      throw err;
+    }
+    existing = await findInvoice(conn, job.id);
+  }
+  if (!existing || existing.status === 'draft') {
+    throw new MaterialsError('There are no items on this installation to bill yet', 'nothing_to_bill');
+  }
+
+  await conn.query(
+    "UPDATE installations SET materials_status = 'confirmed', materials_confirmed_at = NOW(), materials_confirmed_by = ? WHERE id = ?",
+    [user?.id || null, job.id]
+  );
+  job.materials_status = 'confirmed';
+
+  const delivery = await sendInvoice(conn, { businessId, user, documentId: existing.id, baseUrl, force: true });
+  return { invoice_id: existing.id, doc_no: existing.doc_no, ...delivery };
 }
 
 /**
@@ -371,4 +435,4 @@ async function setBillType(conn, { businessId, user, job, billType, showGst, ser
   return { invoice_action: invoice.action, invoice_id: invoice.id || existing?.id || null };
 }
 
-module.exports = { MaterialsError, setBillType, ensureSchema, vanFor, netUsed, findInvoice, state, syncInvoice, sendInvoice, setMaterials };
+module.exports = { MaterialsError, confirmAndSend, setBillType, ensureSchema, vanFor, netUsed, findInvoice, state, syncInvoice, sendInvoice, setMaterials };

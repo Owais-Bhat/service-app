@@ -398,6 +398,7 @@ function startGlobalNotifications() {
           : msg.subject === 'employee_clock_out' ? 'alert'
           : msg.subject === 'device_followup_reminder' ? 'alert'
           : msg.subject === 'sla_breach' ? 'alert'
+          : msg.subject === 'installation_items_submitted' ? 'alert'
           : 'info',
     });
   });

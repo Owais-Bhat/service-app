@@ -223,6 +223,8 @@ function rowHtml(r) {
         <select class="in2-state at2-chip ${chip.cls}" data-state="${esc(r.id)}" title="Change status">
           ${STATES.map(st => `<option value="${st.key}"${st.key === r.state ? ' selected' : ''}>${st.label}</option>`).join('')}
         </select>
+        ${r.materials_status === 'submitted' ? '<div><span class="at2-chip warn" title="The technician has submitted the items — open it, check and confirm">Items to check</span></div>' : ''}
+        ${r.materials_status === 'confirmed' ? '<div><span class="at2-chip ok" title="Checked; the bill was issued">Bill confirmed</span></div>' : ''}
       </td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.address || '')}">${esc(r.address || r.location || '—')}</td>
       <td style="white-space:nowrap">

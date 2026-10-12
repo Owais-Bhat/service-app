@@ -101,16 +101,32 @@ test('the technician sees what is in his van — items and quantities, no money'
   assert.ok(!hasMoney(r.body.items), 'no rate or cost on an item');
 });
 
-test('submitting takes the items from his van and makes the customer a bill he cannot see the amount of', { skip }, async () => {
+test('submitting takes the items from his van and keeps a DRAFT bill — nothing is sent, and he cannot see the amount', { skip }, async () => {
   const r = await put([{ item_id: item.id, quantity: 2 }]);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(await held(van.id), 4, 'two left his van');
   assert.equal(r.body.items.find((i) => i.item_id === item.id).on_job, 2);
-  assert.ok(r.body.invoice?.doc_no, 'a bill exists');
-  assert.equal(r.body.invoice.status, 'issued');
+  assert.ok(r.body.invoice, 'a bill exists (as a draft, so it has no number yet)');
+  assert.equal(r.body.invoice.status, 'draft', 'not issued until the office confirms');
+  assert.equal(r.body.invoice.sent, false, 'and nothing is sent to the customer');
   assert.equal(r.body.invoice.total_paise, undefined, 'the technician is not told the total');
   assert.equal(r.body.invoice.lines, undefined);
-  assert.equal(r.body.saved.bill_sent, false, 'WhatsApp is not set up in the test database, so it is reported unsent');
+  assert.equal(r.body.materials_status, 'submitted');
+  assert.equal(r.body.saved.submitted, true);
+
+  // The office is alerted: a stored notification for admins, with the line the browser speaks.
+  let note;
+  for (let i = 0; i < 20 && !note; i += 1) {
+    const [rows] = await db.query(
+      "SELECT audience_role, title, data FROM notifications WHERE subject = 'installation_items_submitted' ORDER BY created_at DESC LIMIT 1"
+    );
+    if (rows[0] && JSON.stringify(rows[0].data).includes(inst)) note = rows[0];
+    else await new Promise((res) => setTimeout(res, 100));
+  }
+  assert.ok(note, 'the office was told');
+  assert.equal(note.audience_role, 'admin');
+  const payload = typeof note.data === 'string' ? JSON.parse(note.data) : note.data;
+  assert.match(payload.voice, /ZZ Install Tech has submitted the installation items for ZZ Install Customer. Please check./);
 
   const office = await call('GET', `/installations/${inst}/materials`);
   invoiceId = office.body.invoice.id;
@@ -175,7 +191,7 @@ test('the office decides the kind of bill; the bill is corrected to match, and t
   const nonGst = await kind({ bill_type: 'non_gst', show_gst: true });
   assert.equal(nonGst.status, 200, JSON.stringify(nonGst.body));
   assert.equal(nonGst.body.bill.type, 'non_gst');
-  assert.equal(nonGst.body.saved.invoice_action, 'revised');
+  assert.equal(nonGst.body.saved.invoice_action, 'drafted');
   assert.equal(await total(), 450000, 'no tax charged on a non-GST bill');
 
   const serviceFree = await kind({ bill_type: 'service', service_gst: false });
@@ -216,12 +232,41 @@ test('a technician cannot read the customer rates through the job summary either
   for (const l of s.body.material_lines) assert.equal(l.sell_rate_paise, undefined);
 });
 
-test('sending the bill is the office’s; the technician is refused', { skip }, async () => {
+test('the office confirms: the bill is issued and sent, the technician is then locked out, the office can still correct it', { skip }, async () => {
+  assert.equal((await call('POST', `/installations/${inst}/confirm`, {}, techToken)).status, 403, 'only the office confirms');
   assert.equal((await call('POST', `/installations/${inst}/send-invoice`, {}, techToken)).status, 403);
-  const r = await call('POST', `/installations/${inst}/send-invoice`, {});
+
+  const before = await call('GET', `/installations/${inst}/materials`);
+  assert.equal(before.body.invoice.status, 'draft');
+  assert.equal(before.body.materials_status, 'submitted');
+
+  const r = await call('POST', `/installations/${inst}/confirm`, {});
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.invoice_id, invoiceId);
   assert.equal(r.body.sent, false); // no WhatsApp in the test database
+  assert.equal(r.body.state.invoice.status, 'issued');
+  assert.ok(r.body.state.invoice.doc_no, 'it has a number now');
+  assert.equal(r.body.state.materials_status, 'confirmed');
+
+  // The technician can no longer change it...
+  const tech = await put([{ item_id: item.id, quantity: 3 }]);
+  assert.equal(tech.status, 409);
+  assert.equal(tech.body.code, 'confirmed');
+  const view = await call('GET', `/installations/${inst}/materials`, null, techToken);
+  assert.equal(view.body.locked, true);
+
+  // ...the office can: the issued bill is corrected, and still not sent until the office says so.
+  const total = r.body.state.invoice.total_paise;
+  const office = await call('PUT', `/installations/${inst}/materials`, { lines: [{ item_id: item.id, quantity: 2 }], installation_charge: 2000 });
+  assert.equal(office.status, 200, JSON.stringify(office.body));
+  assert.equal(office.body.invoice.id, invoiceId);
+  assert.ok(office.body.invoice.total_paise > total, 'one more camera on the bill');
+  assert.equal(office.body.materials_status, 'confirmed', 'the office editing does not put it back to waiting');
+
+  // Asked again, it simply sends once more.
+  const again = await call('POST', `/installations/${inst}/send-invoice`, {});
+  assert.equal(again.status, 200);
+  assert.equal(again.body.invoice_id, invoiceId);
 });
 
 test('once the customer has paid, the technician can no longer change it', { skip }, async () => {
@@ -301,6 +346,7 @@ test.after(async () => {
     }
     for (const id of made.profiles) await db.query('DELETE FROM profiles WHERE id = ?', [id]);
     await db.query("DELETE FROM audit_log WHERE action LIKE 'installation.%' OR action LIKE 'job.materials%'").catch(() => {});
+    await db.query("DELETE FROM notifications WHERE subject = 'installation_items_submitted' AND data LIKE ?", [`%${inst}%`]).catch(() => {});
     if (businessBefore) {
       await db.query('UPDATE businesses SET state_code = ?, state_name = ?, setup_complete = ? WHERE id = ?',
         [businessBefore.state_code, businessBefore.state_name, businessBefore.setup_complete, businessBefore.id]);

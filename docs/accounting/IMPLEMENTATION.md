@@ -839,3 +839,17 @@ customer bill" there are three buttons: GST bill (tax charged), Non-GST bill (no
 customer to see only) and Service bill (GST optional via "Charge GST"). It is stored on the installation (`bill_type`,
 `show_gst`, `service_gst`; NULL = GST bill). Choosing before the technician submits sets how the first bill is made; choosing
 afterwards corrects the existing unpaid bill and sends it again. `PUT /api/installations/:id/bill-type`, office only.
+
+**Confirmed by the office before anything goes to the customer.** The technician's "Submit to office" does not send a bill:
+
+1. It moves the items out of his van and keeps a **draft** invoice (nothing posted to the books, nothing sent).
+2. The office gets a pop-up and a spoken alert ("<technician> has submitted the installation items for <customer>.
+   Please check.") — notification subject `installation_items_submitted`, the line is carried in `data.voice`. The job shows
+   an "Items to check" chip in Installations.
+3. The technician can still change it until the office confirms.
+4. The office opens Installations → job → "Items used & customer bill", checks (calls the technician if it wants to), and
+   presses **Confirm & send bill to customer**: the invoice is issued and sent by WhatsApp, and the record is marked
+   confirmed (`installations.materials_status`: NULL → submitted → confirmed). From then on the technician cannot change it.
+   The office can still correct an issued bill; it is sent again only when the office presses send.
+
+`POST /api/installations/:id/confirm` (also reachable as `/send-invoice`), office only.

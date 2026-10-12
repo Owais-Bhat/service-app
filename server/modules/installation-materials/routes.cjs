@@ -76,26 +76,30 @@ function mountInstallationMaterials({ app, getConn, authenticateToken, permissio
         actor: req.user, action: 'installation.materials_set', entityType: 'installation', entityId: job.id,
         after: { lines: req.body.lines.length, invoice: out.invoice_action }, ip: req.ip,
       });
-      // The office should know what went on the job, whoever recorded it.
-      if (recordNotification) {
-        recordNotification({
-          subject: 'installation_materials',
-          title: '🧰 Items used on an installation',
-          body: `${job.employee_name || 'Technician'} — ${job.full_name || 'Customer'} (${job.ticket_no || ''}): ${out.moved} item${out.moved === 1 ? '' : 's'} ${out.invoice_action === 'revised' ? 'changed' : 'recorded'}`,
-          audience: { role: 'admin' },
-          data: { installation_id: job.id },
-        });
-      }
+    }
+    // The technician's record is what the office has to check: a pop-up and a spoken alert, until it is confirmed.
+    if (out.submitted && recordNotification) {
+      const who = job.employee_name || 'The technician';
+      const customer = job.full_name || 'the customer';
+      recordNotification({
+        subject: 'installation_items_submitted',
+        title: '🧰 Installation items submitted — please check',
+        body: `${who} recorded the items for ${customer} (${job.ticket_no || ''}). Check it, then confirm to send the bill.`,
+        audience: { role: 'admin' },
+        data: {
+          installation_id: job.id, ticket_no: job.ticket_no,
+          voice: `${who} has submitted the installation items for ${customer}. Please check.`,
+        },
+      });
     }
 
     // The same answer as a GET, so the screen redraws from one place — and no money for those who may not see it.
     const fresh = await svc.state(conn, { businessId, job, moneyVisible: await moneyVisible(req) });
     res.json({
       ...fresh,
-      saved: { moved: out.moved, charge_changed: out.charge_changed, bill_sent: !!out.delivery?.sent },
+      saved: { moved: out.moved, charge_changed: out.charge_changed, submitted: out.submitted },
       // The office needs the reason; the technician needs to know only that the office must look.
       problem: out.invoice_error ? (await moneyVisible(req) ? out.invoice_error : 'The bill could not be made — the office has been told') : null,
-      bill_error: out.delivery && !out.delivery.sent && (await moneyVisible(req)) ? out.delivery.error : null,
     });
   }));
 
@@ -115,43 +119,29 @@ function mountInstallationMaterials({ app, getConn, authenticateToken, permissio
       after: { bill_type: job.bill_type, show_gst: job.show_gst, service_gst: job.service_gst, invoice: out.invoice_action }, ip: req.ip,
     });
 
-    // A corrected bill goes to the customer again.
-    let delivery = null;
-    if (out.invoice_id && ['created', 'revised'].includes(out.invoice_action)) {
-      delivery = await svc.sendInvoice(conn, { businessId, user: req.user, documentId: out.invoice_id, baseUrl: baseUrl(req), force: true });
-    }
+    // The corrected bill is not sent from here; the office sends it when it is ready.
     const fresh = await svc.state(conn, { businessId, job, moneyVisible: true });
-    res.json({ ...fresh, saved: { invoice_action: out.invoice_action, bill_sent: !!delivery?.sent }, bill_error: delivery && !delivery.sent ? delivery.error : null });
+    res.json({ ...fresh, saved: { invoice_action: out.invoice_action } });
   }));
 
-  // The office: make the bill if it does not exist yet, and send it (again) to the customer.
-  app.post('/api/installations/:id/send-invoice', authenticateToken, handle(async (req, res, conn) => {
+  // The office has checked the record: issue the bill and send it to the customer. Asked again for a bill already
+  // issued, it sends it once more. (send-invoice is the same thing under its older name.)
+  const confirm = handle(async (req, res, conn) => {
     await ready;
     const businessId = await defaultBusinessId(conn);
     const { job, manager } = await authorise(req, conn);
-    if (!manager) return res.status(403).json({ error: 'Only the office can send the bill' });
+    if (!manager) return res.status(403).json({ error: 'Only the office can confirm and send the bill' });
 
-    let invoice = await svc.findInvoice(conn, job.id);
-    if (!invoice) {
-      await conn.beginTransaction();
-      try {
-        await svc.syncInvoice(conn, { businessId, user: req.user, job });
-        await conn.commit();
-      } catch (err) {
-        await conn.rollback().catch(() => {});
-        throw err;
-      }
-      invoice = await svc.findInvoice(conn, job.id);
-    }
-    if (!invoice) return res.status(409).json({ error: 'There are no items on this installation to bill yet' });
-
-    const delivery = await svc.sendInvoice(conn, { businessId, user: req.user, documentId: invoice.id, baseUrl: baseUrl(req), force: true });
+    const out = await svc.confirmAndSend(conn, { businessId, user: req.user, job, baseUrl: baseUrl(req) });
     audit.record({
-      actor: req.user, action: 'installation.invoice_send', entityType: 'sales_document', entityId: invoice.id,
-      after: { sent: delivery.sent }, ip: req.ip,
+      actor: req.user, action: 'installation.invoice_send', entityType: 'sales_document', entityId: out.invoice_id,
+      after: { sent: out.sent }, ip: req.ip,
     });
-    res.json({ invoice_id: invoice.id, doc_no: invoice.doc_no, ...delivery });
-  }));
+    const fresh = await svc.state(conn, { businessId, job, moneyVisible: true });
+    res.json({ ...out, state: fresh });
+  });
+  app.post('/api/installations/:id/confirm', authenticateToken, confirm);
+  app.post('/api/installations/:id/send-invoice', authenticateToken, confirm);
 
   console.log('[installation-materials] routes mounted');
 }
