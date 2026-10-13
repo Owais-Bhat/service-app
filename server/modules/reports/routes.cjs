@@ -3,6 +3,7 @@
 // Stage 5 API. Every route is read-only and gated on `report.financial`.
 
 const service = require('./service.cjs');
+const partyRecord = require('./party-record.cjs');
 const { defaultBusinessId } = require('../ledger/schema.cjs');
 
 function mountReports({ app, getConn, authenticateToken, permissions }) {
@@ -68,6 +69,32 @@ function mountReports({ app, getConn, authenticateToken, permissions }) {
         const out = await service.partyStatement(conn, businessId, { partyId: String(req.query.party_id), ...(await period(req, conn, businessId)) });
         if (!out) throw Object.assign(new Error('No such party'), { status: 404 });
         res.json(out);
+    });
+
+    // A customer's or supplier's whole record: what they bought and when, what they paid, jobs, the statement.
+    // `all=1` means from the beginning; otherwise the period asked for (default: this financial year).
+    const recordPeriod = async (req, conn, businessId) => (req.query.all === '1'
+        ? { from: '2000-01-01', to: date(req.query.to, service.today(), 'To') }
+        : period(req, conn, businessId));
+
+    get('party-record', async (req, res, conn, businessId) => {
+        if (!req.query.party_id) throw bad('Choose a customer or supplier');
+        const out = await partyRecord.collect(conn, businessId, String(req.query.party_id), await recordPeriod(req, conn, businessId));
+        if (!out) throw Object.assign(new Error('No such party'), { status: 404 });
+        res.json(out);
+    });
+
+    get('party-record.pdf', async (req, res, conn, businessId) => {
+        if (!req.query.party_id) throw bad('Choose a customer or supplier');
+        const record = await partyRecord.collect(conn, businessId, String(req.query.party_id), await recordPeriod(req, conn, businessId));
+        if (!record) throw Object.assign(new Error('No such party'), { status: 404 });
+        const [[business]] = await conn.query('SELECT * FROM businesses WHERE id = ? LIMIT 1', [businessId]);
+        const pdf = await partyRecord.renderPdf(record, business || {});
+        const name = String(record.party.display_name || 'record').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'record';
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="record-${name}-${record.period.from}-to-${record.period.to}.pdf"`);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(pdf);
     });
 
     get('gst/summary', async (req, res, conn, businessId) => {

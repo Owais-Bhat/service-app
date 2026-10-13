@@ -6,6 +6,7 @@
 // last tab, Health Check, sets the books against themselves and says plainly
 // where they disagree.
 import { toast, exportToCSV } from '../utils.js';
+import { openPartyRecord } from '../party-record.js';
 import { ICONS } from '../icons.js';
 import { sendWhatsapp } from './whatsapp-send.js';
 
@@ -348,7 +349,8 @@ async function statement(body) {
   if (!parties.length) parties = await api('/parties?limit=5000');
   if (!state.party && parties[0]) state.party = parties[0].id;
   const picker = `<select id="rp-party" style="padding:7px 10px;border-radius:9px;min-width:240px">
-    ${parties.map(p => `<option value="${esc(p.id)}"${p.id === state.party ? ' selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select>`;
+    ${parties.map(p => `<option value="${esc(p.id)}"${p.id === state.party ? ' selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select>
+    <button class="btn btn-secondary btn-sm" id="rp-record" title="What they bought, paid, jobs and the statement — for this period">Full record (PDF)</button>`;
   if (!state.party) { body.innerHTML = '<div class="at2-empty">No customers or suppliers yet.</div>'; return; }
   const r = await api(`/reports/party-statement?party_id=${state.party}&from=${state.from}&to=${state.to}`);
   const dr = (v) => (v >= 0 ? `${rupees(v)} Dr` : `${rupees(-v)} Cr`);
@@ -358,6 +360,8 @@ async function statement(body) {
       ...r.rows.map(x => [day(x.date), `<code>${esc(x.journal_no)}</code>`, esc(x.narration || ''), x.debit_paise ? rupees(x.debit_paise) : '', x.credit_paise ? rupees(x.credit_paise) : '', dr(x.balance_paise)]),
     ], { right: [3, 4, 5], foot: ['', '', '<i>Closing balance</i>', rupees(r.totals.debit_paise), rupees(r.totals.credit_paise), dr(r.closing_paise)] })}`;
   bind(body);
+  const recordBtn = body.querySelector('#rp-record');
+  if (recordBtn) recordBtn.onclick = () => openPartyRecord({ partyId: state.party, from: state.from, to: state.to });
   setExport(`statement-${r.party.display_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${state.from}-to-${state.to}.csv`, r.rows.map(x => ({
     Date: x.date, Journal: x.journal_no, Narration: x.narration || '', Debit: plain(x.debit_paise), Credit: plain(x.credit_paise), Balance: plain(x.balance_paise),
   })));

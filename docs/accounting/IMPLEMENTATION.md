@@ -876,3 +876,12 @@ items only.
 *Delete selected*). Inactive items are shown with "Show inactive items (N)". `POST /api/inventory/items/bulk-active`
 `{ ids, active }`; needs `item.manage`; audited as `item.bulk_activate` / `item.bulk_hide`. Nothing about stock or the books
 changes — an inactive item is only out of the lists and pickers.
+
+## A customer's or supplier's full record (PDF)
+
+Customers & Suppliers → open a party → **Full record (PDF)** (from the beginning), or Reports → Party Statement → **Full
+record (PDF)** (the period chosen above). One A4 PDF with: who they are and their address, a summary (sales, received,
+purchases, jobs, what is owed), every bill with its items and rates, item totals, payments, service and installation jobs
+(matched on phone number), the statement of account with running balance, and earlier records from the old program.
+`GET /api/reports/party-record.pdf?party_id=…&from=…&to=…` (or `&all=1`); the same data as JSON at `/party-record`.
+Needs `report.financial`.

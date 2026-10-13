@@ -6,6 +6,7 @@
 // credit terms, addresses, and a balance read straight from the ledger rather
 // than from a stored field that could disagree with the accounts.
 import { toast, exportToCSV } from '../utils.js';
+import { openPartyRecord } from '../party-record.js';
 import { ICONS } from '../icons.js';
 
 const API = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
@@ -639,6 +640,7 @@ async function openPartyDetail(container, id) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="pd-cancel">Close</button>
+        <button class="btn btn-secondary" id="pd-record" title="Everything about them on paper: what they bought, paid, jobs, statement">Full record (PDF)</button>
         <button class="btn btn-primary" id="pd-edit">Edit</button>
       </div>
     </div>`;
@@ -649,6 +651,7 @@ async function openPartyDetail(container, id) {
   overlay.querySelector('#pd-cancel').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   overlay.querySelector('#pd-edit').onclick = () => { close(); openPartyModal(container, party); };
+  overlay.querySelector('#pd-record').onclick = () => openPartyRecord({ partyId: party.id, all: true });
   overlay.querySelectorAll('[data-past]').forEach(tr => { tr.onclick = () => past.open(tr.dataset.past); });
 }
 
