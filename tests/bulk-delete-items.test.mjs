@@ -133,6 +133,13 @@ test('confirmed: the clean items go, the used one is hidden, and the opening sto
   const tb = (await call('GET', '/accounting/trial-balance?from=2026-04-01&to=2027-03-31')).body;
   assert.equal(tb.balanced, true);
 
+  // The Stock screen can tell a hidden item from a live one, and the deleted ones are not there at all.
+  const valuation = (await call('GET', '/stock/valuation')).body;
+  assert.equal(valuation.items.find((i) => i.id === used.id)?.active, false);
+  assert.equal(valuation.items.find((i) => i.id === plain.id), undefined);
+  assert.equal(valuation.items.find((i) => i.id === opening.id), undefined);
+  assert.deepEqual(valuation.discrepancies, []);
+
   // Asked again, there is nothing left to delete.
   const again = await call('POST', '/inventory/items/bulk-delete', { ids: [plain.id, opening.id], dry_run: false, confirm: 'DELETE' });
   assert.equal(again.status, 200);

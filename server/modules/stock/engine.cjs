@@ -248,12 +248,12 @@ async function locationQuantity(conn, itemId, locationId, { includeUnassigned = 
 // count.
 async function locationStock(conn, locationId, { includeUnassigned = false } = {}) {
     const [rows] = await conn.query(
-        `SELECT i.id, i.name, i.sku, i.unit, i.base_unit, i.avg_cost_paise,
+        `SELECT i.id, i.name, i.sku, i.unit, i.base_unit, i.avg_cost_paise, i.active,
                 COALESCE(SUM(m.quantity), 0) AS held_qty
            FROM inventory_movements m
            JOIN inventory_items i ON i.id = m.item_id
           WHERE m.location_id = ?${includeUnassigned ? ' OR m.location_id IS NULL' : ''}
-          GROUP BY i.id, i.name, i.sku, i.unit, i.base_unit, i.avg_cost_paise
+          GROUP BY i.id, i.name, i.sku, i.unit, i.base_unit, i.avg_cost_paise, i.active
          HAVING held_qty <> 0
           ORDER BY i.name`,
         [locationId]
@@ -380,7 +380,7 @@ async function receiveCustomerDevice(conn, {
 // rather than simply agreeing with them by construction.
 async function valuation(conn, { businessId = null } = {}) {
     const [items] = await conn.query(
-        `SELECT i.id, i.name, i.sku, i.unit, i.base_unit, i.quantity, i.avg_cost_paise, i.stock_value_paise,
+        `SELECT i.id, i.name, i.sku, i.unit, i.base_unit, i.quantity, i.avg_cost_paise, i.stock_value_paise, i.active,
                 COALESCE(led.qty, 0) AS ledger_qty,
                 COALESCE(led.value, 0) AS ledger_value_paise
            FROM inventory_items i
@@ -399,6 +399,7 @@ async function valuation(conn, { businessId = null } = {}) {
         const ledgerQty = qty(i.ledger_qty);
         return {
             id: i.id, name: i.name, sku: i.sku, unit: i.base_unit || i.unit,
+            active: !!i.active,
             quantity: onHand,
             ledger_quantity: ledgerQty,
             quantity_matches: onHand === ledgerQty,

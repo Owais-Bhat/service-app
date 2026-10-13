@@ -865,3 +865,9 @@ first (`POST /api/inventory/items/bulk-delete`, default), and nothing happens un
 - **Hidden, not deleted:** items that bills, purchases, jobs or counts still refer to are made inactive (Items → "Show
   inactive items" brings them back). Deleting them would rewrite history those documents and journals point at.
 - Needs `item.manage` and `stock.adjust`; audited as `item.bulk_delete`. Take a Backup first.
+
+**What the Stock screen lists.** On Hand and the store/van view show only *live* items that actually hold stock. Items
+with no stock, and items that were hidden (made inactive, e.g. by a bulk delete because bills refer to them), stay out of
+the list unless "Also show items with no stock and hidden items" is ticked; a note says how much stock value they still
+carry in the accounts, so the total never quietly disagrees with the books. Pickers (Transfer, Adjust, Give…) offer live
+items only.

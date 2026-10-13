@@ -53,7 +53,7 @@ const SERIAL_CHIP = {
   customer_owned: ['warn', "Customer's own"],
 };
 
-const state = { tab: 'onhand', q: '', locationId: '' };
+const state = { tab: 'onhand', q: '', locationId: '', showAll: false };
 let valuation = null;
 let locations = [];
 let locationItems = [];
@@ -65,7 +65,7 @@ export async function renderStockTab(container) {
   container.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
   try {
     locations = await api('GET', '/stock/locations');
-    items = await api('GET', '/inventory/items?all=1').catch(() => []);
+    items = (await api('GET', '/inventory/items?all=1').catch(() => [])).filter(i => i.active);
     state.locationId = state.locationId || (locations.find(l => l.is_default)?.id || '');
     await loadTab();
   } catch (err) {
@@ -128,6 +128,7 @@ function paint(container) {
             </select>
             <button class="btn btn-secondary btn-sm" id="st-new-location">${ICONS.plus}<span>New location</span></button>` : ''}
           ${['onhand', 'serials'].includes(state.tab) ? `<input type="search" id="st-q" class="at2-search" placeholder="${state.tab === 'serials' ? 'Serial number' : 'Item name or SKU'}" value="${esc(state.q)}">` : ''}
+          ${['onhand', 'locations'].includes(state.tab) ? `<label class="at2-check"><input type="checkbox" id="st-showall" ${state.showAll ? 'checked' : ''}> Also show items with no stock and hidden items</label>` : ''}
           <span class="at2-scope">${esc(scopeLine())}</span>
         </div>
         <div class="at2-body" id="st-body"></div>
@@ -137,6 +138,9 @@ function paint(container) {
   container.querySelectorAll('[data-tab]').forEach(btn => {
     btn.onclick = async () => { state.tab = btn.dataset.tab; await loadTab(); paint(container); };
   });
+
+  const showAll = container.querySelector('#st-showall');
+  if (showAll) showAll.onchange = () => { state.showAll = showAll.checked; paintBody(container); };
 
   const search = container.querySelector('#st-q');
   if (search) {
@@ -189,7 +193,7 @@ function kpiRow() {
       <div><div class="at2-kpi-label">${esc(label)}</div><div class="at2-kpi-value tone-${tone}">${value}</div></div>
     </div>`;
 
-  const withStock = (valuation?.items || []).filter(i => i.quantity > 0).length;
+  const withStock = (valuation?.items || []).filter(i => i.active !== false && i.quantity > 0).length;
   const low = items.filter(i => Number(i.min_stock) > 0 && Number(i.quantity) <= Number(i.min_stock)).length;
   const vans = locations.filter(l => l.kind === 'van').length;
   const discrepancies = valuation?.discrepancies?.length || 0;
@@ -214,11 +218,15 @@ function paintBody(container) {
 
 function paintOnHand(container, body) {
   const q = state.q.toLowerCase();
-  const rows = (valuation?.items || [])
+  const all = (valuation?.items || [])
     .filter(i => !q || i.name.toLowerCase().includes(q) || (i.sku || '').toLowerCase().includes(q));
+  // What is on the shelf now: live items that hold something. Hidden items and empty ones only on request.
+  const rows = state.showAll ? all : all.filter(i => i.active !== false && Number(i.quantity) !== 0);
+  const unseen = all.length - rows.length;
+  const unseenValue = all.filter(i => !rows.includes(i)).reduce((s, i) => s + Number(i.value_paise || 0), 0);
 
   if (!rows.length) {
-    body.innerHTML = '<div class="at2-empty">Nothing in stock yet. Receive a delivery to put something on the shelf.</div>';
+    body.innerHTML = `<div class="at2-empty">Nothing in stock yet. Add an item in Items with its opening stock, or receive a purchase, and it will show here.${unseen ? ` <br><small>${unseen} item${unseen === 1 ? ' is' : 's are'} not shown (no stock, or hidden) — tick "Also show items with no stock and hidden items" to see ${unseen === 1 ? 'it' : 'them'}.</small>` : ''}</div>`;
     return;
   }
 
@@ -246,10 +254,11 @@ function paintOnHand(container, body) {
         ${canSeeCost ? `
         <tr style="border-top:2px solid var(--border)">
           <td colspan="4" style="text-align:right"><b>Total</b></td>
-          <td style="text-align:right"><b style="color:var(--primary)">${rupees(valuation.total_value_paise)}</b></td><td></td>
+          <td style="text-align:right"><b style="color:var(--primary)">${rupees(rows.reduce((s, i) => s + Number(i.value_paise || 0), 0))}</b></td><td></td>
         </tr>` : ''}
       </tbody>
     </table></div>
+    ${!state.showAll && unseenValue ? `<p class="at2-note">${unseen} hidden or empty item${unseen === 1 ? '' : 's'} still hold${unseen === 1 ? 's' : ''} stock worth ${rupees(unseenValue)}, which is in the accounts but not listed above.</p>` : ''}
     <p class="at2-note">${esc(valuation.method ? `Valuation method: ${valuation.method}. ` : '')}Reservations do not reduce this — they reduce what is available to promise.</p>`;
 
   body.querySelectorAll('[data-avail]').forEach(btn => {
@@ -264,18 +273,19 @@ function paintOnHand(container, body) {
 
 function paintLocation(container, body) {
   const location = locations.find(l => l.id === state.locationId);
-  if (!locationItems.length) {
+  const heldHere = state.showAll ? locationItems : locationItems.filter(r => Number(r.active) !== 0);
+  if (!heldHere.length) {
     body.innerHTML = `<div class="at2-empty">${esc(location?.name || 'This location')} is holding nothing right now.</div>`;
     return;
   }
-  const total = locationItems.reduce((s, r) => s + Number(r.value_paise), 0);
+  const total = heldHere.reduce((s, r) => s + Number(r.value_paise), 0);
 
   body.innerHTML = `
     ${location && !location.owned ? '<p class="at2-note" style="margin-top:0">These belong to customers. They are tracked here and counted in no valuation of ours.</p>' : ''}
     <div class="table-wrap"><table class="at2-tbl">
       <thead><tr><th>Item</th><th style="text-align:right">Held</th>${canSeeCost && location?.owned ? '<th style="text-align:right">Value</th>' : ''}</tr></thead>
       <tbody>
-        ${locationItems.map(r => `
+        ${heldHere.map(r => `
           <tr>
             <td><b>${esc(r.name)}</b>${r.sku ? `<div style="font-size:0.72rem;color:var(--text-dim)">${esc(r.sku)}</div>` : ''}</td>
             <td style="text-align:right"><b>${r.held_qty}</b> <small style="color:var(--text-dim)">${esc(r.base_unit || r.unit || '')}</small></td>
@@ -634,7 +644,7 @@ function openAdjustModal(container) {
       const name = picker.item()?.name || 'Item';
       toast(`${name}: ${Number(made.balance_qty) - Number(made.quantity)} → ${Number(made.balance_qty)}`, 'success');
       closeAdjust();
-      items = await api('GET', '/inventory/items?all=1').catch(() => items);
+      items = (await api('GET', '/inventory/items?all=1').catch(() => items)).filter(i => i.active);
       await loadTab();
       paint(container);
     } catch (err) {
