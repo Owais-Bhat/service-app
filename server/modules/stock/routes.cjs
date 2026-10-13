@@ -367,6 +367,26 @@ function mountStock({ app, getConn, authenticateToken, permissions, audit }) {
     });
     app.post('/api/stock/import', authenticateToken, requireCap('item.manage'), requireCap('stock.adjust'), importHandler);
 
+    // Make many items active (in the lists and pickers again) or inactive (hidden), at one go.
+    app.post('/api/inventory/items/bulk-active', authenticateToken, requireCap('item.manage'), handle(async (req, res, conn) => {
+        const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).filter(Boolean))];
+        if (!ids.length) return res.status(400).json({ error: 'Choose the items first' });
+        if (ids.length > 20000) return res.status(400).json({ error: 'Too many items at once' });
+        if (typeof req.body?.active !== 'boolean') return res.status(400).json({ error: 'Say whether to activate or hide them' });
+
+        const active = req.body.active ? 1 : 0;
+        let changed = 0;
+        for (let i = 0; i < ids.length; i += 500) {
+            const [r] = await conn.query('UPDATE inventory_items SET active = ? WHERE id IN (?) AND active <> ?', [active, ids.slice(i, i + 500), active]);
+            changed += r.affectedRows;
+        }
+        audit.record({
+            actor: req.user, action: active ? 'item.bulk_activate' : 'item.bulk_hide', entityType: 'inventory_item', entityId: null,
+            after: { chosen: ids.length, changed }, ip: req.ip,
+        });
+        res.json({ active: !!active, chosen: ids.length, changed });
+    }));
+
     // Many items at once. Without `dry_run: false` it only says what would happen; the real thing also needs
     // `confirm: "DELETE"`. Items that bills, purchases, jobs or counts still point at are hidden, not deleted.
     app.post('/api/inventory/items/bulk-delete', authenticateToken, requireCap('item.manage'), requireCap('stock.adjust'), handle(async (req, res, conn) => {

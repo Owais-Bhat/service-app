@@ -871,3 +871,8 @@ with no stock, and items that were hidden (made inactive, e.g. by a bulk delete 
 the list unless "Also show items with no stock and hidden items" is ticked; a note says how much stock value they still
 carry in the accounts, so the total never quietly disagrees with the books. Pickers (Transfer, Adjust, Give…) offer live
 items only.
+
+**Activating or hiding many items at once.** Items → tick items → *Activate selected* / *Hide selected* (next to
+*Delete selected*). Inactive items are shown with "Show inactive items (N)". `POST /api/inventory/items/bulk-active`
+`{ ids, active }`; needs `item.manage`; audited as `item.bulk_activate` / `item.bulk_hide`. Nothing about stock or the books
+changes — an inactive item is only out of the lists and pickers.

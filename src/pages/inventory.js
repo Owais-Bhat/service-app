@@ -108,7 +108,7 @@ function paint(container) {
             </select>
           </div>
           <div class="form-group"><label>Search</label><input type="search" id="inv-q" placeholder="Item name or SKU…" value="${esc(state.q)}"></div>
-          <label class="at2-check"><input type="checkbox" id="inv-inactive" ${state.showInactive ? 'checked' : ''}> Show inactive items</label>
+          <label class="at2-check"><input type="checkbox" id="inv-inactive" ${state.showInactive ? 'checked' : ''}> Show inactive items (${items.filter(i => !i.active).length})</label>
         </div>
       </div>
 
@@ -162,7 +162,11 @@ function paintItems(container, body, list) {
       <div class="card-header">
         <span class="card-title">${state.tab === 'low' ? 'Items at or below minimum' : 'Items'}</span>
         <span class="at2-count">${list.length} item${list.length === 1 ? '' : 's'}</span>
-        <button class="btn btn-secondary btn-sm" id="inv-bulkdel" disabled style="margin-left:auto">Delete selected (0)</button>
+        <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" id="inv-bulkon" disabled>Activate selected (0)</button>
+          <button class="btn btn-secondary btn-sm" id="inv-bulkoff" disabled>Hide selected (0)</button>
+          <button class="btn btn-secondary btn-sm" id="inv-bulkdel" disabled>Delete selected (0)</button>
+        </span>
       </div>
       <div class="table-wrap"><table class="at2-tbl">
         <thead><tr>
@@ -223,13 +227,22 @@ function paintItems(container, body, list) {
 // Tick boxes and the "Delete selected" button.
 function wireBulkDelete(container, body, list) {
   const btn = body.querySelector('#inv-bulkdel');
+  const bulkOn = body.querySelector('#inv-bulkon');
+  const bulkOff = body.querySelector('#inv-bulkoff');
   const all = body.querySelector('#inv-selall');
-  if (!btn || !all) return;
+  if (!btn || !all || !bulkOn || !bulkOff) return;
   const shown = new Set(list.map(i => i.id));
   const refresh = () => {
     const n = [...selected].filter(id => shown.has(id)).length;
     btn.textContent = `Delete selected (${n})`;
     btn.disabled = n === 0;
+    const chosen = list.filter(i => selected.has(i.id));
+    const off = chosen.filter(i => !i.active).length;   // inactive now: can be activated
+    const on = chosen.length - off;                      // active now: can be hidden
+    bulkOn.textContent = `Activate selected (${off})`;
+    bulkOn.disabled = off === 0;
+    bulkOff.textContent = `Hide selected (${on})`;
+    bulkOff.disabled = on === 0;
     all.checked = list.length > 0 && n === list.length;
     all.indeterminate = n > 0 && n < list.length;
   };
@@ -242,6 +255,24 @@ function wireBulkDelete(container, body, list) {
     refresh();
   };
   btn.onclick = () => openBulkDelete(container, [...selected].filter(id => shown.has(id)));
+
+  // Activate or hide every ticked item that is not already so.
+  const setActive = async (active) => {
+    const ids = list.filter(i => selected.has(i.id) && !!i.active !== active).map(i => i.id);
+    if (!ids.length) return;
+    bulkOn.disabled = true; bulkOff.disabled = true;
+    try {
+      const out = await api('POST', '/inventory/items/bulk-active', { ids, active });
+      toast(`${out.changed} item${out.changed === 1 ? '' : 's'} ${active ? 'activated' : 'hidden'}`, 'success');
+      ids.forEach(id => selected.delete(id));
+      renderInventoryTab(container);
+    } catch (err) {
+      toast(err.message, 'error');
+      refresh();
+    }
+  };
+  bulkOn.onclick = () => setActive(true);
+  bulkOff.onclick = () => setActive(false);
   refresh();
 }
 

@@ -146,6 +146,35 @@ test('confirmed: the clean items go, the used one is hidden, and the opening sto
   assert.equal(again.body.deleted, 0);
 });
 
+test('many items can be hidden or made active again in one go', { skip }, async () => {
+  const mk = async (name) => {
+    const r = await call('POST', '/inventory/items', { name, unit: 'pcs', purchase_rate: 10, selling_rate: 15 });
+    made.items.push(r.body.id);
+    return r.body.id;
+  };
+  const a = await mk('ZZ Bulk Active A');
+  const b = await mk('ZZ Bulk Active B');
+  const activeOf = async (id) => Number((await exists(id)).active);
+
+  const hide = await call('POST', '/inventory/items/bulk-active', { ids: [a, b], active: false });
+  assert.equal(hide.status, 200, JSON.stringify(hide.body));
+  assert.equal(hide.body.changed, 2);
+  assert.equal(await activeOf(a), 0);
+  assert.equal(await activeOf(b), 0);
+
+  // Only those not already so are counted.
+  const one = await call('POST', '/inventory/items/bulk-active', { ids: [a], active: true });
+  assert.equal(one.body.changed, 1);
+  const both = await call('POST', '/inventory/items/bulk-active', { ids: [a, b], active: true });
+  assert.equal(both.body.changed, 1);
+  assert.equal(await activeOf(a), 1);
+  assert.equal(await activeOf(b), 1);
+
+  assert.equal((await call('POST', '/inventory/items/bulk-active', { ids: [a], active: 'yes' })).status, 400);
+  assert.equal((await call('POST', '/inventory/items/bulk-active', { ids: [], active: true })).status, 400);
+  assert.equal((await call('POST', '/inventory/items/bulk-active', { ids: [a], active: false }, employeeToken)).status, 403);
+});
+
 test.after(async () => {
   if (!db) return;
   try {
