@@ -3893,7 +3893,7 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
             <div id="pricing-section" style="display:${isResolving ? 'block' : 'none'};">
               <label style="font-weight:700; margin-bottom:8px; display:block;">Diagnose Issue & Add Services</label>
               ${(pricing || []).length === 0 ? `
-                <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services defined by Admin.</p>
+                <p style="font-size:0.8rem; color:var(--text-dim); padding:10px; background:var(--bg-soft); border-radius:10px;">No standard services have been set up yet. Add the work as your own line under <b>Items used</b> below, with your price.</p>
               ` : `
                 <div class="svc-search-row">
                   <div class="svc-search-input-wrap">
@@ -3905,11 +3905,6 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
                 <div id="svc-selected" style="display:none; margin-bottom:12px;"></div>
               `}
 
-              <div class="form-group">
-                <label>Additional Charges (Optional)</label>
-                <input type="number" id="extra-cost" placeholder="₹0" value="${inquiryRow?.extra_cost || ''}" style="margin-bottom:8px;"/>
-                <input type="text" id="extra-reason" placeholder="Reason for extra charge..." value="${escapeHtml(inquiryRow?.extra_cost_reason || '')}"/>
-              </div>
 
               <div class="form-group">
                 <label>Redeem Coupon</label>
@@ -3939,13 +3934,27 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
               </div>
 
               <div class="form-group">
-                <label>Items used <span style="color:var(--text-dim);font-weight:500;">(parts fitted on this job)</span></label>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                  <select id="bill-item-pick" style="flex:2;min-width:180px;"><option value="">Loading items…</option></select>
-                  <input type="number" id="bill-item-qty" min="0.01" step="0.01" value="1" placeholder="Qty" style="flex:0 0 90px;"/>
-                  <button type="button" class="btn btn-secondary btn-sm" id="bill-item-add">Add</button>
+                <label>Items used <span style="color:var(--text-dim);font-weight:500;">(parts fitted on this job — search, tap, and the price comes by itself)</span></label>
+                <div style="position:relative;">
+                  <input type="search" id="bill-item-search" placeholder="Search an item by name…" autocomplete="off" style="width:100%;"/>
+                  <div id="bill-item-results" class="svc-results" style="display:none;"></div>
                 </div>
                 <div id="bill-item-list" style="margin-top:10px;"></div>
+                <details style="margin-top:8px;">
+                  <summary style="cursor:pointer;font-size:0.82rem;font-weight:600;">Something not in the list? Add it with your own price</summary>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                    <input type="text" id="bill-custom-name" placeholder="What (e.g. Camera installation, extra cable)" style="flex:2;min-width:170px;"/>
+                    <input type="number" id="bill-custom-qty" min="0.01" step="0.01" value="1" placeholder="Qty" style="flex:0 0 80px;"/>
+                    <input type="number" id="bill-custom-rate" min="0" step="1" placeholder="Price ₹" style="flex:0 0 110px;"/>
+                    <button type="button" class="btn btn-secondary btn-sm" id="bill-custom-add">Add</button>
+                  </div>
+                </details>
+              </div>
+
+              <div class="form-group">
+                <label>Additional Charges (Optional)</label>
+                <input type="number" id="extra-cost" placeholder="₹0" value="${inquiryRow?.extra_cost || ''}" style="margin-bottom:8px;"/>
+                <input type="text" id="extra-reason" placeholder="Reason for extra charge..." value="${escapeHtml(inquiryRow?.extra_cost_reason || '')}"/>
               </div>
 
               <label style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;font-size:0.85rem;font-weight:600;">
@@ -4300,33 +4309,49 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
     };
 
     // ── Items used on this job ──────────────────────────
-    // The catalogue comes from Inventory; the technician picks quantities and
-    // the rate is the one admin set. Stock is adjusted server-side when the
-    // bill saves, so nothing moves until the job is actually billed.
+    // Search the catalogue, tap an item, and it goes on the bill at its selling price. The technician can change the
+    // quantity and the price on the line itself. Anything not in the catalogue can be typed in with its own price.
+    // Stock is adjusted server-side when the bill saves, so nothing moves until the job is actually billed.
     let billItems = [];
     let catalogue = [];
-    const itemPick = overlay.querySelector('#bill-item-pick');
-    const itemQty = overlay.querySelector('#bill-item-qty');
+    const itemSearch = overlay.querySelector('#bill-item-search');
+    const itemResults = overlay.querySelector('#bill-item-results');
     const itemList = overlay.querySelector('#bill-item-list');
 
     const renderBillItems = () => {
       if (!itemList) return;
       itemList.innerHTML = billItems.length
         ? billItems.map((it, idx) => `
-            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line,var(--border));border-radius:10px;margin-bottom:6px;">
-              <span style="flex:1;font-size:0.85rem;">${escapeHtml(it.name)}</span>
-              <span style="font-size:0.8rem;color:var(--text-dim);">${Number(it.quantity)} × ${inr(it.rate)}</span>
-              <b style="font-size:0.85rem;">${inr(Number(it.quantity) * Number(it.rate))}</b>
+            <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--line,var(--border));border-radius:10px;margin-bottom:6px;flex-wrap:wrap;">
+              <span style="flex:1 1 150px;font-size:0.85rem;">${escapeHtml(it.name)}${it.item_id ? '' : ' <small style="color:var(--text-dim);">(your own line)</small>'}</span>
+              <input type="number" data-qty-item="${idx}" min="0.01" step="0.01" value="${Number(it.quantity)}" style="width:70px;" title="Quantity"/>
+              <span style="font-size:0.8rem;color:var(--text-dim);">×</span>
+              <input type="number" data-rate-item="${idx}" min="0" step="1" value="${Number(it.rate)}" style="width:92px;" title="Price — you can change it"/>
+              <b data-amount-item="${idx}" style="font-size:0.85rem;min-width:70px;text-align:right;">${inr(Number(it.quantity) * Number(it.rate))}</b>
               <button type="button" class="btn btn-secondary btn-sm" data-rm-item="${idx}">✕</button>
             </div>`).join('')
         : '<small style="color:var(--text-dim);">No items added.</small>';
       itemList.querySelectorAll('[data-rm-item]').forEach(btn => {
         btn.onclick = () => { billItems.splice(Number(btn.dataset.rmItem), 1); renderBillItems(); calcTotal(); };
       });
+      // Editing a figure updates the line and the total in place, so the cursor stays where it was.
+      const edited = (attr, field) => itemList.querySelectorAll(`[${attr}]`).forEach(input => {
+        input.oninput = () => {
+          const idx = Number(input.getAttribute(attr));
+          const value = Number(input.value);
+          if (!billItems[idx]) return;
+          billItems[idx][field] = Number.isFinite(value) && value >= 0 ? value : 0;
+          const cell = itemList.querySelector(`[data-amount-item="${idx}"]`);
+          if (cell) cell.textContent = inr(Number(billItems[idx].quantity) * Number(billItems[idx].rate));
+          calcTotal();
+        };
+      });
+      edited('data-qty-item', 'quantity');
+      edited('data-rate-item', 'rate');
     };
 
     (async () => {
-      if (!itemPick) return;
+      if (!itemSearch) return;
       try {
         const [cat, existing] = await Promise.all([
           empApiGet('/inventory/items'),
@@ -4336,27 +4361,64 @@ function openTaskModal(taskId, inqId, currentStatus, onDone) {
         billItems = (Array.isArray(existing) ? existing : []).map(r => ({
           item_id: r.item_id, name: r.name, quantity: Number(r.quantity), rate: Number(r.rate),
         }));
-        itemPick.innerHTML = '<option value="">Select an item…</option>' + catalogue.map(i => `
-          <option value="${escapeHtml(i.id)}">${escapeHtml(i.name)} — ${inr(i.selling_rate)} (${Number(i.quantity)} left)</option>`).join('');
         renderBillItems();
         calcTotal();
       } catch {
-        itemPick.innerHTML = '<option value="">Items unavailable</option>';
+        itemSearch.placeholder = 'Items could not be loaded — you can still add your own line below';
       }
     })();
 
-    const addItemBtn = overlay.querySelector('#bill-item-add');
-    if (addItemBtn) addItemBtn.onclick = () => {
-      const chosen = catalogue.find(i => i.id === itemPick.value);
-      if (!chosen) return toast('Pick an item first', 'warning');
-      const quantity = Number(itemQty.value);
+    const closeItemResults = () => { if (itemResults) { itemResults.innerHTML = ''; itemResults.style.display = 'none'; } };
+    const addCatalogueItem = (item) => {
+      const existing = billItems.find(it => it.item_id === item.id);
+      if (existing) existing.quantity = Number(existing.quantity) + 1;
+      else billItems.push({ item_id: item.id, name: item.name, quantity: 1, rate: Number(item.selling_rate) || 0 });
+      if (Number(item.quantity) < (existing ? existing.quantity : 1)) {
+        toast(`Only ${Number(item.quantity)} ${item.unit || 'pcs'} in stock — recorded anyway`, 'warning');
+      }
+      itemSearch.value = '';
+      closeItemResults();
+      renderBillItems();
+      calcTotal();
+    };
+    const showItemResults = (q) => {
+      const words = q.split(/\s+/).filter(Boolean);
+      const hits = catalogue.filter(i => {
+        const hay = `${i.name} ${i.sku || ''} ${i.category || ''}`.toLowerCase();
+        return words.every(w => hay.includes(w));
+      }).slice(0, 40);
+      itemResults.innerHTML = hits.length
+        ? hits.map((i, n) => `
+            <div class="svc-result-item" data-hit="${n}">
+              <div class="svc-result-name"><b>${escapeHtml(i.name)}</b> <small style="color:var(--text-dim);">${Number(i.quantity)} ${escapeHtml(i.unit || 'pcs')} left</small></div>
+              <span class="svc-result-price">${inr(i.selling_rate)}</span>
+            </div>`).join('')
+        : `<div class="svc-result-empty">No item matches "<b>${escapeHtml(q)}</b>" — use "Something not in the list" below.</div>`;
+      itemResults.style.display = 'block';
+      itemResults.querySelectorAll('[data-hit]').forEach((el) => {
+        el.addEventListener('mousedown', (e) => { e.preventDefault(); addCatalogueItem(hits[Number(el.dataset.hit)]); });
+      });
+    };
+    if (itemSearch) {
+      itemSearch.addEventListener('input', () => showItemResults(itemSearch.value.trim().toLowerCase()));
+      itemSearch.addEventListener('focus', () => showItemResults(itemSearch.value.trim().toLowerCase()));
+      itemSearch.addEventListener('blur', () => setTimeout(closeItemResults, 180));
+    }
+
+    // A line of the technician's own: a service or part that is not in the catalogue, at the price he gives.
+    const customAdd = overlay.querySelector('#bill-custom-add');
+    if (customAdd) customAdd.onclick = () => {
+      const nameEl = overlay.querySelector('#bill-custom-name');
+      const qtyEl = overlay.querySelector('#bill-custom-qty');
+      const rateEl = overlay.querySelector('#bill-custom-rate');
+      const name = nameEl.value.trim();
+      const quantity = Number(qtyEl.value);
+      const rate = Number(rateEl.value);
+      if (!name) return toast('Say what it is', 'warning');
       if (!(quantity > 0)) return toast('Enter a quantity', 'warning');
-      if (Number(chosen.quantity) < quantity) toast(`Only ${Number(chosen.quantity)} ${chosen.unit || 'pcs'} in stock — recorded anyway`, 'warning');
-      const existing = billItems.find(it => it.item_id === chosen.id);
-      if (existing) existing.quantity = Number(existing.quantity) + quantity;
-      else billItems.push({ item_id: chosen.id, name: chosen.name, quantity, rate: Number(chosen.selling_rate) });
-      itemPick.value = '';
-      itemQty.value = '1';
+      if (!(rate >= 0) || rateEl.value === '') return toast('Enter the price', 'warning');
+      billItems.push({ item_id: null, name, quantity, rate });
+      nameEl.value = ''; qtyEl.value = '1'; rateEl.value = '';
       renderBillItems();
       calcTotal();
     };

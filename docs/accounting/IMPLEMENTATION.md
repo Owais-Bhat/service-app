@@ -885,3 +885,9 @@ purchases, jobs, what is owed), every bill with its items and rates, item totals
 (matched on phone number), the statement of account with running balance, and earlier records from the old program.
 `GET /api/reports/party-record.pdf?party_id=…&from=…&to=…` (or `&all=1`); the same data as JSON at `/party-record`.
 Needs `report.financial`.
+
+**The technician's bill (service tickets): items and own lines.** Under "Items used" the technician searches the catalogue
+(by name, code or category); tapping an item puts it on the bill at its selling price, and the quantity and the price can be
+changed on the line itself. Work or parts that are not in the catalogue are added as the technician's own line — a name, a
+quantity and a price — which is stored as a `custom` bill line (no stock moves, no cost). "Additional charges" sits below
+the items. Prices typed on the line are the prices billed; the server stores them as given.
