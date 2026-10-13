@@ -853,3 +853,15 @@ afterwards corrects the existing unpaid bill and sends it again. `PUT /api/insta
    The office can still correct an issued bill; it is sent again only when the office presses send.
 
 `POST /api/installations/:id/confirm` (also reachable as `/send-invoice`), office only.
+
+## Deleting many items at once
+
+Items → tick items (or the box in the header for the whole list) → **Delete selected**. The server answers a *dry run*
+first (`POST /api/inventory/items/bulk-delete`, default), and nothing happens until the word DELETE is typed.
+
+- **Deleted for good:** items nothing else points at — no bill, purchase, job, serial number, count or transfer — whose
+  stock came in only as opening stock. Their opening stock is taken back out of Inventory against Opening Balance Equity
+  (one journal, the reverse of what brought it in), then the items and their movements are removed.
+- **Hidden, not deleted:** items that bills, purchases, jobs or counts still refer to are made inactive (Items → "Show
+  inactive items" brings them back). Deleting them would rewrite history those documents and journals point at.
+- Needs `item.manage` and `stock.adjust`; audited as `item.bulk_delete`. Take a Backup first.

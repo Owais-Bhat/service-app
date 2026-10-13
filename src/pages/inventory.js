@@ -42,7 +42,8 @@ const TABS = [
   { key: 'movements', label: 'Stock Ledger' },
 ];
 
-const state = { tab: 'items', q: '', category: '' };
+const state = { tab: 'items', q: '', category: '', showInactive: false };
+const selected = new Set(); // items ticked for a bulk delete
 let items = [];
 let movements = [];
 
@@ -61,14 +62,16 @@ const lowStock = () => items.filter(i => Number(i.min_stock) > 0 && Number(i.qua
 
 function filtered() {
   return items
+    .filter(i => state.showInactive || i.active)
     .filter(i => !state.category || (i.category || 'Uncategorised') === state.category)
     .filter(i => !state.q || `${i.name} ${i.sku || ''} ${i.category || ''}`.toLowerCase().includes(state.q.toLowerCase()));
 }
 
 function paint(container) {
   const low = lowStock();
-  const stockValue = items.reduce((s, i) => s + Number(i.quantity) * Number(i.purchase_rate || 0), 0);
-  const retailValue = items.reduce((s, i) => s + Number(i.quantity) * Number(i.selling_rate || 0), 0);
+  const live = items.filter(i => i.active);
+  const stockValue = live.reduce((s, i) => s + Number(i.quantity) * Number(i.purchase_rate || 0), 0);
+  const retailValue = live.reduce((s, i) => s + Number(i.quantity) * Number(i.selling_rate || 0), 0);
   const categories = [...new Set(items.map(i => i.category || 'Uncategorised'))].sort();
 
   container.innerHTML = `
@@ -85,7 +88,7 @@ function paint(container) {
       </div>
 
       <div class="at2-kpis">
-        ${kpi(ICONS.box, items.length, 'Items', '', 'muted')}
+        ${kpi(ICONS.box, live.length, 'Items', '', 'muted')}
         ${kpi(ICONS.alert, low.length, 'Low Stock', '', low.length ? 'red' : 'muted')}
         ${kpi(ICONS.rupee, money(stockValue), 'Stock Value (cost)', '', 'green')}
         ${kpi(ICONS.receipt, money(retailValue), 'Stock Value (selling)', '', 'amber')}
@@ -105,6 +108,7 @@ function paint(container) {
             </select>
           </div>
           <div class="form-group"><label>Search</label><input type="search" id="inv-q" placeholder="Item name or SKU…" value="${esc(state.q)}"></div>
+          <label class="at2-check"><input type="checkbox" id="inv-inactive" ${state.showInactive ? 'checked' : ''}> Show inactive items</label>
         </div>
       </div>
 
@@ -124,6 +128,7 @@ function paint(container) {
   $('#inv-cat').onchange = (e) => { state.category = e.target.value; paint(container); };
   let t;
   $('#inv-q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value.trim(); paint(container); }, 250); };
+  $('#inv-inactive').onchange = (e) => { state.showInactive = e.target.checked; paint(container); };
   $('#inv-new').onclick = () => openItemModal(container, null);
   $('#inv-export').onclick = () => {
     if (!items.length) return toast('Nothing to export', 'info');
@@ -157,10 +162,11 @@ function paintItems(container, body, list) {
       <div class="card-header">
         <span class="card-title">${state.tab === 'low' ? 'Items at or below minimum' : 'Items'}</span>
         <span class="at2-count">${list.length} item${list.length === 1 ? '' : 's'}</span>
+        <button class="btn btn-secondary btn-sm" id="inv-bulkdel" disabled style="margin-left:auto">Delete selected (0)</button>
       </div>
       <div class="table-wrap"><table class="at2-tbl">
         <thead><tr>
-          <th>Item</th><th>Category</th><th>In stock</th><th>Min</th>
+          <th style="width:34px"><input type="checkbox" id="inv-selall" title="Select every item in this list"></th><th>Item</th><th>Category</th><th>In stock</th><th>Min</th>
           <th>Purchase</th><th>Selling</th><th>Margin</th><th>GST</th><th></th>
         </tr></thead>
         <tbody>
@@ -170,6 +176,7 @@ function paintItems(container, body, list) {
             const isLow = Number(i.min_stock) > 0 && Number(i.quantity) <= Number(i.min_stock);
             return `
               <tr>
+                <td><input type="checkbox" class="inv-sel" data-sel="${esc(i.id)}"${selected.has(i.id) ? ' checked' : ''}></td>
                 <td>
                   <b>${esc(i.name)}</b>${i.active ? '' : ' <span class="at2-chip muted">Inactive</span>'}
                   ${i.sku ? `<div style="font-size:0.75rem;color:var(--text-dim)">${esc(i.sku)}</div>` : ''}
@@ -187,7 +194,7 @@ function paintItems(container, body, list) {
                   <button class="at2-photo inv-del" data-del="${esc(i.id)}" title="Delete item">${ICONS.close}</button>
                 </td>
               </tr>`;
-          }).join('') : `<tr><td colspan="9" style="text-align:center;padding:26px;color:var(--text-dim)">${state.tab === 'low' ? 'Nothing is running low 🎉' : 'No items yet — add your first one.'}</td></tr>`}
+          }).join('') : `<tr><td colspan="10" style="text-align:center;padding:26px;color:var(--text-dim)">${state.tab === 'low' ? 'Nothing is running low 🎉' : 'No items yet — add your first one.'}</td></tr>`}
         </tbody>
       </table></div>
     </div>`;
@@ -209,6 +216,102 @@ function paintItems(container, body, list) {
       }
     };
   });
+
+  wireBulkDelete(container, body, list);
+}
+
+// Tick boxes and the "Delete selected" button.
+function wireBulkDelete(container, body, list) {
+  const btn = body.querySelector('#inv-bulkdel');
+  const all = body.querySelector('#inv-selall');
+  if (!btn || !all) return;
+  const shown = new Set(list.map(i => i.id));
+  const refresh = () => {
+    const n = [...selected].filter(id => shown.has(id)).length;
+    btn.textContent = `Delete selected (${n})`;
+    btn.disabled = n === 0;
+    all.checked = list.length > 0 && n === list.length;
+    all.indeterminate = n > 0 && n < list.length;
+  };
+  body.querySelectorAll('.inv-sel').forEach(cb => {
+    cb.onchange = () => { if (cb.checked) selected.add(cb.dataset.sel); else selected.delete(cb.dataset.sel); refresh(); };
+  });
+  all.onchange = () => {
+    list.forEach(i => { if (all.checked) selected.add(i.id); else selected.delete(i.id); });
+    body.querySelectorAll('.inv-sel').forEach(cb => { cb.checked = all.checked; });
+    refresh();
+  };
+  btn.onclick = () => openBulkDelete(container, [...selected].filter(id => shown.has(id)));
+  refresh();
+}
+
+// Shows what would happen first; nothing is deleted until the word DELETE is typed.
+async function openBulkDelete(container, ids) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal" style="max-width:560px"><div class="modal-body"><div class="loading-screen"><div class="spinner"></div></div></div></div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  let plan;
+  try {
+    plan = await api('POST', '/inventory/items/bulk-delete', { ids, dry_run: true });
+  } catch (err) {
+    close();
+    return toast(err.message, 'error');
+  }
+
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <span class="modal-title">Delete ${ids.length} item${ids.length === 1 ? '' : 's'}</span>
+        <button class="modal-close" id="bd-close">${ICONS.close}</button>
+      </div>
+      <div class="modal-body">
+        <div class="at2-notice ${plan.will_delete ? 'warn' : 'info'}">
+          <b>${plan.will_delete}</b> will be deleted for good${plan.reverse_value_paise ? `, and their opening stock worth <b>${money(plan.reverse_value_paise / 100)}</b> is taken back out of the books` : ''}.
+          This cannot be undone — take a Backup first (Data Migration → Backup).
+        </div>
+        ${plan.will_keep ? `
+          <div class="at2-notice info"><b>${plan.will_keep}</b> cannot be deleted because bills, purchases, jobs or stock counts still refer to them. They will be <b>hidden</b> (made inactive) instead.</div>
+          <div class="table-wrap" style="max-height:200px;overflow:auto"><table class="at2-tbl"><tbody>
+            ${plan.keep.slice(0, 30).map(k => `<tr><td>${esc(k.name)}</td><td style="color:var(--text-dim);font-size:0.78rem">${esc(k.reason)}</td></tr>`).join('')}
+            ${plan.will_keep > 30 ? `<tr><td colspan="2" style="color:var(--text-dim)">…and ${plan.will_keep - 30} more</td></tr>` : ''}
+          </tbody></table></div>` : ''}
+        ${plan.will_delete || plan.will_keep ? `
+          <div class="form-group" style="margin-top:14px">
+            <label>Type <b>DELETE</b> to confirm</label>
+            <input type="text" id="bd-word" autocomplete="off" placeholder="DELETE">
+          </div>` : '<p>Nothing to do.</p>'}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="bd-cancel">Cancel</button>
+        <button class="btn btn-primary" id="bd-go" disabled style="background:var(--danger)">Delete</button>
+      </div>
+    </div>`;
+
+  const $ = (s) => overlay.querySelector(s);
+  $('#bd-close').onclick = close;
+  $('#bd-cancel').onclick = close;
+  const word = $('#bd-word');
+  const go = $('#bd-go');
+  if (word) word.oninput = () => { go.disabled = word.value.trim() !== 'DELETE'; };
+  go.onclick = async () => {
+    go.disabled = true;
+    go.textContent = 'Deleting…';
+    try {
+      const out = await api('POST', '/inventory/items/bulk-delete', { ids, dry_run: false, confirm: 'DELETE' });
+      toast(`${out.deleted} deleted${out.hidden ? `, ${out.hidden} hidden` : ''}`, 'success');
+      ids.forEach(id => selected.delete(id));
+      close();
+      renderInventoryTab(container);
+    } catch (err) {
+      toast(err.message, 'error');
+      go.disabled = false;
+      go.textContent = 'Delete';
+    }
+  };
 }
 
 function paintMovements(container, body) {

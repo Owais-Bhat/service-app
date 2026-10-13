@@ -10,6 +10,7 @@ const { defaultBusinessId } = require('../ledger/schema.cjs');
 const stock = require('./engine.cjs');
 const purchases = require('./purchases.cjs');
 const importer = require('./importer.cjs');
+const bulkDelete = require('./bulk-delete.cjs');
 
 const clean = (v, max = 255) => (v === undefined || v === null ? null : String(v).trim().slice(0, max) || null);
 const ymd = (d) => {
@@ -365,6 +366,35 @@ function mountStock({ app, getConn, authenticateToken, permissions, audit }) {
         res.status(201).json({ ...shaped, dry_run: false, done });
     });
     app.post('/api/stock/import', authenticateToken, requireCap('item.manage'), requireCap('stock.adjust'), importHandler);
+
+    // Many items at once. Without `dry_run: false` it only says what would happen; the real thing also needs
+    // `confirm: "DELETE"`. Items that bills, purchases, jobs or counts still point at are hidden, not deleted.
+    app.post('/api/inventory/items/bulk-delete', authenticateToken, requireCap('item.manage'), requireCap('stock.adjust'), handle(async (req, res, conn) => {
+        const businessId = await business(conn);
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+        if (!ids.length) return res.status(400).json({ error: 'Choose the items first' });
+        if (ids.length > 20000) return res.status(400).json({ error: 'Too many items at once' });
+
+        const p = await bulkDelete.plan(conn, ids);
+        const summary = {
+            will_delete: p.delete.length,
+            will_keep: p.keep.length,
+            reverse_value_paise: p.reverse_value_paise,
+            delete_sample: p.delete.slice(0, 20).map((i) => ({ name: i.name, quantity: i.quantity })),
+            keep: p.keep.slice(0, 200).map((i) => ({ name: i.name, reason: i.reason, quantity: i.quantity })),
+        };
+        if (req.body?.dry_run !== false) return res.json({ dry_run: true, ...summary });
+
+        if (req.body?.confirm !== 'DELETE') return res.status(400).json({ error: 'Type DELETE to confirm' });
+        if (!p.delete.length && !p.keep.some((i) => i.active)) return res.json({ dry_run: false, deleted: 0, hidden: 0, kept: p.keep.length });
+
+        const done = await bulkDelete.execute(conn, { businessId, user: req.user, plan: p });
+        audit.record({
+            actor: req.user, action: 'item.bulk_delete', entityType: 'inventory_item', entityId: null,
+            after: done, reason: `${ids.length} chosen`, ip: req.ip,
+        });
+        res.json({ dry_run: false, ...done });
+    }));
 
     // ── purchases ───────────────────────────────────────────────────────
     app.get('/api/purchases/documents', authenticateToken, requireCap('purchase.view'), handle(async (req, res, conn) => {
