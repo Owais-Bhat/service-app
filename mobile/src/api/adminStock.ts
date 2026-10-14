@@ -69,3 +69,13 @@ export const saveCount = (body: { count_date: string; location_id: string; note:
   api.post<CountResult>('/stock/counts', body);
 
 export const approveCount = (id: string) => api.post(`/stock/counts/${encodeURIComponent(id)}/approve`);
+
+// On hand, reserved for open orders, and what is left to promise.
+export interface Availability {
+  name: string;
+  on_hand: number | string;
+  reserved: number | string;
+  available: number | string;
+}
+
+export const fetchAvailability = (itemId: string) => api.get<Availability>(`/stock/availability/${encodeURIComponent(itemId)}`);

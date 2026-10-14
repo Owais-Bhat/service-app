@@ -143,6 +143,17 @@ export default function ServiceLogEntrySheet({ visible, entry, onClose, onSaved 
       }
     >
       <Field label="Link a ticket (optional)" value={ticket} onChangeText={search} placeholder="Ticket number, name or phone" autoCapitalize="characters" />
+      {inquiryId ? (
+        <ActionButton
+          label="Unlink ticket"
+          tone="neutral"
+          onPress={() => {
+            setInquiryId(null);
+            setTicket('');
+            setHits([]);
+          }}
+        />
+      ) : null}
       {hits.map((t) => (
         <ListRow
           key={t.id}

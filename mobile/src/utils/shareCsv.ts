@@ -1,7 +1,7 @@
 import { Share } from 'react-native';
 
 const cell = (v: unknown) => {
-  const s = v == null ? '' : String(v);
+  const s = v == null || typeof v === 'object' ? '' : String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

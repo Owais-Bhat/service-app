@@ -12,6 +12,7 @@ import Field from '../../components/admin/Field';
 import SectionLabel from '../../components/admin/SectionLabel';
 import { fetchStockValuation, fetchItems, ItemRow, rupees } from '../../api/adminBooks';
 import {
+  fetchAvailability,
   adjustStock,
   AdjustType,
   approveCount,
@@ -284,6 +285,15 @@ export default function StockScreen({ onBack }: Props) {
     }
   };
 
+  const showAvailability = async (itemId: string) => {
+    try {
+      const a = await fetchAvailability(itemId);
+      Alert.alert(a.name, `${a.on_hand} on hand\n${a.reserved} reserved for open orders\n${a.available} available to promise`);
+    } catch (e) {
+      Alert.alert('Could not check', e instanceof Error ? e.message : 'Try again');
+    }
+  };
+
   return (
     <AdminScreen
       title="Stock"
@@ -354,6 +364,7 @@ export default function StockScreen({ onBack }: Props) {
               subtitle={`${i.qty} ${i.unit}${i.sku ? ` · ${i.sku}` : ''}`}
               value={i.value != null ? inr(rupees(i.value)) : undefined}
               badge={i.mismatch ? { label: 'Ledger differs', color: semantic.danger } : undefined}
+              footer={<ActionButton label="Availability" tone="neutral" onPress={() => showAvailability(i.id)} />}
             />
           ))}
         </>

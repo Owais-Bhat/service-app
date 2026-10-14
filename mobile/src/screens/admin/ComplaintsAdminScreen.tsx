@@ -5,6 +5,7 @@ import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
 import ListRow from '../../components/admin/ListRow';
+import ExportButton from '../../components/admin/ExportButton';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
@@ -97,6 +98,7 @@ export default function ComplaintsAdminScreen({ onBack }: Props) {
           { label: 'Resolved', value: count('resolved'), color: semantic.success },
         ]}
       />
+      <ExportButton name="complaints.csv" rows={visible as unknown as Record<string, unknown>[]} label="Export all" />
       {visible.length === 0 ? <EmptyNote text="No complaints here" icon="alert" /> : null}
       {visible.map((r) => (
         <ListRow

@@ -6,6 +6,7 @@ import StatGrid from '../../components/admin/StatGrid';
 import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import EmptyNote from '../../components/admin/EmptyNote';
+import ExportButton from '../../components/admin/ExportButton';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
 import { amounts, BillLine, CollectionRow, fetchBillLines, fetchCollections, paidDay } from '../../api/adminCollections';
@@ -204,6 +205,13 @@ export default function CollectionsScreen({ onBack }: Props) {
             />
           ))}
 
+          <ExportButton
+            name="collection-report.csv"
+            rows={visible.map((r) => {
+              const a = amounts(r);
+              return { Date: paidDay(r), Ticket: r.ticket_no, Customer: r.full_name, Employee: r.assigned_employee_id ? names.get(r.assigned_employee_id) : '', Service: a.service, Travel: a.travel, Platform: a.platform, GST: a.gst, Discount: a.discount, Net: a.net, Method: r.payment_method === 'cash' ? 'cash' : 'online' };
+            })}
+          />
           <SectionLabel>Tickets</SectionLabel>
           {visible.map((r) => {
             const a = amounts(r);

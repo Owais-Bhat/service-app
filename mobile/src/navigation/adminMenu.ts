@@ -28,6 +28,7 @@ export const ADMIN_MENU: AdminMenuGroup[] = [
       { label: 'Service Requests', hint: 'Assign, track and bill requests', icon: 'tasks', route: 'ServiceRequests' },
       { label: 'Queries & Follow-ups', hint: 'Customer queries to chase', icon: 'chat', route: 'Queries' },
       { label: 'Installations', hint: 'Install jobs and technicians', icon: 'construct', route: 'Installations' },
+      { label: 'Record Materials', hint: 'Stock used or returned on a job', icon: 'box', route: 'JobMaterials' },
       { label: 'Job Costing', hint: 'Materials, labour and margin', icon: 'calculator', route: 'JobCosting' },
       { label: 'Device Tracking', hint: 'Devices taken for repair', icon: 'device', route: 'DeviceTracking' },
     ],

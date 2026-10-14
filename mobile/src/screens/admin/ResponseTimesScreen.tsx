@@ -3,6 +3,7 @@ import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
 import ListRow from '../../components/admin/ListRow';
+import ExportButton from '../../components/admin/ExportButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchResponseTimes } from '../../api/adminOps';
 import { semantic } from '../../theme/tokens';
@@ -62,6 +63,7 @@ export default function ResponseTimesScreen({ onBack }: Props) {
           { label: 'Avg response (late ones)', value: avg == null ? '—' : avg < 60 ? `${avg}m` : `${Math.floor(avg / 60)}h ${avg % 60}m` },
         ]}
       />
+      <ExportButton name="response-times.csv" rows={visible as unknown as Record<string, unknown>[]} />
       {visible.length === 0 ? <EmptyNote text="No missed response times" icon="check-circle" /> : null}
       {visible.map((r) => {
         const waiting = !r.responded_at;

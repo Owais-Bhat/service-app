@@ -15,11 +15,14 @@ import Icon from '../../components/Icon';
 import { fetchReceivables, fetchSalesDocs, rupees, OpenInvoice } from '../../api/adminBooks';
 import {
   acceptSales,
+  allocatePayment,
   cancelSales,
   convertSales,
   fetchReceipts,
   issueSales,
+  loadPayment,
   loadSalesDoc,
+  PaymentLoaded,
   recordReceipt,
   salesShareLink,
   SalesLoaded,
@@ -55,6 +58,11 @@ const METHODS = ['cash', 'upi', 'bank', 'card', 'cheque', 'other'];
 // customer is quoted and what the invoice carries are the same numbers.
 export default function SalesScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const [payment, setPayment] = useState<PaymentLoaded | null>(null);
+  const [payOpen, setPayOpen] = useState<OpenInvoice[]>([]);
+  const [payTarget, setPayTarget] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [payBusy, setPayBusy] = useState(false);
   const [view, setView] = useState<SalesView>('invoice');
   const [query, setQuery] = useState('');
   const [chooser, setChooser] = useState(false);
@@ -162,6 +170,39 @@ export default function SalesScreen({ onBack }: Props) {
   const canPay = !!d && d.doc_type === 'invoice' && d.status === 'issued' && (detail?.balance_paise ?? 0) > 0;
   const partyName = d?.party_snapshot?.display_name || d?.party_name || 'Customer';
 
+  const openPayment = async (id: string) => {
+    try {
+      const p = await loadPayment(id);
+      setPayment(p);
+      setPayTarget('');
+      setPayAmount('');
+      if (p.unallocated_paise > 0) {
+        const open = await fetchReceivables().catch(() => [] as OpenInvoice[]);
+        setPayOpen(open.filter((o) => (o as OpenInvoice & { party_id?: string }).party_id === p.payment.party_id));
+      } else {
+        setPayOpen([]);
+      }
+    } catch (e) {
+      Alert.alert('Could not open the receipt', e instanceof Error ? e.message : 'Try again');
+    }
+  };
+
+  const applyPayment = async () => {
+    if (!payment || !payTarget) return Alert.alert('Pick an invoice', 'Choose the invoice to apply it to.');
+    if (!(Number(payAmount) > 0)) return Alert.alert('Amount', 'Enter the amount to apply.');
+    setPayBusy(true);
+    try {
+      await allocatePayment(payment.payment.id, payTarget, payAmount);
+      Alert.alert('Applied', 'The receipt was put against the invoice.');
+      setPayment(null);
+      await data.reload();
+    } catch (e) {
+      Alert.alert('Not applied', e instanceof Error ? e.message : 'Try again');
+    } finally {
+      setPayBusy(false);
+    }
+  };
+
   return (
     <AdminScreen
       title="Invoices & Quotations"
@@ -229,6 +270,7 @@ export default function SalesScreen({ onBack }: Props) {
               meta={`${humanize(r.method)}${r.reference ? ` · ${r.reference}` : ''}${r.unallocated_paise > 0 ? ` · ${inr(rupees(r.unallocated_paise))} on account` : ''}`}
               value={inr(rupees(r.amount_paise))}
               valueColor={semantic.success}
+              onPress={() => openPayment(r.id)}
             />
           ))}
         </>
@@ -253,6 +295,55 @@ export default function SalesScreen({ onBack }: Props) {
           ))}
         </>
       )}
+
+      {/* Receipt detail: what it covers and what is still on account */}
+      <FormSheet
+        visible={!!payment}
+        title={payment?.payment.payment_no || 'Receipt'}
+        subtitle={payment ? `${payment.payment.party_name || ''} · ${shortDate(payment.payment.payment_date)}` : undefined}
+        onClose={() => setPayment(null)}
+      >
+        {payment ? (
+          <View>
+            <Text style={[styles.payAmount, { color: theme.text }]}>{inr(rupees(payment.payment.amount_paise))}</Text>
+            <Text style={[styles.payNote, { color: theme.text3 }]}>
+              {humanize(payment.payment.method)}
+              {payment.payment.reference ? ` · ${payment.payment.reference}` : ''}
+            </Text>
+            <SectionLabel>Put against</SectionLabel>
+            {payment.allocations.length === 0 ? <Text style={[styles.payNote, { color: theme.text3 }]}>Not put against any invoice yet.</Text> : null}
+            {payment.allocations.map((a, i) => (
+              <ListRow key={i} icon="receipt" title={a.doc_no || 'Invoice'} subtitle={a.doc_date ? shortDate(a.doc_date) : undefined} value={inr(rupees(a.amount_paise))} />
+            ))}
+            {payment.unallocated_paise > 0 ? (
+              <View>
+                <SectionLabel>{`On account: ${inr(rupees(payment.unallocated_paise))}`}</SectionLabel>
+                {payOpen.length === 0 ? (
+                  <Text style={[styles.payNote, { color: theme.text3 }]}>This customer has no outstanding invoices to apply it to.</Text>
+                ) : (
+                  <View>
+                    {payOpen.map((o) => (
+                      <ListRow
+                        key={o.id}
+                        icon={payTarget === o.id ? 'check-circle' : 'receipt'}
+                        iconColor={payTarget === o.id ? semantic.success : undefined}
+                        title={o.doc_no}
+                        subtitle={`${inr(rupees(o.outstanding_paise))} due`}
+                        onPress={() => {
+                          setPayTarget(o.id);
+                          setPayAmount((Math.min(payment.unallocated_paise, o.outstanding_paise) / 100).toFixed(2));
+                        }}
+                      />
+                    ))}
+                    <Field label="Amount ₹" value={payAmount} onChangeText={setPayAmount} keyboardType="decimal-pad" />
+                    <ActionButton label="Apply" busy={payBusy} onPress={applyPayment} />
+                  </View>
+                )}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </FormSheet>
 
       {/* New-document chooser */}
       <FormSheet visible={chooser} title="New document" onClose={() => setChooser(false)}>
@@ -502,6 +593,8 @@ export default function SalesScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
+  payAmount: { ...typography.heading, fontWeight: '800' },
+  payNote: { ...typography.caption, marginVertical: spacing(1) },
   add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   meta: { ...typography.caption, fontSize: 12 },
   kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: StyleSheet.hairlineWidth },

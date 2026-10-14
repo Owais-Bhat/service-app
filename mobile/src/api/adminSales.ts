@@ -159,3 +159,24 @@ export interface ReceiptRow {
 }
 
 export const fetchReceipts = () => api.get<ReceiptRow[]>('/payments?direction=in&limit=200');
+
+// One receipt in full: what it was put against, and what is still on account.
+export interface PaymentLoaded {
+  payment: {
+    id: string;
+    payment_no: string | null;
+    payment_date: string;
+    party_id: string;
+    party_name: string | null;
+    method: string | null;
+    reference: string | null;
+    amount_paise: number;
+  };
+  allocations: { doc_no: string | null; doc_date: string | null; amount_paise: number }[];
+  unallocated_paise: number;
+}
+
+export const loadPayment = (id: string) => api.get<PaymentLoaded>(`/payments/${encodeURIComponent(id)}`);
+
+export const allocatePayment = (id: string, documentId: string, amount: string) =>
+  api.post(`/payments/${encodeURIComponent(id)}/allocate`, { allocations: [{ document_id: documentId, amount }] });

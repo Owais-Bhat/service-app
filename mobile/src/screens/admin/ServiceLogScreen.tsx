@@ -5,6 +5,7 @@ import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
 import ListRow from '../../components/admin/ListRow';
+import ExportButton from '../../components/admin/ExportButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import ActionButton from '../../components/admin/ActionButton';
 import ServiceLogEntrySheet from '../../components/admin/ServiceLogEntrySheet';
@@ -103,6 +104,10 @@ export default function ServiceLogScreen({ onBack }: Props) {
           { label: 'Unpaid', value: inr(sum(by('unpaid'))), color: semantic.danger },
           { label: 'Total', value: inr(sum(rows)) },
         ]}
+      />
+      <ExportButton
+        name="service-log.csv"
+        rows={visible.map((r) => ({ Date: String(r.log_date).slice(0, 10), Ticket: r.ticket_no, Technician: r.technician_name, Customer: r.customer_name, Phone: r.customer_phone, Service: r.service_type, Problem: r.problem, Items: r.items_used, Amount: r.amount, Payment: r.payment_status }))}
       />
       {visible.length === 0 ? <EmptyNote text="No entries for these filters" icon="list" /> : null}
       {visible.map((r) => (

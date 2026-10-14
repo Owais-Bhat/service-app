@@ -189,3 +189,41 @@ export interface TechnicianVans {
   }[];
 }
 export const fetchTechnicianStock = () => api.get<TechnicianVans>('/jobs/technician-stock');
+
+// ── A Vyapar record in full ──────────────────────────────────
+export interface PastRecordFull {
+  document: {
+    id: string;
+    doc_type: string;
+    doc_no: string | null;
+    doc_date: string;
+    party_name: string | null;
+    party_phone: string | null;
+    total_paise: number;
+    paid_paise: number | null;
+    discount_paise: number | null;
+    payment_mode: string | null;
+    reference: string | null;
+    notes: string | null;
+    charges?: { name: string; amount_paise: number }[];
+  };
+  lines: {
+    line_no: number;
+    item_name: string;
+    serial_no: string | null;
+    hsn_sac: string | null;
+    quantity: number | string;
+    unit: string | null;
+    rate_paise: number;
+    discount_paise: number | null;
+    tax_rate_bps: number | null;
+    amount_paise: number;
+  }[];
+  related: {
+    kind: string;
+    amount_paise: number | null;
+    record: { id: string; doc_type: string; doc_no: string | null; doc_date: string } | null;
+  }[];
+}
+
+export const fetchPastRecord = (id: string) => api.get<PastRecordFull>(`/vyapar/history/${encodeURIComponent(id)}`);
