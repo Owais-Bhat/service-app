@@ -294,6 +294,19 @@ function mountSales({ app, getConn, authenticateToken, permissions, audit }) {
         await sendPdf(res, conn, req.params.id);
     }));
 
+    // A one-day public link to the same PDF, for clients that cannot attach the
+    // login header to a browser or viewer request (the mobile app opens it in
+    // the phone's own PDF viewer). Same token mechanism WhatsApp sending uses.
+    app.post('/api/sales/documents/:id/share-link', authenticateToken, requireCap('invoice.view'), handle(async (req, res, conn) => {
+        const loaded = await sales.loadDocument(conn, req.params.id);
+        if (!loaded) return res.status(404).json({ error: 'No such document' });
+        if (loaded.document.status === 'draft') return res.status(409).json({ error: 'Issue the document before sharing it' });
+        const { token } = await sales.createShareLink(conn, { documentId: req.params.id, user: req.user, days: 1 });
+        const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+        const base = process.env.PUBLIC_BASE_URL || `${proto}://${req.get('host')}`;
+        res.json({ url: `${base.replace(/\/$/, '')}/api/public/documents/${token}/pdf` });
+    }));
+
     // The same PDF for someone with a link and no login — a customer opening
     // what was sent to their WhatsApp. The token is the only key; it expires,
     // and a cancelled document stops opening.
