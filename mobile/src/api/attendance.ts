@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { api, ApiError, dataGet, dataPatch, dataPost, localUriToBlob, postForm } from './client';
@@ -139,15 +138,6 @@ export async function clockIn(userId: string): Promise<AttendanceRow> {
   const photoRequired = requirements.photoRequired && !exemptions.photo_clockin_exempt;
   const geofenceRequired = requirements.geofenceRequired && !exemptions.geofence_clockin_exempt;
 
-  // TEMPORARY diagnostic — standalone builds have no attached console, so
-  // this is the only way to see why photo/geofence enforcement isn't
-  // kicking in when the admin has it turned on. Remove once confirmed fixed.
-  const debugSummary = `requirements=${JSON.stringify(requirements)} exemptions=${JSON.stringify(exemptions)} photoRequired=${photoRequired} geofenceRequired=${geofenceRequired} hasCoords=${!!coords}`;
-  console.log('[clock-in debug]', debugSummary);
-  if (!__DEV__) {
-    Alert.alert('Clock-in debug', debugSummary);
-  }
-
   if (geofenceRequired && !coords) {
     throw new ApiError('Could not get your location. Enable location access and try again.', 400);
   }
@@ -171,18 +161,7 @@ export async function clockIn(userId: string): Promise<AttendanceRow> {
     form.append('accuracy', String(coords.accuracy));
   }
 
-  console.log('[clock-in debug] submitting form, hasSelfie=', !!selfie, 'hasCoords=', !!coords);
-  let row: AttendanceRow;
-  try {
-    row = await postForm<AttendanceRow>('/attendance/clock-in-photo', form);
-  } catch (e) {
-    // TEMPORARY diagnostic — the UI layer collapses any non-ApiError into a
-    // generic "check your connection" message, hiding the real cause.
-    const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-    console.log('[clock-in debug] postForm FAILED:', raw);
-    if (!__DEV__) Alert.alert('Clock-in submit failed', raw);
-    throw e;
-  }
+  const row = await postForm<AttendanceRow>('/attendance/clock-in-photo', form);
   startBackgroundLocationTracking().catch(() => {});
   return row;
 }
