@@ -7,6 +7,9 @@ import SectionLabel from '../../components/admin/SectionLabel';
 import ActionButton from '../../components/admin/ActionButton';
 import Field from '../../components/admin/Field';
 import {
+  BookingRules,
+  fetchBookingRules,
+  saveBookingRules,
   AppSettings,
   fetchSettings,
   saveAutoClockOut,
@@ -61,6 +64,19 @@ export default function SettingsAdminScreen({ onBack }: Props) {
   const [radiusM, setRadiusM] = useState('150');
   const [shown, setShown] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [rules, setRules] = useState<BookingRules | null>(null);
+  const [minDues, setMinDues] = useState('0');
+  const [radiusKm, setRadiusKm] = useState('0');
+
+  useEffect(() => {
+    fetchBookingRules()
+      .then((r) => {
+        setRules(r);
+        setMinDues(String(r.minDuesRupees));
+        setRadiusKm(String(r.radiusKm));
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const d = settings.data;
@@ -197,6 +213,33 @@ export default function SettingsAdminScreen({ onBack }: Props) {
               run('pool', () => savePoolMinutes(n), () => setS({ ...s, poolMinutes: n }));
             }}
           />
+
+          {rules ? (
+            <>
+              <SectionLabel>Who can book a service</SectionLabel>
+              <Row
+                busy={busy === 'dues'}
+                label="Block customers with a pending payment"
+                hint="A customer who still owes for an earlier job is asked to pay first"
+                value={rules.blockOnDues}
+                onChange={(v) => run('dues', () => saveBookingRules({ blockOnDues: v, minDuesRupees: rules.minDuesRupees, radiusKm: rules.radiusKm }), () => setRules({ ...rules, blockOnDues: v }))}
+              />
+              <Field label="Ignore dues below ₹" value={minDues} onChangeText={setMinDues} keyboardType="numeric" hint="Small leftovers under this amount do not block a booking" />
+              <Field label="Service radius (km, 0 = no limit)" value={radiusKm} onChangeText={setRadiusKm} keyboardType="numeric" hint={`Measured from ${rules.centre.lat.toFixed(4)}, ${rules.centre.lng.toFixed(4)}${rules.centreIsDefault ? ' (the office location, or Srinagar if that is not set)' : ''}`} />
+              <ActionButton
+                label="Save booking rules"
+                tone="neutral"
+                busy={busy === 'rules'}
+                onPress={() => {
+                  const dues = Number(minDues);
+                  const km = Number(radiusKm);
+                  if (!Number.isFinite(km) || km < 0 || km > 2000) return Alert.alert('Radius', 'Enter a distance from 0 to 2000 km');
+                  if (!Number.isFinite(dues) || dues < 0) return Alert.alert('Dues', 'Enter 0 or more');
+                  run('rules', () => saveBookingRules({ blockOnDues: rules.blockOnDues, minDuesRupees: dues, radiusKm: km }), () => setRules({ ...rules, minDuesRupees: dues, radiusKm: km }));
+                }}
+              />
+            </>
+          ) : null}
 
           <SectionLabel>Public page</SectionLabel>
           <Row

@@ -112,3 +112,25 @@ export function fetchCourseProgress(id: string): Promise<CourseProgress> {
 export function setCourseActive(id: string, active: boolean): Promise<unknown> {
   return api.patch(`/training/courses/${id}`, { active });
 }
+
+// ── Who can book a service ─────────────────────────────────────
+export interface BookingRules {
+  blockOnDues: boolean;
+  minDuesRupees: number;
+  radiusKm: number;
+  centre: { lat: number; lng: number };
+  centreIsDefault: boolean;
+}
+
+export function fetchBookingRules(): Promise<BookingRules> {
+  return api.get<BookingRules>('/settings/booking-rules');
+}
+
+export function saveBookingRules(b: {
+  blockOnDues: boolean;
+  minDuesRupees: number;
+  radiusKm: number;
+  centre?: { lat: number; lng: number } | null;
+}): Promise<BookingRules> {
+  return api.put<BookingRules>('/settings/booking-rules', b);
+}

@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, dataGet } from './client';
 
 export interface DeviceTakenLog {
   id: string;
@@ -84,4 +84,18 @@ export async function markDeviceReturned(inquiryId: string, condition: string, n
     return_notes: notes || null,
     return_image_url: imageUrl || null,
   });
+}
+
+// Marks (or unmarks) a ticket as one whose device goes to the service centre.
+export function setDeviceServiceEnabled(inquiryId: string, enabled: boolean): Promise<unknown> {
+  return api.post('/device-tracking/toggle', { inquiry_id: inquiryId, enabled });
+}
+
+export async function fetchDeviceServiceEnabled(inquiryId: string): Promise<boolean> {
+  const rows = await dataGet<{ device_service_enabled: number | boolean | null }[]>('inquiries', {
+    select: 'device_service_enabled',
+    eq: `id:${inquiryId}`,
+    limit: '1',
+  });
+  return !!Number(rows[0]?.device_service_enabled);
 }

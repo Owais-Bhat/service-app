@@ -17,6 +17,7 @@ import {
 } from '../api/adminInquiries';
 import { ApiError, resolveUploadUrl } from '../api/client';
 import { deleteInquiry, releaseToPool, transferInquiry } from '../api/adminManage';
+import CustomerEquipment from './CustomerEquipment';
 
 interface Props {
   inquiryId: string;
@@ -198,6 +199,8 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
 
                 <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(2) }]}>Location</Text>
                 <Text style={[styles.fieldValue, { color: theme.text }]}>{inq.location || '—'}</Text>
+
+                <CustomerEquipment phone={inq.phone} ticketNo={inq.ticket_no} />
                 {hasCoords ? (
                   <PressScale onPress={openMaps} style={{ marginTop: spacing(2) }}>
                     <View style={[styles.mapBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>

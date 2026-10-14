@@ -10,7 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import { sendOtp, verifyOtp, resendOtp } from '../api/otp';
-import { submitInquiry, Inquiry } from '../api/inquiries';
+import { submitInquiry, precheckBooking, Inquiry } from '../api/inquiries';
 import { IssueOption } from '../api/landing';
 
 interface Props {
@@ -146,6 +146,12 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
         ? `Other: ${otherIssue.trim()}`
         : issueLabel;
     try {
+      const check = await precheckBooking({ phone: '+91' + phone, lat: coords?.lat ?? null, lng: coords?.lng ?? null, location: locationValue.trim() });
+      if (!check.ok) {
+        const dues = (check.pending || []).map((p) => `${p.what}${p.ref ? ` (${p.ref})` : ''} — ₹${Math.round(p.amount_paise / 100)}`).join('\n');
+        setFormError(`${check.message || 'We cannot take this booking right now.'}${dues ? `\n${dues}` : ''}\nCall or WhatsApp us if you think this is a mistake.`);
+        return;
+      }
       const inquiry = await submitInquiry({
         full_name: name.trim(),
         phone: '+91' + phone,

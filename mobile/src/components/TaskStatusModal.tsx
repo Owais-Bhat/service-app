@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pingAssignmentSeen } from '../api/tasks';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import CustomerEquipment from './CustomerEquipment';
+import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
@@ -29,7 +30,7 @@ import { checkPaymentStatus } from '../api/payments';
 import { validateCoupon } from '../api/coupons';
 import { generateBillPdf, billWhatsAppCaption, BillPdfData } from '../api/bills';
 import { fetchInventoryItems, fetchBillItems, saveBillItems, InventoryItem, BillItemLine } from '../api/inventory';
-import { markDeviceTaken } from '../api/deviceTracking';
+import { markDeviceTaken, fetchDeviceServiceEnabled, setDeviceServiceEnabled } from '../api/deviceTracking';
 import { ApiError } from '../api/client';
 
 const BUSINESS_NAME = 'Networking Experts';
@@ -73,6 +74,9 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         { key: 'case_closed', label: 'Case Closed (final)', icon: 'close' },
       ];
   const [mode, setMode] = useState<'status' | 'device'>('status');
+  // Whether this ticket is marked as one whose device goes to the service centre.
+  const [deviceOn, setDeviceOn] = useState<boolean | null>(null);
+  const [deviceSwitching, setDeviceSwitching] = useState(false);
   const [status, setStatus] = useState<StatusOption>(options[0].key);
   const [detail, setDetail] = useState(item.employeeUpdateDetail || '');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -159,6 +163,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     couponCode: couponApplied?.code,
     paymentMethod,
   });
+
+  useEffect(() => {
+    if (mode !== 'device' || !item.inquiryId || deviceOn !== null) return;
+    fetchDeviceServiceEnabled(item.inquiryId).then(setDeviceOn).catch(() => setDeviceOn(true));
+  }, [mode, item.inquiryId, deviceOn]);
 
   // Opening a job is how the office learns it was seen.
   useEffect(() => {
@@ -474,6 +483,8 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 </View>
               ) : null}
 
+              <CustomerEquipment phone={item.phone} ticketNo={item.ticketNo} />
+
               <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(3) }]}>New Status</Text>
               <View style={styles.optionList}>
                 {options.map((opt, idx) => {
@@ -528,6 +539,28 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 ) : null}
               </View>
 
+            {mode === 'device' && item.inquiryId && deviceOn !== null ? (
+              <View style={[styles.reopenedBanner, { justifyContent: 'space-between' }]}>
+                <Text style={[styles.reopenedBannerText, { flex: 1 }]}>This ticket involves a device for the service centre</Text>
+                <Switch
+                  value={deviceOn}
+                  disabled={deviceSwitching || (alreadyTaken && deviceOn)}
+                  trackColor={{ true: brand.primary }}
+                  onValueChange={async (v) => {
+                    if (!v && alreadyTaken) return;
+                    setDeviceSwitching(true);
+                    try {
+                      await setDeviceServiceEnabled(item.inquiryId as string, v);
+                      setDeviceOn(v);
+                    } catch (e) {
+                      setError(e instanceof ApiError ? e.message : 'Could not change this');
+                    } finally {
+                      setDeviceSwitching(false);
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
             {mode === 'device' ? (
               alreadyTaken ? (
                 <View style={styles.reopenedBanner}>

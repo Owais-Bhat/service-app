@@ -1,4 +1,4 @@
-import { dataGet, dataPost } from './client';
+import { api, dataGet, dataPost } from './client';
 
 export interface NewInquiry {
   full_name: string;
@@ -56,4 +56,23 @@ export function trackInquiry(ticketNo: string, phone: string) {
   return dataGet<Inquiry[]>('inquiries', {
     eq: [`ticket_no:${ticketNo}`, `phone:${phone}`],
   });
+}
+
+export interface BookingCheck {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  pending?: { what: string; ref?: string | null; amount_paise: number }[];
+}
+
+// Ask before the customer fills the whole form: a payment from before is still
+// pending, or the place is outside the area served. A failed call never blocks
+// them — the save asks again on the server.
+export async function precheckBooking(input: { phone: string; lat?: number | null; lng?: number | null; location?: string }): Promise<BookingCheck> {
+  try {
+    const res = await api.post<BookingCheck>('/booking/precheck', input);
+    return res && typeof res.ok === 'boolean' ? res : { ok: true };
+  } catch {
+    return { ok: true };
+  }
 }

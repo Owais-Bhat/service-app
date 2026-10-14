@@ -15,6 +15,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../../theme/tokens';
 import { AdminDashboardData, fetchAdminDashboard, fetchUnreadCount } from '../../api/adminPortal';
+import { AssignmentAlert, fetchAssignmentAlerts } from '../../api/adminOps';
 import { humanize, shortTime, timeAgo } from '../../utils/format';
 
 interface Props {
@@ -42,12 +43,14 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [alerts, setAlerts] = useState<AssignmentAlert[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const [d, n] = await Promise.all([fetchAdminDashboard(), fetchUnreadCount()]);
+      const [d, n, a] = await Promise.all([fetchAdminDashboard(), fetchUnreadCount(), fetchAssignmentAlerts()]);
       setData(d);
       setUnread(n);
+      setAlerts(a);
       setError(null);
     } catch {
       setError('Could not load the dashboard');
@@ -119,6 +122,23 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
             </Pressable>
           ))}
         </View>
+
+        {alerts.length > 0 ? (
+          <>
+            <SectionLabel>Overdue to assign</SectionLabel>
+            {alerts.slice(0, 5).map((a) => (
+              <ListRow
+                key={a.id}
+                icon="alert"
+                iconColor={semantic.danger}
+                title={a.full_name || 'Customer'}
+                subtitle={a.service_item || undefined}
+                meta={`${a.ticket_no || ''} · nobody assigned, ${Math.round(a.late_minutes)} working minutes past the 2-hour limit`}
+                onPress={() => onOpen('ServiceRequests')}
+              />
+            ))}
+          </>
+        ) : null}
 
         <SectionLabel>Needs attention</SectionLabel>
         {view.needsAttention.length === 0 ? (

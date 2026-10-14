@@ -193,3 +193,17 @@ export function verifyReview(
 ): Promise<unknown> {
   return api.post(`/review-submissions/${id}/verify`, body);
 }
+
+// Requests whose two-working-hour assignment clock has run out with nobody on them.
+export interface AssignmentAlert {
+  id: string;
+  ticket_no: string | null;
+  full_name: string | null;
+  service_item: string | null;
+  created_at: string;
+  late_minutes: number;
+}
+
+export function fetchAssignmentAlerts(): Promise<AssignmentAlert[]> {
+  return api.get<AssignmentAlert[]>('/response-times/alerts').catch(() => [] as AssignmentAlert[]);
+}
