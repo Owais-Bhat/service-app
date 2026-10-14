@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
@@ -12,7 +12,9 @@ import Icon from '../components/Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { fetchLiveLocations, LiveLocationRow } from '../api/liveLocation';
+import { fetchLiveLocations, fetchLocationHistory, LiveLocationRow, TrailPoint } from '../api/liveLocation';
+import { dataGet } from '../api/client';
+import { todayIso } from '../utils/format';
 
 interface Props {
   onBack: () => void;
@@ -64,6 +66,39 @@ window.updateMarkers = function(rows) {
     map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3));
   }
 };
+var trail = null;
+window.clearTrail = function() {
+  if (!trail) return;
+  ['full', 'done', 'mover', 'start', 'end'].forEach(function(k) { if (trail[k]) map.removeLayer(trail[k]); });
+  trail = null;
+};
+window.showTrail = function(pts) {
+  window.clearTrail();
+  if (!pts.length) return;
+  var ll = pts.map(function(p) { return [p.lat, p.lng]; });
+  trail = { pts: pts };
+  trail.full = L.polyline(ll, { color: '#7c5cfc', weight: 3, opacity: 0.3 }).addTo(map);
+  trail.done = L.polyline([ll[0]], { color: '#7c5cfc', weight: 5, opacity: 0.95 }).addTo(map);
+  trail.mover = L.circleMarker(ll[0], { radius: 8, color: '#fff', weight: 2, fillColor: '#7c5cfc', fillOpacity: 1 }).addTo(map);
+  trail.start = L.circleMarker(ll[0], { radius: 6, color: '#fff', weight: 2, fillColor: '#15a05a', fillOpacity: 1 }).addTo(map);
+  trail.end = L.circleMarker(ll[ll.length - 1], { radius: 6, color: '#fff', weight: 2, fillColor: '#e0384a', fillOpacity: 1 }).addTo(map);
+  map.fitBounds(L.latLngBounds(ll), { padding: [30, 30], maxZoom: 16 });
+};
+window.seekTrail = function(f) {
+  if (!trail) return;
+  var pts = trail.pts;
+  var first = pts[0].t, span = Math.max(1, pts[pts.length - 1].t - first);
+  var at = first + Math.min(1, Math.max(0, f)) * span;
+  var i = 0;
+  while (i < pts.length - 1 && pts[i + 1].t <= at) i++;
+  var a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)];
+  var k = b.t > a.t ? (at - a.t) / (b.t - a.t) : 0;
+  var pos = [a.lat + (b.lat - a.lat) * k, a.lng + (b.lng - a.lng) * k];
+  trail.mover.setLatLng(pos);
+  var done = pts.slice(0, i + 1).map(function(p) { return [p.lat, p.lng]; });
+  done.push(pos);
+  trail.done.setLatLngs(done);
+};
 </script></body></html>`;
 
 function timeAgo(iso: string): string {
@@ -84,6 +119,16 @@ export default function LiveLocationsScreen({ onBack }: Props) {
   const [webReady, setWebReady] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const webRef = useRef<WebView>(null);
+  const [people, setPeople] = useState<{ id: string; full_name: string | null; worker_type: string | null }[]>([]);
+  const [trailUser, setTrailUser] = useState('');
+  const [trailDate, setTrailDate] = useState(todayIso());
+  const [trail, setTrail] = useState<TrailPoint[] | null>(null);
+  const [trailBusy, setTrailBusy] = useState(false);
+  const [trailMsg, setTrailMsg] = useState('');
+  const [frac, setFrac] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(8);
+  const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +154,85 @@ export default function LiveLocationsScreen({ onBack }: Props) {
   useEffect(() => {
     if (webReady) webRef.current?.injectJavaScript(`window.updateMarkers(${JSON.stringify(rows)}); true;`);
   }, [rows, webReady]);
+
+  useEffect(() => {
+    dataGet<{ id: string; full_name: string | null; worker_type: string | null }[]>('profiles', { select: 'id,full_name,worker_type', eq: 'role:employee' })
+      .then((p) => {
+        setPeople(p);
+        if (p[0]) setTrailUser((cur) => cur || p[0].id);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const stopPlay = useCallback(() => {
+    if (playRef.current) clearInterval(playRef.current);
+    playRef.current = null;
+    setPlaying(false);
+  }, []);
+
+  useEffect(() => () => stopPlay(), [stopPlay]);
+
+  const seek = useCallback(
+    (f: number) => {
+      const c = Math.min(1, Math.max(0, f));
+      setFrac(c);
+      webRef.current?.injectJavaScript(`window.seekTrail(${c}); true;`);
+    },
+    [],
+  );
+
+  const showTrail = async () => {
+    if (!trailUser || !/^\d{4}-\d{2}-\d{2}$/.test(trailDate)) {
+      setTrailMsg('Pick an employee and a date as YYYY-MM-DD.');
+      return;
+    }
+    stopPlay();
+    setTrailBusy(true);
+    setTrailMsg('');
+    try {
+      const pts = await fetchLocationHistory(trailUser, trailDate);
+      if (pts.length === 0) {
+        webRef.current?.injectJavaScript('window.clearTrail(); true;');
+        setTrail(null);
+        setTrailMsg('No location data was recorded for that employee on that day.');
+        return;
+      }
+      setTrail(pts);
+      webRef.current?.injectJavaScript(`window.showTrail(${JSON.stringify(pts)}); true;`);
+      setFrac(0);
+      const clock = (ms: number) => new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+      setTrailMsg(`${pts.length} points · ${clock(pts[0].t)} → ${clock(pts[pts.length - 1].t)}`);
+    } catch (e: unknown) {
+      setTrailMsg(e instanceof Error && e.message ? e.message : 'Could not load location history');
+    } finally {
+      setTrailBusy(false);
+    }
+  };
+
+  const clearTrail = () => {
+    stopPlay();
+    setTrail(null);
+    setTrailMsg('');
+    setFrac(0);
+    webRef.current?.injectJavaScript('window.clearTrail(); true;');
+  };
+
+  const togglePlay = () => {
+    if (!trail) return;
+    if (playing) return stopPlay();
+    let f = frac >= 1 ? 0 : frac;
+    setPlaying(true);
+    playRef.current = setInterval(() => {
+      // The whole day plays in 60 seconds at 1x.
+      f += (0.25 * speed) / 60;
+      if (f >= 1) {
+        seek(1);
+        stopPlay();
+        return;
+      }
+      seek(f);
+    }, 250);
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -156,6 +280,73 @@ export default function LiveLocationsScreen({ onBack }: Props) {
           </View>
         )}
 
+        <GlassCard style={styles.row}>
+          <Text style={[styles.name, { color: theme.text }]}>Day trail</Text>
+          <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(2) }]}>Where an employee went on a given day, with playback.</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing(2), paddingBottom: spacing(2) }}>
+            {people.map((p) => (
+              <Pressable
+                key={p.id}
+                onPress={() => setTrailUser(p.id)}
+                style={[styles.chip, { borderColor: trailUser === p.id ? brand.primary : theme.line, backgroundColor: trailUser === p.id ? brand.primary + '22' : theme.panel2 }]}
+              >
+                <Text style={[styles.chipText, { color: trailUser === p.id ? brand.primary : theme.text2 }]}>
+                  {p.full_name || 'Employee'} ({p.worker_type === 'gig' ? 'Gig' : 'Fixed'})
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <TextInput
+            value={trailDate}
+            onChangeText={setTrailDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={theme.text3}
+            keyboardType="numbers-and-punctuation"
+            style={[styles.dateInput, { color: theme.text, borderColor: theme.line, backgroundColor: theme.panel2 }]}
+          />
+          <View style={styles.trailBtns}>
+            <Pressable onPress={showTrail} disabled={trailBusy} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+              <Text style={[styles.mapsBtnText, { color: brand.primary }]}>{trailBusy ? 'Loading…' : 'Show trail'}</Text>
+            </Pressable>
+            {trail ? (
+              <Pressable onPress={clearTrail} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                <Text style={[styles.mapsBtnText, { color: semantic.danger }]}>Clear trail</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {trailMsg ? <Text style={[styles.caption, { color: theme.text2, marginTop: spacing(2) }]}>{trailMsg}</Text> : null}
+          {trail ? (
+            <View style={{ marginTop: spacing(3) }}>
+              <View style={[styles.scrubTrack, { backgroundColor: theme.line }]}>
+                <View style={[styles.scrubFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: brand.primary }]} />
+              </View>
+              <Text style={[styles.caption, { color: theme.text3, marginVertical: spacing(1) }]}>
+                {new Date(trail[0].t + frac * (trail[trail.length - 1].t - trail[0].t)).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+              </Text>
+              <View style={styles.trailBtns}>
+                <Pressable onPress={() => { stopPlay(); seek(frac - 0.1); }} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                  <Text style={[styles.mapsBtnText, { color: theme.text2 }]}>−10%</Text>
+                </Pressable>
+                <Pressable onPress={togglePlay} style={[styles.mapsBtn, { borderColor: brand.primary, backgroundColor: brand.primary + '22' }]}>
+                  <Text style={[styles.mapsBtnText, { color: brand.primary }]}>{playing ? 'Pause' : 'Play'}</Text>
+                </Pressable>
+                <Pressable onPress={() => { stopPlay(); seek(frac + 0.1); }} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                  <Text style={[styles.mapsBtnText, { color: theme.text2 }]}>+10%</Text>
+                </Pressable>
+                {[1, 4, 16].map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => setSpeed(s)}
+                    style={[styles.mapsBtn, { borderColor: speed === s ? brand.primary : theme.line, backgroundColor: speed === s ? brand.primary + '22' : theme.panel2 }]}
+                  >
+                    <Text style={[styles.mapsBtnText, { color: speed === s ? brand.primary : theme.text2 }]}>{s}x</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </GlassCard>
+
         {rows.length === 0 ? (
           <Text style={[styles.caption, { color: theme.text3, textAlign: 'center', marginTop: spacing(8) }]}>
             No one is currently clocked in with a reported location.{'\n\n'}
@@ -197,6 +388,12 @@ const styles = StyleSheet.create({
   caption: { ...typography.caption, lineHeight: 18 },
   mapWrap: { height: 320, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: spacing(4) },
   row: { marginBottom: spacing(3) },
+  chip: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
+  chipText: { ...typography.caption, fontWeight: '700' },
+  dateInput: { ...typography.body, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), minHeight: 44, marginBottom: spacing(2) },
+  trailBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
+  scrubTrack: { height: 8, borderRadius: radius.sm, overflow: 'hidden' },
+  scrubFill: { height: '100%' },
   rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), marginBottom: spacing(2.5) },
   name: { fontFamily: 'Manrope_700Bold', fontSize: 15 },
   coords: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12, marginBottom: spacing(3) },

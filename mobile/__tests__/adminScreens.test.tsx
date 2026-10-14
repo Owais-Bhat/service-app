@@ -52,6 +52,8 @@ import MigrationScreen from '../src/screens/admin/MigrationScreen';
 import AiAssistantScreen from '../src/screens/AiAssistantScreen';
 import BusinessFinanceScreen from '../src/screens/admin/BusinessFinanceScreen';
 import ServicePricingScreen from '../src/screens/ServicePricingScreen';
+import AttendanceReportScreen from '../src/screens/admin/AttendanceReportScreen';
+import RequestReportsScreen from '../src/screens/admin/RequestReportsScreen';
 import { ADMIN_MENU } from '../src/navigation/adminMenu';
 
 // ── fixtures, shaped like the server's real responses ─────────────────────
@@ -252,6 +254,8 @@ const CASES: { name: string; el: () => React.ReactElement; expects: string[] }[]
   { name: 'AI assistant', el: () => <AiAssistantScreen onBack={noop} />, expects: ['AI Assistant', 'Describe the problem'] },
   { name: 'Finance', el: () => <BusinessFinanceScreen onBack={noop} />, expects: ['Finance', 'BUSINESS HEALTH', 'Collection rate 70%', 'Imran Khan', 'GROWTH ADVISOR', 'Generate report'] },
   { name: 'Service pricing', el: () => <ServicePricingScreen onBack={noop} />, expects: ['Service Pricing', 'No signal', '₹500', 'Import CSV'] },
+  { name: 'Attendance report', el: () => <AttendanceReportScreen onBack={noop} />, expects: ['Attendance Report', 'Export report', 'Imran Khan', 'Present (days)'] },
+  { name: 'Request reports', el: () => <RequestReportsScreen onBack={noop} />, expects: ['Request Reports', 'TECHNICIAN REPORT', 'Export report', 'Most requested services'.toUpperCase()] },
   { name: 'Campaigns', el: () => <CampaignsScreen onBack={noop} />, expects: ['WhatsApp Campaigns', 'Diwali offer', '90 sent', 'Do-not-message list', 'IST'] },
 ];
 

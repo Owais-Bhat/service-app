@@ -94,6 +94,8 @@ export const ADMIN_MENU: AdminMenuGroup[] = [
     label: 'Reports',
     icon: 'chart',
     items: [
+      { label: 'Attendance Report', hint: 'Present, absent, late, hours', icon: 'clock', route: 'AttendanceReport' },
+      { label: 'Request Reports', hint: 'Technician report, top services', icon: 'report', route: 'RequestReports' },
       { label: 'Stats', hint: 'Live operations overview', icon: 'chart', route: 'Stats' },
       { label: 'Response Time', hint: 'Who was late and by how much', icon: 'clock', route: 'ResponseTimes' },
       { label: 'Employee Performance', hint: 'Leaderboard', icon: 'leaderboard', route: 'Performance' },

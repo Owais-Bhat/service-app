@@ -33,3 +33,23 @@ export async function fetchLiveLocations(): Promise<LiveLocationRow[]> {
     accuracy: r.accuracy != null ? Number(r.accuracy) : null,
   }));
 }
+
+// One employee's recorded route for a day (the Day Trail). Oldest point first.
+export interface TrailPoint {
+  lat: number;
+  lng: number;
+  t: number;
+  accuracy: number | null;
+}
+
+export async function fetchLocationHistory(userId: string, date: string): Promise<TrailPoint[]> {
+  const rows = await api.get<{ latitude: number | string; longitude: number | string; accuracy: number | string | null; recorded_at: string }[]>(
+    `/live-location/history?user_id=${encodeURIComponent(userId)}&date=${encodeURIComponent(date)}`,
+  );
+  return rows.map((r) => ({
+    lat: Number(r.latitude),
+    lng: Number(r.longitude),
+    accuracy: r.accuracy != null ? Number(r.accuracy) : null,
+    t: new Date(r.recorded_at).getTime(),
+  }));
+}
