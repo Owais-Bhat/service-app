@@ -897,3 +897,10 @@ listed (item, how many he holds), with a box for how many came back and an "All"
 Whatever is counted goes van → store as one transfer. Something he brought that was never recorded as given to him is added
 in the empty row below; it has nothing to transfer from, so it is added to the store as a stock adjustment with the reason
 "Brought back by <name> — it was not recorded as given to him" (audited).
+
+**Invoices on a phone.** At phone width (≤ 720 px) an invoice or quotation line is drawn as a small card — the item on top,
+then HSN / qty / unit, rate / discount, tax and the amount — instead of a wide table to scroll sideways, and the form never
+runs wider than the screen. The item box is a search list (name, code, brand, category) with the selling price beside each
+result; the words can still be anything, so work done or a charge is simply a line without a catalogue item. Hidden
+(inactive) items are not offered. The "New customer" box asks for name, phone and GSTIN; a complete GSTIN fetches the legal
+name and address from the GST portal lookup when that is set up, and otherwise gives the state.

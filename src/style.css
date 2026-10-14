@@ -9306,3 +9306,52 @@ body.nav-collapsed .nav-grouphead > span:not(.nav-icon) { display: none; }
 
 /* Unit of measure on a line: narrow, like Qty. */
 .at2-modal .at2-tbl td input.sl-unit { min-width: 76px !important; }
+
+/* Phone-width invoices and orders: each line is a small card (item on top, then the figures) instead of a wide table
+   that has to be scrolled sideways, and nothing in the form is wider than the screen. */
+@media (max-width: 720px) {
+  .at2-grid { grid-template-columns: minmax(0, 1fr); }
+  .at2-grid > * { grid-column: auto !important; min-width: 0; }
+  .at2-modal { max-width: 100% !important; width: calc(100vw - 16px); }
+  .at2-select-row { flex-wrap: nowrap; }
+  .at2-select-row .at2-plus { padding: 0 12px; }
+
+  .at2-modal .sl-wrap { overflow: visible; padding: 0; border: 0; background: none; }
+  #sl-table, #sl-table tbody { display: block; width: 100%; }
+  #sl-table thead { display: none; }
+  #sl-table tr.sl-line {
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px 8px;
+    padding: 12px; margin-bottom: 10px; position: relative;
+    border: 1px solid var(--line, var(--border)); border-radius: 14px;
+    background: color-mix(in srgb, var(--panel-2, var(--bg-soft)) 55%, transparent);
+  }
+  #sl-table tr.sl-line td { padding: 0; border: 0; min-width: 0; width: auto; text-align: left; }
+  #sl-table tr.sl-line td::before {
+    content: attr(data-label); display: block; margin-bottom: 3px;
+    font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim);
+  }
+  #sl-table tr.sl-line td:last-child::before { content: none; }
+  #sl-table tr.sl-line td:nth-child(1) { grid-column: 1 / -1; }          /* the item, full width */
+  #sl-table tr.sl-line td:nth-child(2) { grid-column: span 2; }          /* HSN */
+  #sl-table tr.sl-line td:nth-child(3) { grid-column: span 2; }          /* qty */
+  #sl-table tr.sl-line td:nth-child(4) { grid-column: span 2; }          /* unit */
+  #sl-table tr.sl-line td:nth-child(5) { grid-column: span 3; }          /* rate */
+  #sl-table tr.sl-line td:nth-child(6) { grid-column: span 3; }          /* disc */
+  #sl-table tr.sl-line td:nth-child(7) { grid-column: 1 / -1; }          /* tax */
+  #sl-table tr.sl-line td:nth-child(8) { grid-column: span 5; align-self: end; font-size: 1rem; }
+  #sl-table tr.sl-line td:nth-child(9) { grid-column: span 1; align-self: end; text-align: right; width: auto; }
+  .at2-modal #sl-table td input, .at2-modal #sl-table td select,
+  .at2-modal #sl-table td:first-child input[type=text] { min-width: 0 !important; width: 100% !important; }
+  .at2-modal #sl-table td input[type=number] { text-align: left; }
+  .at2-modal #sl-table td.sl-amount { min-width: 0; padding-left: 0; }
+}
+
+@media (max-width: 720px) {
+  /* the generic table minimum would keep the cards wider than the screen */
+  .at2-modal #sl-table { min-width: 0 !important; width: 100% !important; }
+}
+
+@media (max-width: 720px) {
+  /* a form on a phone is read against what is behind it: make it solid so the page underneath never shows through */
+  .modal-overlay .at2-modal { background: var(--bg, #fff) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}

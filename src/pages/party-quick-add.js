@@ -48,7 +48,7 @@ export function openQuickParty({ kind = 'customer', onCreated }) {
         <div class="form-group"><label>Name *</label><input type="text" id="qp-name" placeholder="Person or company" autocomplete="off"></div>
         <div class="at2-grid">
           <div class="form-group"><label>Phone</label><input type="tel" id="qp-phone" placeholder="10-digit mobile"></div>
-          <div class="form-group"><label>GSTIN <small>(if registered)</small></label><input type="text" id="qp-gstin" maxlength="15" placeholder="15 characters" style="text-transform:uppercase"></div>
+          <div class="form-group"><label>GSTIN <small>(if registered)</small></label><input type="text" id="qp-gstin" maxlength="15" placeholder="15 characters" style="text-transform:uppercase"><small id="qp-gst-note" style="color:var(--text-dim);font-size:0.74rem"></small></div>
         </div>
         <div class="at2-grid">
           <div class="form-group"><label>City / area</label><input type="text" id="qp-city" placeholder="Srinagar"></div>
@@ -70,6 +70,33 @@ export function openQuickParty({ kind = 'customer', onCreated }) {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   setTimeout(() => $('#qp-name')?.focus(), 60);
 
+  // A complete GSTIN brings the name and address the GST portal holds for it (when a lookup service is set up);
+  // otherwise it still tells the state. Nothing typed by hand is overwritten.
+  let fetched = null;
+  $('#qp-gstin').addEventListener('input', async () => {
+    const field = $('#qp-gstin');
+    const value = field.value.toUpperCase().trim();
+    field.value = value;
+    const note = $('#qp-gst-note');
+    fetched = null;
+    if (value.length !== 15) { note.textContent = value ? `${value.length}/15 characters` : ''; return; }
+    note.textContent = 'Looking it up…';
+    try {
+      const r = await api('GET', `/parties/gst-lookup/${encodeURIComponent(value)}`);
+      if ($('#qp-gstin').value.toUpperCase().trim() !== value) return; // typed on meanwhile
+      if (r.found) {
+        fetched = r.details;
+        if (!$('#qp-name').value.trim()) $('#qp-name').value = fetched.trade_name || fetched.legal_name || '';
+        if (!$('#qp-city').value.trim()) $('#qp-city').value = fetched.address.city || '';
+        note.style.color = 'var(--primary)';
+        note.textContent = `${fetched.legal_name}${fetched.status ? ' · ' + fetched.status : ''} — ${fetched.address.full}`;
+      } else {
+        note.style.color = r.error ? 'var(--danger)' : 'var(--text-dim)';
+        note.textContent = r.error || (r.configured === false ? 'Valid GSTIN. The portal lookup is not set up, so type the name and city.' : '');
+      }
+    } catch { note.textContent = ''; }
+  });
+
   const save = async () => {
     const name = $('#qp-name').value.trim();
     if (!name) { toast(`Enter the ${word}'s name`, 'warning'); $('#qp-name').focus(); return; }
@@ -82,13 +109,19 @@ export function openQuickParty({ kind = 'customer', onCreated }) {
     try {
       const party = await api('POST', '/parties', {
         display_name: name, kind: word,
+        legal_name: fetched?.legal_name || undefined,
         phone: $('#qp-phone').value.trim() || null,
         gstin: gstin || null,
         // The state a supply is taxed for: taken from the GSTIN when there is
         // one (the server does that), else assumed to be the business's own.
         place_of_supply_state_code: gstin ? undefined : (state || undefined),
         credit_days: Number($('#qp-credit').value) || 0,
-        addresses: city ? [{ kind: 'billing', city, state_code: state || undefined, is_default: true }] : [],
+        addresses: fetched
+          ? [{
+              kind: 'billing', line1: fetched.address.line1 || undefined, city: city || fetched.address.city || undefined,
+              pincode: fetched.address.pincode || undefined, state_code: fetched.address.state_code || state || undefined, is_default: true,
+            }]
+          : (city ? [{ kind: 'billing', city, state_code: state || undefined, is_default: true }] : []),
       });
       toast(`${esc(name)} added`, 'success');
       close();

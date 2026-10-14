@@ -10,6 +10,7 @@
 // record. It cannot be deleted, only cancelled. That is what keeps the books
 // worth reading.
 import { toast, exportToCSV, makeSearchableSelect } from '../utils.js';
+import { attachItemPicker } from './item-picker.js';
 import { ICONS } from '../icons.js';
 import { openQuickParty } from './party-quick-add.js';
 import { unitDatalist, tidyUnit, DEFAULT_UNIT } from './units.js';
@@ -91,7 +92,7 @@ export async function renderSalesTab(container) {
     await api('POST', '/parties/sync-installation-contacts').catch(() => {});
     [parties, items, taxRates] = await Promise.all([
       api('GET', '/parties?kind=all&limit=5000'),
-      api('GET', '/inventory/items?all=1').catch(() => []),
+      api('GET', '/inventory/items').catch(() => []), // live items only; hidden ones are not offered
       api('GET', '/accounting/tax-rates').catch(() => []),
     ]);
     await loadTab();
@@ -376,16 +377,16 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
 
   const lineRow = (line = {}) => `
     <tr class="sl-line">
-      <td>
+      <td data-label="Item">
         <input type="text" class="sl-desc" list="sl-items" value="${esc(line.description || '')}" placeholder="Item or work done" style="min-width:160px">
         <input type="hidden" class="sl-item-id" value="${esc(line.item_id || '')}">
       </td>
-      <td class="sl-c-hsn"><input type="text" class="sl-hsn" value="${esc(line.hsn_sac || '')}" placeholder="HSN" style="width:70px"></td>
-      <td><input type="number" class="sl-qty" step="0.001" min="0" value="${line.quantity ?? 1}" style="width:70px"></td>
-      <td><input type="text" class="sl-unit" list="sl-units" value="${esc(line.unit || (line.description ? '' : DEFAULT_UNIT))}" placeholder="Unit" autocomplete="off" style="width:76px"></td>
-      <td><input type="number" class="sl-rate" step="0.01" min="0" value="${line.rate_paise !== undefined ? Number(line.rate_paise) / 100 : ''}" style="width:90px"></td>
-      <td><input type="number" class="sl-disc" step="0.01" min="0" max="100" value="${line.discount_bps ? Number(line.discount_bps) / 100 : ''}" placeholder="0" style="width:60px"></td>
-      <td class="sl-c-tax">
+      <td class="sl-c-hsn" data-label="HSN"><input type="text" class="sl-hsn" value="${esc(line.hsn_sac || '')}" placeholder="HSN" style="width:70px"></td>
+      <td data-label="Qty"><input type="number" class="sl-qty" step="0.001" min="0" value="${line.quantity ?? 1}" style="width:70px"></td>
+      <td data-label="Unit"><input type="text" class="sl-unit" list="sl-units" value="${esc(line.unit || (line.description ? '' : DEFAULT_UNIT))}" placeholder="Unit" autocomplete="off" style="width:76px"></td>
+      <td data-label="Rate ₹"><input type="number" class="sl-rate" step="0.01" min="0" value="${line.rate_paise !== undefined ? Number(line.rate_paise) / 100 : ''}" style="width:90px"></td>
+      <td data-label="Disc %"><input type="number" class="sl-disc" step="0.01" min="0" max="100" value="${line.discount_bps ? Number(line.discount_bps) / 100 : ''}" placeholder="0" style="width:60px"></td>
+      <td class="sl-c-tax" data-label="Tax">
         <select class="sl-tax" style="width:90px">
           ${gstOptions.map(t => `<option value="${t.rate_bps}"${Number(line.info_tax_bps || line.tax_rate_bps) === Number(t.rate_bps) ? ' selected' : ''}>${Number(t.rate_bps) / 100}%</option>`).join('')}
           <option value="exempt"${line.tax_treatment === 'exempt' ? ' selected' : ''}>Exempt</option>
@@ -393,7 +394,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
           <option value="non_gst"${line.tax_treatment === 'non_gst' ? ' selected' : ''}>Non-GST</option>
         </select>
       </td>
-      <td class="sl-amount" style="text-align:right;white-space:nowrap">—</td>
+      <td class="sl-amount" data-label="Amount" style="text-align:right;white-space:nowrap">—</td>
       <td><button class="at2-photo sl-del" title="Remove">${ICONS.close}</button></td>
     </tr>`;
 
@@ -455,7 +456,7 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
         </label>
 
         <style>.sl-notax .sl-c-tax, .sl-nohsn .sl-c-hsn { display: none; }</style>
-        <div class="table-wrap"><table class="at2-tbl" id="sl-table">
+        <div class="table-wrap sl-wrap"><table class="at2-tbl" id="sl-table">
           <thead><tr><th>Description</th><th class="sl-c-hsn">HSN</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Disc %</th><th class="sl-c-tax">Tax</th><th style="text-align:right">Amount</th><th></th></tr></thead>
           <tbody id="sl-lines">
             ${(existing?.lines?.filter(l => l.kind === 'item') || [{}]).map(lineRow).join('')}
@@ -573,31 +574,52 @@ async function openEditor(container, { doc_type: docTypeArg = 'invoice', existin
     }
   };
 
+  // A known item fills its rate, HSN, unit and tax from the catalogue.
+  const applyItem = (tr, match) => {
+    tr.querySelector('.sl-item-id').value = match.id;
+    tr.querySelector('.sl-hsn').value = match.hsn_sac || '';
+    tr.querySelector('.sl-unit').value = tidyUnit(match.base_unit || match.unit) || DEFAULT_UNIT;
+    if (!tr.querySelector('.sl-rate').value) {
+      tr.querySelector('.sl-rate').value = Number(match.selling_rate_paise ? match.selling_rate_paise / 100 : match.selling_rate) || '';
+    }
+    const rate = Math.round(Number(match.gst_rate || 18) * 100);
+    const opt = [...tr.querySelector('.sl-tax').options].find(o => Number(o.value) === rate);
+    if (opt) tr.querySelector('.sl-tax').value = opt.value;
+  };
+
   const wireLines = () => {
     overlay.querySelectorAll('.sl-line').forEach(tr => {
       tr.querySelectorAll('input, select').forEach(el => { el.oninput = queueReprice; el.onchange = queueReprice; });
-      tr.querySelector('.sl-desc').oninput = () => { ensureTrailingLine(); queueReprice(); };
-      // Picking a known item fills its rate, HSN and tax from the catalogue.
-      tr.querySelector('.sl-desc').onchange = (e) => {
+      const desc = tr.querySelector('.sl-desc');
+      desc.oninput = () => {
+        // Typing again after choosing an item makes it the technician's own wording; the link to the item goes.
+        const chosen = items.find(i => i.id === tr.querySelector('.sl-item-id').value);
+        if (chosen && chosen.name !== desc.value) tr.querySelector('.sl-item-id').value = '';
+        ensureTrailingLine();
+        queueReprice();
+      };
+      if (!tr._picker) {
+        // Search by name, code, brand or category; tapping a result fills the line. The words can still be anything —
+        // work done, a charge — and then it is simply a line without a catalogue item.
+        desc.removeAttribute('list');
+        tr._picker = attachItemPicker(desc, {
+          items: () => items,
+          hint: (i) => '₹' + (Number(i.selling_rate_paise ? i.selling_rate_paise / 100 : i.selling_rate) || 0).toLocaleString('en-IN'),
+          onPick: (item) => { applyItem(tr, item); ensureTrailingLine(); queueReprice(); },
+        });
+        desc.addEventListener('blur', () => setTimeout(() => { desc.style.borderColor = ''; }, 220));
+      }
+      // Picking a known item fills its rate, HSN and tax from the catalogue (also when its whole name is typed).
+      desc.onchange = (e) => {
         const match = items.find(i => i.name === e.target.value);
-        if (match) {
-          tr.querySelector('.sl-item-id').value = match.id;
-          tr.querySelector('.sl-hsn').value = match.hsn_sac || '';
-          tr.querySelector('.sl-unit').value = tidyUnit(match.base_unit || match.unit) || DEFAULT_UNIT;
-          if (!tr.querySelector('.sl-rate').value) {
-            tr.querySelector('.sl-rate').value = Number(match.selling_rate_paise ? match.selling_rate_paise / 100 : match.selling_rate) || '';
-          }
-          const rate = Math.round(Number(match.gst_rate || 18) * 100);
-          const opt = [...tr.querySelector('.sl-tax').options].find(o => Number(o.value) === rate);
-          if (opt) tr.querySelector('.sl-tax').value = opt.value;
-        } else {
-          tr.querySelector('.sl-item-id').value = '';
-        }
+        if (match) applyItem(tr, match);
+        else tr.querySelector('.sl-item-id').value = '';
         ensureTrailingLine();
         queueReprice();
       };
       tr.querySelector('.sl-del').onclick = () => {
         if (overlay.querySelectorAll('.sl-line').length <= 1) return toast('A document needs at least one line', 'warning');
+        tr._picker?.destroy();
         tr.remove();
         queueReprice();
       };
