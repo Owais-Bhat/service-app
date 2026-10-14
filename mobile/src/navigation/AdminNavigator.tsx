@@ -11,7 +11,7 @@ import LeaveAdminScreen from '../screens/LeaveAdminScreen';
 import AssignmentQueueScreen from '../screens/AssignmentQueueScreen';
 import ServicePricingScreen from '../screens/ServicePricingScreen';
 import ContactsScreen from '../screens/ContactsScreen';
-import FinanceSummaryScreen from '../screens/FinanceSummaryScreen';
+import BusinessFinanceScreen from '../screens/admin/BusinessFinanceScreen';
 import EmployeePanelScreen from '../screens/EmployeePanelScreen';
 import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 import AttendanceLogsScreen from '../screens/admin/AttendanceLogsScreen';
@@ -76,7 +76,7 @@ export const ADMIN_SCREENS: Record<string, BackScreen> = {
   AssignmentQueue: AssignmentQueueScreen,
   ServicePricing: ServicePricingScreen,
   Contacts: ContactsScreen,
-  Finance: FinanceSummaryScreen,
+  Finance: BusinessFinanceScreen,
   Attendance: AttendanceLogsScreen,
   EodSummaries: EodSummariesScreen,
   JobCards: JobCardsAdminScreen,

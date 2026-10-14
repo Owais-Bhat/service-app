@@ -50,6 +50,8 @@ import TutorialsAdminScreen from '../src/screens/admin/TutorialsAdminScreen';
 import AiReportScreen from '../src/screens/admin/AiReportScreen';
 import MigrationScreen from '../src/screens/admin/MigrationScreen';
 import AiAssistantScreen from '../src/screens/AiAssistantScreen';
+import BusinessFinanceScreen from '../src/screens/admin/BusinessFinanceScreen';
+import ServicePricingScreen from '../src/screens/ServicePricingScreen';
 import { ADMIN_MENU } from '../src/navigation/adminMenu';
 
 // ── fixtures, shaped like the server's real responses ─────────────────────
@@ -111,6 +113,19 @@ const FIXTURES: { match: RegExp; body: unknown }[] = [
   { match: /\/inventory\/items/, body: [{ id: 'it1', sku: 'CAM-2', name: 'Dome Camera 2MP', category: 'Camera', unit: 'pcs', brand: 'Hikvision', model: 'DS-2CE', selling_rate: 1800, purchase_rate: 1200, gst_rate: 18, quantity: 2, min_stock: 5, active: 1 }] },
   { match: /\/accounting\/journals\?/, body: [{ id: 'j1', journal_no: 'JV-1', journal_date: today, narration: 'Opening stock entry', source_type: 'manual', status: 'posted', reversal_of_id: null, reversed_by_id: null, reversal_reason: null, total_paise: 500000, posted_by_name: 'Owais Bhat', posted_at: iso }] },
   { match: /\/accounting\/accounts/, body: [{ id: 'ac1', code: '1000', name: 'Cash in hand', type: 'asset', subtype: null, is_system: 1, active: 1, opening_balance_paise: 0 }] },
+  { match: /\/finance\/summary/, body: {
+    range: { from: today, to: today },
+    totals: { billed: 100000, received: 70000, pending: 30000, billsCount: 10, paidCount: 7, avgTicket: 10000, gst: 9000, discounts: 2000, platform: 1000, transport: 500, cashInHand: 4000 },
+    gig: { count: 2, billed: 5000, payout: 3000, companyKeeps: 2000, unpaidPayout: 1000 },
+    jobCards: { logged: 5, awaitingVerification: 2, verified: 3, award: null },
+    byMethod: { cash: 30000, online: 40000, unknown: 0 }, aging: { '0-7': 10000, '8-30': 10000, '31+': 10000 },
+    previous: { billed: 80000, received: 60000, billsCount: 8, paidCount: 6, from: today, to: today },
+    trend: [{ month: '2026-09', billed: 80000, received: 60000, bills: 8 }, { month: '2026-10', billed: 100000, received: 70000, bills: 10 }],
+    byTechnician: [{ name: 'Imran Khan', billed: 60000, received: 50000, jobs: 6 }],
+    byCompany: [{ company: 'Asha Traders', billed: 20000, received: 15000 }],
+    byCategory: [{ category: 'CCTV', revenue: 70000, items: 12 }],
+  } },
+  { match: /\/data\/service_pricing/, body: [{ id: 'sp1', category: 'CCTV', sub_category: 'DVR', sub_sub_category: 'No signal', name: 'No signal', cost: '500' }] },
   { match: /\/data\/training_items/, body: [{ id: 't1', title: 'How to bill a service', description: 'Billing basics', category: 'Billing', kind: 'video', url: '/uploads/t1.mp4', position: 0, required: 1, active: 1 }] },
   { match: /\/data\/training_completions/, body: [{ id: 'tc1', item_id: 't1', employee_id: 'e1' }] },
   { match: /\/training\/watch-progress/, body: [{ item_id: 't1', employee_id: 'e2', full_name: 'Sajad Ahmad', percent: 60, updated_at: iso }] },
@@ -235,6 +250,8 @@ const CASES: { name: string; el: () => React.ReactElement; expects: string[] }[]
   { name: 'AI report', el: () => <AiReportScreen onBack={noop} />, expects: ['AI Report', 'Paid revenue', 'BUSINESS NOTES', 'EMPLOYEE PROGRESS'] },
   { name: 'Data migration', el: () => <MigrationScreen onBack={noop} />, expects: ['Data Migration', 'From Vyapar', 'Email it to me'] },
   { name: 'AI assistant', el: () => <AiAssistantScreen onBack={noop} />, expects: ['AI Assistant', 'Describe the problem'] },
+  { name: 'Finance', el: () => <BusinessFinanceScreen onBack={noop} />, expects: ['Finance', 'BUSINESS HEALTH', 'Collection rate 70%', 'Imran Khan', 'GROWTH ADVISOR', 'Generate report'] },
+  { name: 'Service pricing', el: () => <ServicePricingScreen onBack={noop} />, expects: ['Service Pricing', 'No signal', '₹500', 'Import CSV'] },
   { name: 'Campaigns', el: () => <CampaignsScreen onBack={noop} />, expects: ['WhatsApp Campaigns', 'Diwali offer', '90 sent', 'Do-not-message list', 'IST'] },
 ];
 
