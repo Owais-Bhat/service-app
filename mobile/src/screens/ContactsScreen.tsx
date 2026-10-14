@@ -27,6 +27,8 @@ export default function ContactsScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [raw, setRaw] = useState<Contact[]>([]);
+  const [tab, setTab] = useState<'unique' | 'today' | 'week' | 'month'>('unique');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export default function ContactsScreen({ onBack }: Props) {
         select: 'id,full_name,phone,location,service_item,created_at',
         order: 'full_name:asc',
       });
+      setRaw(data);
       const seen = new Set<string>();
       const deduped: Contact[] = [];
       for (const c of data) {
@@ -60,7 +63,17 @@ export default function ContactsScreen({ onBack }: Props) {
   useEffect(() => { load(); }, [load]);
 
   const q = search.toLowerCase();
-  const filtered = contacts.filter((c) =>
+  // Today / week / month list every request made in that period (the same
+  // customer can appear twice); Unique is one line per phone number.
+  const periodStart = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (tab === 'week') d.setDate(d.getDate() - 6);
+    if (tab === 'month') d.setDate(1);
+    return d.getTime();
+  })();
+  const base = tab === 'unique' ? contacts : raw.filter((c) => new Date(c.created_at).getTime() >= periodStart);
+  const filtered = base.filter((c) =>
     !q ||
     c.full_name.toLowerCase().includes(q) ||
     (c.phone ?? '').includes(q) ||
@@ -86,6 +99,24 @@ export default function ContactsScreen({ onBack }: Props) {
           value={search}
           onChangeText={setSearch}
         />
+
+        <View style={styles.tabs}>
+          {([
+            ['unique', 'Unique'],
+            ['today', 'Today'],
+            ['week', 'This week'],
+            ['month', 'This month'],
+          ] as const).map(([k, label]) => (
+            <PressScale
+              key={k}
+              onPress={() => setTab(k)}
+              style={[styles.tab, { borderColor: tab === k ? brand.primary : theme.line, backgroundColor: tab === k ? brand.primary + '22' : theme.panel2 }]}
+            >
+              <Text style={[styles.tabText, { color: tab === k ? brand.primary : theme.text2 }]}>{label}</Text>
+            </PressScale>
+          ))}
+        </View>
+        <Text style={[styles.dim, { color: theme.text3, marginTop: 0, marginBottom: spacing(3) }]}>{filtered.length} contact{filtered.length === 1 ? '' : 's'}</Text>
 
         {loading && <Text style={[styles.dim, { color: theme.text3 }]}>Loading…</Text>}
         {error && <Text style={[styles.dim, { color: semantic.danger }]}>{error}</Text>}
@@ -119,6 +150,9 @@ export default function ContactsScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginBottom: spacing(3) },
+  tab: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
+  tabText: { ...typography.caption, fontWeight: '700' as const },
   search: { borderRadius: radius.md, borderWidth: 1, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(4), ...typography.body },
   dim: { ...typography.body, textAlign: 'center', marginTop: spacing(8) },
   card: { marginBottom: spacing(3) },

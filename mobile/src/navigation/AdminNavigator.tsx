@@ -56,6 +56,7 @@ import AiReportScreen from '../screens/admin/AiReportScreen';
 import MigrationScreen from '../screens/admin/MigrationScreen';
 import AttendanceReportScreen from '../screens/admin/AttendanceReportScreen';
 import JobMaterialsScreen from '../screens/JobMaterialsScreen';
+import ClientFeedbackScreen from '../screens/admin/ClientFeedbackScreen';
 import RequestReportsScreen from '../screens/admin/RequestReportsScreen';
 import AiAssistantScreen from '../screens/AiAssistantScreen';
 import CalendarScreen from '../screens/CalendarScreen';
@@ -121,6 +122,7 @@ export const ADMIN_SCREENS: Record<string, BackScreen> = {
   Migration: MigrationScreen,
   AttendanceReport: AttendanceReportScreen,
   JobMaterials: JobMaterialsScreen,
+  ClientFeedback: ClientFeedbackScreen,
   RequestReports: RequestReportsScreen,
   AiAssistant: AiAssistantScreen,
   Calendar: CalendarScreen,

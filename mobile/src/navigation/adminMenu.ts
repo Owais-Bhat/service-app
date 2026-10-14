@@ -99,6 +99,7 @@ export const ADMIN_MENU: AdminMenuGroup[] = [
       { label: 'Request Reports', hint: 'Technician report, top services', icon: 'report', route: 'RequestReports' },
       { label: 'Stats', hint: 'Live operations overview', icon: 'chart', route: 'Stats' },
       { label: 'Response Time', hint: 'Who was late and by how much', icon: 'clock', route: 'ResponseTimes' },
+      { label: 'Client Feedback', hint: 'Ratings, rankings, by company', icon: 'star', route: 'ClientFeedback' },
       { label: 'Employee Performance', hint: 'Leaderboard', icon: 'leaderboard', route: 'Performance' },
       { label: 'AI Reports', hint: 'Finance and employee progress summary', icon: 'chart', route: 'AiReport' },
       { label: 'AI Assistant', hint: 'Fix steps and solution videos', icon: 'chat', route: 'AiAssistant' },

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import ExportButton from '../components/admin/ExportButton';
 import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -212,6 +213,13 @@ export default function ManageTasksScreen({ onBack }: Props) {
         ) : (
           <>
             <Text style={[styles.resultCount, { color: theme.text3 }]}>{filtered.length} of {items.length} tasks</Text>
+            <View style={{ alignSelf: 'flex-start', marginBottom: spacing(3) }}>
+              <ExportButton
+                name="my-tasks.csv"
+                label="Export tasks"
+                rows={filtered.map((t) => ({ Ticket: t.ticketNo, Customer: t.fullName, Phone: t.phone, Service: t.serviceItem, Location: t.location, Status: t.status, Assignment: t.assignmentStatus, Created: String(t.createdAt).slice(0, 10) }))}
+              />
+            </View>
             {filtered.map((item, idx) => {
               const statusStyle = statusColors[displayStatus(item.status)] || DEFAULT_STATUS_STYLE;
               const locked = isLocked(item.status);
