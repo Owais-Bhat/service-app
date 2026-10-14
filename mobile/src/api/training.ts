@@ -28,6 +28,40 @@ export interface QuizQuestion {
   options: string[];
 }
 
+// The database stores every question as (question TEXT, options JSON,
+// correct_index). Fill-in-the-blank, image and match-the-following questions
+// pack their extras into the question column as a JSON envelope (_qz) — the
+// same one the web course editor writes. Plain text is a multiple-choice question.
+export interface DecodedQuestion {
+  kind: 'mcq' | 'fill' | 'image' | 'match';
+  text: string;
+  img: string | null;
+  group: string | null;
+  groupTitle: string;
+  left: string;
+}
+
+export function decodeQuestion(raw: string | null | undefined): DecodedQuestion {
+  const s = String(raw || '');
+  if (s[0] === '{' && s.includes('"_qz"')) {
+    try {
+      const o = JSON.parse(s);
+      const kind = ['fill', 'image', 'match'].includes(o.t) ? o.t : 'mcq';
+      return { kind, text: String(o.text || ''), img: o.img || null, group: o.group || null, groupTitle: String(o.gtitle || ''), left: String(o.left || '') };
+    } catch {
+      /* fall through to plain text */
+    }
+  }
+  return { kind: 'mcq', text: s, img: null, group: null, groupTitle: '', left: '' };
+}
+
+// What to print as the question line.
+export function questionLabel(d: DecodedQuestion): string {
+  if (d.kind === 'match') return d.left || d.text;
+  if (d.kind === 'fill') return d.text.replace(/_{2,}/g, '________');
+  return d.text;
+}
+
 export interface QuizResultItem {
   id: string;
   correct_index: number;

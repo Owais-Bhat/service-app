@@ -33,7 +33,8 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { attendance } = useAttendanceStatus();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const showClockStrip = user?.role !== 'admin';
   const [now, setNow] = useState(new Date());
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -73,7 +74,8 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
         </View>
       </View>
 
-      <View style={styles.statusRow}>
+      {/* The clock-in strip is an employee thing; admins don't clock in. */}
+      {showClockStrip ? <View style={styles.statusRow}>
         <View style={styles.statusItem}>
           <Icon name="calendar" size={12} color={theme.text3} />
           <Text style={[styles.statusText, { color: theme.text3 }]}>{dateStr}</Text>
@@ -92,7 +94,7 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
             <Text style={[styles.statusText, { color: theme.text3 }]} numberOfLines={1}>{attendance.location}</Text>
           </View>
         ) : null}
-      </View>
+      </View> : null}
 
       {showLogoutConfirm && (
         <LogoutConfirmModal

@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -362,7 +360,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.backdrop}>
         <Animated.View entering={ZoomIn.duration(320).springify().damping(15).mass(0.85)} style={styles.cardWrap}>
           <GlassSurface style={styles.card} borderRadius={radius.lg}>
             <View style={[styles.headRow, { borderBottomColor: theme.line }]}>
@@ -376,10 +374,10 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
                 </View>
               </PressScale>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>{body()}</ScrollView>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{body()}</ScrollView>
           </GlassSurface>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </View>
 
       {showPicker ? (
         <Modal visible transparent animationType="fade" onRequestClose={() => setShowPicker(false)}>
@@ -393,7 +391,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
                   </View>
                 </PressScale>
               </View>
-              <ScrollView style={{ maxHeight: 380 }}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 380 }}>
                 {inventory.length === 0 ? (
                   <Text style={[styles.pickerEmpty, { color: theme.text3 }]}>No items in inventory yet.</Text>
                 ) : (
@@ -427,7 +425,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
                   </View>
                 </PressScale>
               </View>
-              <ScrollView style={{ maxHeight: 380 }}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 380 }}>
                 {employees.map((emp) => (
                   <Pressable
                     key={emp.id}

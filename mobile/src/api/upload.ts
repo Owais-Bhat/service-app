@@ -14,3 +14,26 @@ export async function uploadImage(uri: string): Promise<string> {
   const res = await postForm<{ url: string }>('/upload', form);
   return resolveUploadUrl(res.url);
 }
+
+// Same endpoint, for the ad creatives that may be a short video.
+export async function uploadMedia(uri: string, kind: 'image' | 'video'): Promise<string> {
+  const form = new FormData();
+  const filename = uri.split('/').pop() || `${kind}-${Date.now()}.${kind === 'video' ? 'mp4' : 'jpg'}`;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mime =
+    kind === 'video' ? (ext === 'webm' ? 'video/webm' : 'video/mp4') : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const blob = await localUriToBlob(uri, mime);
+  form.append('file', blob, filename);
+  const res = await postForm<{ url: string }>('/upload', form);
+  return resolveUploadUrl(res.url);
+}
+
+// Any picked file (a PDF header for a WhatsApp template, say) with its own
+// mime type — the document picker supplies both.
+export async function uploadFile(uri: string, name: string, mime: string): Promise<string> {
+  const form = new FormData();
+  const blob = await localUriToBlob(uri, mime);
+  form.append('file', blob, name);
+  const res = await postForm<{ url: string }>('/upload', form);
+  return resolveUploadUrl(res.url);
+}

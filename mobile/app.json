@@ -18,6 +18,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.owais_07.networkingexperts",
       "googleServicesFile": "./google-services.json",
       "versionCode": 17

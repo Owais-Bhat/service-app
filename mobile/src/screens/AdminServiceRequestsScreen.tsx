@@ -15,6 +15,8 @@ import { fetchInquiries, AdminInquiryRow } from '../api/adminInquiries';
 
 interface Props {
   onBack: () => void;
+  /** Opens the "register a request for a customer" form. */
+  onRegister?: () => void;
 }
 
 type FilterKey = 'active' | 'resolved' | 'issues' | 'reopened' | 'unpaid' | 'paid' | 'all';
@@ -44,7 +46,7 @@ function matchesFilter(row: AdminInquiryRow, filter: FilterKey): boolean {
   return true;
 }
 
-export default function AdminServiceRequestsScreen({ onBack }: Props) {
+export default function AdminServiceRequestsScreen({ onBack, onRegister }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [rows, setRows] = useState<AdminInquiryRow[]>([]);
@@ -117,6 +119,15 @@ export default function AdminServiceRequestsScreen({ onBack }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
+
+        {onRegister ? (
+          <PressScale onPress={onRegister} style={{ marginBottom: spacing(3) }}>
+            <View style={[styles.registerBtn, { backgroundColor: brand.primary }]}>
+              <Icon name="add" size={18} color="#fff" />
+              <Text style={styles.registerText}>Register request for a customer</Text>
+            </View>
+          </PressScale>
+        ) : null}
 
         <View style={styles.filterRow}>
           {filters.map((f) => {
@@ -252,6 +263,8 @@ const styles = StyleSheet.create({
   filterPillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   filterCountBubble: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   filterCountText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
+  registerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 46, borderRadius: radius.md },
+  registerText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 44, marginBottom: spacing(2.5) },
   searchInput: { flex: 1, fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
   clearBtn: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

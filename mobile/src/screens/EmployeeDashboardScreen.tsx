@@ -30,6 +30,7 @@ import { fetchNotifications } from '../api/notifications';
 import { syncAppBadge } from '../notifications';
 import { fetchEodReports, EodReport } from '../api/eod';
 import { fetchMyTasks, TaskItem } from '../api/tasks';
+import EmployeePopupAd from '../components/EmployeePopupAd';
 
 interface Props {
   onOpenTask: (ticketId: string) => void;
@@ -210,6 +211,7 @@ export default function EmployeeDashboardScreen({
   return (
     <View style={styles.root}>
       <MeshBackground />
+      <EmployeePopupAd />
 
       <AppHeaderBar
         title={`Hi, ${user?.full_name?.split(' ')[0] || 'there'}`}

@@ -24,9 +24,11 @@ interface Props {
   onOpenTutorials: () => void;
   onOpenNotifications: () => void;
   onOpenSettings: () => void;
+  onOpenAccount: () => void;
 }
 
 const MENU: { key: string; label: string; icon?: IconName }[] = [
+  { key: 'account', label: 'Account details & password', icon: 'user' },
   { key: 'leaderboard', label: 'Leaderboard', icon: 'leaderboard' },
   { key: 'bonus-reviews', label: 'Bonus Reviews', icon: 'star' },
   { key: 'training', label: 'Training Courses', icon: 'training' },
@@ -46,6 +48,7 @@ export default function ProfileScreen({
   onOpenTutorials,
   onOpenNotifications,
   onOpenSettings,
+  onOpenAccount,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -66,6 +69,7 @@ export default function ProfileScreen({
     else if (key === 'training') onOpenTraining();
     else if (key === 'tutorials') onOpenTutorials();
     else if (key === 'notifications') onOpenNotifications();
+    else if (key === 'account') onOpenAccount();
     else onOpenSettings();
   };
 

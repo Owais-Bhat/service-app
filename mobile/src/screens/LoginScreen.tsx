@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, ScrollView } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -80,8 +80,7 @@ export default function LoginScreen({ onBack }: Props) {
         <BackLink onPress={onBack} />
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <View
         style={styles.root}
       >
         <ScrollView
@@ -138,7 +137,7 @@ export default function LoginScreen({ onBack }: Props) {
             </Animated.View>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }

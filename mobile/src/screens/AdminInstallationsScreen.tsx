@@ -1,16 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MeshBackground from '../components/MeshBackground';
-import AppHeaderBar from '../components/AppHeaderBar';
-import GlassCard from '../components/GlassCard';
-import PressScale from '../components/PressScale';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import AdminScreen from '../components/admin/AdminScreen';
+import FilterChips from '../components/admin/FilterChips';
+import ListRow from '../components/admin/ListRow';
+import ActionButton from '../components/admin/ActionButton';
+import EmptyNote from '../components/admin/EmptyNote';
+import FormSheet from '../components/admin/FormSheet';
+import Field from '../components/admin/Field';
+import SectionLabel from '../components/admin/SectionLabel';
+import Icon from '../components/Icon';
 import InstallationDetailSheet, { EmployeeOption } from '../components/InstallationDetailSheet';
-import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing, typography } from '../theme';
+import { radius, spacing } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { dataGet } from '../api/client';
+import { api, dataDelete, dataGet, dataPatch, dataPost } from '../api/client';
 import { fetchAllInstallations, InstallationJob } from '../api/installations';
+import { shortDate, todayIso } from '../utils/format';
 
 interface Props {
   onBack: () => void;
@@ -20,9 +24,9 @@ const FILTERS = ['Open', 'Unassigned', 'Unpaid', 'All'] as const;
 type Filter = typeof FILTERS[number];
 
 const num = (v: unknown) => Number(v || 0);
-
-// Pill colour for the plain "assigned, nothing has happened yet" case.
 const NEUTRAL = '#8aa79a';
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // What state this booking is really in, in the order that matters to the
 // office: unassigned first, then waiting on the technician, then money owed.
@@ -38,18 +42,39 @@ function pill(job: InstallationJob): { label: string; color: string } {
   return { label: 'Assigned', color: NEUTRAL };
 }
 
-// Admin's own view of every installation: assign it, push the status along,
-// and mark the bill paid when the money lands — the same sheet the technician
-// uses on site, so both sides see one history.
+function uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+interface Draft {
+  name: string;
+  phone: string;
+  location: string;
+  type: string;
+  date: string;
+  time: string;
+  emp: string;
+  address: string;
+  details: string;
+}
+const blank = (): Draft => ({ name: '', phone: '', location: '', type: '', date: todayIso(), time: '', emp: '', address: '', details: '' });
+
+// Admin's own view of every installation: book one, edit or delete it, assign
+// it, push the status along, and mark the bill paid when the money lands — the
+// same sheet the technician uses on site, so both sides see one history.
 export default function AdminInstallationsScreen({ onBack }: Props) {
-  const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
   const [rows, setRows] = useState<InstallationJob[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [filter, setFilter] = useState<Filter>('Open');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ job: InstallationJob | null } | null>(null);
+  const [draft, setDraft] = useState<Draft>(blank());
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -58,11 +83,13 @@ export default function AdminInstallationsScreen({ onBack }: Props) {
     } catch {
       setError('Could not load installations — pull to retry');
     } finally {
-      setRefreshing(false);
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     dataGet<EmployeeOption[]>('profiles', { eq: ['role:employee'], order: 'full_name:asc' })
@@ -72,94 +99,166 @@ export default function AdminInstallationsScreen({ onBack }: Props) {
 
   const nameOf = (empId?: string | null) => employees.find((e) => e.id === empId)?.full_name || '';
 
-  const filtered = useMemo(() => rows.filter((r) => {
-    const paid = String(r.payment_status || '').toLowerCase() === 'paid';
-    if (filter === 'Unassigned') return !r.assigned_employee_id;
-    if (filter === 'Unpaid') return num(r.bill_total) > 0 && !paid;
-    if (filter === 'Open') return !r.completed_at || (num(r.bill_total) > 0 && !paid);
-    return true;
-  }), [rows, filter]);
+  const filtered = useMemo(
+    () =>
+      rows.filter((r) => {
+        const paid = String(r.payment_status || '').toLowerCase() === 'paid';
+        if (filter === 'Unassigned') return !r.assigned_employee_id;
+        if (filter === 'Unpaid') return num(r.bill_total) > 0 && !paid;
+        if (filter === 'Open') return !r.completed_at || (num(r.bill_total) > 0 && !paid);
+        return true;
+      }),
+    [rows, filter],
+  );
+
+  const openEditor = (job: InstallationJob | null) => {
+    setEditing({ job });
+    setDraft(
+      job
+        ? {
+            name: job.full_name || '',
+            phone: job.phone || '',
+            location: job.location || '',
+            type: job.installation_type || '',
+            date: String(job.preferred_date || '').slice(0, 10) || todayIso(),
+            time: /^\d{2}:\d{2}/.test(job.preferred_time || '') ? job.preferred_time.slice(0, 5) : '',
+            emp: job.assigned_employee_id || '',
+            address: job.address || '',
+            details: job.description || '',
+          }
+        : blank(),
+    );
+  };
+
+  const save = async () => {
+    const d = draft;
+    if (!d.name.trim() || !d.phone.trim() || !d.location.trim() || !d.address.trim() || !d.type.trim() || !d.date) {
+      return Alert.alert('Details needed', 'Name, phone, location, address, type and date are required.');
+    }
+    if (!DATE_RE.test(d.date)) return Alert.alert('Date', 'Enter the date as YYYY-MM-DD.');
+    if (d.time && !TIME_RE.test(d.time)) return Alert.alert('Time', 'Enter the time as HH:MM, or leave it empty for Anytime.');
+    const fields = {
+      full_name: d.name.trim(),
+      phone: d.phone.trim(),
+      location: d.location.trim(),
+      address: d.address.trim(),
+      installation_type: d.type.trim(),
+      preferred_date: d.date,
+      preferred_time: d.time || 'Anytime',
+      assigned_employee_id: d.emp || null,
+      description: d.details.trim() || null,
+    };
+    setSaving(true);
+    try {
+      if (editing?.job) await dataPatch('installations', `id:${editing.job.id}`, fields);
+      else
+        await dataPost('installations', [
+          { id: uuid(), ticket_no: `INST-${Math.floor(100000 + Math.random() * 900000)}`, ...fields, status: 'pending' },
+        ]);
+      setEditing(null);
+      await load();
+    } catch (e: unknown) {
+      Alert.alert('Could not save', e instanceof Error && e.message ? e.message : 'Try again');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = (job: InstallationJob) =>
+    Alert.alert('Delete this installation?', `${job.full_name || 'This customer'} on ${shortDate(job.preferred_date)}. This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            // Give the parts back to the store before the job disappears.
+            await api.post('/bill-items', { ref_type: 'installation', ref_id: job.id, items: [] }).catch(() => undefined);
+            await dataDelete('installations', `id:${job.id}`);
+            await load();
+          } catch (e: unknown) {
+            Alert.alert('Could not delete', e instanceof Error && e.message ? e.message : 'Try again');
+          }
+        },
+      },
+    ]);
 
   return (
-    <View style={styles.root}>
-      <MeshBackground />
-      <AppHeaderBar title="Installations" onBack={onBack} />
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(16), paddingBottom: spacing(8), paddingHorizontal: spacing(4) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={semantic.success} />}
+    <AdminScreen
+      title="Installations"
+      subtitle={`${filtered.length} shown`}
+      onBack={onBack}
+      onRefresh={load}
+      loading={loading}
+      error={error}
+      headerRight={
+        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add installation">
+          <Icon name="add" size={20} color="#fff" />
+        </Pressable>
+      }
+      toolbar={<FilterChips items={FILTERS.map((f) => ({ key: f, label: f }))} activeKey={filter} onSelect={(k) => setFilter(k as Filter)} />}
+    >
+      {filtered.length === 0 && !loading ? <EmptyNote text="Nothing here right now" icon="construct" /> : null}
+      {filtered.map((job) => {
+        const tag = pill(job);
+        return (
+          <ListRow
+            key={job.id}
+            icon="construct"
+            iconColor={tag.color}
+            title={`${job.ticket_no} · ${job.installation_type}`}
+            subtitle={`${job.full_name}${job.location ? ` · ${job.location}` : ''}`}
+            meta={`${shortDate(job.preferred_date)} · ${job.preferred_time}${nameOf(job.assigned_employee_id) ? ` · ${nameOf(job.assigned_employee_id)}` : ''}`}
+            badge={{ label: tag.label, color: tag.color }}
+            onPress={() => setOpenId(job.id)}
+            footer={
+              <View style={styles.actions}>
+                <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(job)} />
+                <ActionButton label="Delete" tone="danger" onPress={() => remove(job)} />
+              </View>
+            }
+          />
+        );
+      })}
+
+      <FormSheet
+        visible={!!editing}
+        title={editing?.job ? 'Edit installation' : 'New installation'}
+        onClose={() => setEditing(null)}
+        footer={<ActionButton label={editing?.job ? 'Save changes' : 'Save installation'} busy={saving} onPress={save} grow />}
       >
-        <View style={styles.pills}>
-          {FILTERS.map((f) => (
-            <Text
-              key={f}
-              onPress={() => setFilter(f)}
-              style={[styles.pill, {
-                backgroundColor: filter === f ? brand.primary + '22' : theme.neuDark,
-                color: filter === f ? brand.primary : theme.text3,
-                borderColor: filter === f ? brand.primary : 'transparent',
-              }]}
-            >
-              {f}
-            </Text>
-          ))}
+        <Field label="Customer name" value={draft.name} onChangeText={(v) => setDraft({ ...draft, name: v })} autoCapitalize="words" />
+        <Field label="Phone" value={draft.phone} onChangeText={(v) => setDraft({ ...draft, phone: v })} keyboardType="phone-pad" placeholder="10 digit mobile number" />
+        <Field label="Location (city / area)" value={draft.location} onChangeText={(v) => setDraft({ ...draft, location: v })} placeholder="e.g. Rajbagh, Srinagar" />
+        <Field label="Installation type" value={draft.type} onChangeText={(v) => setDraft({ ...draft, type: v })} placeholder="e.g. 4 Camera CCTV" />
+        <View style={styles.pair}>
+          <View style={styles.half}>
+            <Field label="Date" value={draft.date} onChangeText={(v) => setDraft({ ...draft, date: v })} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+          </View>
+          <View style={styles.half}>
+            <Field label="Time" value={draft.time} onChangeText={(v) => setDraft({ ...draft, time: v })} placeholder="HH:MM" keyboardType="numbers-and-punctuation" hint="Empty means Anytime" />
+          </View>
         </View>
-
-        {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
-
-        {filtered.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3 }]}>Nothing here right now.</Text>
-        ) : (
-          filtered.map((job) => {
-            const tag = pill(job);
-            return (
-              <PressScale key={job.id} onPress={() => setOpenId(job.id)}>
-                <GlassCard style={styles.card}>
-                  <View style={styles.headerRow}>
-                    <Text style={[styles.ticketNo, { color: brand.primary }]}>{job.ticket_no}</Text>
-                    <View style={[styles.badge, { backgroundColor: `${tag.color}22` }]}>
-                      <Text style={[styles.badgeText, { color: tag.color }]}>{tag.label}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.installType, { color: theme.text }]}>{job.installation_type}</Text>
-                  <Text style={[styles.body, { color: theme.text2 }]}>{job.full_name}</Text>
-                  <Text style={[styles.caption, { color: theme.text3 }]}>{job.location}</Text>
-                  <Text style={[styles.caption, { color: theme.text3 }]}>
-                    {job.preferred_date} · {job.preferred_time}
-                    {nameOf(job.assigned_employee_id) ? ` · ${nameOf(job.assigned_employee_id)}` : ''}
-                  </Text>
-                </GlassCard>
-              </PressScale>
-            );
-          })
-        )}
-      </ScrollView>
+        <SectionLabel>Assign technician (optional)</SectionLabel>
+        <FilterChips
+          items={[{ key: '', label: 'Unassigned' }, ...employees.map((e) => ({ key: e.id, label: e.full_name || 'Employee' }))]}
+          activeKey={draft.emp}
+          onSelect={(k) => setDraft({ ...draft, emp: k })}
+        />
+        <Field label="Address" value={draft.address} onChangeText={(v) => setDraft({ ...draft, address: v })} multiline placeholder="Full address / landmark" />
+        <Field label="Details (optional)" value={draft.details} onChangeText={(v) => setDraft({ ...draft, details: v })} multiline />
+      </FormSheet>
 
       {openId ? (
-        <InstallationDetailSheet
-          id={openId}
-          isAdmin
-          employees={employees}
-          onClose={() => setOpenId(null)}
-          onChanged={load}
-        />
+        <InstallationDetailSheet id={openId} isAdmin employees={employees} onClose={() => setOpenId(null)} onChanged={load} />
       ) : null}
-    </View>
+    </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  pills: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(4), flexWrap: 'wrap' },
-  pill: {
-    paddingHorizontal: spacing(3.5), paddingVertical: spacing(1.5), borderRadius: radius.sm, borderWidth: 1,
-    fontFamily: 'Manrope_700Bold', fontSize: 12, overflow: 'hidden',
-  },
-  card: { marginBottom: spacing(3.5) },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(2) },
-  ticketNo: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13 },
-  badge: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.sm },
-  badgeText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
-  installType: { ...typography.heading, fontSize: 15, marginBottom: spacing(1) },
-  body: { ...typography.body },
-  caption: { ...typography.caption },
+  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  actions: { flexDirection: 'row', gap: spacing(2) },
+  pair: { flexDirection: 'row', gap: spacing(3) },
+  half: { flex: 1 },
 });

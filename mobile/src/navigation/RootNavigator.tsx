@@ -12,7 +12,6 @@ import LoginScreen from '../screens/LoginScreen';
 import ClientSubmitTicketScreen from '../screens/ClientSubmitTicketScreen';
 import ClientTrackTicketScreen from '../screens/ClientTrackTicketScreen';
 import EmployeeDashboardScreen from '../screens/EmployeeDashboardScreen';
-import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import LeaveFormScreen from '../screens/LeaveFormScreen';
@@ -30,14 +29,19 @@ import CoursePlayerScreen from '../screens/CoursePlayerScreen';
 import TutorialsScreen from '../screens/TutorialsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import AccountScreen from '../screens/AccountScreen';
+import AiAssistantScreen from '../screens/AiAssistantScreen';
 import InstallationsScreen from '../screens/InstallationsScreen';
 import GigPoolScreen from '../screens/GigPoolScreen';
 import ManageTasksScreen from '../screens/ManageTasksScreen';
 import MyStatsScreen from '../screens/MyStatsScreen';
 import ServicePricingScreen from '../screens/ServicePricingScreen';
 import TeamLeadDashboardScreen from '../screens/TeamLeadDashboardScreen';
-import LiveLocationsScreen from '../screens/LiveLocationsScreen';
 import AdminServiceRequestsScreen from '../screens/AdminServiceRequestsScreen';
+import AdminNavigator from './AdminNavigator';
+import CalendarScreen from '../screens/CalendarScreen';
+import RegisterRequestScreen from '../screens/RegisterRequestScreen';
+import JobMaterialsScreen from '../screens/JobMaterialsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import ClockInGateModal from '../components/ClockInGateModal';
 
@@ -48,13 +52,6 @@ type GuestStackParams = {
   TrackTicket: undefined;
 };
 
-type AdminStackParams = {
-  Dashboard: undefined;
-  Notifications: undefined;
-  LiveLocations: undefined;
-  ServiceRequests: undefined;
-};
-
 type EmployeeStackParams = {
   Dashboard: undefined;
   TaskDetail: { ticketId: string };
@@ -62,6 +59,8 @@ type EmployeeStackParams = {
   LeaveForm: undefined;
   JobTools: undefined;
   Estimator: undefined;
+  Account: undefined;
+  AiAssistant: undefined;
   DeviceFollowUp: undefined;
   DeviceDetail: { inquiryId: string };
   EodReport: undefined;
@@ -80,11 +79,13 @@ type EmployeeStackParams = {
   MyStats: undefined;
   ServicePricing: undefined;
   AssignRequests: undefined;
+  Calendar: undefined;
+  RegisterRequest: undefined;
+  JobMaterials: undefined;
 };
 
 const GuestStack = createNativeStackNavigator<GuestStackParams>();
 const EmployeeStack = createNativeStackNavigator<EmployeeStackParams>();
-const AdminStack = createNativeStackNavigator<AdminStackParams>();
 
 function LandingRoute({ navigation }: any) {
   return <LandingScreen onStaffLogin={() => navigation.navigate('Login')} />;
@@ -163,8 +164,24 @@ function JobToolsRoute({ navigation }: any) {
       onOpenMyStats={() => navigation.navigate('MyStats')}
       onOpenServicePricing={() => navigation.navigate('ServicePricing')}
       onOpenAssignRequests={() => navigation.navigate('AssignRequests')}
+      onOpenCalendar={() => navigation.navigate('Calendar')}
+      onOpenAssistant={() => navigation.navigate('AiAssistant')}
+      onOpenRegister={() => navigation.navigate('RegisterRequest')}
+      onOpenMaterials={() => navigation.navigate('JobMaterials')}
     />
   );
+}
+
+function CalendarRoute({ navigation }: any) {
+  return <CalendarScreen onBack={() => navigation.goBack()} />;
+}
+
+function RegisterRequestRoute({ navigation }: any) {
+  return <RegisterRequestScreen onBack={() => navigation.goBack()} />;
+}
+
+function JobMaterialsRoute({ navigation }: any) {
+  return <JobMaterialsScreen onBack={() => navigation.goBack()} />;
 }
 
 function ManageTasksRoute({ navigation }: any) {
@@ -232,8 +249,17 @@ function ProfileRoute({ navigation }: any) {
       onOpenTutorials={() => navigation.navigate('Tutorials')}
       onOpenNotifications={() => navigation.navigate('Notifications')}
       onOpenSettings={() => navigation.navigate('Settings')}
+      onOpenAccount={() => navigation.navigate('Account')}
     />
   );
+}
+
+function AiAssistantRoute({ navigation }: any) {
+  return <AiAssistantScreen onBack={() => navigation.goBack()} />;
+}
+
+function AccountRoute({ navigation }: any) {
+  return <AccountScreen onBack={() => navigation.goBack()} />;
 }
 
 function LeaderboardRoute({ navigation }: any) {
@@ -291,6 +317,9 @@ function EmployeeNavigator() {
       {/* Only reachable from Job Tools when the employee has can_assign_tickets;
           the server enforces the permission on every read/write regardless. */}
       <EmployeeStack.Screen name="AssignRequests" component={AdminServiceRequestsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Calendar" component={CalendarRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="RegisterRequest" component={RegisterRequestRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="JobMaterials" component={JobMaterialsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="ServicePricing" component={ServicePricingRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Leaderboard" component={LeaderboardRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="BonusReviews" component={BonusReviewsRoute} options={{ animation: 'slide_from_right' }} />
@@ -299,47 +328,16 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="Tutorials" component={TutorialsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Notifications" component={NotificationsRoute} options={{ animation: 'slide_from_right' }} />
       <EmployeeStack.Screen name="Settings" component={SettingsRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="Account" component={AccountRoute} options={{ animation: 'slide_from_right' }} />
+      <EmployeeStack.Screen name="AiAssistant" component={AiAssistantRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
     <ClockInGateModal />
     </AttendanceProvider>
   );
 }
 
-function AdminDashboardRoute({ navigation }: any) {
-  return (
-    <AdminDashboardScreen
-      onOpenNotifications={() => navigation.navigate('Notifications')}
-      onOpenLiveLocations={() => navigation.navigate('LiveLocations')}
-      onOpenServiceRequests={() => navigation.navigate('ServiceRequests')}
-    />
-  );
-}
-
-function AdminNotificationsRoute({ navigation }: any) {
-  return <NotificationsScreen onBack={() => navigation.goBack()} />;
-}
-
-function AdminLiveLocationsRoute({ navigation }: any) {
-  return <LiveLocationsScreen onBack={() => navigation.goBack()} />;
-}
-
 function AdminServiceRequestsRoute({ navigation }: any) {
   return <AdminServiceRequestsScreen onBack={() => navigation.goBack()} />;
-}
-
-// Dashboard + Notifications + Live Locations + Service Requests so far —
-// the rest of admin (Job Cards, Finance, Device Tracking, etc.) is still the
-// MoreSheet's "Coming soon" placeholder list (AdminDashboardScreen's
-// MORE_SECTIONS), each becoming a real route here as it's built.
-function AdminNavigator() {
-  return (
-    <AdminStack.Navigator screenOptions={{ headerShown: false }}>
-      <AdminStack.Screen name="Dashboard" component={AdminDashboardRoute} options={{ animation: 'none' }} />
-      <AdminStack.Screen name="Notifications" component={AdminNotificationsRoute} options={{ animation: 'slide_from_right' }} />
-      <AdminStack.Screen name="LiveLocations" component={AdminLiveLocationsRoute} options={{ animation: 'slide_from_right' }} />
-      <AdminStack.Screen name="ServiceRequests" component={AdminServiceRequestsRoute} options={{ animation: 'slide_from_right' }} />
-    </AdminStack.Navigator>
-  );
 }
 
 const navigationRef = createNavigationContainerRef<any>();

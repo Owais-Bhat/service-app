@@ -2,6 +2,22 @@
 
 Status of the Expo/React Native app (`mobile/`) vs. the web app, tracked on branch `mobile-app`. Last updated 2026-08-22.
 
+## 2026-10-14 — Depth pass: every web admin / employee feature on the phone
+
+- Financial Reports: all web tabs (reminders with WhatsApp send, P&L, balance sheet, ageing, account ledger, party statement, GST, stock value, job margins, health check)
+- New admin pages: Collection Reports, Business & Tax Setup, Employee Tutorials, AI Reports, AI Assistant, Data Migration, My Profile
+- Editing flows: ads/popups with upload, course authoring (lessons, quiz, assign), WhatsApp campaigns (compose, test, schedule, publish, opt-outs), job costs + invoice, installation book/edit/delete
+- Employee: Account details + password, AI Assistant, rich quiz question types (fill / image / match)
+- New dependency: `expo-document-picker` (Vyapar backup, campaign header files)
+- `npm test`: 70 tests; `npx tsc --noEmit` clean
+
+## 2026-10-13 — Admin portal + parity pass
+
+- Admin portal: real `AdminNavigator` with a grouped Menu tab; all 44 web pages are routes (see `docs/PORTAL_FEATURES.md`)
+- Employee: Calendar, Register Customer (walk-in), Materials Used, employee popup ad
+- `KeyboardAvoidingView` removed everywhere; form scroll views keep taps working with the keyboard open
+- `npm test` (jest-expo): 51 render + interaction tests; `npx tsc --noEmit` clean
+
 ## Manage Tasks (core parity with web)
 
 - Full task list: status filters, job cards, accept/decline pending assignments

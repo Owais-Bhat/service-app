@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import GlassCard from './GlassCard';
 import GlassSurface from './GlassSurface';
@@ -26,7 +26,7 @@ function DeclineModal({ onDismiss, onConfirm }: { onDismiss: () => void; onConfi
   const [reason, setReason] = useState('');
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <KeyboardAvoidingView style={styles.reasonBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.reasonBackdrop}>
         <GlassSurface style={styles.reasonCard} borderRadius={radius.lg}>
           <Text style={[styles.modalTitle, { color: theme.text }]}>Decline Assignment</Text>
           <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(2) }]}>Reason (required)</Text>
@@ -49,7 +49,7 @@ function DeclineModal({ onDismiss, onConfirm }: { onDismiss: () => void; onConfi
             </PressScale>
           </View>
         </GlassSurface>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -59,7 +59,7 @@ function AssignmentCard({ item, width }: { item: TaskItem; width: number }) {
   return (
     <View style={{ width }}>
       <GlassCard shadow style={styles.pendingCard}>
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.cardScroll}>
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.cardScroll}>
           <View style={styles.rowHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.eyebrow, { color: brand.primary }]}>Service Request</Text>

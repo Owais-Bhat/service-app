@@ -1,5 +1,8 @@
 # Employee Portal — Visual Polish + Feature Parity Roadmap
 
+> **Superseded 2026-10-13** — the parity table below is out of date (installations, gig pool, billing, selfie clock-in, notices,
+> today's route, calendar, walk-in registration and job materials are all built). Current status: [docs/PORTAL_FEATURES.md](../../PORTAL_FEATURES.md).
+
 **Purpose:** reference doc for making the mobile app's employee (technician) portal look as attractive as the redesigned landing/login screens, and for tracking which of the web app's employee-facing features (`src/pages/employee.js` + related modules) still need a mobile equivalent — customized for a phone, not a 1:1 port of the desktop UI.
 
 **Scope:** employee/technician-facing screens only. Admin screens (`AdminDashboardScreen.tsx` and beyond) are a separate, larger effort and out of scope here.

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import GlassSurface from './GlassSurface';
@@ -446,7 +446,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.backdrop}>
         <Animated.View entering={ZoomIn.duration(360).springify().damping(15).mass(0.85)} style={styles.modalCardWrap}>
           <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
             <View style={[styles.modalHeaderRow, { borderBottomColor: theme.line }]}>
@@ -460,7 +460,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 </View>
               </PressScale>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {item.reopened ? (
                 <View style={styles.reopenedBanner}>
                   <Icon name="alert" size={14} color={semantic.warning} />
@@ -937,7 +937,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
           </ScrollView>
           </GlassSurface>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </View>
 
       {showPicker && (
         <ServicePickerModal
@@ -959,7 +959,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   <Icon name="close" size={16} color={theme.text3} />
                 </Pressable>
               </View>
-              <ScrollView style={{ maxHeight: 360 }}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 360 }}>
                 {catalogue.length === 0 ? (
                   <Text style={[styles.pickerEmpty, { color: theme.text3 }]}>No items in inventory yet.</Text>
                 ) : catalogue.map((inv) => (

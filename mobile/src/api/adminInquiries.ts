@@ -60,6 +60,19 @@ export interface ManageContextInquiry {
   feedback_comment: string | null;
   created_at: string;
   updated_at: string | null;
+  ticket_id?: string | null;
+  pool_status?: string | null;
+  claimed_by_gig_worker_id?: string | null;
+  platform_fee?: number | string | null;
+  transport_km?: number | string | null;
+  transport_fee?: number | string | null;
+  gst_amount?: number | string | null;
+  discount_amount?: number | string | null;
+  discount_label?: string | null;
+  coupon_code?: string | null;
+  bill_no?: string | null;
+  bill_pdf_url?: string | null;
+  payment_method?: string | null;
 }
 
 export interface ManageContext {

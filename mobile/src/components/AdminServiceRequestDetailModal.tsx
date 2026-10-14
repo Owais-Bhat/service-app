@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import PressScale from './PressScale';
@@ -15,7 +15,8 @@ import {
   ManageContext,
   ManageContextEmployee,
 } from '../api/adminInquiries';
-import { ApiError } from '../api/client';
+import { ApiError, resolveUploadUrl } from '../api/client';
+import { deleteInquiry, releaseToPool, transferInquiry } from '../api/adminManage';
 
 interface Props {
   inquiryId: string;
@@ -41,6 +42,8 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
   const [error, setError] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [acting, setActing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +89,41 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
   };
 
   const employeeSelectable = (e: ManageContextEmployee): boolean => (e.clockedIn && !e.restricted) || e.always_assign;
+
+  const finished = inq ? ['resolved', 'closed', 'case_closed', 'issue_not_resolved', 'foc'].includes(inq.status) : false;
+  const canTransfer = !!inq && !!inq.assigned_employee_id && !finished && inq.payment_status !== 'paid' && inq.pool_status !== 'claimed';
+  const canRelease = !!inq && !inq.pool_status && !finished;
+
+  const run = async (key: string, fn: () => Promise<unknown>, done: () => void) => {
+    setActing(key);
+    setError(null);
+    try {
+      await fn();
+      done();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Could not complete that');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const confirmTransfer = (e: ManageContextEmployee) =>
+    Alert.alert('Transfer request?', `Move it from ${technicianName || 'the current technician'} to ${e.full_name}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Transfer', onPress: () => inq && run('transfer', () => transferInquiry(inq.id, e.id, ''), onSaved) },
+    ]);
+
+  const confirmRelease = () =>
+    Alert.alert('Release to public pool?', 'Gig workers will see this job and the first to accept gets it. Payment becomes online-only.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Release', onPress: () => inq && run('pool', () => releaseToPool(inq.id), onSaved) },
+    ]);
+
+  const confirmDelete = () =>
+    Alert.alert('Delete this request?', 'This permanently removes the request with its bill, payment and feedback records. It cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => inq && run('delete', () => deleteInquiry(inq.id, inq.ticket_id || null), onSaved) },
+    ]);
 
   const handleSave = async () => {
     if (assignmentLocked || !inq) return;
@@ -255,6 +293,47 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
                   </View>
                 ) : null}
 
+                {hasBill ? (
+                  <View style={[styles.noteBox, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+                    <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Bill detail</Text>
+                    {[
+                      ['Platform fee', money(inq.platform_fee)],
+                      [`Transport (${Number(inq.transport_km || 0).toFixed(1)} km)`, money(inq.transport_fee)],
+                      ['GST', money(inq.gst_amount)],
+                      ...(Number(inq.discount_amount) > 0
+                        ? [[inq.discount_label || (inq.coupon_code ? `Coupon ${inq.coupon_code}` : 'Discount'), `-${money(inq.discount_amount)}`]]
+                        : []),
+                      ['Payment', `${inq.payment_status === 'paid' ? 'Paid' : 'Unpaid'}${inq.payment_method ? ` · ${inq.payment_method}` : ''}`],
+                    ].map(([k, v]) => (
+                      <View key={k} style={styles.billLine}>
+                        <Text style={[styles.fieldValue, { color: theme.text2 }]}>{k}</Text>
+                        <Text style={[styles.fieldValue, { color: theme.text }]}>{v}</Text>
+                      </View>
+                    ))}
+                    {inq.bill_pdf_url ? (
+                      <PressScale onPress={() => Linking.openURL(resolveUploadUrl(inq.bill_pdf_url as string))} style={{ marginTop: spacing(2) }}>
+                        <View style={[styles.mapBtn, { borderColor: theme.line, backgroundColor: theme.surface }]}>
+                          <Icon name="receipt" size={14} color={brand.primary} />
+                          <Text style={[styles.mapBtnText, { color: brand.primary }]}>View bill PDF</Text>
+                        </View>
+                      </PressScale>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {inq.pool_status ? (
+                  <View style={[styles.noteBox, { backgroundColor: `${semantic.info}18`, borderColor: semantic.info }]}>
+                    <Text style={[styles.fieldLabel, { color: semantic.info }]}>
+                      {inq.pool_status === 'claimed' ? 'Claimed from public pool' : 'In public pool'}
+                    </Text>
+                    <Text style={[styles.fieldValue, { color: theme.text }]}>
+                      {inq.pool_status === 'claimed'
+                        ? `Claimed by ${employees.find((e) => e.id === inq.claimed_by_gig_worker_id)?.full_name || 'a gig worker'}`
+                        : 'Visible to gig workers — first to accept gets it'}
+                    </Text>
+                  </View>
+                ) : null}
+
                 <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(4) }]}>Assign to Technician</Text>
                 <View style={styles.employeeList}>
                   <PressScale onPress={() => !assignmentLocked && setSelectedEmployeeId(null)} disabled={assignmentLocked}>
@@ -300,6 +379,56 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
                     ? 'Already assigned. Save is disabled to prevent duplicate assignment.'
                     : 'Only currently clocked-in employees, or those admin has allowed offline, can receive new assignments.'}
                 </Text>
+
+                <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(2) }]}>Actions</Text>
+                <View style={styles.actions}>
+                  {inq.phone ? (
+                    <PressScale onPress={() => Linking.openURL(`tel:${inq.phone}`)} style={styles.actionCell}>
+                      <View style={[styles.actionBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                        <Icon name="phone" size={14} color={brand.primary} />
+                        <Text style={[styles.actionText, { color: theme.text }]}>Call</Text>
+                      </View>
+                    </PressScale>
+                  ) : null}
+                  {canTransfer ? (
+                    <PressScale onPress={() => setShowTransfer((v) => !v)} style={styles.actionCell}>
+                      <View style={[styles.actionBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                        <Icon name="swap" size={14} color={brand.primary} />
+                        <Text style={[styles.actionText, { color: theme.text }]}>Transfer</Text>
+                      </View>
+                    </PressScale>
+                  ) : null}
+                  {canRelease ? (
+                    <PressScale onPress={confirmRelease} disabled={acting === 'pool'} style={styles.actionCell}>
+                      <View style={[styles.actionBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                        <Icon name="refresh" size={14} color={brand.primary} />
+                        <Text style={[styles.actionText, { color: theme.text }]}>{acting === 'pool' ? '…' : 'Release to pool'}</Text>
+                      </View>
+                    </PressScale>
+                  ) : null}
+                  <PressScale onPress={confirmDelete} disabled={acting === 'delete'} style={styles.actionCell}>
+                    <View style={[styles.actionBtn, { borderColor: semantic.danger, backgroundColor: `${semantic.danger}14` }]}>
+                      <Icon name="trash" size={14} color={semantic.danger} />
+                      <Text style={[styles.actionText, { color: semantic.danger }]}>{acting === 'delete' ? '…' : 'Delete'}</Text>
+                    </View>
+                  </PressScale>
+                </View>
+
+                {showTransfer && canTransfer ? (
+                  <View style={styles.employeeList}>
+                    <Text style={[styles.helperText, { color: theme.text3, marginBottom: 0 }]}>Move it to one of the technicians who are online:</Text>
+                    {employees
+                      .filter((e) => e.id !== inq.assigned_employee_id && employeeSelectable(e))
+                      .map((e) => (
+                        <PressScale key={e.id} onPress={() => confirmTransfer(e)} disabled={acting === 'transfer'}>
+                          <View style={[styles.employeeRow, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                            <Text style={[styles.employeeName, { color: theme.text }]}>{e.full_name}</Text>
+                            <Text style={[styles.employeeStatus, { color: semantic.success }]}>{employeeStatusLabel(e)}</Text>
+                          </View>
+                        </PressScale>
+                      ))}
+                  </View>
+                ) : null}
 
                 {error ? <Text style={[styles.errorText, { marginTop: spacing(2) }]}>{error}</Text> : null}
               </ScrollView>
@@ -349,6 +478,11 @@ const styles = StyleSheet.create({
   billBox: { borderRadius: radius.md, borderWidth: 1, padding: spacing(2.5), marginTop: spacing(2.5), alignItems: 'center' },
   billTotal: { fontFamily: 'Manrope_800ExtraBold', fontSize: 20, marginTop: spacing(0.5) },
   employeeList: { gap: spacing(2), marginTop: spacing(1) },
+  billLine: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing(1) },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginTop: spacing(1), marginBottom: spacing(3) },
+  actionCell: { flexBasis: '47%', flexGrow: 1 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.md, borderWidth: 1 },
+  actionText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   employeeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 46,
     borderRadius: radius.md, borderWidth: 1, paddingHorizontal: spacing(3),

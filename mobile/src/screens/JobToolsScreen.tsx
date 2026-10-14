@@ -26,6 +26,10 @@ interface Props {
   onOpenMyStats: () => void;
   onOpenServicePricing: () => void;
   onOpenAssignRequests: () => void;
+  onOpenCalendar: () => void;
+  onOpenRegister: () => void;
+  onOpenMaterials: () => void;
+  onOpenAssistant: () => void;
 }
 
 interface Tool {
@@ -43,6 +47,9 @@ const BASE_TOOLS: Tool[] = [
   { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
   { key: 'mystats', label: 'My Stats', desc: 'Personal KPIs: tasks, attendance & collections', color: '#7c5cfc', icon: 'star' },
   { key: 'pricing', label: 'Service Pricing', desc: 'Browse service rates on-site', color: '#0ea5a5', icon: 'estimator' },
+  { key: 'calendar', label: 'Calendar', desc: 'Your dated installation jobs', color: '#2e9bff', icon: 'calendar' },
+  { key: 'materials', label: 'Materials Used', desc: 'Record stock fitted on, or returned from, a job', color: '#e08a14', icon: 'box' },
+  { key: 'assistant', label: 'AI Assistant', desc: 'Describe a fault, get fix steps and a solution video', color: '#a855f7', icon: 'chat' },
 ];
 
 export default function JobToolsScreen({
@@ -59,6 +66,10 @@ export default function JobToolsScreen({
   onOpenMyStats,
   onOpenServicePricing,
   onOpenAssignRequests,
+  onOpenCalendar,
+  onOpenRegister,
+  onOpenMaterials,
+  onOpenAssistant,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -68,6 +79,7 @@ export default function JobToolsScreen({
   const installationsOn = user?.installations_enabled !== 0 && user?.installations_enabled !== false;
   const isGigWorker = user?.worker_type === 'gig';
   const canAssignTickets = user?.can_assign_tickets === 1 || user?.can_assign_tickets === true;
+  const canRegister = user?.can_add_service === 1 || user?.can_add_service === true;
 
   const tools: Tool[] = [
     ...BASE_TOOLS,
@@ -76,6 +88,9 @@ export default function JobToolsScreen({
       : []),
     ...(isGigWorker
       ? [{ key: 'gigpool', label: 'Public Jobs', desc: 'Unclaimed jobs open to any gig worker', color: '#7c5cfc', icon: 'star' as IconName }]
+      : []),
+    ...(canRegister
+      ? [{ key: 'register', label: 'Register Customer', desc: 'Walk-in or phone request, accepted by you', color: '#15a05a', icon: 'add' as IconName }]
       : []),
     ...(canAssignTickets
       ? [{ key: 'assign', label: 'Assign Requests', desc: 'Hand incoming service requests to technicians', color: '#6366f1', icon: 'tasks' as IconName }]
@@ -92,6 +107,10 @@ export default function JobToolsScreen({
     else if (key === 'mystats') onOpenMyStats();
     else if (key === 'pricing') onOpenServicePricing();
     else if (key === 'assign') onOpenAssignRequests();
+    else if (key === 'calendar') onOpenCalendar();
+    else if (key === 'register') onOpenRegister();
+    else if (key === 'materials') onOpenMaterials();
+    else if (key === 'assistant') onOpenAssistant();
   };
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;

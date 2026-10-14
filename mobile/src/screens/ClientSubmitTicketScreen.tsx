@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
@@ -72,8 +72,8 @@ export default function ClientSubmitTicketScreen({ onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
+      <View style={styles.flex}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
           <Text style={styles.link} onPress={onBack}>← Back</Text>
           <Text style={[styles.title, { color: theme.text }]}>Submit a Service Request</Text>
 
@@ -96,7 +96,7 @@ export default function ClientSubmitTicketScreen({ onBack }: Props) {
 
           <GlowButton label="Submit Request" onPress={handleSubmit} loading={loading} />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }

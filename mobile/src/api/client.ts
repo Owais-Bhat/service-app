@@ -63,6 +63,7 @@ export const api = {
     request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  del: <T>(path: string, body?: unknown) => request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined }),
 };
 
 // Mirrors the web app's generic /api/data/:table compatibility layer
@@ -118,4 +119,10 @@ export async function postForm<T>(path: string, form: FormData): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
   return data as T;
+}
+
+export async function dataDelete<T>(table: string, eq: string | string[]): Promise<T> {
+  const sp = new URLSearchParams();
+  (Array.isArray(eq) ? eq : [eq]).forEach((v) => sp.append('eq', v));
+  return request<T>(`/data/${table}?${sp.toString()}`, { method: 'DELETE' });
 }

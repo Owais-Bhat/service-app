@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import GlassSurface from './GlassSurface';
 import GlassCard from './GlassCard';
@@ -9,8 +9,8 @@ import ProgressRing from './ProgressRing';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
-import { submitQuiz, QuizQuestion, QuizSubmitResult } from '../api/training';
-import { ApiError } from '../api/client';
+import { decodeQuestion, questionLabel, submitQuiz, QuizQuestion, QuizSubmitResult } from '../api/training';
+import { ApiError, resolveUploadUrl } from '../api/client';
 
 interface Props {
   courseId: string;
@@ -97,7 +97,7 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                             <View style={[styles.resultIconChip, { backgroundColor: ok ? 'rgba(21,160,90,0.16)' : 'rgba(240,85,109,0.16)' }]}>
                               <Icon name={ok ? 'check' : 'close'} size={12} color={ok ? brand.primary : semantic.danger} />
                             </View>
-                            <Text style={[styles.resultQuestion, { color: theme.text }]}>{q.question}</Text>
+                            <Text style={[styles.resultQuestion, { color: theme.text }]}>{questionLabel(decodeQuestion(q.question))}</Text>
                           </View>
                           {!ok ? (
                             <View style={styles.resultAnswers}>
@@ -125,14 +125,22 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                 </View>
               ) : (
                 <>
-                  {questions.map((q, idx) => (
+                  {questions.map((q, idx) => {
+                    const dq = decodeQuestion(q.question);
+                    const prev = idx > 0 ? decodeQuestion(questions[idx - 1].question) : null;
+                    const startsGroup = dq.kind === 'match' && (!prev || prev.group !== dq.group);
+                    return (
                     <Animated.View key={q.id} entering={FadeInUp.delay(idx * 70).duration(350).springify().damping(15)}>
+                      {startsGroup && dq.groupTitle ? (
+                        <Text style={[styles.groupTitle, { color: theme.text2 }]}>Match the following: {dq.groupTitle}</Text>
+                      ) : null}
                       <GlassCard style={styles.questionCard}>
+                        {dq.img ? <Image source={{ uri: resolveUploadUrl(dq.img) }} style={styles.questionImage} resizeMode="contain" /> : null}
                         <View style={styles.questionHeader}>
                           <View style={[styles.questionIndex, { backgroundColor: `${brand.primary}22` }]}>
                             <Text style={[styles.questionIndexText, { color: brand.primary }]}>{idx + 1}</Text>
                           </View>
-                          <Text style={[styles.questionText, { color: theme.text }]}>{q.question}</Text>
+                          <Text style={[styles.questionText, { color: theme.text }]}>{questionLabel(dq)}</Text>
                         </View>
                         {q.options.map((opt, optIdx) => {
                           const selected = answers[q.id] === optIdx;
@@ -155,7 +163,8 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                         })}
                       </GlassCard>
                     </Animated.View>
-                  ))}
+                    );
+                  })}
 
                   {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -187,6 +196,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, marginTop: spacing(0.5) },
   error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(2), textAlign: 'center' },
   questionCard: { marginBottom: spacing(3) },
+  questionImage: { width: '100%', height: 160, borderRadius: radius.md, marginBottom: spacing(3) },
+  groupTitle: { fontFamily: 'Manrope_700Bold', fontSize: 12, marginBottom: spacing(2), marginTop: spacing(1) },
   questionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2.5), marginBottom: spacing(3) },
   questionIndex: { width: 26, height: 26, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   questionIndexText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },

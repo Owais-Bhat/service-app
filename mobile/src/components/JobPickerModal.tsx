@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';
@@ -38,7 +38,7 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.backdrop}>
         <GlassSurface style={styles.card} borderRadius={radius.lg}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.text }]}>Completed Job</Text>
@@ -63,7 +63,7 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
           ) : error ? (
             <Text style={[styles.empty, { color: theme.text3 }]}>{error}</Text>
           ) : (
-            <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+            <ScrollView keyboardShouldPersistTaps="handled" style={styles.list} showsVerticalScrollIndicator={false}>
               {filtered.length === 0 ? (
                 <Text style={[styles.empty, { color: theme.text3 }]}>No completed jobs to claim yet.</Text>
               ) : (
@@ -86,7 +86,7 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
             </ScrollView>
           )}
         </GlassSurface>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
