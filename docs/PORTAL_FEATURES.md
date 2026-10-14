@@ -162,9 +162,9 @@ when its route is in `ADMIN_SCREENS`. Every web menu page is live, plus the ones
 | Marketing | Notices · Coupons · Discount Details · Landing & Popup Ads (upload, edit) · WhatsApp Campaigns (compose, test, schedule, publish, monthly automatic, opt-outs) |
 | Also | AI Assistant · Notifications · Calendar · Auto Assignment · Assignment Tracker |
 
-Still web-only, honestly: spreadsheet-driven authoring (quiz questions imported from an Excel/CSV file, match-the-following
-questions), the direct ZIP download of the full backup (the phone gets the emailed copy instead) and CSV export buttons.
-Everything else a web admin or employee can do is on the phone.
+Not on the phone yet: see `docs/FEATURE_AUDIT.md` — the page-by-page audit of every web feature against mobile, with the
+list of gaps (pricing admin, Finance page + AI report, live-location trail, attendance / service-request reports,
+customer-equipment panel, booking rules, spreadsheet imports and more).
 
 ## 5. Build phases
 
