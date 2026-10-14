@@ -891,3 +891,9 @@ Needs `report.financial`.
 changed on the line itself. Work or parts that are not in the catalogue are added as the technician's own line — a name, a
 quantity and a price — which is stored as a `custom` bill line (no stock moves, no cost). "Additional charges" sits below
 the items. Prices typed on the line are the prices billed; the server stores them as given.
+
+**Taking stock back from a technician.** Stock → Take back → choose the technician: what he is recorded as holding is
+listed (item, how many he holds), with a box for how many came back and an "All" button, so nothing is searched for.
+Whatever is counted goes van → store as one transfer. Something he brought that was never recorded as given to him is added
+in the empty row below; it has nothing to transfer from, so it is added to the store as a stock adjustment with the reason
+"Brought back by <name> — it was not recorded as given to him" (audited).

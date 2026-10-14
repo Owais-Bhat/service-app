@@ -479,7 +479,7 @@ async function openTransferModal(container, mode = 'transfer') {
         <div class="form-group" style="margin-top:12px"><label>Note</label><input type="text" id="tr-note" placeholder="${esc(cfg.note)}"></div>
         <p class="at2-note">${mode === 'give'
       ? 'The goods stay yours — they are only recorded as being with him. When he fits them on a job, record it under <b>Used on a job</b>.'
-      : mode === 'takeback' ? 'Use this for stock he did not use and brought back. Stock fitted on a job is recorded under <b>Used on a job</b> instead.'
+      : mode === 'takeback' ? 'Choose the technician: what he is holding is listed — count it and enter how many came back. Something he brought that is not on his list goes in the empty row below (it is added to the store as a correction). Stock fitted on a job is recorded under <b>Used on a job</b> instead.'
         : 'A transfer is not a sale and not an expense — it records where the goods are, nothing more.'}</p>
       </div>
       <div class="modal-footer">
@@ -512,6 +512,7 @@ async function openTransferModal(container, mode = 'transfer') {
   };
   const hint = (i) => (held === null ? '' : held.has(i.id) ? `${held.get(i.id)} here` : (fromId() ? 'none here' : `${Number(i.quantity)} in all`));
   const check = (tr) => {
+    if (mode === 'takeback') { const w = tr.querySelector('.tr-warn'); if (w && !tr._fixed) w.textContent = ''; return; }
     const item = tr._picker?.item();
     const q = Number(tr.querySelector('.tr-qty').value) || 0;
     tr.querySelector('.tr-warn').textContent = held && item && fromId() && q > (held.get(item.id) || 0) ? `Only ${held.get(item.id) || 0} recorded there` : '';
@@ -524,6 +525,7 @@ async function openTransferModal(container, mode = 'transfer') {
       <td><input type="text" class="tr-item" placeholder="Search item…" style="min-width:230px"><div class="tr-warn" style="font-size:0.72rem;color:var(--danger)"></div></td>
       <td><input type="number" class="tr-qty" step="0.001" min="0" style="width:100px"></td>
       <td><button class="at2-photo tr-del" title="Remove">${ICONS.close}</button></td>`;
+    if (mode === 'takeback') tr.querySelector('td').insertAdjacentHTML('afterend', '<td style="color:var(--text-dim);font-size:0.78rem">not on his list</td>');
     $('#tr-lines').appendChild(tr);
     tr._picker = attachItemPicker(tr.querySelector('.tr-item'), {
       items: () => items, hint, onPick: () => { tr.querySelector('.tr-qty').focus(); check(tr); },
@@ -537,15 +539,71 @@ async function openTransferModal(container, mode = 'transfer') {
   };
   addLine();
   $('#tr-add').onclick = addLine;
-  ['#tr-from', '#tr-store', '#tr-tech'].forEach(sel => { if ($(sel)) $(sel).onchange = loadHeld; });
+
+  // Taking stock back: what he is holding is listed for counting, so nothing has to be searched for. The person
+  // enters how many came back; anything he brought that was not on his list is added with "Add item".
+  const buildHeldList = async () => {
+    const tbody = $('#tr-lines');
+    overlay.querySelectorAll('.tr-line').forEach(tr => tr._picker?.destroy());
+    tbody.innerHTML = '';
+    const head = overlay.querySelector('thead tr');
+    if (head) head.innerHTML = '<th>Item</th><th>He holds</th><th>Brought back</th><th></th>';
+    const vanId = fromId();
+    if (!vanId) { addLine(); return; }
+    let rows = [];
+    try { rows = await api('GET', `/stock/locations/${encodeURIComponent(vanId)}/items`); } catch { /* the list below still works by search */ }
+    rows = rows.filter(r => Number(r.held_qty) > 0 && r.active !== 0);
+    rows.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.className = 'tr-line tr-fixed';
+      tr._fixed = r.id;
+      tr.innerHTML = `
+        <td><b>${esc(r.name)}</b>${r.sku ? `<div style="font-size:0.72rem;color:var(--text-dim)">${esc(r.sku)}</div>` : ''}<div class="tr-warn" style="font-size:0.72rem;color:var(--danger)"></div></td>
+        <td style="white-space:nowrap">${Number(r.held_qty)} <small style="color:var(--text-dim)">${esc(r.base_unit || r.unit || '')}</small></td>
+        <td style="white-space:nowrap">
+          <input type="number" class="tr-qty" step="0.001" min="0" max="${Number(r.held_qty)}" placeholder="0" style="width:90px">
+          <button type="button" class="btn btn-secondary btn-sm tr-all" title="He brought all of it back">All</button>
+        </td>
+        <td></td>`;
+      const qtyInput = tr.querySelector('.tr-qty');
+      qtyInput.oninput = () => {
+        tr.querySelector('.tr-warn').textContent = Number(qtyInput.value) > Number(r.held_qty) ? `He only holds ${Number(r.held_qty)}` : '';
+      };
+      tr.querySelector('.tr-all').onclick = () => { qtyInput.value = Number(r.held_qty); qtyInput.oninput(); };
+      tbody.appendChild(tr);
+    });
+    if (!rows.length) {
+      tbody.insertAdjacentHTML('beforeend', '<tr class="tr-empty"><td colspan="4" style="color:var(--text-dim);padding:12px">Nothing is recorded as being with this technician. Add what he brought back below.</td></tr>');
+    }
+    addLine(); // a row for anything he brought back that was not on his list
+  };
+
+  ['#tr-from', '#tr-store'].forEach(sel => { if ($(sel)) $(sel).onchange = loadHeld; });
+  if ($('#tr-tech')) {
+    $('#tr-tech').onchange = async () => {
+      await loadHeld();
+      if (mode === 'takeback') await buildHeldList();
+    };
+  }
   loadHeld();
 
   $('#tr-save').onclick = async () => {
-    const lines = [...overlay.querySelectorAll('.tr-line')].map(tr => ({
-      item_id: tr._picker.value(),
-      quantity: Number(tr.querySelector('.tr-qty').value) || 0,
+    const gathered = [...overlay.querySelectorAll('.tr-line')].map(tr => ({
+      item_id: tr._fixed || tr._picker?.value(),
+      quantity: Number(tr.querySelector('.tr-qty')?.value) || 0,
     })).filter(l => l.item_id && l.quantity > 0);
-    if (!lines.length) return toast('Choose an item and a quantity', 'warning');
+    if (!gathered.length) return toast(mode === 'takeback' ? 'Enter how many of each came back' : 'Choose an item and a quantity', 'warning');
+
+    // Taking back: what he is recorded as holding goes back by transfer; anything he brought that was never recorded
+    // as given to him has nothing to transfer from, so it is added to the store as a correction, with the reason.
+    const heldQty = (id) => (held && held.get(id)) || 0;
+    const merged = new Map();
+    gathered.forEach(l => merged.set(l.item_id, (merged.get(l.item_id) || 0) + l.quantity));
+    const lines = []; const extras = [];
+    merged.forEach((quantity, item_id) => {
+      if (mode !== 'takeback' || held === null || heldQty(item_id) > 0) lines.push({ item_id, quantity });
+      else extras.push({ item_id, quantity });
+    });
 
     const btn = $('#tr-save');
     btn.disabled = true;
@@ -567,9 +625,20 @@ async function openTransferModal(container, mode = 'transfer') {
         employeeId = van.employee_id || null;
         if (mode === 'give') { from = $('#tr-store').value; to = van.id; } else { from = van.id; to = $('#tr-store').value; }
       }
-      await api('POST', '/stock/transfers', {
-        from_location_id: from, to_location_id: to, employee_id: employeeId, note: $('#tr-note').value.trim(), lines,
-      });
+      if (lines.length) {
+        await api('POST', '/stock/transfers', {
+          from_location_id: from, to_location_id: to, employee_id: employeeId, note: $('#tr-note').value.trim(), lines,
+        });
+      }
+      if (extras.length) {
+        const who = techs.find(t => t.id === $('#tr-tech').value)?.name || 'the technician';
+        for (const x of extras) {
+          await api('POST', '/stock/adjustments', {
+            item_id: x.item_id, type: 'adjust_in', quantity: x.quantity, location_id: to,
+            reason: 'Brought back by ' + who + ' — it was not recorded as given to him',
+          });
+        }
+      }
       toast(mode === 'give' ? 'Stock given' : mode === 'takeback' ? 'Stock taken back' : 'Transferred', 'success');
       close();
       await loadTab();
