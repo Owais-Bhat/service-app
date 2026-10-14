@@ -116,7 +116,7 @@ Notifications list + push + voice alert · AI Assistant chat · global search ·
 ## 4. Mobile app today
 
 Stack: Expo SDK 57, React Native 0.86, react-navigation native-stack, reanimated, NEST dark-glass design system.
-Checked by `npm test` in `mobile/` (70 render + interaction tests) and `npx tsc --noEmit`.
+Checked by `npm test` in `mobile/` (75 render + interaction tests) and `npx tsc --noEmit`.
 
 ### Employee navigator — full parity
 
@@ -196,5 +196,5 @@ customer-equipment panel, booking rules, spreadsheet imports and more).
 ```bash
 cd mobile
 npx tsc --noEmit   # types, including the tests
-npm test           # 70 tests: every admin screen against server-shaped data, forms, employee flows
+npm test           # 75 tests: every admin screen against server-shaped data, forms, employee flows
 ```

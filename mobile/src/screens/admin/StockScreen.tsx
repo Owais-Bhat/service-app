@@ -8,6 +8,7 @@ import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
+import StockImportSheet from '../../components/admin/StockImportSheet';
 import Field from '../../components/admin/Field';
 import SectionLabel from '../../components/admin/SectionLabel';
 import { fetchStockValuation, fetchItems, ItemRow, rupees } from '../../api/adminBooks';
@@ -285,6 +286,8 @@ export default function StockScreen({ onBack }: Props) {
     }
   };
 
+  const [importing, setImporting] = useState(false);
+
   const showAvailability = async (itemId: string) => {
     try {
       const a = await fetchAvailability(itemId);
@@ -335,6 +338,7 @@ export default function StockScreen({ onBack }: Props) {
           </View>
           <View style={styles.actions}>
             <ActionButton label="Transfer" tone="neutral" onPress={() => openTransfer('transfer')} />
+            <ActionButton label="Import CSV" tone="neutral" onPress={() => setImporting(true)} />
             <ActionButton
               label="Adjust stock"
               tone="neutral"
@@ -558,6 +562,7 @@ export default function StockScreen({ onBack }: Props) {
         })}
         <Field label="Note (optional)" value={countNote} onChangeText={setCountNote} />
       </FormSheet>
+      <StockImportSheet visible={importing} onClose={() => setImporting(false)} onDone={() => data.reload()} />
     </AdminScreen>
   );
 }

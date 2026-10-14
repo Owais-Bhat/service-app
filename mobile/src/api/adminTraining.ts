@@ -56,3 +56,91 @@ export const fetchTrainingEmployees = () => dataGet<PlainEmployee[]>('profiles',
 // Fill-in-the-blank and image questions pack their extras into the question
 // column as a JSON envelope — the format the web editor and the player share.
 export const packQuestion = (o: { t: 'fill' | 'image'; text: string; img?: string | null }) => JSON.stringify({ _qz: 1, ...o });
+
+// ── Quiz questions from a CSV (Type, Question, OptionA-D, Correct, ImageURL) ──
+export interface QuizBody {
+  question: string;
+  options: string[];
+  correct_index: number;
+}
+
+export const QUIZ_SAMPLE: Record<string, string>[] = [
+  { Type: 'mcq', Question: 'Which cable carries video for an analog CCTV camera?', OptionA: 'Coaxial', OptionB: 'HDMI', OptionC: 'Audio', OptionD: 'VGA', Correct: 'A', ImageURL: '' },
+  { Type: 'fill', Question: 'The default RTSP port is ___', OptionA: '554', OptionB: '80', OptionC: '8080', OptionD: '443', Correct: 'A', ImageURL: '' },
+  { Type: 'image', Question: 'Which device is shown in the image?', OptionA: 'DVR', OptionB: 'NVR', OptionC: 'Network Switch', OptionD: 'Router', Correct: 'C', ImageURL: 'https://example.com/your-image.jpg' },
+  { Type: 'match', Question: 'Match the device to its purpose', OptionA: 'DVR=Records analog CCTV footage', OptionB: 'Switch=Connects LAN devices', OptionC: 'Biometric=Marks attendance', OptionD: 'VDP=Video door communication', Correct: '', ImageURL: '' },
+];
+
+const uid = () =>
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+
+// Same rules as the web importer. Match-the-following makes one row per pair
+// (same group id) so the server's index-based grading keeps working.
+export function quizBodiesFromRows(rows: string[][]): { bodies: QuizBody[]; errors: string[] } {
+  const bodies: QuizBody[] = [];
+  const errors: string[] = [];
+  if (rows.length < 2) return { bodies, errors: ['The file has no question rows'] };
+  const heads = rows[0].map((h) => String(h).toLowerCase().replace(/[^a-z]/g, ''));
+  rows.slice(1).forEach((cells, idx) => {
+    const r: Record<string, string> = {};
+    heads.forEach((h, i) => {
+      r[h] = String(cells[i] ?? '').trim();
+    });
+    const line = idx + 2;
+    const type = (r.type || 'mcq').toLowerCase();
+    const text = r.question || '';
+    const img = r.imageurl || r.image || null;
+    const opts = ['optiona', 'optionb', 'optionc', 'optiond'].map((k) => r[k] || '').filter(Boolean);
+    if (!text) {
+      errors.push(`Row ${line}: question is empty`);
+      return;
+    }
+    if (type === 'match') {
+      const pairs = opts
+        .map((p) => {
+          const i = p.indexOf('=');
+          return i > 0 ? [p.slice(0, i).trim(), p.slice(i + 1).trim()] : null;
+        })
+        .filter((p): p is string[] => !!p && !!p[0] && !!p[1]);
+      if (pairs.length < 2) {
+        errors.push(`Row ${line}: match needs at least 2 "Left=Right" pairs in the Option columns`);
+        return;
+      }
+      const group = uid();
+      const rights = pairs.map((p) => p[1]);
+      pairs.forEach((p, i) => bodies.push({ question: JSON.stringify({ _qz: 1, t: 'match', text, gtitle: text, left: p[0], group }), options: rights, correct_index: i }));
+      return;
+    }
+    if (opts.length < 2) {
+      errors.push(`Row ${line}: needs at least 2 options`);
+      return;
+    }
+    const cRaw = r.correct || r.correctanswer || 'A';
+    let correct = 'ABCD'.indexOf(cRaw.toUpperCase());
+    if (correct === -1 && /^[1-4]$/.test(cRaw)) correct = Number(cRaw) - 1;
+    if (correct === -1) correct = opts.findIndex((o) => o.toLowerCase() === cRaw.toLowerCase());
+    if (correct < 0 || correct >= opts.length) {
+      errors.push(`Row ${line}: Correct must be A–D, 1–4, or match an option`);
+      return;
+    }
+    if (type === 'fill' && !/_{2,}/.test(text)) {
+      errors.push(`Row ${line}: fill questions need a blank written as ___ in the question`);
+      return;
+    }
+    const t = type === 'image' || (img && type === 'mcq') ? 'image' : type === 'fill' ? 'fill' : 'mcq';
+    bodies.push({ question: t === 'mcq' ? text : JSON.stringify({ _qz: 1, t, text, img }), options: opts, correct_index: correct });
+  });
+  return { bodies, errors };
+}
+
+export async function importQuizBodies(courseId: string, bodies: QuizBody[], startAt: number): Promise<number> {
+  let n = 0;
+  for (const b of bodies) {
+    await addQuestion(courseId, { ...b, position: startAt + n });
+    n++;
+  }
+  return n;
+}

@@ -15,6 +15,9 @@ import {
   fetchFullCourse,
   fetchTrainingEmployees,
   FullCourse,
+  importQuizBodies,
+  QUIZ_SAMPLE,
+  quizBodiesFromRows,
   packQuestion,
   PlainEmployee,
   removeLesson,
@@ -22,6 +25,9 @@ import {
   updateCourse,
 } from '../../api/adminTraining';
 import { decodeQuestion, questionLabel } from '../../api/training';
+import * as DocumentPicker from 'expo-document-picker';
+import { parseCsv } from '../../api/servicePricing';
+import { shareCsv } from '../../utils/shareCsv';
 import { uploadMedia } from '../../api/upload';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
@@ -176,6 +182,26 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
       },
     ]);
 
+  const importCsv = () =>
+    run(
+      'qimport',
+      async () => {
+        const res = await DocumentPicker.getDocumentAsync({ type: ['text/csv', 'text/comma-separated-values', 'text/plain', '*/*'], copyToCacheDirectory: true });
+        if (res.canceled || !res.assets?.[0]) return;
+        const f = res.assets[0];
+        if (!/\.csv$/i.test(f.name)) throw new Error('Choose a .csv file. In Excel use Save As → CSV.');
+        const rows = parseCsv((await (await fetch(f.uri)).text()).replace(/^\uFEFF/, ''));
+        const { bodies, errors } = quizBodiesFromRows(rows);
+        if (errors.length) throw new Error(errors.slice(0, 5).join('\n'));
+        if (!bodies.length) throw new Error('No questions were found in that file');
+        const n = await importQuizBodies(courseId as string, bodies, full?.quiz.length || 0);
+        await load();
+        onChanged();
+        Alert.alert('Imported', `${n} question${n === 1 ? '' : 's'} added.`);
+      },
+      'Import failed',
+    );
+
   const saveQuestion = () =>
     run(
       'quiz',
@@ -285,6 +311,14 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
               />
             );
           })}
+          <SectionLabel>Import many from a CSV</SectionLabel>
+          <Text style={[styles.cap, { color: theme.text3 }]}>
+            Columns: Type (mcq, fill, image, match), Question, OptionA–D, Correct (A–D), ImageURL. For match, write each option as Left=Right.
+          </Text>
+          <View style={styles.optRow}>
+            <ActionButton label="Sample CSV" tone="neutral" onPress={() => shareCsv('quiz-upload-sample.csv', QUIZ_SAMPLE)} />
+            <ActionButton label="Import CSV" busy={busy === 'qimport'} onPress={importCsv} />
+          </View>
           <SectionLabel>Add a question</SectionLabel>
           <FilterChips items={Q_TYPES} activeKey={q.type} onSelect={(k) => setQ({ ...q, type: k })} />
           {q.type === 'image' ? (

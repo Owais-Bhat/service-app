@@ -2,6 +2,14 @@
 
 Status of the Expo/React Native app (`mobile/`) vs. the web app, tracked on branch `mobile-app`. Last updated 2026-08-22.
 
+## 2026-10-14 (later) — Gap pass from docs/FEATURE_AUDIT.md
+
+- Deleting a request now removes its employee ticket on the server (web and mobile), so the card leaves the technician's portal
+- Assignment "seen" ping, service pricing manage + CSV import, Finance page + AI report, live-location day trail
+- Attendance Report, Request Reports, Client Feedback, customer-equipment panel with AMC visit counter
+- Booking rules setting + precheck, response-time alerts, per-ticket device switch, payment allocate, past-record detail, stock availability
+- CSV: stock import, quiz import, export on reports / tasks / service log / complaints / collections
+
 ## 2026-10-14 — Depth pass: every web admin / employee feature on the phone
 
 - Financial Reports: all web tabs (reminders with WhatsApp send, P&L, balance sheet, ageing, account ledger, party statement, GST, stock value, job margins, health check)

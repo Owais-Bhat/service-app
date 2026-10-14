@@ -6,6 +6,7 @@ import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
+import ExportButton from '../../components/admin/ExportButton';
 import FilterChips from '../../components/admin/FilterChips';
 import SearchField from '../../components/admin/SearchField';
 import FormSheet from '../../components/admin/FormSheet';
@@ -761,8 +762,52 @@ export default function FinReportsScreen({ onBack }: Props) {
     }
   };
 
+  // What "Export CSV" hands over: the rows of whichever report is on screen.
+  const rp = (p: number) => (p / 100).toFixed(2);
+  const exportRows = (): Record<string, unknown>[] => {
+    if (!payload) return [];
+    switch (payload.kind) {
+      case 'reminders':
+        return payload.v.customers.map((c) => ({ Customer: c.party, Phone: c.phone || '', Overdue: rp(c.overdue_paise), 'Total owed': rp(c.outstanding_paise), 'Oldest days': c.oldest_days, Reminded: c.times_reminded }));
+      case 'pnl':
+        return [
+          ...payload.v.income.map((a) => ({ Section: 'Income', Code: a.code, Account: a.name, Amount: rp(a.amount_paise) })),
+          ...payload.v.cogs.map((a) => ({ Section: 'Cost of goods sold', Code: a.code, Account: a.name, Amount: rp(a.amount_paise) })),
+          ...payload.v.expenses.map((a) => ({ Section: 'Expenses', Code: a.code, Account: a.name, Amount: rp(a.amount_paise) })),
+          { Section: 'Net profit', Code: '', Account: '', Amount: rp(payload.v.totals.net_profit_paise) },
+        ];
+      case 'balance':
+        return [
+          ...payload.v.assets.map((a) => ({ Side: 'Assets', Code: a.code, Account: a.name, Amount: rp(a.balance_paise) })),
+          ...payload.v.liabilities.map((a) => ({ Side: 'Liabilities', Code: a.code, Account: a.name, Amount: rp(a.balance_paise) })),
+          ...payload.v.equity.map((a) => ({ Side: 'Equity', Code: a.code, Account: a.name, Amount: rp(a.balance_paise) })),
+        ];
+      case 'ageing':
+        return payload.v.parties.map((p) => ({ Party: p.party, Phone: p.phone || '', '0-30': rp(p.d0_30), '31-60': rp(p.d31_60), '61-90': rp(p.d61_90), '90+': rp(p.d90_plus), Outstanding: rp(p.outstanding_paise), 'Paid ahead': rp(p.advance_paise) }));
+      case 'ledger':
+      case 'statement':
+        return payload.v.rows.map((x) => ({ Date: x.date, Journal: x.journal_no, Narration: x.narration || '', Party: x.party || '', Debit: rp(x.debit_paise), Credit: rp(x.credit_paise), Balance: rp(x.balance_paise) }));
+      case 'gst-sales':
+        return payload.v.map((r) => ({ Date: r.date, Document: r.doc_no, Party: r.party, GSTIN: r.gstin || '', Category: r.category, Taxable: rp(r.taxable_paise), CGST: rp(r.cgst_paise), SGST: rp(r.sgst_paise), IGST: rp(r.igst_paise), Total: rp(r.total_paise) }));
+      case 'gst-purchases':
+        return payload.v.map((r) => ({ Date: r.date, Document: r.doc_no, 'Supplier bill': r.supplier_ref || '', Supplier: r.party, GSTIN: r.gstin || '', Taxable: rp(r.taxable_paise), CGST: rp(r.cgst_paise), SGST: rp(r.sgst_paise), IGST: rp(r.igst_paise), Claim: r.eligible ? 'Yes' : 'No' }));
+      case 'gst-hsn':
+        return payload.v.rows.map((r) => ({ 'HSN/SAC': r.hsn_sac || '', Unit: r.unit, 'Rate %': r.rate_pct, Quantity: r.quantity, Taxable: rp(r.taxable_paise), CGST: rp(r.cgst_paise), SGST: rp(r.sgst_paise), IGST: rp(r.igst_paise) }));
+      case 'stock':
+        return payload.v.items.map((i) => ({ Item: i.name, SKU: i.sku || '', Unit: i.unit || '', 'On hand': i.quantity, 'Avg cost': rp(i.avg_cost_paise), Value: rp(i.value_paise) }));
+      case 'jobs':
+        return payload.v.jobs.map((j) => ({ Date: String(j.job_date || '').slice(0, 10), Ticket: j.ticket_no || '', Customer: j.customer || '', Revenue: rp(j.revenue_paise), Cost: rp(j.total_cost_paise), Margin: rp(j.margin_paise), 'Margin %': j.margin_pct ?? '' }));
+      case 'health':
+        return payload.v.checks.map((c) => ({ Check: c.label, OK: c.ok ? 'Yes' : 'No', 'One side': c.a_paise, 'Other side': c.b_paise, Difference: c.difference_paise }));
+      default:
+        return [];
+    }
+  };
+  const exportable = payload && payload.kind !== 'summary' && payload.kind !== 'gst-summary';
+
   return (
     <AdminScreen title="Financial Reports" subtitle={subtitle} onBack={onBack} onRefresh={load} loading={loading && !payload} error={error} toolbar={toolbar}>
+      {exportable ? <ExportButton name={`${tab}-report.csv`} rows={exportRows()} /> : null}
       {body()}
       <FormSheet
         visible={picker !== null}
