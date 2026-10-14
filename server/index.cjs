@@ -3191,6 +3191,12 @@ function appendRoleScope({ table, user, method, whereClauses, params }) {
         case 'tickets':
             whereClauses.push('(?? = ? OR ?? = ?)');
             params.push('assigned_to', id, 'client_id', id);
+            // A ticket made by an assignment (category service_request) is only a
+            // shadow of its request: once the request is deleted nothing points at
+            // it any more, and it must not keep a card alive in the portal.
+            whereClauses.push(
+                "NOT (tickets.category = 'service_request' AND NOT EXISTS (SELECT 1 FROM inquiries i WHERE i.ticket_id = tickets.id))"
+            );
             break;
         case 'inquiries':
             // Ticket assigners work the whole queue, so no ownership filter.
@@ -8777,10 +8783,37 @@ app.delete('/api/data/:table', dataAuth, async (req, res) => {
             deletedRows = rows;
         } catch { /* ignore — proceed with delete */ }
 
+        // A request that is deleted must also leave the technician's portal. The
+        // employee's task list is built from `tickets`, which the assignment
+        // creates beside the inquiry, so remove that ticket and its comments (and
+        // the service lines, which have no cascade) in the same breath. Every
+        // client — web admin, web dashboard, mobile — then gets the same result.
+        const orphanedTickets = [];
+        if (table === 'inquiries' && deletedRows.length) {
+            for (const row of deletedRows) {
+                try {
+                    await connection.query('DELETE FROM inquiry_services WHERE inquiry_id = ?', [row.id]);
+                    if (row.ticket_id) {
+                        const [[others]] = await connection.query(
+                            'SELECT COUNT(*) AS n FROM inquiries WHERE ticket_id = ? AND id <> ?', [row.ticket_id, row.id]
+                        );
+                        if (!Number(others.n)) {
+                            await connection.query('DELETE FROM ticket_comments WHERE ticket_id = ?', [row.ticket_id]);
+                            await connection.query('DELETE FROM tickets WHERE id = ?', [row.ticket_id]);
+                            orphanedTickets.push({ id: row.ticket_id, assigned_to: row.assigned_employee_id || null });
+                        }
+                    }
+                } catch (cleanupErr) {
+                    console.error('[data delete] inquiry cleanup failed:', cleanupErr.message);
+                }
+            }
+        }
+
         const query = `DELETE FROM ?? WHERE ${whereClauses.join(' AND ')}`;
         const [result] = await connection.query(query, [table, ...whereParams]);
         connection.release();
 
+        orphanedTickets.forEach(t => broadcastChange('DELETE', 'tickets', t));
         deletedRows.forEach(row => broadcastChange('DELETE', table, row));
         if (LEDGER_KIND[table]) deletedRows.forEach(row => serviceLedger.syncSoon(LEDGER_KIND[table], row.id));
         if (table === 'ads' || table === 'service_pricing') invalidateLandingBootstrap();

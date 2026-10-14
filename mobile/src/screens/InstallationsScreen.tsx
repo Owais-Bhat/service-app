@@ -12,6 +12,7 @@ import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import InstallationDetailSheet from '../components/InstallationDetailSheet';
 import { fetchMyInstallations, InstallationJob } from '../api/installations';
+import { pingAssignmentSeen } from '../api/tasks';
 
 interface Props {
   onBack: () => void;
@@ -50,7 +51,9 @@ export default function InstallationsScreen({ onBack }: Props) {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      setJobs(await fetchMyInstallations(user.id));
+      const mine = await fetchMyInstallations(user.id);
+      setJobs(mine);
+      mine.filter((j) => !j.completed_at).forEach((j) => pingAssignmentSeen('installation', j.id));
       setError(null);
     } catch {
       setError('Could not load installations — pull to retry');

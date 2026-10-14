@@ -1,4 +1,16 @@
-import { dataGet, dataPatch } from './client';
+import { api, dataGet, dataPatch } from './client';
+
+// The assigned technician has opened the job. The server stamps "seen" so the
+// Assignment Tracker can tell a job that was read from one nobody has noticed.
+// Fire and forget, once per job per app session — a failed ping never matters.
+const pinged = new Set<string>();
+export function pingAssignmentSeen(kind: 'inquiry' | 'installation', id: string | null | undefined): void {
+  if (!id) return;
+  const key = `${kind}:${id}`;
+  if (pinged.has(key)) return;
+  pinged.add(key);
+  api.post(`/assignments/${kind}/${encodeURIComponent(id)}/seen`).catch(() => pinged.delete(key));
+}
 import { createPaymentLink } from './payments';
 import { redeemCoupon } from './coupons';
 

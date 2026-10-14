@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { pingAssignmentSeen } from '../api/tasks';
 import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
@@ -158,6 +159,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     couponCode: couponApplied?.code,
     paymentMethod,
   });
+
+  // Opening a job is how the office learns it was seen.
+  useEffect(() => {
+    pingAssignmentSeen('inquiry', item.inquiryId);
+  }, [item.inquiryId]);
 
   useEffect(() => {
     let alive = true;
