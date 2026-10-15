@@ -52,11 +52,11 @@ export interface WalkInInput {
   employeeId: string;
   name: string;
   phone10: string;
-  company: string;
+  company?: string;
   serviceItem: string;
   location: string;
   description: string;
-  preferredTime: string;
+  preferredTime?: string;
   lat: number | null;
   lng: number | null;
 }
@@ -91,12 +91,12 @@ export async function registerWalkInRequest(input: WalkInInput): Promise<string>
       service_item: input.serviceItem,
       description: input.description || null,
       ticket_no: no,
-      preferred_time: input.preferredTime,
+      preferred_time: input.preferredTime || null,
       assigned_employee_id: input.employeeId,
       ticket_id: ticketId,
       status: 'open',
       assignment_status: 'accepted',
-      company_name: input.company,
+      company_name: input.company || null,
     });
   } catch (e) {
     await dataDelete('tickets', `id:${ticketId}`).catch(() => {});

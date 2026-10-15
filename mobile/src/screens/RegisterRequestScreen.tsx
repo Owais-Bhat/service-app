@@ -6,9 +6,8 @@ import ActionButton from '../components/admin/ActionButton';
 import Field from '../components/admin/Field';
 import SectionLabel from '../components/admin/SectionLabel';
 import { useAuth } from '../context/AuthContext';
-import { fetchCompanies } from '../api/companies';
 import { fetchServicePricing } from '../api/servicePricing';
-import { PREFERRED_TIMES, registerWalkInRequest } from '../api/employeeExtra';
+import { registerWalkInRequest } from '../api/employeeExtra';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -42,23 +41,18 @@ function Choice({ items, value, onChange }: { items: string[]; value: string; on
 export default function RegisterRequestScreen({ onBack }: Props) {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const [companies, setCompanies] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [company, setCompany] = useState('Networking Experts');
-  const [customCompany, setCustomCompany] = useState('');
   const [issue, setIssue] = useState('');
   const [customIssue, setCustomIssue] = useState('');
   const [location, setLocation] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [description, setDescription] = useState('');
-  const [time, setTime] = useState('Flexible');
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetchCompanies().then((rows) => setCompanies(rows.map((r) => r.name))).catch(() => {});
     fetchServicePricing()
       .then((rows) => {
         const cats = [...new Set(rows.map((r) => r.category).filter((c): c is string => !!c))];
@@ -68,7 +62,6 @@ export default function RegisterRequestScreen({ onBack }: Props) {
       .catch(() => setIssue('Other'));
   }, []);
 
-  const companyChoices = useMemo(() => [...new Set(['Networking Experts', ...companies]), 'Other'], [companies]);
   const issueChoices = useMemo(() => [...categories, 'Other'], [categories]);
 
   const useMyLocation = async () => {
@@ -98,11 +91,9 @@ export default function RegisterRequestScreen({ onBack }: Props) {
 
   const submit = async () => {
     const digits = phone.replace(/\D/g, '');
-    const companyName = company === 'Other' ? customCompany.trim() : company;
     const serviceItem = issue === 'Other' ? customIssue.trim() : issue;
     if (!name.trim()) return Alert.alert('Customer name', 'Enter the customer name');
     if (digits.length !== 10) return Alert.alert('Phone number', 'Enter a valid 10-digit mobile number');
-    if (!companyName) return Alert.alert('Company', 'Choose or type the company');
     if (!serviceItem) return Alert.alert('Issue', 'Choose or describe the issue');
     if (!location.trim()) return Alert.alert('Location', 'The address is required');
     if (!user) return;
@@ -113,11 +104,9 @@ export default function RegisterRequestScreen({ onBack }: Props) {
         employeeId: user.id,
         name: name.trim(),
         phone10: digits,
-        company: companyName,
         serviceItem,
         location: location.trim(),
         description: description.trim(),
-        preferredTime: time,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
       });
@@ -135,10 +124,6 @@ export default function RegisterRequestScreen({ onBack }: Props) {
         <Field label="Customer name" value={name} onChangeText={setName} autoCapitalize="words" />
         <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="10 digits" />
 
-        <SectionLabel>Company</SectionLabel>
-        <Choice items={companyChoices} value={company} onChange={setCompany} />
-        {company === 'Other' ? <Field label="Company name" value={customCompany} onChangeText={setCustomCompany} autoCapitalize="words" /> : null}
-
         <SectionLabel>Issue</SectionLabel>
         <Choice items={issueChoices} value={issue} onChange={setIssue} />
         {issue === 'Other' ? <Field label="Describe the issue" value={customIssue} onChangeText={setCustomIssue} /> : null}
@@ -147,8 +132,6 @@ export default function RegisterRequestScreen({ onBack }: Props) {
         <Field label="Address" value={location} onChangeText={setLocation} multiline hint={coords ? `GPS ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : undefined} />
         <ActionButton label={locating ? 'Finding…' : 'Use my current location'} tone="neutral" busy={locating} onPress={useMyLocation} />
 
-        <SectionLabel>When</SectionLabel>
-        <Choice items={PREFERRED_TIMES} value={time} onChange={setTime} />
         <Field label="Notes (optional)" value={description} onChangeText={setDescription} multiline />
 
         <Text style={[styles.note, { color: theme.text3 }]}>The request is created already assigned to you and accepted.</Text>

@@ -52,12 +52,12 @@ function uuid(): string {
 export interface AdminRequestInput {
   name: string;
   phone10: string;
-  company: string;
+  company?: string;
   location: string;
   serviceItem: string;
   description: string;
   billNo: string;
-  preferredTime: string;
+  preferredTime?: string;
   lat: number | null;
   lng: number | null;
   employeeId: string;
@@ -81,7 +81,7 @@ export async function createAdminRequest(input: AdminRequestInput): Promise<stri
     service_item: input.serviceItem,
     description: input.description || null,
     ticket_no: ticket,
-    preferred_time: input.preferredTime,
+    preferred_time: input.preferredTime || null,
     status: 'open',
     assignment_status: 'none',
   });

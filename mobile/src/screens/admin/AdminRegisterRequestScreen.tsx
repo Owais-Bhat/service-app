@@ -7,7 +7,6 @@ import Field from '../../components/admin/Field';
 import SectionLabel from '../../components/admin/SectionLabel';
 import { createAdminRequest, fetchOnlineEmployees, OnlineEmployee } from '../../api/adminManage';
 import { getLandingBootstrap } from '../../api/landing';
-import { PREFERRED_TIMES } from '../../api/employeeExtra';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
 import { brand } from '../../theme/tokens';
@@ -44,8 +43,6 @@ export default function AdminRegisterRequestScreen({ onBack }: Props) {
   const [online, setOnline] = useState<OnlineEmployee[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [company, setCompany] = useState('');
-  const [time, setTime] = useState('As soon as possible');
   const [issue, setIssue] = useState('');
   const [other, setOther] = useState('');
   const [employeeId, setEmployeeId] = useState('');
@@ -101,12 +98,10 @@ export default function AdminRegisterRequestScreen({ onBack }: Props) {
       const no = await createAdminRequest({
         name: name.trim(),
         phone10: digits,
-        company: company.trim(),
         location: location.trim(),
         serviceItem: service,
         description: description.trim(),
         billNo: bill.trim(),
-        preferredTime: time,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
         employeeId,
@@ -127,14 +122,10 @@ export default function AdminRegisterRequestScreen({ onBack }: Props) {
         </Text>
         <Field label="Customer name" value={name} onChangeText={setName} autoCapitalize="words" />
         <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="10 digit mobile number" />
-        <Field label="Company (optional)" value={company} onChangeText={setCompany} autoCapitalize="words" />
 
         <SectionLabel>Issue</SectionLabel>
         <Choice items={issueChoices} value={issue} onChange={setIssue} />
         {issue === 'Other' ? <Field label="Describe the issue" value={other} onChangeText={setOther} /> : null}
-
-        <SectionLabel>Preferred time</SectionLabel>
-        <Choice items={PREFERRED_TIMES.map((t) => ({ key: t, label: t }))} value={time} onChange={setTime} />
 
         <SectionLabel>Assign</SectionLabel>
         <Choice items={people} value={employeeId} onChange={setEmployeeId} />

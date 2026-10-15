@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Location from 'expo-location';
 import GlassCard from './GlassCard';
 import GlowButton from './GlowButton';
@@ -18,7 +18,6 @@ interface Props {
   issueOptions: IssueOption[];
 }
 
-const PREFERRED_TIMES = ['Morning (10 AM - 1 PM)', 'Afternoon (1 PM - 4 PM)', 'Evening (4 PM - 6 PM)', 'Tomorrow Morning', "I'm Flexible"];
 const CAPTCHA_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function makeCaptcha(): string {
@@ -53,7 +52,6 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
   const [locationValue, setLocationValue] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [detecting, setDetecting] = useState(false);
-  const [preferredTime, setPreferredTime] = useState(PREFERRED_TIMES[0]);
   const [billNo, setBillNo] = useState('');
   const [issueValue, setIssueValue] = useState(issueOptions[0]?.value ?? '');
   const [otherIssue, setOtherIssue] = useState('');
@@ -159,7 +157,6 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
         service_item,
         description: description.trim() || null,
         bill_no: billNo.trim() || null,
-        preferred_time: preferredTime,
         customer_lat: coords?.lat ?? null,
         customer_lng: coords?.lng ?? null,
       });
@@ -323,25 +320,6 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
                 <Text style={{ color: brand.primary, fontSize: 11, marginBottom: spacing(2) }}>Open exact pin</Text>
               </Pressable>
             )}
-
-            <Text style={[styles.label, { color: theme.text3 }]}>Preferred visit time</Text>
-            <View style={[styles.inputWrap, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-              <Icon name="clock" size={16} color={theme.text3} />
-              {Platform.OS === 'web' ? (
-                <TextInput value={preferredTime} onChangeText={setPreferredTime} style={[styles.input, { color: theme.text }]} />
-              ) : (
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.text }}>{preferredTime}</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1), marginTop: spacing(1.5) }}>
-                    {PREFERRED_TIMES.map((t) => (
-                      <Pressable key={t} onPress={() => setPreferredTime(t)}>
-                        <Text style={{ fontSize: 10, color: t === preferredTime ? brand.primary : theme.text3 }}>{t}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </View>
 
             <Text style={[styles.label, { color: theme.text3 }]}>Device bill number (optional)</Text>
             <View style={[styles.inputWrap, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>

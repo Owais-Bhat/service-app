@@ -82,10 +82,12 @@ function AssignmentCard({ item, width }: { item: TaskItem; width: number }) {
               <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Created</Text>
               <Text style={[styles.metaValue, { color: theme.text }]}>{timeAgo(item.createdAt)}</Text>
             </View>
-            <View style={styles.metaCell}>
-              <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Preferred Time</Text>
-              <Text style={[styles.metaValue, { color: brand.primary }]}>{item.preferredTime || 'Flexible'}</Text>
-            </View>
+            {item.preferredTime ? (
+              <View style={styles.metaCell}>
+                <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Preferred Time</Text>
+                <Text style={[styles.metaValue, { color: brand.primary }]}>{item.preferredTime}</Text>
+              </View>
+            ) : null}
           </View>
 
           {item.location ? (

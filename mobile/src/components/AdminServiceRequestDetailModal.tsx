@@ -231,10 +231,12 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
                 ) : null}
 
                 <View style={styles.metaRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Preferred Time</Text>
-                    <Text style={[styles.fieldValue, { color: brand.primary }]}>{inq.preferred_time || 'Flexible'}</Text>
-                  </View>
+                  {inq.preferred_time ? (
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Preferred Time</Text>
+                      <Text style={[styles.fieldValue, { color: brand.primary }]}>{inq.preferred_time}</Text>
+                    </View>
+                  ) : null}
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.fieldLabel, { color: theme.text3 }]}>SLA</Text>
                     <Text style={[styles.fieldValue, { color: isTerminal ? theme.text3 : slaTimeInfo?.isOverdue ? semantic.danger : semantic.success }]}>
