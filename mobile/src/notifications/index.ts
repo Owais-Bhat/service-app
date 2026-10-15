@@ -74,6 +74,7 @@ export function resolveNotificationRoute(
   const s = (subject || '').toLowerCase();
   const inquiryId = data?.inquiry_id;
 
+  if (s === 'daily_report') return { name: 'DailyReport' };
   if (s.includes('device')) return { name: 'DeviceFollowUp' };
   if (inquiryId && (s.includes('assign') || s.includes('sla') || s.includes('verification') || s.includes('job_completed') || s.includes('pool_job_claimed'))) {
     return { name: 'TaskDetail', params: { ticketId: inquiryId } };

@@ -18,6 +18,7 @@ import { AdminDashboardData, fetchAdminDashboard, fetchUnreadCount } from '../..
 import { AssignmentAlert, fetchAssignmentAlerts } from '../../api/adminOps';
 import { fetchAutoAssignStatus } from '../../api/adminManage';
 import { humanize, initials, inr, timeAgo } from '../../utils/format';
+import { isReportTime, lastReportSent, loadReminderPrefs, ReminderPrefs, timeText } from '../../notifications/dailyReport';
 
 interface Props {
   onTab: (tab: AdminTab) => void;
@@ -45,6 +46,8 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [alerts, setAlerts] = useState<AssignmentAlert[]>([]);
   const [autoOn, setAutoOn] = useState<boolean | null>(null);
+  const [reportPrefs, setReportPrefs] = useState<ReminderPrefs | null>(null);
+  const [reportSentToday, setReportSentToday] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +61,8 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
       setUnread(n);
       setAlerts(a);
       setAutoOn(auto);
+      setReportPrefs(await loadReminderPrefs());
+      setReportSentToday((await lastReportSent()) === new Date().toLocaleDateString('en-CA'));
       setError(null);
     } catch {
       setError('Could not load the dashboard');
@@ -103,6 +108,7 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
   const dateLine = new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
   const complaints = data?.complaints.length ?? 0;
   const topMax = Math.max(1, ...view.top.map((t) => t.n));
+  const reportDue = !reportSentToday && !!reportPrefs && isReportTime(reportPrefs);
 
   const kpis: { label: string; value: string | number; icon: IconName; sub: string; subColor: string; route: string }[] = [
     { label: 'Open requests', value: view.open.length, icon: 'tasks', sub: `${view.needsAttention.length} unassigned`, subColor: view.needsAttention.length ? theme.warn : theme.text2, route: 'ServiceRequests' },
@@ -149,6 +155,32 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
             <Text style={[styles.autoText, { color: theme.text }]}>{autoOn === null ? 'Auto-assign' : autoOn ? 'Auto-assign on' : 'Auto-assign off'}</Text>
           </Pressable>
         </View>
+
+        <Pressable
+          onPress={() => onOpen('DailyReport')}
+          accessibilityRole="button"
+          accessibilityLabel="Daily WhatsApp report"
+          style={({ pressed }) => [
+            styles.reportCard,
+            { backgroundColor: theme.panel, borderColor: reportDue ? theme.accent : theme.border },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={[styles.tile, { backgroundColor: theme.okS }]}>
+            <Icon name="whatsapp" size={20} color={theme.ok} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={[styles.rowTitle, { color: theme.text }]}>Daily report</Text>
+            <Text style={[styles.attHint, { color: theme.text2 }]} numberOfLines={2}>
+              {reportSentToday
+                ? 'Shared today — tap to view again'
+                : reportDue
+                  ? "Ready — send today's clock-ins, collections and sales"
+                  : `Clock-ins, collections and sales for WhatsApp${reportPrefs?.enabled ? ` · reminder ${timeText(reportPrefs)}` : ''}`}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={16} color={theme.text3} />
+        </Pressable>
 
         {alerts.length > 0 || view.needsAttention.length > 0 ? (
           <>
@@ -353,6 +385,7 @@ const styles = StyleSheet.create({
   autoPill: { height: 52, borderRadius: radius.md, borderWidth: 1, paddingHorizontal: spacing(3.5), flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
   dot: { width: 8, height: 8, borderRadius: 4 },
   autoText: { ...typography.caption, fontFamily: 'Manrope_700Bold', lineHeight: 16 },
+  reportCard: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), marginTop: spacing(2), marginBottom: spacing(1) },
   panel: { borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden' },
   attRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(3.5), paddingVertical: spacing(3), minHeight: 60 },
   tile: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },

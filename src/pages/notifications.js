@@ -17,6 +17,7 @@ const SUBJECT_ICON = {
   new_complaint: '⚠️',
   sla_breach: '⏰',
   finance_summary: '📊',
+  daily_report: '📲',
 };
 
 // Subject → page navigation (role-aware).
@@ -38,6 +39,7 @@ const NAV_MAP = {
   eod_warning:             { employee: 'my-eod' },
   leaderboard_rank:        { employee: 'leaderboard' },
   finance_summary:         { admin: 'finance' },
+  daily_report:            { admin: 'daily-report' },
 };
 
 function navTarget(subject) {

@@ -3,6 +3,7 @@ import { getToken, setToken as persistToken, ApiError } from '../api/client';
 import { signin as apiSignin, fetchMe, AuthUser } from '../api/auth';
 import { registerPushToken } from '../api/push';
 import { registerForPushNotificationsAsync } from '../notifications';
+import { cancelDailyReportReminder, syncDailyReportReminder } from '../notifications/dailyReport';
 
 interface AuthState {
   user: AuthUser | null;
@@ -64,6 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Silent by design.
       }
     })();
+  }, [user]);
+
+  // The 5:30 PM daily-report nudge is for the admin only: set it up on sign-in
+  // and drop it for anyone else (or after logout) so a shared phone stays quiet.
+  useEffect(() => {
+    if (user?.role === 'admin') syncDailyReportReminder();
+    else cancelDailyReportReminder();
   }, [user]);
 
   const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);

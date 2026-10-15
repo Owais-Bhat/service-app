@@ -1475,6 +1475,46 @@ async function runEodReminders() {
     }
 }
 
+// Daily report prompt: from 17:30 server time, tell the admin the day's
+// WhatsApp report is ready (who clocked in, what was collected and sold). The
+// admin opens it, reviews and posts it to the group by hand — nothing is sent
+// automatically. One prompt per day; the date is kept in app_settings so a
+// restart or deploy after 17:30 does not repeat it.
+let _lastDailyReportPrompt = null;
+async function runDailyReportPrompt() {
+    const now = new Date();
+    if (now.getHours() < 17 || (now.getHours() === 17 && now.getMinutes() < 30)) return;
+    const today = localDateKey(now);
+    if (_lastDailyReportPrompt === today) return;
+    _lastDailyReportPrompt = today; // claim it first so overlapping ticks cannot double-send
+    let conn;
+    try {
+        conn = await getConn();
+        const [rows] = await conn.query("SELECT setting_value FROM app_settings WHERE setting_key = 'last_daily_report_prompt'");
+        if (rows[0]?.setting_value === today) return;
+        await saveAppSetting('last_daily_report_prompt', today);
+        await recordNotification({
+            subject: 'daily_report',
+            title: '📲 Daily report is ready',
+            body: "Review today's clock-ins, collections and sales, then send it to the WhatsApp group.",
+            audience: { role: 'admin' },
+            skipExpoPush: true,
+            data: { voice: 'The daily report is ready. Please review it and send it to the WhatsApp group.' },
+        });
+        console.log('[daily-report] admin prompted');
+    } catch (err) {
+        _lastDailyReportPrompt = null; // let the next tick retry
+        console.error('[daily-report] prompt failed:', err.message);
+    } finally {
+        if (conn) conn.release();
+    }
+}
+
+function startDailyReportJob() {
+    console.log('[daily-report] 17:30 admin prompt job active');
+    setInterval(runDailyReportPrompt, 60_000).unref();
+}
+
 function startEodReminderJob() {
     console.log('[eod] EOD reminder job active');
     setInterval(runEodReminders, 60_000).unref();
@@ -2356,7 +2396,9 @@ async function recordNotification(payload) {
     }
     broadcastNotify(payload);
     sendWebPush(audience, payload).catch(() => {});
-    sendExpoPush(audience, payload).catch(() => {});
+    // skipExpoPush: the mobile app schedules this one itself on the phone, so a
+    // second push from here would show the same alert twice.
+    if (!payload.skipExpoPush) sendExpoPush(audience, payload).catch(() => {});
 }
 
 // Send a real OS push (background/foreground/killed) to the mobile app via
@@ -9878,6 +9920,7 @@ async function startServer() {
         startFinanceSummaryJob();
         startLeaderboardJob();
         startEodReminderJob();
+        startDailyReportJob();
         startPoolReleaseSweepJob();
         startVerificationReminderJob();
         

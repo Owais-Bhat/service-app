@@ -203,6 +203,7 @@ function getNavItems(role) {
     {
       type: 'group', key: 'reports', icon: ICONS.chart || ICONS.clipboard, label: 'Reports',
       children: [
+        { id: 'daily-report', label: 'Daily Report' },
         { id: 'stats', label: 'Stats' },
         { id: 'response-times', label: 'Response Time' },
         { id: 'feedback', label: 'Employee Performance' },
@@ -329,6 +330,7 @@ const PAGE_LOADERS = {
     'device-tracking': () => import('./pages/device-tracking-admin.js').then(m => m.renderDeviceTrackingTab),
     'live-locations': () => import('./pages/live-locations-admin.js').then(m => m.renderLiveLocationsTab),
     finance: () => import('./pages/finance.js').then(m => m.renderFinanceReportTab),
+    'daily-report': () => import('./pages/daily-report.js').then(m => m.renderDailyReportTab),
     notifications: () => import('./pages/notifications.js').then(m => m.renderNotificationsTab),
     'training-courses': () => import('./pages/training.js').then(m => m.renderTrainingCoursesAdmin),
     calendar: () => import('./pages/calendar.js').then(m => m.renderCalendarTab),
@@ -398,6 +400,7 @@ function startGlobalNotifications() {
           : msg.subject === 'employee_clock_out' ? 'alert'
           : msg.subject === 'device_followup_reminder' ? 'alert'
           : msg.subject === 'sla_breach' ? 'alert'
+          : msg.subject === 'daily_report' ? 'alert'
           : msg.subject === 'installation_items_submitted' ? 'alert'
           : 'info',
     });

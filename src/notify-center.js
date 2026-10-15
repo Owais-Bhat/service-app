@@ -26,6 +26,7 @@ const NAV_MAP = {
   eod_warning:              { employee: 'my-eod' },
   leaderboard_rank:         { employee: 'leaderboard' },
   finance_summary:          { admin: 'finance' },
+  daily_report:             { admin: 'daily-report' },
   installation_items_submitted: { admin: 'installations' },
 };
 
@@ -69,6 +70,7 @@ const SUBJECTS = {
   employee_clock_in: { icon: '🟢', label: 'Clock In', voice: (m) => m.body || 'An employee clocked in.' },
   employee_clock_out: { icon: '🔴', label: 'Clock Out', voice: (m) => m.body || 'An employee clocked out.' },
   finance_summary: { icon: '📊', label: 'Finance Summary', voice: () => 'The daily finance summary is ready.' },
+  daily_report: { icon: '📲', label: 'Daily Report', voice: (m) => m.data?.voice || 'The daily report is ready. Please review it and send it to the WhatsApp group.' },
   installation_items_submitted: {
     icon: '🧰', label: 'Installation items to check',
     voice: (m) => m.data?.voice || 'A technician has submitted installation items. Please check.',
