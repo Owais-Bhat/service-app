@@ -175,8 +175,8 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
               {reportSentToday
                 ? 'Shared today — tap to view again'
                 : reportDue
-                  ? "Ready — send today's clock-ins, collections and sales"
-                  : `Clock-ins, collections and sales for WhatsApp${reportPrefs?.enabled ? ` · reminder ${timeText(reportPrefs)}` : ''}`}
+                  ? 'Ready — send the attendance and pending-jobs messages'
+                  : `Attendance and pending jobs for WhatsApp${reportPrefs?.enabled ? ` · reminder ${timeText(reportPrefs)}` : ''}`}
             </Text>
           </View>
           <Icon name="chevron-right" size={16} color={theme.text3} />

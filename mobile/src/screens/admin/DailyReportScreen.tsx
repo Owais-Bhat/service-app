@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Share, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
@@ -7,9 +7,14 @@ import StatGrid from '../../components/admin/StatGrid';
 import ActionButton from '../../components/admin/ActionButton';
 import SectionLabel from '../../components/admin/SectionLabel';
 import Field from '../../components/admin/Field';
-import ListRow from '../../components/admin/ListRow';
 import { RowPanel, SwitchRow } from '../../components/admin/FinanceKit';
-import { buildReportText, DailyReport, fetchDailyReport, localToday } from '../../api/adminDailyReport';
+import {
+  buildAttendanceText,
+  buildPendingText,
+  DailyReport,
+  fetchDailyReport,
+  localToday,
+} from '../../api/adminDailyReport';
 import {
   loadReminderPrefs,
   markReportSent,
@@ -23,7 +28,6 @@ import { sendToWhatsapp } from '../../utils/whatsapp';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
 import { semantic } from '../../theme/tokens';
-import { inr, shortTime } from '../../utils/format';
 
 interface Props {
   onBack: () => void;
@@ -43,10 +47,11 @@ function yesterday(): string {
   return d.toLocaleDateString('en-CA');
 }
 
-// The end-of-day WhatsApp report: who clocked in and when, what was collected,
-// what was sold. Nothing is sent automatically — the text opens in WhatsApp and
-// the admin picks the group and presses send. A daily reminder (5:30 PM by
-// default) brings the admin here.
+// The end-of-day WhatsApp report as two messages: attendance (employee and
+// clock-in time) and pending jobs (per employee: ticket, customer, SLA). Each
+// opens in WhatsApp; the admin picks the group and presses send. Nothing is
+// sent automatically. A daily reminder (5:30 PM by default) brings the admin
+// here.
 export default function DailyReportScreen({ onBack }: Props) {
   const { theme } = useTheme();
   const [pick, setPick] = useState<Pick>('today');
@@ -61,7 +66,6 @@ export default function DailyReportScreen({ onBack }: Props) {
   const [prefs, setPrefs] = useState<ReminderPrefs | null>(null);
   const [timeInput, setTimeInput] = useState('17:30');
   const [saving, setSaving] = useState(false);
-  const [withJobs, setWithJobs] = useState(true);
 
   const load = useCallback(async () => {
     if (!DATE_RE.test(date)) return;
@@ -90,19 +94,19 @@ export default function DailyReportScreen({ onBack }: Props) {
     });
   }, []);
 
-  const text = report ? buildReportText(report, withJobs) : '';
+  const attText = report ? buildAttendanceText(report) : '';
+  const pendText = report ? buildPendingText(report) : '';
 
-  const send = async () => {
-    if (!report) return;
+  const send = async (text: string) => {
     try {
       await sendToWhatsapp(text);
-      await markReportSent(report.date);
+      await markReportSent(localToday());
     } catch (e) {
       Alert.alert('Could not open WhatsApp', e instanceof Error ? e.message : 'Try Copy instead');
     }
   };
 
-  const copy = async () => {
+  const copy = async (text: string) => {
     try {
       await Clipboard.setStringAsync(text);
       Alert.alert('Copied', 'Paste it into the WhatsApp group.');
@@ -111,7 +115,7 @@ export default function DailyReportScreen({ onBack }: Props) {
     }
   };
 
-  const share = async () => {
+  const share = async (text: string) => {
     try {
       await Share.share({ message: text });
     } catch {
@@ -139,11 +143,25 @@ export default function DailyReportScreen({ onBack }: Props) {
     saveReminder({ enabled: prefs?.enabled ?? true, hour: t.hour, minute: t.minute });
   };
 
-  const t = report?.totals;
+  const message = (title: string, note: string, text: string) => (
+    <>
+      <SectionLabel>{title}</SectionLabel>
+      <View style={[styles.preview, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+        <Text selectable style={[styles.previewText, { color: theme.text }]}>{text}</Text>
+      </View>
+      <Text style={[styles.hint, { color: theme.text3 }]}>{note}</Text>
+      <ActionButton label="Send on WhatsApp" onPress={() => send(text)} />
+      <View style={styles.pair}>
+        <ActionButton label="Copy text" tone="neutral" onPress={() => copy(text)} />
+        <ActionButton label="Share…" tone="neutral" onPress={() => share(text)} />
+      </View>
+    </>
+  );
+
   return (
     <AdminScreen
       title="Daily Report"
-      subtitle={`WhatsApp report · ${date}`}
+      subtitle={`WhatsApp messages · ${date}`}
       onBack={onBack}
       onRefresh={load}
       loading={loading && !report}
@@ -153,69 +171,29 @@ export default function DailyReportScreen({ onBack }: Props) {
           <FilterChips items={CHIPS} activeKey={pick} onSelect={(k) => setPick(k as Pick)} />
           {pick === 'custom' ? (
             <View style={styles.dateRow}>
-              <Field label="Date" value={custom} onChangeText={setCustom} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+              <Field label="Attendance date" value={custom} onChangeText={setCustom} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
             </View>
           ) : null}
         </View>
       }
     >
-      {report && t ? (
+      {report ? (
         <>
           <StatGrid
             items={[
-              { label: 'Clocked in', value: t.present, color: semantic.success },
-              { label: 'Collected', value: inr(t.collected), color: t.collected ? semantic.success : undefined },
-              { label: 'Jobs paid', value: t.jobs },
-              { label: 'Sales', value: report.sales ? inr(report.sales.total) : '—' },
+              { label: 'Clocked in', value: `${report.present} / ${report.attendance.length}`, color: semantic.success },
+              { label: 'Late', value: report.late, color: report.late ? semantic.warning : undefined },
+              { label: 'Pending jobs', value: report.pendingKnown ? report.pendingTotal : '—' },
+              { label: 'Past SLA', value: report.pendingKnown ? report.overdueTotal : '—', color: report.overdueTotal ? semantic.danger : undefined },
             ]}
           />
 
-          <ActionButton label="Send on WhatsApp" onPress={send} />
-          <View style={styles.pair}>
-            <ActionButton label="Copy text" tone="neutral" onPress={copy} />
-            <ActionButton label="Share…" tone="neutral" onPress={share} />
-          </View>
-
-          <RowPanel>
-            <SwitchRow label="Include job details in the message" hint="Customer, place, map link, time and bill for every job" value={withJobs} onValueChange={setWithJobs} last />
-          </RowPanel>
-
-          <SectionLabel>Message preview</SectionLabel>
-          <View style={[styles.preview, { backgroundColor: theme.panel, borderColor: theme.border }]}>
-            <Text selectable style={[styles.previewText, { color: theme.text }]}>{text}</Text>
-          </View>
-          {report.sales === null ? (
-            <Text style={[styles.hint, { color: theme.warn }]}>Sales could not be read, so they are left out of the message.</Text>
-          ) : null}
-
-          <SectionLabel>Jobs by employee</SectionLabel>
-          {report.jobsKnown === false ? (
-            <Text style={[styles.hint, { color: theme.warn }]}>Job details could not be loaded.</Text>
-          ) : null}
-          {report.staff.filter((s) => s.jobList.length > 0).length === 0 && report.jobsKnown ? (
-            <Text style={[styles.hint, { color: theme.text3 }]}>No jobs were worked on this day.</Text>
-          ) : null}
-          {report.staff
-            .filter((s) => s.jobList.length > 0)
-            .map((s) => (
-              <View key={s.id}>
-                <Text style={[styles.person, { color: theme.text }]}>
-                  {s.name} · {s.jobList.length} job{s.jobList.length === 1 ? '' : 's'}
-                </Text>
-                {s.jobList.map((j, i) => (
-                  <ListRow
-                    key={`${s.id}-${i}`}
-                    icon="location"
-                    title={j.customer}
-                    subtitle={[j.ticket, j.service].filter(Boolean).join(' · ') + (j.address ? `\n${j.address}` : '')}
-                    meta={[j.start ? `${shortTime(j.start)}${j.end ? ` – ${shortTime(j.end)}` : ''}` : '', j.status, j.note].filter(Boolean).join(' · ')}
-                    value={j.amount > 0 ? inr(j.amount) : undefined}
-                    valueColor={j.paid ? semantic.success : semantic.danger}
-                    onPress={j.customerMap ? () => Linking.openURL(j.customerMap).catch(() => {}) : undefined}
-                  />
-                ))}
-              </View>
-            ))}
+          {message('Message 1 — Attendance', 'Everyone who is not clocked in shows as "Not in".', attText)}
+          {message(
+            'Message 2 — Pending jobs',
+            'Open jobs per employee with the SLA time, as of right now. LATE means the SLA time has passed.',
+            pendText,
+          )}
 
           <SectionLabel>Daily reminder</SectionLabel>
           <RowPanel>
@@ -229,7 +207,7 @@ export default function DailyReportScreen({ onBack }: Props) {
           <Field label="Reminder time (24-hour)" value={timeInput} onChangeText={setTimeInput} placeholder="17:30" keyboardType="numbers-and-punctuation" />
           <ActionButton label="Save time" tone="neutral" busy={saving} onPress={saveTime} />
           <Text style={[styles.hint, { color: theme.text3 }]}>
-            At this time every day the phone shows a notification. Tap it, check the report, and send it to the group yourself.
+            At this time every day the phone shows a notification. Tap it, check both messages, and send them to the group yourself.
           </Text>
         </>
       ) : null}
@@ -239,9 +217,8 @@ export default function DailyReportScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   dateRow: { paddingHorizontal: spacing(4) },
-  pair: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(2.5) },
+  pair: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(2.5), marginBottom: spacing(2) },
   preview: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5) },
-  previewText: { ...typography.body, lineHeight: 21 },
+  previewText: { ...typography.caption, fontFamily: 'JetBrainsMono_500Medium', lineHeight: 19 },
   hint: { ...typography.caption, marginTop: spacing(2), marginBottom: spacing(2) },
-  person: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginTop: spacing(2), marginBottom: spacing(1.5) },
 });

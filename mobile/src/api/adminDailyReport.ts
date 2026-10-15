@@ -1,97 +1,57 @@
-import { api } from './client';
-import { fetchAttendanceLogs, fetchEodKeys } from './adminOps';
-import { fetchCollections, paidDay } from './adminCollections';
-import { fetchSalesDocs } from './adminBooks';
-import { fetchReceipts } from './adminSales';
-import { inr, shortTime } from '../utils/format';
+import { api, dataGet } from './client';
+import { fetchAttendanceLogs } from './adminOps';
 
-// Same cut-off the Attendance Report uses.
+// Anything clocked in after 10:00 counts as late — same cut-off the Attendance
+// Report and the web page use.
 const LATE_AFTER_MIN = 10 * 60;
 
-// One job an employee worked on the day, from /admin/daily-jobs.
-export interface DailyJob {
-  ticket: string;
-  customer: string;
-  company: string;
-  service: string;
-  address: string;
-  customerMap: string;
-  billMap: string;
-  status: string;
-  start: string | null;
-  end: string | null;
-  note: string;
-  amount: number;
-  paid: boolean;
-  method: string;
-  secondary: string;
-}
-
-interface RawJob {
-  ticket_no: string | null;
-  full_name: string | null;
-  company_name: string | null;
-  service_item: string | null;
-  location: string | null;
-  status: string | null;
-  customer_lat: number | string | null;
-  customer_lng: number | string | null;
-  employee_bill_lat: number | string | null;
-  employee_bill_lng: number | string | null;
-  assigned_employee_id: string | null;
-  claimed_by_gig_worker_id: string | null;
-  job_start_time: string | null;
-  job_end_time: string | null;
-  job_card_filled_at: string | null;
-  employee_update_at: string | null;
-  employee_update_status: string | null;
-  employee_update_detail: string | null;
-  work_done_note: string | null;
-  bill_generated_at: string | null;
-  bill_total: number | string | null;
-  payment_status: string | null;
-  payment_method: string | null;
-  payment_received_at: string | null;
-  employee_name: string | null;
-  secondary_name: string | null;
-}
-
-export interface DailyStaff {
+export interface AttendanceLine {
   id: string;
   name: string;
-  worker: string;
   clockIn: string | null;
-  clockOut: string | null;
   late: boolean;
-  eod: boolean;
-  jobs: number;
-  cash: number;
-  online: number;
-  clockWhere: string;
-  clockMap: string;
-  jobList: DailyJob[];
 }
 
-export interface DailySaleLine {
-  docNo: string;
-  party: string;
-  total: number;
+export interface PendingJob {
+  ticket: string;
+  customer: string;
+  service: string;
+  deadline: string | null;
+  paused: boolean;
+  overdue: boolean;
+}
+
+export interface PendingGroup {
+  id: string;
+  name: string;
+  jobs: PendingJob[];
 }
 
 export interface DailyReport {
   date: string;
-  staff: DailyStaff[];
-  notIn: string[];
-  eodPending: string[];
-  totals: { present: number; late: number; jobs: number; cash: number; online: number; collected: number };
-  // false = the job list could not be loaded (the rest of the report stands).
-  jobsKnown: boolean;
-  // null = the books could not be read (the rest of the report still stands).
-  sales: { count: number; total: number; lines: DailySaleLine[] } | null;
-  receipts: { count: number; total: number } | null;
+  attendance: AttendanceLine[];
+  present: number;
+  late: number;
+  pending: PendingGroup[];
+  // false = the pending-jobs list could not be loaded.
+  pendingKnown: boolean;
+  pendingTotal: number;
+  overdueTotal: number;
 }
 
-const num = (v: unknown) => Number(v) || 0;
+interface RawPending {
+  employee_id: string;
+  employee_name: string | null;
+  ticket_no: string | null;
+  full_name: string | null;
+  service_item: string | null;
+  sla_deadline: string | null;
+  sla_paused: boolean | number;
+  overdue: boolean | number;
+}
+
+export const localToday = () => new Date().toLocaleDateString('en-CA');
+
 // DATE columns can arrive as plain YYYY-MM-DD, SQL datetimes or full ISO
 // timestamps; all are reduced to the local calendar day.
 function day(v: unknown): string {
@@ -102,214 +62,122 @@ function day(v: unknown): string {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA');
 }
-const rupees = (paise: unknown) => num(paise) / 100;
 
-export const localToday = () => new Date().toLocaleDateString('en-CA');
-
-const mapUrl = (lat: unknown, lng: unknown) => (num(lat) && num(lng) ? `https://maps.google.com/?q=${num(lat)},${num(lng)}` : '');
-const nice = (v: string | null | undefined) => String(v || '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
-const cut = (v: string | null | undefined, n: number) => {
-  const t = String(v || '').replace(/\s+/g, ' ').trim();
-  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
-};
-
-function jobOf(j: RawJob): DailyJob {
-  return {
-    ticket: j.ticket_no || '',
-    customer: j.full_name || 'Customer',
-    company: j.company_name || '',
-    service: j.service_item || '',
-    address: String(j.location || '').trim(),
-    customerMap: mapUrl(j.customer_lat, j.customer_lng),
-    billMap: mapUrl(j.employee_bill_lat, j.employee_bill_lng),
-    status: nice(j.employee_update_status || j.status),
-    start: j.job_start_time || j.employee_update_at || j.job_card_filled_at || j.bill_generated_at || j.payment_received_at,
-    end: j.job_end_time || null,
-    note: cut(j.work_done_note || j.employee_update_detail, 160),
-    amount: num(j.bill_total),
-    paid: String(j.payment_status || '').toLowerCase() === 'paid',
-    method: nice(j.payment_method),
-    secondary: j.secondary_name || '',
-  };
-}
-
-function isSunday(date: string): boolean {
-  return new Date(`${date}T00:00:00`).getDay() === 0;
-}
-
-// Everything the admin wants to post in the staff WhatsApp group at the end of
-// the day: who clocked in and when, what each person collected, what was sold.
+// What the admin posts to the staff group: who clocked in (and when) on the
+// chosen day, and every job still open per employee with its SLA deadline.
 export async function fetchDailyReport(date: string): Promise<DailyReport> {
-  // The books are optional: a failure there must not sink the whole report.
-  const optional = <T,>(p: Promise<T[]>) => p.then((r) => (Array.isArray(r) ? r : null)).catch(() => null);
-  const [logs, eod, coll, docs, receipts, jobRows] = await Promise.all([
+  const [logs, people, jobs] = await Promise.all([
     fetchAttendanceLogs(),
-    fetchEodKeys(),
-    fetchCollections(),
-    optional(fetchSalesDocs('invoice')),
-    optional(fetchReceipts()),
-    optional(api.get<RawJob[]>(`/admin/daily-jobs?date=${encodeURIComponent(date)}`)),
+    dataGet<{ id: string; full_name: string | null }[]>('profiles', { select: 'id,full_name', eq: 'role:employee' }),
+    api.get<RawPending[]>('/admin/pending-jobs').then((r) => (Array.isArray(r) ? r : null)).catch(() => null),
   ]);
 
-  const eodSet = new Set(eod.map((e) => `${e.employee_id}|${day(e.date)}`));
-  const byId = new Map<string, DailyStaff>();
-  const person = (id: string, name: string | null | undefined, worker?: string | null): DailyStaff => {
-    let s = byId.get(id);
-    if (!s) {
-      s = {
-        id,
-        name: name || 'Employee',
-        worker: worker === 'gig' ? 'Gig' : 'Fixed',
-        clockIn: null,
-        clockOut: null,
-        late: false,
-        eod: eodSet.has(`${id}|${date}`),
-        jobs: 0,
-        cash: 0,
-        online: 0,
-        clockWhere: '',
-        clockMap: '',
-        jobList: [],
-      };
-      byId.set(id, s);
-    }
-    return s;
-  };
-
-  coll.employees.forEach((e) => person(e.id, e.full_name, e.worker_type));
-
+  const first = new Map<string, string>(); // employee id -> earliest clock-in that day
   logs
     .filter((r) => r.clock_in && day(r.date || r.clock_in) === date)
     .forEach((r) => {
-      const s = person(r.user_id, r.profiles?.full_name);
-      // Several clock-ins in a day: the first one counts, the last clock-out.
-      if (!s.clockIn || String(r.clock_in) < s.clockIn) {
-        s.clockIn = r.clock_in;
-        s.clockWhere = String(r.location || '').trim();
-        s.clockMap = mapUrl(r.latitude, r.longitude);
-      }
-      if (r.clock_out && (!s.clockOut || r.clock_out > s.clockOut)) s.clockOut = r.clock_out;
-    });
-  byId.forEach((s) => {
-    if (!s.clockIn) return;
-    const t = new Date(s.clockIn);
-    s.late = t.getHours() * 60 + t.getMinutes() > LATE_AFTER_MIN;
-  });
-
-  coll.paid
-    .filter((r) => paidDay(r) === date)
-    .forEach((r) => {
-      const id = r.assigned_employee_id || r.claimed_by_gig_worker_id;
-      if (!id) return;
-      const s = person(id, null);
-      const amount = num(r.bill_total);
-      s.jobs += 1;
-      if ((r.payment_method || '').toLowerCase() === 'cash') s.cash += amount;
-      else s.online += amount;
+      const cur = first.get(r.user_id);
+      if (!cur || new Date(r.clock_in as string) < new Date(cur)) first.set(r.user_id, r.clock_in as string);
     });
 
-  (jobRows ?? []).forEach((j) => {
-    const id = j.claimed_by_gig_worker_id || j.assigned_employee_id;
-    if (id) person(id, j.employee_name).jobList.push(jobOf(j));
+  const attendance: AttendanceLine[] = people
+    .map((p) => {
+      const clockIn = first.get(p.id) ?? null;
+      const t = clockIn ? new Date(clockIn) : null;
+      return {
+        id: p.id,
+        name: p.full_name || 'Employee',
+        clockIn,
+        late: !!t && t.getHours() * 60 + t.getMinutes() > LATE_AFTER_MIN,
+      };
+    })
+    // Clocked-in first (earliest first), then the ones who are not in.
+    .sort((a, b) =>
+      a.clockIn && b.clockIn
+        ? new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
+        : a.clockIn
+          ? -1
+          : b.clockIn
+            ? 1
+            : a.name.localeCompare(b.name),
+    );
+
+  const groups = new Map<string, PendingGroup>();
+  (jobs ?? []).forEach((j) => {
+    if (!groups.has(j.employee_id)) groups.set(j.employee_id, { id: j.employee_id, name: j.employee_name || 'Employee', jobs: [] });
+    groups.get(j.employee_id)!.jobs.push({
+      ticket: j.ticket_no || '—',
+      customer: j.full_name || 'Customer',
+      service: j.service_item || '',
+      deadline: j.sla_deadline,
+      paused: !!j.sla_paused,
+      overdue: !!j.overdue,
+    });
   });
+  const when = (j: PendingJob) => (j.deadline ? new Date(j.deadline).getTime() : Infinity);
+  const pending = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  pending.forEach((g) => g.jobs.sort((a, b) => when(a) - when(b)));
 
-  const staff = [...byId.values()].filter((s) => s.clockIn || s.jobs > 0 || s.jobList.length > 0);
-  staff.sort((a, b) => (a.clockIn || '9').localeCompare(b.clockIn || '9') || a.name.localeCompare(b.name));
-
-  const everyone = [...byId.values()];
-  const present = staff.filter((s) => s.clockIn);
-  const notIn = isSunday(date)
-    ? []
-    : coll.employees.filter((e) => !present.some((s) => s.id === e.id)).map((e) => e.full_name || 'Employee');
-  const eodPending = present.filter((s) => !s.eod).map((s) => s.name);
-
-  const invoices = (docs ?? []).filter((d) => day(d.doc_date) === date && !['draft', 'cancelled', 'void'].includes((d.status || '').toLowerCase()));
-  const dayReceipts = (receipts ?? []).filter((r) => day(r.payment_date) === date);
-
-  const cash = everyone.reduce((n, s) => n + s.cash, 0);
-  const online = everyone.reduce((n, s) => n + s.online, 0);
   return {
     date,
-    staff,
-    notIn,
-    eodPending,
-    totals: {
-      present: present.length,
-      late: present.filter((s) => s.late).length,
-      jobs: everyone.reduce((n, s) => n + s.jobs, 0),
-      cash,
-      online,
-      collected: cash + online,
-    },
-    jobsKnown: jobRows !== null,
-    sales: docs
-      ? {
-          count: invoices.length,
-          total: invoices.reduce((n, d) => n + rupees(d.total_paise), 0),
-          lines: invoices.map((d) => ({ docNo: d.doc_no, party: d.party_name || 'Customer', total: rupees(d.total_paise) })),
-        }
-      : null,
-    receipts: receipts
-      ? { count: dayReceipts.length, total: dayReceipts.reduce((n, r) => n + rupees(r.amount_paise), 0) }
-      : null,
+    attendance,
+    present: attendance.filter((a) => a.clockIn).length,
+    late: attendance.filter((a) => a.late).length,
+    pending,
+    pendingKnown: jobs !== null,
+    pendingTotal: pending.reduce((n, g) => n + g.jobs.length, 0),
+    overdueTotal: pending.reduce((n, g) => n + g.jobs.filter((j) => j.overdue).length, 0),
   };
 }
 
-const PRETTY = (date: string) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const clock = (v: string | Date) =>
+  new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
 
-// WhatsApp formatting: *bold*. Kept to short lines so it reads well in a group.
-export function buildReportText(r: DailyReport, withJobs = true): string {
-  const out: string[] = [];
-  out.push(`*Daily Report – ${PRETTY(r.date)}*`);
+export const dayTime = (v: string | null): string => {
+  if (!v) return '—';
+  const d = new Date(v);
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${clock(d)}`;
+};
 
-  out.push('', `*Attendance* (${r.totals.present} clocked in${r.totals.late ? `, ${r.totals.late} late` : ''})`);
-  const present = r.staff.filter((s) => s.clockIn);
-  if (present.length === 0) out.push('Nobody clocked in');
-  present.forEach((s) => {
-    const out_ = s.clockOut ? `out ${shortTime(s.clockOut)}` : 'still on duty';
-    out.push(`• ${s.name} – in ${shortTime(s.clockIn)}${s.late ? ' (late)' : ''}, ${out_}`);
-    if (withJobs && (s.clockWhere || s.clockMap)) out.push(`   Clock-in place: ${[s.clockWhere, s.clockMap].filter(Boolean).join(' ')}`);
+const clip = (v: string, n: number) => {
+  const t = String(v ?? '').replace(/\s+/g, ' ').trim();
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+};
+
+// WhatsApp does not draw tables, but a ``` block is monospaced, so padded
+// columns line up exactly like one.
+function monoTable(headers: string[], rows: string[][]): string {
+  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
+  const line = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i])).join('  ').trimEnd();
+  return ['```', line(headers), widths.map((w) => '-'.repeat(w)).join('  '), ...rows.map(line), '```'].join('\n');
+}
+
+const pretty = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+// Message 1 — employee and clock-in time, nothing else.
+export function buildAttendanceText(r: DailyReport): string {
+  const head = `*Attendance – ${pretty(r.date)}*\n${r.present} of ${r.attendance.length} clocked in`;
+  if (r.attendance.length === 0) return `${head}\n\nNo employees found.`;
+  const rows = r.attendance.map((a) => [clip(a.name, 22), a.clockIn ? `${clock(a.clockIn)}${a.late ? ' (late)' : ''}` : 'Not in']);
+  return `${head}\n\n${monoTable(['Employee', 'Clock-in'], rows)}`;
+}
+
+export function slaCell(j: PendingJob): string {
+  if (!j.deadline) return '—';
+  if (j.paused) return `${dayTime(j.deadline)} (paused)`;
+  return `${dayTime(j.deadline)}${j.overdue ? ' LATE' : ''}`;
+}
+
+// Message 2 — per employee: ticket number, the customer it is for, SLA time.
+export function buildPendingText(r: DailyReport, now = new Date()): string {
+  const head = `*Pending jobs – ${pretty(now.toLocaleDateString('en-CA'))}, ${clock(now)}*`;
+  if (!r.pendingKnown) return `${head}\n\nPending jobs could not be loaded.`;
+  if (r.pending.length === 0) return `${head}\n\nNo pending jobs.`;
+  const parts = [`${head}\n${r.pendingTotal} pending${r.overdueTotal ? ` · ${r.overdueTotal} past SLA` : ''}`];
+  r.pending.forEach((g) => {
+    const rows = g.jobs.map((j) => [clip(j.ticket, 18), clip(j.customer, 22), slaCell(j)]);
+    parts.push(`*${g.name}* – ${g.jobs.length} job${g.jobs.length === 1 ? '' : 's'}\n${monoTable(['Ticket', 'Customer', 'SLA'], rows)}`);
   });
-  if (r.notIn.length) out.push(`Not clocked in: ${r.notIn.join(', ')}`);
-
-  out.push('', `*Collections* – ${inr(r.totals.collected)}`);
-  if (r.totals.collected > 0) out.push(`Cash ${inr(r.totals.cash)} · Online ${inr(r.totals.online)}`);
-  const collectors = r.staff.filter((s) => s.jobs > 0);
-  if (collectors.length === 0) out.push('No payments collected');
-  collectors.forEach((s) => out.push(`• ${s.name} – ${inr(s.cash + s.online)} (${s.jobs} job${s.jobs === 1 ? '' : 's'})`));
-
-  if (r.sales) {
-    out.push('', `*Sales* – ${r.sales.count} invoice${r.sales.count === 1 ? '' : 's'}, ${inr(r.sales.total)}`);
-    r.sales.lines.slice(0, 12).forEach((l) => out.push(`• ${l.docNo} · ${l.party} – ${inr(l.total)}`));
-    if (r.sales.lines.length > 12) out.push(`…and ${r.sales.lines.length - 12} more`);
-  }
-  if (r.receipts && r.receipts.count > 0) {
-    out.push(`Receipts recorded: ${r.receipts.count} · ${inr(r.receipts.total)}`);
-  }
-  if (withJobs) {
-    const workers = r.staff.filter((s) => s.jobList.length > 0);
-    if (workers.length) {
-      out.push('', '*Jobs by employee*');
-      workers.forEach((s) => {
-        out.push('', `*${s.name}* – ${s.jobList.length} job${s.jobList.length === 1 ? '' : 's'}`);
-        s.jobList.forEach((j, i) => {
-          out.push(`${i + 1}. ${[j.ticket, j.customer].filter(Boolean).join(' · ')}${j.company ? ` (${j.company})` : ''}`);
-          if (j.service) out.push(`   Service: ${j.service}`);
-          if (j.address) out.push(`   Place: ${j.address}`);
-          if (j.customerMap) out.push(`   Map: ${j.customerMap}`);
-          const when = j.start ? `${shortTime(j.start)}${j.end ? ` – ${shortTime(j.end)}` : ''}` : '';
-          out.push(`   ${[when, j.status].filter(Boolean).join(' · ')}`);
-          if (j.billMap) out.push(`   Billed from: ${j.billMap}`);
-          if (j.amount > 0) out.push(`   Bill: ${inr(j.amount)} (${j.paid ? `Paid${j.method ? ` · ${j.method}` : ''}` : 'Not paid yet'})`);
-          if (j.secondary) out.push(`   With: ${j.secondary}`);
-          if (j.note) out.push(`   Note: ${j.note}`);
-        });
-      });
-    } else if (!r.jobsKnown) {
-      out.push('', '_Job details could not be loaded_');
-    }
-  }
-  if (r.eodPending.length) out.push('', `*EOD pending:* ${r.eodPending.join(', ')}`);
-  return out.join('\n');
+  return parts.join('\n\n');
 }

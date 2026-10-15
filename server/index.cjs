@@ -1496,7 +1496,7 @@ async function runDailyReportPrompt() {
         await recordNotification({
             subject: 'daily_report',
             title: '📲 Daily report is ready',
-            body: "Review today's clock-ins, collections and sales, then send it to the WhatsApp group.",
+            body: 'The attendance and pending-jobs messages are ready. Review them and send them to the WhatsApp group.',
             audience: { role: 'admin' },
             skipExpoPush: true,
             data: { voice: 'The daily report is ready. Please review it and send it to the WhatsApp group.' },
@@ -8116,44 +8116,57 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
     }
 });
 
-// Daily report → the jobs each employee actually worked on a given day: the
-// customer and where the job was, when work started/ended, what was updated or
-// billed and where the employee was when billing. A job counts for the day if
-// any of its work events (start, end, status update, job card, bill, payment,
-// cash) happened on that date. Admin only.
-app.get('/api/admin/daily-jobs', authenticateToken, async (req, res) => {
+// Daily report -> every job still open, per employee, with its SLA deadline.
+// Same rule the SLA alerts and the web job cards use: the clock starts at
+// assignment (12 working hours, 10:00-18:00, no Sundays), a rescheduled visit
+// time overrides it, and time the device spent at the service centre pushes it
+// out. Admin only.
+app.get('/api/admin/pending-jobs', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : localDateKey();
     let connection;
     try {
         connection = await getConn();
         const [rows] = await connection.query(
-            `SELECT i.id, i.ticket_no, i.full_name, i.phone, i.company_name, i.location, i.service_item,
-                    i.status, i.assignment_status, i.customer_lat, i.customer_lng,
-                    i.employee_bill_lat, i.employee_bill_lng,
-                    i.assigned_employee_id, i.secondary_employee_id, i.claimed_by_gig_worker_id,
-                    i.assigned_at, i.job_start_time, i.job_end_time, i.job_card_filled_at,
-                    i.employee_update_at, i.employee_update_status, i.employee_update_detail, i.work_done_note,
-                    i.bill_generated_at, i.bill_total, i.payment_status, i.payment_method,
-                    i.payment_received_at, i.cash_collected_at,
-                    p.full_name AS employee_name, s.full_name AS secondary_name
+            `SELECT i.id, i.ticket_no, i.full_name, i.service_item, i.status,
+                    i.assigned_at, i.scheduled_at, i.sla_paused_at, i.sla_pause_ms,
+                    COALESCE(i.claimed_by_gig_worker_id, i.assigned_employee_id) AS employee_id,
+                    p.full_name AS employee_name
                FROM inquiries i
                LEFT JOIN profiles p ON p.id = COALESCE(i.claimed_by_gig_worker_id, i.assigned_employee_id)
-               LEFT JOIN profiles s ON s.id = i.secondary_employee_id
               WHERE COALESCE(i.claimed_by_gig_worker_id, i.assigned_employee_id) IS NOT NULL
-                AND (   DATE(i.job_start_time) = ? OR DATE(i.job_end_time) = ?
-                     OR DATE(i.job_card_filled_at) = ? OR DATE(i.employee_update_at) = ?
-                     OR DATE(i.bill_generated_at) = ? OR DATE(i.payment_received_at) = ?
-                     OR DATE(i.cash_collected_at) = ?)
-              ORDER BY p.full_name ASC,
-                       COALESCE(i.job_start_time, i.employee_update_at, i.job_card_filled_at, i.bill_generated_at, i.payment_received_at) ASC
-              LIMIT 600`,
-            [date, date, date, date, date, date, date]
+                AND i.status IN ('pending','open','assigned','in_progress','reopened','issue_not_resolved')
+              ORDER BY p.full_name ASC, i.assigned_at ASC
+              LIMIT 1000`
         );
-        res.json(rows);
+        const now = Date.now();
+        const out = rows.map((r) => {
+            const base = r.scheduled_at ? new Date(r.scheduled_at) : (r.assigned_at ? slaDeadline(r.assigned_at) : null);
+            let deadline = null;
+            if (base && !Number.isNaN(base.getTime())) {
+                let ms = base.getTime() + (Number(r.sla_pause_ms) || 0);
+                const pausedAt = r.sla_paused_at ? new Date(r.sla_paused_at).getTime() : NaN;
+                if (!Number.isNaN(pausedAt)) ms += Math.max(0, now - pausedAt);
+                deadline = new Date(ms);
+            }
+            const paused = !!r.sla_paused_at;
+            return {
+                id: r.id,
+                employee_id: r.employee_id,
+                employee_name: r.employee_name,
+                ticket_no: r.ticket_no,
+                full_name: r.full_name,
+                service_item: r.service_item,
+                status: r.status,
+                assigned_at: r.assigned_at,
+                sla_deadline: deadline ? deadline.toISOString() : null,
+                sla_paused: paused,
+                overdue: !!deadline && !paused && deadline.getTime() < now,
+            };
+        });
+        res.json(out);
     } catch (error) {
-        console.error('daily-jobs error:', error);
-        res.status(500).json({ error: 'Could not load the day\'s jobs' });
+        console.error('pending-jobs error:', error);
+        res.status(500).json({ error: 'Could not load the pending jobs' });
     } finally {
         if (connection) connection.release();
     }

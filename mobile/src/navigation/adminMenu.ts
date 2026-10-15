@@ -107,7 +107,7 @@ export const ADMIN_MENU: AdminMenuGroup[] = [
     icon: 'chart',
     tone: 'info',
     items: [
-      { label: 'Daily Report', hint: 'Clock-ins, collections, sales for WhatsApp', icon: 'whatsapp', route: 'DailyReport' },
+      { label: 'Daily Report', hint: 'Attendance and pending jobs for WhatsApp', icon: 'whatsapp', route: 'DailyReport' },
       { label: 'Attendance Report', hint: 'Present, absent, late, hours', icon: 'clock', route: 'AttendanceReport' },
       { label: 'Request Reports', hint: 'Technician report, top services', icon: 'report', route: 'RequestReports' },
       { label: 'Stats', hint: 'Live operations overview', icon: 'chart', route: 'Stats' },

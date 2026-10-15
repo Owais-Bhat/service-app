@@ -105,7 +105,7 @@ export async function syncDailyReportReminder(prefs?: ReminderPrefs): Promise<bo
       identifier: REMINDER_ID,
       content: {
         title: 'Daily report is ready',
-        body: "Review today's clock-ins, collections and sales, then send it to the WhatsApp group.",
+        body: 'The attendance and pending-jobs messages are ready. Review them and send them to the WhatsApp group.',
         data: { subject: 'daily_report' },
         sound: true,
       },
