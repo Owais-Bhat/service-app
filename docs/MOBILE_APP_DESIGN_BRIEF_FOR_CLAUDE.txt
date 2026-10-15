@@ -1,0 +1,788 @@
+NEST MOBILE APPLICATION — COMPLETE PRODUCT, UX, UI, ICON, AND INTERACTION BRIEF FOR CLAUDE DESIGN
+Version: 1.0
+Prepared from the working web and mobile repositories on 2026-10-15
+Product: Networking Experts Service Portal (NEST)
+
+======================================================================
+0. INSTRUCTION TO CLAUDE
+======================================================================
+
+Design a production-grade iOS and Android mobile application for NEST. This is not a concept app and not a generic field-service dashboard. It is a complete operational product already backed by working business logic. Preserve every capability and permission described below. Improve information architecture, clarity, touch ergonomics, visual consistency, empty/loading/error states, and task speed without changing the underlying business rules.
+
+Produce a connected, high-fidelity mobile design system and screen set for:
+1. Public customer/guest experience (no customer login).
+2. Employee/technician portal, including fixed, gig, and team-lead variations.
+3. Administrator/office portal.
+
+The result must look like one professional product, not three unrelated templates. Design light and dark themes. Use the supplied NEST logo. Make all screens responsive for compact Android phones, modern iPhones, large phones, and tablets. Do not show fake charts, fake records, placeholder lorem ipsum, or invented features. Use realistic Indian names, INR values, +91 phone numbers, dates, ticket IDs, GST terminology, and service categories.
+
+Design intent: calm, trustworthy, precise, fast in the field, and information-rich without feeling crowded. The employee app should feel action-oriented and easy to operate outdoors with one hand. The admin app should feel like a compact command centre. The guest flow should feel reassuring and simple.
+
+======================================================================
+1. NON-NEGOTIABLE PRODUCT TRUTHS
+======================================================================
+
+- Brand name: NEST. Company context: Networking Experts, an IT/security installation and service business.
+- Authenticated roles are admin, employee, and team lead. Customers use a public guest flow; do not design a customer login because the server rejects client login.
+- Employees may be fixed workers or gig workers.
+- Employee visibility is permission-driven. Dashboard, Notifications, and Profile are always available. Public Jobs appears only for gig workers. Assign Requests appears only when can_assign_tickets is enabled. Service Pricing management and Register Customer are gated by can_add_service. Installations can be disabled. Profile editing can be disabled. Other tabs may be hidden through allowed_tabs.
+- Do not show locked features as enticing upsells. Hide unavailable operational features, while keeping navigation stable and understandable.
+- All destructive and money-changing actions require clear confirmation. Routine status changes should not be slowed by unnecessary confirmation.
+- All data screens need loading, empty, error, offline/stale, refreshing, and success states.
+- Pull-to-refresh is supported. Native push replaces browser live-polling. Notification deep links must open the relevant record.
+- Phone imports use CSV, not XLSX. Backup ZIP is emailed on mobile. Landing-ad order uses a Position field rather than drag reorder.
+- Feedback links open the existing web feedback page. Do not invent an in-app feedback form for staff.
+- Keep native back behavior and preserve user-entered form state when returning from a picker or permission prompt.
+
+======================================================================
+2. INFORMATION ARCHITECTURE
+======================================================================
+
+2.1 Public/guest navigation
+
+Landing is a single welcoming surface with four clear modes:
+- New Request — wrench-outline
+- Track — search-outline
+- Complaint — shield-checkmark-outline
+- Installation — construct-outline
+
+Persistent secondary actions: Staff Login, Call Support, WhatsApp Support, theme switch. Do not place staff login as the dominant guest CTA.
+
+2.2 Employee navigation
+
+Use a five-item bottom tab bar for high-frequency destinations:
+- Home — home-outline / home
+- Attendance — time-outline / time
+- Job Tools — build-outline / build
+- Earnings — wallet-outline / wallet
+- Profile — person-outline / person
+
+Secondary employee screens open in a native push stack from their source. Job Tools is the discoverable directory for My Tasks, Installations, Public Jobs, Assign Requests, Device Follow-up, My Stats, Estimator, Service Pricing, Calendar, Register Customer, Materials Used, EOD Report, and AI Assistant. Notifications open from a bell in the header. Do not put more than five items in the bottom bar.
+
+2.3 Admin navigation
+
+Use a three-item bottom bar:
+- Dashboard — home
+- Menu — apps/grid
+- Notifications — notifications
+
+Admin Menu is a searchable grouped directory, not a wall of tiny dashboard icons. Groups: Work, Customers, Sales, Purchases & Stock, Accounts, Operations, Reports, Management, Marketing. Show recent/favourite destinations above groups if useful, but do not remove any group. Every menu row has a leading line icon, direct label, one-line purpose hint, chevron, and optional count/status badge.
+
+2.4 Tablet behavior
+
+At width 768 dp and above, replace the bottom-bar-plus-menu pattern with an adaptive split view: persistent navigation rail/sidebar, list in the middle when relevant, detail on the right. Never merely stretch a phone card to tablet width. Keep forms to a readable maximum width of 680 dp.
+
+======================================================================
+3. VISUAL SYSTEM
+======================================================================
+
+3.1 Brand and emotional direction
+
+Use “precision service” as the visual idea: deep forest surfaces, fresh operational green, restrained glass, crisp typography, exact alignment, and clean line icons. The interface should suggest technical competence and reliability. Avoid neon cyberpunk, oversized gradients, excessive glow, gaming UI, cartoon illustrations, skeuomorphic tools, and decorative 3D objects competing with work data.
+
+Use the supplied transparent NEST wordmark. Preserve its proportions; never redraw, outline, stretch, or place it on a low-contrast image. Provide app-icon lockups using the NEST mark or a simplified geometric N monogram that remains legible at 20 px. Do not put the full wordmark into a tiny notification icon.
+
+3.2 Color tokens
+
+Core brand:
+- Primary 500: #15A05A
+- Primary 600: #0F8A4C
+- Primary 700: #0C6F3D
+- Success: #15A05A
+- Warning: #E08A14
+- Danger: #F0556D
+- Info: #2E9BFF
+- Violet/assigned: #7C5CFC
+- Teal/networking: #0EA5A5
+
+Dark theme:
+- Background: #06100B
+- Glass surface: rgba(22,38,31,0.62)
+- Strong surface/sheet: rgba(20,34,28,0.86)
+- Border: rgba(255,255,255,0.14)
+- Primary text: #E9F1EC
+- Secondary text: #A3B6AD
+- Tertiary text: #6D8278
+- Divider: rgba(255,255,255,0.09)
+- Secondary panel: rgba(255,255,255,0.06)
+
+Light theme:
+- Background: #EEF3EF
+- Glass surface: rgba(255,255,255,0.68)
+- Strong surface/sheet: rgba(255,255,255,0.90)
+- Border: rgba(16,50,36,0.12)
+- Primary text: #0E1D16
+- Secondary text: #41584D
+- Tertiary text: #7A8D84
+- Divider: rgba(16,50,36,0.10)
+- Secondary panel: rgba(16,50,36,0.05)
+
+Color meaning must be consistent: red only for destructive/error/seriously overdue; amber for pending or attention; green for completed/paid/healthy; blue for new/information; violet for assigned; grey for closed/inactive. Never communicate status using color alone.
+
+3.3 Typography
+
+- Display, screen titles, high-value KPIs: Space Grotesk 600/700.
+- Body, controls, labels: Manrope 400/500/600/700.
+- Ticket IDs, clock times, amounts, serial numbers: JetBrains Mono 500/700.
+- Large title: 30/36, tracking -0.6.
+- Screen title: 24/30, tracking -0.35.
+- Section title: 18/24, tracking -0.15.
+- Body: 15/22.
+- Supporting: 13/18.
+- Micro/overline: 11/15, uppercase only for short metadata.
+- Button: 15/20, 700.
+- Support Dynamic Type/font scaling through at least 200%. Let cards grow; never clip text.
+
+3.4 Spacing, shape, and elevation
+
+- Base grid: 4 dp. Screen gutters: 16 dp compact, 20 dp regular, 24 dp tablet.
+- Common gaps: 8, 12, 16, 20, 24, 32.
+- Hero/glass cards: radius 24.
+- Standard cards and panels: radius 16–20.
+- Inputs/buttons: radius 14.
+- Chips/badges: radius 999.
+- Minimum touch target: 48 x 48 dp; minimum gap between destructive and primary controls: 12 dp.
+- Use glass only for navigation, sheets, and primary summary surfaces. Use calmer opaque/tinted panels for dense lists and forms. Never stack translucent cards on translucent cards.
+- Use subtle shadows only to explain elevation. Borders and spacing carry most hierarchy.
+
+3.5 Background
+
+Use the existing deep forest/light sage base with three extremely subtle blurred mesh fields (green, teal, indigo). Content must remain fully legible. Freeze ambient mesh movement when Reduce Motion is on and avoid continual animation on operational screens to preserve battery.
+
+======================================================================
+4. ICON SYSTEM — PRECISE RULES
+======================================================================
+
+Use Ionicons consistently. Outline icons for inactive/navigation/list actions; filled version only for selected tabs, selected filters, or confirmed states. Standard sizes: 16 inline, 20 row, 22 toolbar, 24 tab, 28 empty-state, 40–48 illustration container. Stroke appearance must be visually consistent. Icons must have text labels for unfamiliar or irreversible actions. Never use emoji as product icons.
+
+Core mapping:
+- Home: home-outline / home
+- Attendance/time: time-outline / time
+- Tasks: checkbox-outline / checkbox
+- Tools/service: build-outline / build
+- Earnings/wallet: wallet-outline / wallet
+- Profile: person-outline / person
+- Notifications: notifications-outline / notifications
+- Search: search-outline
+- Filter: filter-outline
+- Calendar: calendar-outline
+- Customers/team: people-outline
+- Call: call-outline
+- WhatsApp: logo-whatsapp
+- Location/map: location-outline / map-outline
+- Refresh: refresh-outline
+- Add: add-outline
+- Edit: create-outline
+- Delete: trash-outline
+- Close: close-outline
+- Back/forward: chevron-back / chevron-forward
+- Success: checkmark-circle-outline
+- Warning/error: alert-circle-outline
+- Security/AMC: shield-checkmark-outline
+- Device: hardware-chip-outline
+- Stock/item: cube-outline
+- Purchases: cart-outline
+- Sales/bill: receipt-outline
+- Documents/reports: document-text-outline
+- Ledger: book-outline
+- Finance/chart: bar-chart-outline
+- Payments/cash: cash-outline
+- Price/coupon: pricetag-outline / ticket-outline
+- Installations: construct-outline
+- Training: school-outline
+- Tutorials: play-circle-outline
+- Leaderboard: podium-outline
+- Marketing: megaphone-outline
+- Settings: settings-outline
+- AI: sparkles-outline
+- Transfer: swap-horizontal-outline
+- Visibility/read: eye-outline
+- Camera/selfie: camera-outline
+- Sign out: log-out-outline
+
+Icon container rules:
+- Navigation: no decorative background unless selected.
+- Menu row: 40 x 40 tinted rounded square, icon 20.
+- Quick action: 48 x 48 tinted rounded square, icon 22.
+- Destructive icon buttons use a pale red container and require accessible label.
+- Status badges use a dot/check plus text, never an ambiguous standalone icon.
+
+======================================================================
+5. SHARED COMPONENT LIBRARY
+======================================================================
+
+Design reusable variants and document their properties/states:
+
+1. AppHeader: optional back, title/subtitle, context badge, notification badge, search, overflow.
+2. BottomTabBar: safe-area aware, 5 employee or 3 admin destinations, selected filled icon and label.
+3. AdminMenuRow and ToolRow: icon, label, hint, metadata/count, chevron, disabled/hidden logic.
+4. GlassHeroCard and SolidPanel.
+5. MetricCard: label, value, trend/status, optional drill-in. Numbers align and never wrap.
+6. RecordCard: status accent, title, key metadata, primary next action, overflow menu.
+7. StatusBadge and CategoryBadge.
+8. SearchField: clear button, optional scanner/filter, 48 dp.
+9. FilterChips and SegmentedTabs: horizontally scroll only when necessary; selected state obvious beyond color.
+10. PrimaryButton, SecondaryButton, TertiaryButton, DestructiveButton, IconButton, FloatingActionButton.
+11. FormField: label, required marker, help, value, validation, leading/trailing icon, keyboard type.
+12. MoneyField: INR prefix, right-aligned numeric value, decimal validation.
+13. Date/Time/Calendar picker.
+14. PersonPicker, ItemPicker, ServicePicker, JobPicker with search and recent selections.
+15. PhotoField: camera/gallery, preview, replace/remove, upload progress, retry.
+16. EmptyState, ErrorState, OfflineBanner, Skeleton, InlineNotice, Toast.
+17. ConfirmationSheet and ActionSheet.
+18. BottomSheet: grabber, title, scrolling body, pinned action area, keyboard-safe.
+19. DataTable for tablet; mobile equivalent is cards with progressive disclosure.
+20. Timeline/AuditLog: event icon, title, actor, timestamp, note.
+21. ContactActions: Call, WhatsApp, Directions; always labeled.
+22. ExportShareSheet: CSV/PDF/share destination and completion state.
+23. PermissionPrimer: explains camera/location/notification need before OS prompt.
+24. SensitiveReveal: obscures passwords/keys until deliberate reveal.
+
+All buttons show pressed, disabled, loading, success, and error states. Disable a submitting control and keep its label meaningful (for example, “Saving…”). Inline validation appears next to the field, not only as a global toast.
+
+======================================================================
+6. PUBLIC/GUEST EXPERIENCE — COMPLETE FLOW
+======================================================================
+
+6.1 Landing
+
+Header: NEST wordmark left; theme and Staff Login right. Hero message promises verified, prompt support without exaggerated marketing. Four-mode selector remains visible near the active form. Include ad/promo carousel only when content exists; failed media collapses cleanly instead of leaving a blank white block. Footer support bar offers the configured call and WhatsApp contacts.
+
+6.2 New service request
+
+Three-step wizard with persistent progress: Verify → OTP → Details.
+- Verify: Indian 10-digit phone, generated letter captcha, refresh captcha, Send OTP.
+- OTP: six-digit code, masked phone summary, resend timer/action, change number.
+- Details: name, company if applicable, location/address, use-current-location, service/category, issue description, preferred date/time where configured, photos if supported.
+- Before submission run booking precheck. If blocked for dues, minimum threshold, or service radius, show the server message and support actions; never erase entered data.
+- Success shows ticket number prominently, copy/share, “Track this request,” and reminder to save the number.
+
+6.3 Installation booking
+
+Start with a visual but compact type grid:
+- CCTV Camera Installation
+- Networking & LAN Setup
+- Wi-Fi / Access Point Setup
+- Biometric & Access Control
+- Video Door Phone / Intercom
+- Smart Home Automation
+
+After type selection, use the same Verify → OTP → Details wizard, retaining an installation banner. Collect site/contact/scheduling details. Success uses installation-specific language.
+
+6.4 Track request
+
+Require exact ticket number and phone together. Show a helpful example format. Result card includes ticket ID, service, status, latest update, assigned technician only where allowed, bill/payment state, and timeline. When reopening is allowed, show “Report issue again” with the configured limit and a confirmation sheet. Wrong details use neutral privacy-safe wording.
+
+6.5 Complaint
+
+Fields: ticket number, phone, “What went wrong?” multiline field. Explain that the ticket is verified against the number. Success says Complaint received and gives expected next step. Avoid accusatory language.
+
+======================================================================
+7. AUTHENTICATION AND SESSION
+======================================================================
+
+Staff login: email/phone identifier as supported, password, reveal toggle, Sign In, connection error, and Back to customer service. The authenticated route is determined by role. Sessions restore securely. A 30-day employee session expiry returns the user to login with an explanation. Logout uses a confirmation sheet. Do not expose registration keys in ordinary login; staff account creation is an admin task.
+
+======================================================================
+8. EMPLOYEE/TECHNICIAN PORTAL — SCREEN-BY-SCREEN
+======================================================================
+
+8.1 Home dashboard
+
+Top: greeting, fixed/gig/team-lead role chip, online/sync state, notification bell. Primary attendance card is the dominant action. It shows Not clocked in / Clocked in since / Clocked out, location validity, and Clock In or Clock Out.
+
+Dashboard sections, ordered by urgency:
+- Blocking notice: missed EOD/restriction, with Resolve action.
+- Pending assignments carousel/list; each card can Accept or Decline. Opening marks assignment as seen.
+- Today’s route/jobs with status, SLA, customer, area, next action.
+- Reopened tickets warning.
+- Devices currently in service.
+- Notices from admin with priority and expiry.
+- Gig worker public-jobs summary only for gig workers.
+- Small daily stats/target summary.
+- Employee popup ad once per session when enabled; obvious close, never blocks emergency task work.
+
+8.2 Attendance
+
+- Clock In requires a permission primer, precise GPS, and selfie. Fixed staff may require face verification against reference selfie and office geofence. Explain any failure: outside radius, no location, face mismatch, permission denied, or already clocked in.
+- Clock Out may require EOD completion. Confirm with time and total shift duration.
+- Attendance Records: date, in/out time, hours, late/on-time, selfie/map access.
+- Leave Request: type, from/to dates, reason, optional attachment; show pending/approved/rejected history.
+- EOD Report: jobs completed, pending work, cash, notes/issues; preserve draft and show gate requirement.
+
+8.3 My Tasks
+
+List supports status filters, search, pull refresh, CSV export, and compact status counts. Every task card shows ticket ID, customer, service/category, status, SLA urgency, locality, scheduled time, assignment state, and quick Call/WhatsApp/Directions. Primary action is Open/Manage.
+
+Task detail includes:
+- Customer and contact/location.
+- Service description and photos.
+- SLA timer and complete status history.
+- Installed customer equipment, warranty state, active/expired AMC, visits remaining.
+- “Count this as an AMC visit” when eligible.
+- Assignment seen/accepted state.
+- Quick contact/directions.
+- Manage Status, Device Service, Materials, and Billing actions.
+
+8.4 Task status management
+
+Available outcomes:
+- In Progress.
+- Reschedule: date, time, reason.
+- Issue Not Resolved: reason/notes.
+- Case Closed: final close confirmation.
+- FOC — free rework; used for reopened work and requires bill number only where existing logic requests it.
+- Resolved — proceeds into bill creation.
+
+Show status options as labeled rows/tiles, not color-only circles. Keep Device Service separate from ticket status.
+
+8.5 Device Service
+
+Per-ticket enable switch. Mark Device Taken requires device type, serial number, description/condition, and photo. Show custody receipt and timestamp. Follow-up log supports status plus notes and history. Mark Returned requires return photo, return condition, notes, and confirmation. Never permit a closed job with an unreturned device without an explicit admin-visible audit flag.
+
+8.6 Resolve and bill
+
+Billing sheet is a guided flow:
+- Company/customer identity.
+- Searchable, category-grouped services/items with quantity and price.
+- Extra cost plus mandatory reason.
+- Redeem coupon with server validation and removable applied state.
+- Employee discount plus mandatory reason.
+- Transport distance; Capture My Location at customer site; calculated kilometres/cost.
+- Optional GST at 18% as configured.
+- Platform fee.
+- Live receipt breakdown: Services, Extra Charges, Platform Fee, Transport, GST, Coupon/Discount, Total.
+- Payment method Cash or Online. Gig workers are online-only.
+- Online: generate Razorpay link and QR, Share via WhatsApp, poll payment, finalize automatically when paid.
+- Cash: saving records cash collection in the same action.
+- Generate server-rendered invoice PDF, View PDF, Send via WhatsApp with itemized caption.
+
+Make recalculation immediate and visibly stable. Confirm the final amount and payment method before committing. Do not place tiny price fields or destructive removal buttons beside each other.
+
+8.7 Installations
+
+Assigned installation cards show customer/site, type, date/time, status, technician, payment, and Call/Directions. Actions: accept, start, update, complete, record materials, build bill. Opening marks assignment as seen.
+
+8.8 Public Jobs (gig only)
+
+List unclaimed eligible jobs with location, category, estimated value, distance when available, and expiry. Claim is race-safe: while claiming, lock action; if another worker wins, explain and remove/update the card. Never imply guaranteed earnings before claim.
+
+8.9 Assign Requests (permission only)
+
+Show open requests and technician availability. Select request, select technician, review, assign. Surface conflicts and already-assigned state. Do not expose unrelated admin controls.
+
+8.10 Device Follow-up
+
+Show devices currently held, last follow-up, age, customer, ticket, custody technician, and attention state. Add status/notes; display chronological history; open full device detail.
+
+8.11 My Stats
+
+Daily/period metrics, target progress, jobs by status donut, response/completion indicators, and trend. Every chart has a text summary. Avoid ranking pressure when the sample is too small.
+
+8.12 Earnings
+
+Sections: My Cash (pending versus submitted), Collections by period, salary estimate for fixed staff, and gig earnings/payout state for gig staff. Amounts use INR and monospaced numerals. Explain estimates versus finalized amounts.
+
+8.13 Estimator
+
+Quote builder independent of a ticket: customer name, selectable services/items, quantity/rate, adjustments, transport/GST where applicable, total preview, reset, Share via WhatsApp. Label it Estimate, not Tax Invoice.
+
+8.14 Service Pricing
+
+All authorized staff can view/search/category-filter pricing. When can_add_service is enabled, also allow add, edit, delete, CSV import, duplicate removal, bulk delete, and template/sample guidance. Confirm broad deletion and show import validation results row-by-row.
+
+8.15 Growth and learning
+
+- Leaderboard: monthly and all-time rank, score explanation, tie treatment.
+- Bonus Reviews: claim customer-review points up to 30; upload/enter evidence, show pending/approved/rejected.
+- Tutorials: categorized video list, progress/watch tracking, resume.
+- Training: assigned courses, lesson progress, course player, quiz. Support multiple choice, fill-in-the-blank, image question, and match-the-following. Show pass/fail, retry policy, and completion.
+
+8.16 Calendar, Register Customer, Materials, AI
+
+- Calendar: own dated jobs/installations, day/month views, jump to today, record detail.
+- Register Customer: walk-in request creation and automatic acceptance, permission gated.
+- Materials Used: select job, choose van-stock items, used/returned quantities, review and submit.
+- AI Assistant: ask a service issue; return concise diagnostic steps and relevant solution videos. Show uncertainty and never silently change records.
+
+8.17 Notifications, Profile, Account
+
+- Notifications: unread/read, mark one/all read, timestamp, type icon, deep link.
+- Profile: identity, role, contact, permissions summary, theme/settings, sign out.
+- Account details: edit name/phone/company only when allowed; change password with current/new/confirm and strength/help.
+- Settings: theme, notification preference, privacy/help/app version. Do not duplicate admin business settings.
+
+8.18 Team lead
+
+Team lead gets employee tools plus a team dashboard: team members, attendance state, assigned/open work, overdue/attention items, and drill-down. Do not give admin finance, user deletion, or global settings unless independently authorized.
+
+======================================================================
+9. ADMIN PORTAL — COMPLETE SCREEN INVENTORY AND BEHAVIOR
+======================================================================
+
+9.1 Admin Dashboard
+
+This is a triage hub, not a decoration-heavy analytics page. Show:
+- Counts: total/open requests, attendance, low stock, complaints, EOD warnings, installations.
+- Online Now.
+- Overdue-to-assign/response-time alerts.
+- Needs Attention queue.
+- Recent requests, installations, complaints, and resolved work.
+- Services by company and top technicians as drill-in summaries.
+- Auto-assignment state with a safe shortcut.
+- Primary “Register Request” action.
+
+Each metric opens the filtered destination. Prioritize exceptions above healthy totals.
+
+9.2 Work group
+
+SERVICE REQUESTS
+- Status views: Active, Resolved, Issue Not Resolved, Reopened, Awaiting Payment, Paid, All.
+- Search, company/status/technician/date filters, CSV/export.
+- Detail: customer, SLA, service/device, assignment, bill/payment, photos, feedback, installed equipment/AMC, audit timeline.
+- Assign/reassign, transfer technician, release to public gig pool, delete.
+- Deletion removes the linked employee ticket and requires confirmation.
+- Register request on behalf of customer.
+
+QUERIES & FOLLOW-UPS
+- Add, list, search, follow-up state, contact action, notes, delete.
+
+INSTALLATIONS
+- Status tabs, search/date filters, book, edit, delete, assign technician, change status.
+- Detail includes site, contact, schedule, type, materials, bill, payment state, logs.
+- Mark paid/unpaid, technician report, most-booked types, CSV/export.
+
+JOB COSTING
+- Queue jobs requiring costing.
+- Approve/reject technician materials.
+- Add/remove labour, travel, material, and other costs.
+- Show revenue, cost, margin amount/percentage, technician van stock.
+- Record materials and prepare invoice.
+
+DEVICE TRACKING
+- All devices taken for repair, age, last follow-up, holder, ticket/customer.
+- Add follow-up status/notes, mark returned, view photos/history.
+- Clearly flag closed-without-return.
+
+9.3 Customers group
+
+CUSTOMERS & SUPPLIERS
+- Searchable address book; create/edit.
+- GSTIN lookup, credit terms, billing/shipping addresses, contact details, opening/current balance.
+- Merge duplicates with before/after review.
+- Statement and complete-record PDF.
+
+SITES & DEVICES
+- Equipment grouped by party/site.
+- Add/edit device, category/model/serial, install date, warranty state.
+- Replacement history, replace, put back, service history.
+
+AMC CONTRACTS
+- Create/edit contract, term dates/value, free visits and usage, term invoicing.
+- Record visits, renew, cancel, renewal-chasing state, WhatsApp renewal.
+
+CONTACTS
+- Today, Week, Month, Unique tabs.
+- Search and Call/WhatsApp/Copy actions.
+
+COMPLAINTS
+- Open/resolved/all, ticket/customer context, response text, SMS response, status update, export all.
+
+9.4 Sales group
+
+INVOICES & QUOTATIONS
+- Document types: quotation, invoice, credit note, debit note, receipt.
+- Draft/issue, quotation-to-invoice, amend/revise with reason, cancel without deletion.
+- Server-priced line items/tax totals, PDF, WhatsApp send.
+- Record receipt and allocate on-account payment to invoices after the fact.
+- Show “owed to us” clearly.
+
+PAST RECORDS (VYAPAR)
+- Read-only imported record list, search/filter, record detail, lines, linked records.
+
+9.5 Purchases & Stock group
+
+PURCHASES
+- Purchase order → partial/full receive → supplier bill → return.
+- Payables/“we owe,” supplier payment out, document and line detail.
+
+STOCK
+- On shelf, in vans, reserved, and per-location availability.
+- Transfer, move, take-back, adjust, count, serial/device history, valuation.
+- CSV import with sample/template and validation report.
+
+ITEMS
+- Create/edit item, purchase/selling rates, tax/category/unit, minimum-stock alert, active/hidden.
+- Item ledger.
+- Bulk activate, hide, delete, with selection summary and confirmation.
+
+9.6 Accounts group
+
+LEDGER & JOURNALS
+- Chart of accounts, journal list/detail, manual entry with balanced debit/credit, reverse entry.
+- Trial balance, opening balances, period locks, audit trail.
+- Locked periods must explain why editing is unavailable.
+
+FINANCIAL REPORTS
+Provide all report destinations with period/filter/export and plain-language summaries:
+- Summary/reminders, including WhatsApp reminder action.
+- Profit & Loss.
+- Balance Sheet.
+- Receivables ageing.
+- Account ledger.
+- Party statement.
+- GST report.
+- Stock value.
+- Job margins.
+- Health check.
+- Any existing report overview tab needed to make eleven total tabs.
+
+DATA MIGRATION
+- Backup by email.
+- Vyapar import.
+- Older tickets, shelf stock, service register, history, evening summary imports.
+- Dry run → validation → explicit confirmation → progress → before/after checks.
+- Never offer direct ZIP download on phone. Make rollback/recovery implications clear.
+
+9.7 Operations group
+
+ATTENDANCE
+- Logs with selfie, map/location, clock-in/out, hours, late state.
+- Resolve missed-EOD restrictions, reset Face ID/reference.
+- Per-employee KPIs: days present, late, hours.
+- Date-range report, absent list, CSV export, location detail.
+
+JOB CARDS
+- Pending entry, entered, awaiting 3-day verification call, verified/problem states.
+- Record verification result, award monthly bonus, leaderboard view.
+
+SERVICE LOG
+- Day register: date, technician, customer, service, amount, payment.
+- Add/edit/delete, link/unlink ticket, summary, CSV.
+
+BONUS REVIEWS
+- Evidence detail, employee/customer context, approve/reject with reason.
+
+AUTO ASSIGNMENT
+- Master on/off, round-robin queue, live state, recent assignment audit. Explain operational consequence before turning off.
+
+ASSIGNMENT QUEUE AND ASSIGNMENT TRACKER
+- Show sent → delivered → read → accepted lifecycle.
+- Identify who has not seen a job.
+- WhatsApp again and Share to group.
+
+LIVE LOCATIONS
+- Map of clocked-in field staff with freshness indicator.
+- Technician detail and Day Trail for selected date.
+- Playback, route timestamps, stale/no-permission state. Never imply real-time accuracy when stale.
+
+CALENDAR
+- Installation/work by date; day/month view; add installation; open record.
+
+9.8 Reports group
+
+- Stats: live operational overview and drill-ins.
+- Response Time: assignment/response durations, overdue list, technician summary.
+- Client Feedback: all reviews, top three, by company, rankings, CSV.
+- Employee Performance: leaderboard and employee detail.
+- Finance: business health, revenue trend for 12 months, by category, receivables ageing, technician collected-versus-billed, growth advisor, PDF/CSV.
+- AI Business Report: generate narration and ask a question; mark generated content and show source period.
+- AI Employee Report: progress summary and notes.
+- Payments: billed jobs, status, mark paid, allocate.
+- Bills: generated invoices, view/share.
+- Cash Collections: employee cash held, record submission/handover.
+- Collection Reports: employee, period, gig pool, and bill detail.
+- Salary: attendance-based estimate with assumptions.
+- Gig Payouts: earned/pending/paid, mark paid.
+- Leave Requests: approve/reject with dates/reason/history.
+- EOD Summaries: employee/date/status, issues, jobs and cash summary.
+
+9.9 Management group
+
+EMPLOYEES
+- Directory and per-employee operations overview, attendance, work, performance, collections, devices, and quick drill-ins.
+
+USERS
+- Create/edit/delete account.
+- Role, worker type, tab access, can_add_service, can_assign_tickets, installations enabled, profile editing, exemptions.
+- User detail by ID. Clearly separate identity, access, and work policy sections.
+
+DEVICE TYPES & COMPANIES
+- CRUD, active state, validation, usage-aware deletion.
+
+SERVICE PRICING
+- Add/edit/delete, search/filter, CSV import, sample/template, remove duplicates, bulk delete.
+
+BUSINESS & TAX SETUP
+- Legal/business identity, GST/tax details, invoice numbering, tax rates, service income mapping, WhatsApp templates. Show save scope and validation.
+
+EMPLOYEE TUTORIALS
+- Upload/edit/hide/delete media, category/order, completion and live-watch progress.
+
+TRAINING COURSES
+- Create/edit course, lessons, questions, assignments, progress.
+- Quiz authoring supports multiple choice, fill, image, match-the-following.
+- CSV quiz import with sample and error report.
+
+SETTINGS
+- Registration keys.
+- Clock-in selfie/location/face requirements.
+- Office geofence centre and radius with Capture My Location.
+- Auto clock-out.
+- Reopen policy.
+- Public-pool timeout.
+- Employee popup configuration.
+- Device tracking controls.
+- Booking rules: block on dues, ignore balances below threshold, service radius.
+- Group settings into Security, Attendance, Requests, Gig Work, Customer Booking, and Media. Do not expose secrets by default.
+
+9.10 Marketing group
+
+LANDING AND POPUP ADS
+- Upload/preview, edit, visibility, dates/link, delete.
+- Position numeric field controls order on mobile.
+- Validate recommended aspect/resolution before upload and explain failures.
+
+WHATSAPP CAMPAIGNS
+- Audience, message, header media/document, preview, test send, schedule, publish.
+- Monthly automatic campaign and opt-outs.
+- Show estimated recipients, exclusions, state, results/errors. Confirm publish.
+
+NOTICES
+- Create/edit, priority, audience, expiry, preview, active/expired state.
+
+COUPONS
+- Code, type/value, limit, dates, active state, validation, usage.
+
+DISCOUNT DETAILS
+- Discounts given by staff with ticket, employee, amount, reason, period filters.
+
+9.11 Cross-cutting admin tools
+
+- Global search across screens, tickets, customers, IDs, and common actions.
+- Notifications with read/read-all and deep links.
+- AI Assistant for service troubleshooting.
+- My Profile and password.
+- Export/share standardized across applicable reports.
+
+======================================================================
+10. LIST, DETAIL, FORM, AND DATA-DENSITY PATTERNS
+======================================================================
+
+- Phone list cards show only decision-making information. Put secondary metadata in detail, not twelve tiny labels.
+- Pin search/filter controls below the header on long lists. Show active-filter count and one-tap Clear All.
+- Keep selected segment while refreshing. Preserve scroll position after non-destructive edits.
+- Use bottom sheets for short edits/pickers and full screens for multi-section forms.
+- Use a sticky bottom action area only for the main commit action; ensure it does not cover the final field.
+- For records with many actions, show one primary action and an overflow menu. Keep Call/WhatsApp/Directions together.
+- Audit/history uses a vertical timeline. Monetary histories show running context, status, and references.
+- Charts must use accessible legends and a written key insight. Tapping a chart segment filters/drills into records.
+- Empty states explain whether there is no data or filters excluded it, and provide the correct next action.
+
+======================================================================
+11. MOTION AND HAPTICS
+======================================================================
+
+Motion communicates structure and state; it is never decoration.
+- Touch feedback begins on press-down: scale to 0.97–0.985 in 80–100 ms.
+- Standard reposition/mount spring: damping ratio 1.0, response 0.4 s.
+- Gesture-driven sheet: damping ratio 0.8, response 0.3 s, velocity carried into settle.
+- Push detail from right and return on the same path. Bottom sheets rise and dismiss downward.
+- Sheet dragging tracks the finger 1:1, supports interruption, and rubber-bands softly past bounds.
+- Success check/haptic occurs only after server confirmation. Warning/error haptics are restrained.
+- Skeletons cross-fade into content; do not cascade every card on every refresh.
+- Reduce Motion: replace spatial motion/springs with ≤200 ms cross-fades and remove ambient movement.
+
+======================================================================
+12. ACCESSIBILITY, FIELD USE, AND LOCALIZATION
+======================================================================
+
+- Meet WCAG AA contrast in both themes, including text over glass.
+- Every icon button has an accessible name; reading order follows visual order.
+- Touch targets are at least 48 dp. Do not rely on swipe as the only way to act.
+- Support screen readers, font scaling, bold text, reduced motion, and reduced transparency/solid surfaces.
+- Numeric keyboard for phone, OTP, quantities, amounts; email keyboard for email.
+- OTP supports platform autofill. Forms expose Next/Done flow and remain usable with keyboard open.
+- Design for sunlight: primary operational cards need strong contrast; do not make all text muted green.
+- Dates use clear Indian-friendly format such as 15 Oct 2026; avoid ambiguous 10/11/26.
+- Currency is ₹ with Indian grouping (₹1,24,500). Phone is +91. Time should honor device 12/24-hour preference.
+- Error copy states what happened and what to do next. Never show raw server errors or database terms.
+
+======================================================================
+13. PRIVACY, PERMISSIONS, AND SAFETY
+======================================================================
+
+- Ask for camera/location/notification access at the moment the feature needs it, preceded by a plain-language primer.
+- Explain that location/selfie is used for attendance or route evidence; do not suggest invisible continuous surveillance.
+- Live-location screens show last updated time. Background/foreground limitations must be truthful.
+- Obscure passwords, registration keys, API-like secrets, and private customer details in previews.
+- Avoid showing full customer phone/address on crowded admin dashboard cards; reveal in authorized detail.
+- Confirm irreversible delete, account removal, financial posting/reversal, campaign publish, migration confirmation, and paid-state changes.
+- Prefer Undo for reversible local presentation changes, and confirmation for real backend destruction.
+
+======================================================================
+14. CONTENT STYLE
+======================================================================
+
+Use short, direct labels: “Assign technician,” “Mark returned,” “Generate invoice,” “Save changes.” Avoid vague “Proceed,” “Submit data,” or “Manage.” Use sentence case. Use “customer,” “technician,” “service request,” “installation,” and “ticket” consistently.
+
+Examples:
+- Empty: “No open requests” / “New requests will appear here.”
+- Offline: “You’re offline. Showing data from 10:42 AM.”
+- Destructive: “Delete request NE-261015-1042? This also removes the linked technician task. This cannot be undone.”
+- Money confirmation: “Record ₹8,450 received in cash from Asha Traders?”
+- Stale location: “Last location received 18 min ago.”
+- Permission: “Allow location while using NEST to verify attendance and calculate travel from the customer site.”
+
+======================================================================
+15. DESIGN DELIVERABLES REQUIRED FROM CLAUDE
+======================================================================
+
+Create a coherent design file, prototype, or generated implementation containing:
+
+1. Foundations page: logo use, light/dark palettes, typography, grid, spacing, radii, elevation, icon rules, status/category semantics.
+2. Component page with all shared components and their interaction/state variants.
+3. Public flow: landing four modes, request wizard all steps/states, installation selection/wizard, tracking result, complaint, staff login.
+4. Employee core: home variants (fixed/gig/restricted/team lead), attendance and permission states, tasks list/detail, status sheet, device flow, billing/payment/PDF flow, installations, job tools, earnings, profile.
+5. Employee secondary: public jobs, assignment, follow-up, stats, estimator, pricing manage, leaderboard/reviews, tutorials/training/quiz, calendar, registration, materials, EOD, AI, notifications/settings.
+6. Admin core: dashboard, searchable grouped menu, service request list/detail/assignment, installations, attendance, live map/trail, customer/party detail, sales editor, stock, ledger, financial report.
+7. Admin secondary patterns covering every page in Section 9 using shared list/detail/editor/report templates with page-specific fields and actions.
+8. Phone portrait frames for all key flows plus at least six tablet split-view examples.
+9. Clickable prototype for these critical journeys:
+   a. Guest verifies phone and submits a service request.
+   b. Fixed technician clocks in with GPS/selfie.
+   c. Technician accepts a task, changes status, resolves, bills, and shares invoice.
+   d. Gig technician claims a public job and completes online payment flow.
+   e. Admin registers and assigns a request.
+   f. Admin receives stock and sees availability update.
+   g. Admin reviews job margin and prepares invoice.
+   h. Admin reviews a live-location day trail.
+   i. Admin creates/tests/schedules a WhatsApp campaign.
+   j. Admin runs a migration dry run and confirms only after validation.
+10. Redline/spec annotations for sizing, spacing, type, colors, icons, gestures, motion, keyboard, safe areas, and responsive behavior.
+11. Developer handoff naming that maps components and screens to the existing React Native/Expo application.
+
+======================================================================
+16. ACCEPTANCE CHECKLIST
+======================================================================
+
+The design is complete only if:
+
+- Public, employee, team-lead, gig, and admin experiences are visually related but role-appropriate.
+- Every feature in Sections 6, 8, and 9 has an obvious home and interaction path.
+- Permission-gated employee features have documented visible/hidden variants.
+- Both themes pass contrast; glass never harms readability.
+- All money and destructive actions have review/confirmation/error/success states.
+- Forms include validation, keyboard behavior, upload progress, and permission denial recovery.
+- Lists include loading, refreshing, empty, filtered-empty, error, offline/stale, and populated states.
+- Status never depends on color alone.
+- Icons are from the defined Ionicons vocabulary and remain consistent.
+- Navigation never strands the user and Android back behavior is predictable.
+- Critical actions are reachable one-handed on a compact phone.
+- Tablet layouts use split views instead of stretched cards.
+- Reduced motion, large text, and reduced transparency are demonstrated.
+- No customer login is invented; no working portal feature is removed.
+- CSV/mobile backup/ad-order limitations are represented truthfully.
+- The final output is detailed enough for implementation without the developer guessing spacing, states, hierarchy, icons, or workflow.
+
+END OF BRIEF
