@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
 import { getToken, setToken as persistToken, ApiError } from '../api/client';
 import { signin as apiSignin, fetchMe, AuthUser } from '../api/auth';
 import { registerPushToken } from '../api/push';
@@ -51,23 +50,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Register (or re-register) the device's push token whenever a user
   // becomes signed in — covers both cold-start session restore and a fresh
-  // login in one place. Failures are non-fatal (permission denied, no
-  // physical device, etc.) — push is a bonus, not a login requirement.
+  // login in one place. Failures are non-fatal and silent (permission denied,
+  // no physical device, server unreachable) — push is a bonus, not a login
+  // requirement, and the user is never shown a setup popup for it.
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
-        const { token, reason } = await registerForPushNotificationsAsync();
-        if (!token) {
-          // TEMPORARY diagnostic — standalone builds have no attached console,
-          // so this is the only way to see why registration didn't happen.
-          Alert.alert('Push setup', reason || 'Unknown reason (no token)');
-          return;
-        }
+        const { token } = await registerForPushNotificationsAsync();
+        if (!token) return;
         await registerPushToken(token);
-        Alert.alert('Push setup', 'Token registered successfully.');
-      } catch (e) {
-        Alert.alert('Push setup', `Server registration failed: ${e instanceof Error ? e.message : String(e)}`);
+      } catch {
+        // Silent by design.
       }
     })();
   }, [user]);
