@@ -80,6 +80,14 @@ const FIXTURES: { match: RegExp; body: unknown }[] = [
     attendance: [{ id: 'a1', user_id: 'e1', clock_in: iso, clock_out: null, location: 'Lal Chowk', profiles: { full_name: 'Imran Khan' } }],
     profiles: [{ id: 'e1', full_name: 'Imran Khan', role: 'employee', phone: '9000000001' }],
   } },
+  { match: /\/admin\/daily-jobs/, body: [{
+    ticket_no: 'NE-261013-1001', full_name: 'Asha Traders', company_name: null, location: 'Lal Chowk, Srinagar',
+    service_item: 'CCTV no signal', status: 'resolved', customer_lat: '34.0837', customer_lng: '74.7973',
+    employee_bill_lat: '34.0840', employee_bill_lng: '74.7980', assigned_employee_id: 'e1', claimed_by_gig_worker_id: null,
+    job_start_time: `${today}T10:15:00`, job_end_time: `${today}T11:40:00`, employee_update_status: 'resolved',
+    work_done_note: 'Replaced DVR power supply', bill_total: 1770, payment_status: 'paid', payment_method: 'cash',
+    employee_name: 'Imran Khan', secondary_name: null,
+  }] },
   { match: /\/notifications\/unread-count/, body: { unread: 3 } },
   { match: /\/data\/profiles/, body: [
     { id: 'e1', full_name: 'Imran Khan', role: 'employee', phone: '9000000001', worker_type: 'fixed', salary: 24000 },
@@ -259,7 +267,7 @@ const CASES: { name: string; el: () => React.ReactElement; expects: string[] }[]
   { name: 'Attendance report', el: () => <AttendanceReportScreen onBack={noop} />, expects: ['Attendance Report', 'Export report', 'Imran Khan', 'Present (days)'] },
   { name: 'Request reports', el: () => <RequestReportsScreen onBack={noop} />, expects: ['Request Reports', 'TECHNICIAN REPORT', 'Export report', 'Most requested services'.toUpperCase()] },
   { name: 'Client feedback', el: () => <ClientFeedbackScreen onBack={noop} />, expects: ['Client Feedback', 'Total reviews', 'Average rating'] },
-  { name: 'Daily report', el: () => <DailyReportScreen onBack={noop} />, expects: ['Daily Report', 'Send on WhatsApp', 'Not clocked in: Sajad Ahmad', 'INV-8', 'Imran Khan', 'DAILY REMINDER', 'Copy text'] },
+  { name: 'Daily report', el: () => <DailyReportScreen onBack={noop} />, expects: ['Daily Report', 'Send on WhatsApp', 'Not clocked in: Sajad Ahmad', 'INV-8', 'Imran Khan', 'DAILY REMINDER', 'Copy text', 'JOBS BY EMPLOYEE', 'Lal Chowk, Srinagar', 'Replaced DVR power supply'] },
   { name: 'Campaigns', el: () => <CampaignsScreen onBack={noop} />, expects: ['WhatsApp Campaigns', 'Diwali offer', '90 sent', 'Do-not-message list', 'IST'] },
 ];
 

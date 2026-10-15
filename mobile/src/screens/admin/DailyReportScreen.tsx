@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Share, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
@@ -7,6 +7,7 @@ import StatGrid from '../../components/admin/StatGrid';
 import ActionButton from '../../components/admin/ActionButton';
 import SectionLabel from '../../components/admin/SectionLabel';
 import Field from '../../components/admin/Field';
+import ListRow from '../../components/admin/ListRow';
 import { RowPanel, SwitchRow } from '../../components/admin/FinanceKit';
 import { buildReportText, DailyReport, fetchDailyReport, localToday } from '../../api/adminDailyReport';
 import {
@@ -22,7 +23,7 @@ import { sendToWhatsapp } from '../../utils/whatsapp';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
 import { semantic } from '../../theme/tokens';
-import { inr } from '../../utils/format';
+import { inr, shortTime } from '../../utils/format';
 
 interface Props {
   onBack: () => void;
@@ -60,6 +61,7 @@ export default function DailyReportScreen({ onBack }: Props) {
   const [prefs, setPrefs] = useState<ReminderPrefs | null>(null);
   const [timeInput, setTimeInput] = useState('17:30');
   const [saving, setSaving] = useState(false);
+  const [withJobs, setWithJobs] = useState(true);
 
   const load = useCallback(async () => {
     if (!DATE_RE.test(date)) return;
@@ -88,7 +90,7 @@ export default function DailyReportScreen({ onBack }: Props) {
     });
   }, []);
 
-  const text = report ? buildReportText(report) : '';
+  const text = report ? buildReportText(report, withJobs) : '';
 
   const send = async () => {
     if (!report) return;
@@ -174,6 +176,10 @@ export default function DailyReportScreen({ onBack }: Props) {
             <ActionButton label="Share…" tone="neutral" onPress={share} />
           </View>
 
+          <RowPanel>
+            <SwitchRow label="Include job details in the message" hint="Customer, place, map link, time and bill for every job" value={withJobs} onValueChange={setWithJobs} last />
+          </RowPanel>
+
           <SectionLabel>Message preview</SectionLabel>
           <View style={[styles.preview, { backgroundColor: theme.panel, borderColor: theme.border }]}>
             <Text selectable style={[styles.previewText, { color: theme.text }]}>{text}</Text>
@@ -181,6 +187,35 @@ export default function DailyReportScreen({ onBack }: Props) {
           {report.sales === null ? (
             <Text style={[styles.hint, { color: theme.warn }]}>Sales could not be read, so they are left out of the message.</Text>
           ) : null}
+
+          <SectionLabel>Jobs by employee</SectionLabel>
+          {report.jobsKnown === false ? (
+            <Text style={[styles.hint, { color: theme.warn }]}>Job details could not be loaded.</Text>
+          ) : null}
+          {report.staff.filter((s) => s.jobList.length > 0).length === 0 && report.jobsKnown ? (
+            <Text style={[styles.hint, { color: theme.text3 }]}>No jobs were worked on this day.</Text>
+          ) : null}
+          {report.staff
+            .filter((s) => s.jobList.length > 0)
+            .map((s) => (
+              <View key={s.id}>
+                <Text style={[styles.person, { color: theme.text }]}>
+                  {s.name} · {s.jobList.length} job{s.jobList.length === 1 ? '' : 's'}
+                </Text>
+                {s.jobList.map((j, i) => (
+                  <ListRow
+                    key={`${s.id}-${i}`}
+                    icon="location"
+                    title={j.customer}
+                    subtitle={[j.ticket, j.service].filter(Boolean).join(' · ') + (j.address ? `\n${j.address}` : '')}
+                    meta={[j.start ? `${shortTime(j.start)}${j.end ? ` – ${shortTime(j.end)}` : ''}` : '', j.status, j.note].filter(Boolean).join(' · ')}
+                    value={j.amount > 0 ? inr(j.amount) : undefined}
+                    valueColor={j.paid ? semantic.success : semantic.danger}
+                    onPress={j.customerMap ? () => Linking.openURL(j.customerMap).catch(() => {}) : undefined}
+                  />
+                ))}
+              </View>
+            ))}
 
           <SectionLabel>Daily reminder</SectionLabel>
           <RowPanel>
@@ -208,4 +243,5 @@ const styles = StyleSheet.create({
   preview: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5) },
   previewText: { ...typography.body, lineHeight: 21 },
   hint: { ...typography.caption, marginTop: spacing(2), marginBottom: spacing(2) },
+  person: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginTop: spacing(2), marginBottom: spacing(1.5) },
 });

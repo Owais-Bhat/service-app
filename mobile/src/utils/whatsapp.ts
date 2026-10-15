@@ -6,7 +6,7 @@ import { Linking, Share } from 'react-native';
 export async function sendToWhatsapp(text: string): Promise<'whatsapp' | 'share'> {
   const q = encodeURIComponent(text);
   // Very long messages do not survive a URL; the share sheet takes any length.
-  if (q.length < 6000) {
+  if (q.length < 30000) {
     for (const url of [`whatsapp://send?text=${q}`, `https://wa.me/?text=${q}`]) {
       try {
         await Linking.openURL(url);

@@ -8116,6 +8116,49 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
     }
 });
 
+// Daily report → the jobs each employee actually worked on a given day: the
+// customer and where the job was, when work started/ended, what was updated or
+// billed and where the employee was when billing. A job counts for the day if
+// any of its work events (start, end, status update, job card, bill, payment,
+// cash) happened on that date. Admin only.
+app.get('/api/admin/daily-jobs', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : localDateKey();
+    let connection;
+    try {
+        connection = await getConn();
+        const [rows] = await connection.query(
+            `SELECT i.id, i.ticket_no, i.full_name, i.phone, i.company_name, i.location, i.service_item,
+                    i.status, i.assignment_status, i.customer_lat, i.customer_lng,
+                    i.employee_bill_lat, i.employee_bill_lng,
+                    i.assigned_employee_id, i.secondary_employee_id, i.claimed_by_gig_worker_id,
+                    i.assigned_at, i.job_start_time, i.job_end_time, i.job_card_filled_at,
+                    i.employee_update_at, i.employee_update_status, i.employee_update_detail, i.work_done_note,
+                    i.bill_generated_at, i.bill_total, i.payment_status, i.payment_method,
+                    i.payment_received_at, i.cash_collected_at,
+                    p.full_name AS employee_name, s.full_name AS secondary_name
+               FROM inquiries i
+               LEFT JOIN profiles p ON p.id = COALESCE(i.claimed_by_gig_worker_id, i.assigned_employee_id)
+               LEFT JOIN profiles s ON s.id = i.secondary_employee_id
+              WHERE COALESCE(i.claimed_by_gig_worker_id, i.assigned_employee_id) IS NOT NULL
+                AND (   DATE(i.job_start_time) = ? OR DATE(i.job_end_time) = ?
+                     OR DATE(i.job_card_filled_at) = ? OR DATE(i.employee_update_at) = ?
+                     OR DATE(i.bill_generated_at) = ? OR DATE(i.payment_received_at) = ?
+                     OR DATE(i.cash_collected_at) = ?)
+              ORDER BY p.full_name ASC,
+                       COALESCE(i.job_start_time, i.employee_update_at, i.job_card_filled_at, i.bill_generated_at, i.payment_received_at) ASC
+              LIMIT 600`,
+            [date, date, date, date, date, date, date]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('daily-jobs error:', error);
+        res.status(500).json({ error: 'Could not load the day\'s jobs' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.get('/api/admin/leaderboard', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const month = String(req.query.month || '').trim();
