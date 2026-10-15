@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
+import AdminFab from '../../components/admin/AdminFab';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -9,11 +10,8 @@ import ExportButton from '../../components/admin/ExportButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import ActionButton from '../../components/admin/ActionButton';
 import ServiceLogEntrySheet from '../../components/admin/ServiceLogEntrySheet';
-import Icon from '../../components/Icon';
 import { api } from '../../api/client';
 import { fetchServiceLogs, ServiceLogRow } from '../../api/adminOps';
-import { radius } from '../../theme';
-import { brand } from '../../theme/tokens';
 import { semantic } from '../../theme/tokens';
 import { inr, shortDate } from '../../utils/format';
 import { todayIso } from '../../utils/format';
@@ -68,6 +66,7 @@ export default function ServiceLogScreen({ onBack }: Props) {
   }, [rows, status, query]);
 
   return (
+    <View style={styles.root}>
     <AdminScreen
       title="Service Log"
       subtitle={`${rows.length} entries · ${inr(sum(rows))}`}
@@ -75,11 +74,6 @@ export default function ServiceLogScreen({ onBack }: Props) {
       onRefresh={logs.reload}
       loading={logs.loading}
       error={logs.error}
-      headerRight={
-        <Pressable onPress={() => setEditing('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New entry">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
-      }
       toolbar={
         <>
           <SearchField value={query} onChangeText={setQuery} placeholder="Customer, technician or ticket" />
@@ -138,10 +132,14 @@ export default function ServiceLogScreen({ onBack }: Props) {
           logs.reload();
         }}
       />
+      <View style={styles.fabSpace} />
     </AdminScreen>
+    <AdminFab label="New" accessibilityLabel="New entry" onPress={() => setEditing('new')} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1 },
+  fabSpace: { height: 64 },
 });

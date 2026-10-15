@@ -11,7 +11,7 @@ import { resolveUploadUrl } from '../../api/client';
 import { fetchReviewSubmissions, ReviewSubmission, verifyReview } from '../../api/adminOps';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { semantic } from '../../theme/tokens';
 import { humanize } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -145,9 +145,9 @@ export default function BonusReviewsAdminScreen({ onBack }: Props) {
                   <Pressable
                     key={n}
                     onPress={() => setStars(n)}
-                    style={[styles.star, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
+                    style={[styles.star, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}
                   >
-                    <Text style={[styles.starText, { color: on ? brand.primary : theme.text2 }]}>{n} ★</Text>
+                    <Text style={[styles.starText, { color: on ? theme.accent : theme.text2 }]}>{n} ★</Text>
                   </Pressable>
                 );
               })}

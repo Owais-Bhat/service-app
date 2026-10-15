@@ -13,7 +13,7 @@ import Field from '../../components/admin/Field';
 import { ComplaintRow, fetchComplaints, respondToComplaint } from '../../api/adminPeople';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { semantic } from '../../theme/tokens';
 import { dateTime, humanize } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -139,9 +139,9 @@ export default function ComplaintsAdminScreen({ onBack }: Props) {
               <Pressable
                 key={s}
                 onPress={() => setStatus(s)}
-                style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
+                style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}
               >
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{humanize(s)}</Text>
+                <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{humanize(s)}</Text>
               </Pressable>
             );
           })}

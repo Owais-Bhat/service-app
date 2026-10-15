@@ -20,7 +20,7 @@ import {
 } from '../../api/adminOps';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, categoryColors, semantic } from '../../theme/tokens';
+import { categoryColors, semantic } from '../../theme/tokens';
 import { shortDate, timeAgo } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -210,9 +210,9 @@ function Chips<T extends string>({ items, value, onChange }: { items: { key: T; 
           <Pressable
             key={c.key}
             onPress={() => onChange(c.key)}
-            style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
+            style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}
           >
-            <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{c.label}</Text>
+            <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{c.label}</Text>
           </Pressable>
         );
       })}
@@ -284,7 +284,7 @@ function EntrySheet({ job, onClose, onSaved }: { job: JobCardRow | null; onClose
       <Field label="Expected time (minutes)" value={expected} onChangeText={setExpected} keyboardType="numeric" />
       <Field label="Work done" value={note} onChangeText={setNote} multiline />
       <Pressable onPress={() => setRework((v) => !v)} style={styles.checkRow}>
-        <Icon name={rework ? 'check-circle' : 'tasks'} size={20} color={rework ? brand.primary : theme.text3} filled={rework} />
+        <Icon name={rework ? 'check-circle' : 'tasks'} size={20} color={rework ? theme.accent : theme.text3} filled={rework} />
         <Text style={[styles.checkText, { color: theme.text }]}>Rework needed</Text>
       </Pressable>
       <Text style={[styles.label, { color: theme.text3 }]}>Items installed / used</Text>

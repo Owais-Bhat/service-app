@@ -8,7 +8,6 @@ import Icon from '../../components/Icon';
 import { fetchEodReports } from '../../api/adminOps';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand } from '../../theme/tokens';
 import { shortDate } from '../../utils/format';
 import { dayOf, RANGE_CHIPS, RangeKey, rangeStart, useLoader } from '../../utils/useLoader';
 
@@ -55,11 +54,11 @@ export default function EodSummariesScreen({ onBack }: Props) {
           <Pressable
             key={r.id}
             onPress={() => setOpen(expanded ? null : r.id)}
-            style={({ pressed }) => [styles.card, { backgroundColor: theme.panel2, borderColor: theme.line }, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.card, { backgroundColor: theme.panel, borderColor: theme.border }, pressed && styles.pressed]}
           >
             <View style={styles.head}>
-              <View style={[styles.avatar, { backgroundColor: brand.primary + '22' }]}>
-                <Text style={[styles.avatarText, { color: brand.primary }]}>{(r.profiles?.full_name || '?').charAt(0).toUpperCase()}</Text>
+              <View style={[styles.avatar, { backgroundColor: theme.okS }]}>
+                <Text style={[styles.avatarText, { color: theme.accent }]}>{(r.profiles?.full_name || '?').charAt(0).toUpperCase()}</Text>
               </View>
               <View style={styles.headText}>
                 <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{r.profiles?.full_name || 'Staff'}</Text>
@@ -76,7 +75,7 @@ export default function EodSummariesScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginBottom: spacing(2.5), gap: spacing(2.5) },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginBottom: spacing(2.5), gap: spacing(2.5) },
   pressed: { opacity: 0.75 },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },

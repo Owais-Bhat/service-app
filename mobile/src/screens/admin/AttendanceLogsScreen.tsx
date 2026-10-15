@@ -1,17 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
-import StatGrid from '../../components/admin/StatGrid';
 import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
+import Icon from '../../components/Icon';
+import { useTheme } from '../../theme/ThemeContext';
+import { radius, spacing } from '../../theme';
 import { dataGet, resolveUploadUrl } from '../../api/client';
 import { fetchAttendanceLogs, fetchEodKeys } from '../../api/adminOps';
 import { resetFaceId, resolveRestriction } from '../../api/adminManage';
-import { semantic } from '../../theme/tokens';
 import { hoursBetween, shortDate, shortTime, todayIso } from '../../utils/format';
 import { dayOf, RANGE_CHIPS, RangeKey, rangeStart, useLoader } from '../../utils/useLoader';
 
@@ -30,6 +31,7 @@ const PAGE = 60;
 // Missing-EOD reading the web Attendance page uses — plus the clock-in
 // restriction panel and Face ID reset.
 export default function AttendanceLogsScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const logs = useLoader(async () => {
     const [rows, eod, profiles] = await Promise.all([
       fetchAttendanceLogs(),
@@ -105,10 +107,10 @@ export default function AttendanceLogsScreen({ onBack }: Props) {
   }, [inRange, state, query]);
 
   const BADGE: Record<string, { label: string; color: string }> = {
-    present: { label: 'Present', color: semantic.success },
-    late: { label: 'Late', color: semantic.warning },
-    missing_eod: { label: 'No EOD', color: semantic.danger },
-    on_shift: { label: 'On shift', color: semantic.info },
+    present: { label: 'Present', color: theme.ok },
+    late: { label: 'Late', color: theme.warn },
+    missing_eod: { label: 'No EOD', color: theme.err },
+    on_shift: { label: 'On shift', color: theme.info },
   };
 
   const resolve = (r: { id: string; name: string; dates: string[] }) =>
@@ -175,32 +177,35 @@ export default function AttendanceLogsScreen({ onBack }: Props) {
         </>
       }
     >
-      <StatGrid
-        items={[
-          { label: 'Clocked in', value: counts.all, color: semantic.success },
-          { label: 'Late arrivals', value: counts.late, color: counts.late ? semantic.warning : undefined },
-          { label: 'Missing EOD', value: counts.missing_eod, color: counts.missing_eod ? semantic.danger : undefined },
-          { label: 'Restricted', value: restricted.length, color: restricted.length ? semantic.danger : semantic.success },
-        ]}
-      />
+      <View style={styles.kpis}>
+        {[
+          { label: 'Clocked in', value: counts.all, color: theme.ok },
+          { label: 'Late arrivals', value: counts.late, color: counts.late ? theme.warn : theme.text },
+          { label: 'Missing EOD', value: counts.missing_eod, color: counts.missing_eod ? theme.err : theme.text },
+          { label: 'Restricted', value: restricted.length, color: restricted.length ? theme.err : theme.ok },
+        ].map((k) => (
+          <View key={k.label} style={[styles.kpi, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            <Text style={[styles.kpiValue, { color: k.color }]} numberOfLines={1}>{k.value}</Text>
+            <Text style={[styles.kpiLabel, { color: theme.text2 }]} numberOfLines={1}>{k.label}</Text>
+          </View>
+        ))}
+      </View>
 
-      {restricted.length > 0 ? (
-        <>
-          <SectionLabel>Clock-in restrictions</SectionLabel>
-          {restricted.map((r) => (
-            <ListRow
-              key={r.id}
-              icon="lock"
-              iconColor={semantic.danger}
-              title={r.name}
-              subtitle={`${r.dates.length} missed end-of-day reports`}
-              badge={{ label: 'Blocked', color: semantic.danger }}
-              footer={<ActionButton label="Resolve restriction" tone="success" busy={busy === r.id} onPress={() => resolve(r)} />}
-            />
-          ))}
-          <SectionLabel>Records</SectionLabel>
-        </>
-      ) : null}
+      {restricted.map((r) => (
+        <View key={r.id} style={[styles.restricted, { backgroundColor: theme.warnS, borderColor: theme.line }]}>
+          <Icon name="lock" size={22} color={theme.warn} />
+          <View style={styles.restrictedText}>
+            <Text style={[styles.restrictedTitle, { color: theme.text }]} numberOfLines={1}>{r.name} is restricted</Text>
+            <Text style={[styles.restrictedHint, { color: theme.text2 }]}>
+              {`${r.dates.length} missed end-of-day reports · can't clock in`}
+            </Text>
+          </View>
+          <View style={styles.resolveCell}>
+            <ActionButton label="Resolve" tone="success" grow={false} busy={busy === r.id} onPress={() => resolve(r)} />
+          </View>
+        </View>
+      ))}
+      {restricted.length > 0 ? <SectionLabel>Records</SectionLabel> : null}
 
       {visible.length === 0 ? <EmptyNote text="No attendance in this view" icon="clock" /> : null}
       {visible.slice(0, shown).map((r) => {
@@ -230,3 +235,15 @@ export default function AttendanceLogsScreen({ onBack }: Props) {
     </AdminScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  kpis: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(3) },
+  kpi: { flex: 1, borderWidth: 1, borderRadius: radius.md + 2, padding: spacing(2.5) },
+  kpiValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 20, lineHeight: 26 },
+  kpiLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, lineHeight: 15 },
+  restricted: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginBottom: spacing(2.5) },
+  restrictedText: { flex: 1, minWidth: 0 },
+  restrictedTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, lineHeight: 19 },
+  restrictedHint: { fontFamily: 'Manrope_500Medium', fontSize: 12, lineHeight: 16 },
+  resolveCell: { minWidth: 92 },
+});

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet } from 'react-native';
+import { Alert, Linking, StyleSheet, View } from 'react-native';
+import AdminFab from '../../components/admin/AdminFab';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -8,10 +9,8 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import { createQuery, deleteQuery, fetchQueries, QueryRow, setEstimateSent } from '../../api/adminPeople';
-import { radius } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { semantic } from '../../theme/tokens';
 import { dateTime } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -86,6 +85,7 @@ export default function QueriesScreen({ onBack }: Props) {
     ]);
 
   return (
+    <View style={styles.root}>
     <AdminScreen
       title="Queries & Follow-ups"
       subtitle={`${rows.filter((r) => !sent(r)).length} waiting for an estimate`}
@@ -93,11 +93,6 @@ export default function QueriesScreen({ onBack }: Props) {
       onRefresh={list.reload}
       loading={list.loading}
       error={list.error}
-      headerRight={
-        <Pressable onPress={() => setAdding(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add query">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
-      }
       toolbar={
         <>
           <SearchField value={query} onChangeText={setQuery} placeholder="Name, phone or details" />
@@ -149,10 +144,14 @@ export default function QueriesScreen({ onBack }: Props) {
         <Field label="Address (optional)" value={form.address} onChangeText={(v) => setForm((f) => ({ ...f, address: v }))} multiline />
         <Field label="What did they ask for?" value={form.details} onChangeText={(v) => setForm((f) => ({ ...f, details: v }))} multiline />
       </FormSheet>
+      <View style={styles.fabSpace} />
     </AdminScreen>
+    <AdminFab label="Add" accessibilityLabel="Add query" onPress={() => setAdding(true)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1 },
+  fabSpace: { height: 64 },
 });

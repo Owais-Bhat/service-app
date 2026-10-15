@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import AdminFab from '../components/admin/AdminFab';
 import AdminScreen from '../components/admin/AdminScreen';
 import FilterChips from '../components/admin/FilterChips';
-import ListRow from '../components/admin/ListRow';
+import StatusBadge from '../components/admin/StatusBadge';
 import ActionButton from '../components/admin/ActionButton';
 import EmptyNote from '../components/admin/EmptyNote';
 import FormSheet from '../components/admin/FormSheet';
@@ -10,7 +11,8 @@ import Field from '../components/admin/Field';
 import SectionLabel from '../components/admin/SectionLabel';
 import Icon from '../components/Icon';
 import InstallationDetailSheet, { EmployeeOption } from '../components/InstallationDetailSheet';
-import { radius, spacing } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
+import { radius, spacing, typography } from '../theme';
 import { brand, semantic } from '../theme/tokens';
 import { api, dataDelete, dataGet, dataPatch, dataPost } from '../api/client';
 import { fetchAllInstallations, InstallationJob } from '../api/installations';
@@ -24,7 +26,6 @@ const FILTERS = ['Open', 'Unassigned', 'Unpaid', 'All'] as const;
 type Filter = typeof FILTERS[number];
 
 const num = (v: unknown) => Number(v || 0);
-const NEUTRAL = '#8aa79a';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -38,8 +39,8 @@ function pill(job: InstallationJob): { label: string; color: string } {
     return { label: `₹${Math.round(num(job.bill_total))} unpaid`, color: semantic.warning };
   }
   if (job.completed_at) return { label: 'Completed', color: semantic.success };
-  if (job.started_at) return { label: 'In progress', color: brand.primary };
-  return { label: 'Assigned', color: NEUTRAL };
+  if (job.started_at) return { label: 'In progress', color: semantic.warning };
+  return { label: 'Assigned', color: brand.grey };
 }
 
 function uuid(): string {
@@ -66,6 +67,7 @@ const blank = (): Draft => ({ name: '', phone: '', location: '', type: '', date:
 // it, push the status along, and mark the bill paid when the money lands — the
 // same sheet the technician uses on site, so both sides see one history.
 export default function AdminInstallationsScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const [rows, setRows] = useState<InstallationJob[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [filter, setFilter] = useState<Filter>('Open');
@@ -183,7 +185,17 @@ export default function AdminInstallationsScreen({ onBack }: Props) {
       },
     ]);
 
+  const countOf = (f: Filter) =>
+    rows.filter((r) => {
+      const paid = String(r.payment_status || '').toLowerCase() === 'paid';
+      if (f === 'Unassigned') return !r.assigned_employee_id;
+      if (f === 'Unpaid') return num(r.bill_total) > 0 && !paid;
+      if (f === 'Open') return !r.completed_at || (num(r.bill_total) > 0 && !paid);
+      return true;
+    }).length;
+
   return (
+    <View style={styles.root}>
     <AdminScreen
       title="Installations"
       subtitle={`${filtered.length} shown`}
@@ -191,33 +203,42 @@ export default function AdminInstallationsScreen({ onBack }: Props) {
       onRefresh={load}
       loading={loading}
       error={error}
-      headerRight={
-        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add installation">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
-      }
-      toolbar={<FilterChips items={FILTERS.map((f) => ({ key: f, label: f }))} activeKey={filter} onSelect={(k) => setFilter(k as Filter)} />}
+      toolbar={<FilterChips items={FILTERS.map((f) => ({ key: f, label: f, count: countOf(f) }))} activeKey={filter} onSelect={(k) => setFilter(k as Filter)} />}
     >
       {filtered.length === 0 && !loading ? <EmptyNote text="Nothing here right now" icon="construct" /> : null}
       {filtered.map((job) => {
         const tag = pill(job);
+        const tech = nameOf(job.assigned_employee_id);
         return (
-          <ListRow
+          <Pressable
             key={job.id}
-            icon="construct"
-            iconColor={tag.color}
-            title={`${job.ticket_no} · ${job.installation_type}`}
-            subtitle={`${job.full_name}${job.location ? ` · ${job.location}` : ''}`}
-            meta={`${shortDate(job.preferred_date)} · ${job.preferred_time}${nameOf(job.assigned_employee_id) ? ` · ${nameOf(job.assigned_employee_id)}` : ''}`}
-            badge={{ label: tag.label, color: tag.color }}
             onPress={() => setOpenId(job.id)}
-            footer={
-              <View style={styles.actions}>
-                <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(job)} />
-                <ActionButton label="Delete" tone="danger" onPress={() => remove(job)} />
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.card, { backgroundColor: theme.panel, borderColor: theme.border }, pressed && styles.pressed]}
+          >
+            <View style={styles.cardHead}>
+              <Text style={[styles.ticket, { color: theme.accent }]} numberOfLines={1}>{job.ticket_no}</Text>
+              <StatusBadge label={tag.label} color={tag.color} />
+            </View>
+            <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{job.full_name}</Text>
+            <Text style={[styles.type, { color: theme.text2 }]} numberOfLines={1}>
+              {job.installation_type}{job.location ? ` · ${job.location}` : ''}
+            </Text>
+            <View style={styles.meta}>
+              <View style={styles.metaItem}>
+                <Icon name="calendar" size={14} color={theme.text3} />
+                <Text style={[styles.metaText, { color: theme.text3 }]}>{shortDate(job.preferred_date)} · {job.preferred_time}</Text>
               </View>
-            }
-          />
+              <View style={styles.metaItem}>
+                <Icon name="user" size={14} color={tech ? theme.text2 : theme.warn} />
+                <Text style={[styles.metaText, { color: tech ? theme.text2 : theme.warn }]} numberOfLines={1}>{tech || 'Unassigned'}</Text>
+              </View>
+            </View>
+            <View style={styles.actions}>
+              <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(job)} />
+              <ActionButton label="Delete" tone="danger" onPress={() => remove(job)} />
+            </View>
+          </Pressable>
         );
       })}
 
@@ -252,13 +273,26 @@ export default function AdminInstallationsScreen({ onBack }: Props) {
       {openId ? (
         <InstallationDetailSheet id={openId} isAdmin employees={employees} onClose={() => setOpenId(null)} onChanged={load} />
       ) : null}
+      <View style={styles.fabSpace} />
     </AdminScreen>
+    <AdminFab label="Add" accessibilityLabel="Add installation" onPress={() => openEditor(null)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  actions: { flexDirection: 'row', gap: spacing(2) },
+  root: { flex: 1 },
+  fabSpace: { height: 64 },
+  pressed: { opacity: 0.75 },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginBottom: spacing(2.5), gap: spacing(1.5) },
+  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(2) },
+  ticket: { ...typography.monoId, flexShrink: 1 },
+  name: { fontFamily: 'Manrope_700Bold', fontSize: 16, lineHeight: 22 },
+  type: { ...typography.supporting },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(3), marginTop: spacing(0.5) },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), flexShrink: 1 },
+  metaText: { fontFamily: 'Manrope_600SemiBold', fontSize: 12, lineHeight: 16, flexShrink: 1 },
+  actions: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(2) },
   pair: { flexDirection: 'row', gap: spacing(3) },
   half: { flex: 1 },
 });

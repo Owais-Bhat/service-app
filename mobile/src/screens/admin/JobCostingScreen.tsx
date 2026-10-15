@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Switch, Text, View } from 'react-native';
+import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
@@ -25,6 +25,7 @@ import SectionLabel from '../../components/admin/SectionLabel';
 import { rupees } from '../../api/adminBooks';
 import { semantic, brand } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
+import { radius, spacing } from '../../theme';
 import { humanize, inr, shortDate, timeAgo } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -266,19 +267,31 @@ export default function JobCostingScreen({ onBack }: Props) {
       >
         {summary ? (
           <View>
-            <StatGrid
-              items={[
-                { label: 'Estimated cost', value: inr(rupees(summary.totals.estimated_cost_paise)) },
-                { label: 'Materials used', value: inr(rupees(summary.totals.material_cost_paise)) },
-                { label: 'Labour & travel', value: inr(rupees(summary.totals.other_cost_paise)) },
-                { label: 'Invoiced', value: inr(rupees(summary.totals.revenue_paise)), color: semantic.success },
-                {
-                  label: `Margin${summary.totals.margin_pct != null ? ` · ${summary.totals.margin_pct}%` : ''}`,
-                  value: inr(rupees(summary.totals.margin_paise)),
-                  color: summary.totals.margin_paise >= 0 ? semantic.success : semantic.danger,
-                },
-              ]}
-            />
+            <View style={[styles.hero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={styles.heroCols}>
+                <View style={styles.heroCol}>
+                  <Text style={[styles.heroLabel, { color: theme.text3 }]}>Invoiced</Text>
+                  <Text style={[styles.heroValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>{inr(rupees(summary.totals.revenue_paise))}</Text>
+                </View>
+                <View style={styles.heroCol}>
+                  <Text style={[styles.heroLabel, { color: theme.text3 }]}>Estimated cost</Text>
+                  <Text style={[styles.heroValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>{inr(rupees(summary.totals.estimated_cost_paise))}</Text>
+                </View>
+                <View style={styles.heroCol}>
+                  <Text style={[styles.heroLabel, { color: theme.text3 }]}>{`Margin${summary.totals.margin_pct != null ? ` · ${summary.totals.margin_pct}%` : ''}`}</Text>
+                  <Text
+                    style={[styles.heroValue, { color: summary.totals.margin_paise >= 0 ? theme.ok : theme.err }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {inr(rupees(summary.totals.margin_paise))}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.heroSub, { color: theme.text2 }]}>
+                {`Materials ${inr(rupees(summary.totals.material_cost_paise))} · Labour & travel ${inr(rupees(summary.totals.other_cost_paise))}`}
+              </Text>
+            </View>
             <SectionLabel>{`Materials${summary.totals.pending_approvals ? ` · ${summary.totals.pending_approvals} waiting` : ''}`}</SectionLabel>
             {summary.material_lines.length === 0 ? <Text style={{ color: theme.text3 }}>No materials recorded on this job yet.</Text> : null}
             {summary.material_lines.map((m, i) => (
@@ -308,7 +321,7 @@ export default function JobCostingScreen({ onBack }: Props) {
             <Field label="Quantity" value={cost.qty} onChangeText={(v) => setCost({ ...cost, qty: v })} keyboardType="decimal-pad" />
             <Field label="Rate ₹" value={cost.rate} onChangeText={(v) => setCost({ ...cost, rate: v })} keyboardType="decimal-pad" />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 8 }}>
-              <Switch value={cost.billable} onValueChange={(v) => setCost({ ...cost, billable: v })} trackColor={{ true: brand.primary }} />
+              <Switch value={cost.billable} onValueChange={(v) => setCost({ ...cost, billable: v })} trackColor={{ true: brand.fill }} />
               <Text style={{ color: theme.text, flex: 1 }}>Charge to the customer</Text>
             </View>
             <ActionButton label="Add cost" busy={busy === 'cost'} onPress={addCost} />
@@ -344,3 +357,12 @@ export default function JobCostingScreen({ onBack }: Props) {
     </AdminScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  hero: { borderWidth: 1, borderRadius: radius.xl, padding: spacing(4), marginBottom: spacing(3) },
+  heroCols: { flexDirection: 'row', gap: spacing(2) },
+  heroCol: { flex: 1, minWidth: 0 },
+  heroLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, lineHeight: 15 },
+  heroValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 17, lineHeight: 24 },
+  heroSub: { fontFamily: 'Manrope_500Medium', fontSize: 12, lineHeight: 16, marginTop: spacing(3) },
+});

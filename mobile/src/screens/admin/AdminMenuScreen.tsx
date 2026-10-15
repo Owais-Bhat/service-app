@@ -8,16 +8,30 @@ import SearchField from '../../components/admin/SearchField';
 import SectionLabel from '../../components/admin/SectionLabel';
 import EmptyNote from '../../components/admin/EmptyNote';
 import Icon from '../../components/Icon';
-import { ADMIN_MENU } from '../../navigation/adminMenu';
+import { ADMIN_MENU, AdminMenuTone } from '../../navigation/adminMenu';
 import { useTheme } from '../../theme/ThemeContext';
+import { ThemeTokens } from '../../theme/tokens';
 import { radius, spacing, typography } from '../../theme';
-import { brand } from '../../theme/tokens';
 
 interface Props {
   /** Route names that have a real screen behind them. */
   available: Set<string>;
   onOpen: (route: string) => void;
   onTab: (tab: AdminTab) => void;
+}
+
+// Icon-tile colour (solid, soft fill) for each menu group's tone.
+function tonePair(theme: ThemeTokens, tone: AdminMenuTone): [string, string] {
+  switch (tone) {
+    case 'info': return [theme.info, theme.infoS];
+    case 'accent': return [theme.accent, theme.okS];
+    case 'teal': return [theme.teal, theme.tealS];
+    case 'vio': return [theme.vio, theme.vioS];
+    case 'warn': return [theme.warn, theme.warnS];
+    case 'grey': return [theme.grey, theme.greyS];
+    case 'err': return [theme.err, theme.errS];
+    default: return [theme.ok, theme.okS];
+  }
 }
 
 // Every page of the web admin portal, grouped the way the web sidebar groups
@@ -43,9 +57,6 @@ export default function AdminMenuScreen({ available, onOpen, onTab }: Props) {
     <View style={styles.root}>
       <MeshBackground />
       <AdminHeader title="Menu" subtitle={`${built} of ${total} portal pages available on mobile`} />
-      <View style={[styles.search, { borderBottomColor: theme.line }]}>
-        <SearchField value={query} onChangeText={setQuery} placeholder="Search pages" />
-      </View>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={{ padding: spacing(4), paddingBottom: insets.bottom + spacing(28) }}
@@ -53,43 +64,47 @@ export default function AdminMenuScreen({ available, onOpen, onTab }: Props) {
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
+        <SearchField value={query} onChangeText={setQuery} placeholder="Search pages" />
         {groups.length === 0 ? <EmptyNote text="No page matches your search" icon="search" /> : null}
-        {groups.map((group) => (
-          <View key={group.key}>
-            <SectionLabel>{group.label}</SectionLabel>
-            <View style={[styles.card, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-              {group.items.map((item, idx) => {
-                const live = !!item.route && available.has(item.route);
-                return (
-                  <Pressable
-                    key={item.label}
-                    disabled={!live}
-                    onPress={() => item.route && onOpen(item.route)}
-                    style={({ pressed }) => [
-                      styles.row,
-                      idx > 0 && { borderTopWidth: 1, borderTopColor: theme.line },
-                      !live && styles.dim,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={[styles.chip, { backgroundColor: (live ? brand.primary : theme.text3) + '22' }]}>
-                      <Icon name={item.icon} size={18} color={live ? brand.primary : theme.text3} />
-                    </View>
-                    <View style={styles.text}>
-                      <Text style={[styles.label, { color: theme.text }]} numberOfLines={1}>{item.label}</Text>
-                      <Text style={[styles.hint, { color: theme.text3 }]} numberOfLines={1}>{item.hint}</Text>
-                    </View>
-                    {live ? (
-                      <Icon name="chevron-right" size={16} color={theme.text3} />
-                    ) : (
-                      <Text style={[styles.soon, { color: theme.text3, borderColor: theme.line }]}>Soon</Text>
-                    )}
-                  </Pressable>
-                );
-              })}
+        {groups.map((group) => {
+          const [tone, toneBg] = tonePair(theme, group.tone);
+          return (
+            <View key={group.key}>
+              <SectionLabel>{group.label}</SectionLabel>
+              <View style={[styles.card, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+                {group.items.map((item, idx) => {
+                  const live = !!item.route && available.has(item.route);
+                  return (
+                    <Pressable
+                      key={item.label}
+                      disabled={!live}
+                      onPress={() => item.route && onOpen(item.route)}
+                      style={({ pressed }) => [
+                        styles.row,
+                        idx > 0 && { borderTopWidth: 1, borderTopColor: theme.line },
+                        !live && styles.dim,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View style={[styles.chip, { backgroundColor: live ? toneBg : theme.panel2 }]}>
+                        <Icon name={item.icon} size={20} color={live ? tone : theme.text3} />
+                      </View>
+                      <View style={styles.text}>
+                        <Text style={[styles.label, { color: theme.text }]} numberOfLines={1}>{item.label}</Text>
+                        <Text style={[styles.hint, { color: theme.text2 }]} numberOfLines={1}>{item.hint}</Text>
+                      </View>
+                      {live ? (
+                        <Icon name="chevron-right" size={16} color={theme.text3} />
+                      ) : (
+                        <Text style={[styles.soon, { color: theme.text3, borderColor: theme.line }]}>Soon</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
       <AdminTabBar active="menu" onSelect={onTab} />
     </View>
@@ -99,14 +114,13 @@ export default function AdminMenuScreen({ available, onOpen, onTab }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
-  search: { paddingHorizontal: spacing(4), paddingVertical: spacing(3), borderBottomWidth: 1 },
-  card: { borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5) },
+  card: { borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(3.5), paddingVertical: spacing(2.5), minHeight: 62 },
   dim: { opacity: 0.55 },
   pressed: { opacity: 0.7 },
-  chip: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  chip: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1, minWidth: 0 },
-  label: { ...typography.body, fontFamily: 'Manrope_700Bold' },
-  hint: { ...typography.caption, fontSize: 12, marginTop: 1 },
+  label: { ...typography.rowTitle },
+  hint: { ...typography.supporting, fontSize: 12, lineHeight: 16 },
   soon: { ...typography.caption, fontSize: 10, borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(2), paddingVertical: 2 },
 });

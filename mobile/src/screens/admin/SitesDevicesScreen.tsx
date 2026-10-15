@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import AdminFab from '../../components/admin/AdminFab';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -237,6 +238,7 @@ export default function SitesDevicesScreen({ onBack }: Props) {
     d && act('status', () => api.patch(`/devices/${encodeURIComponent(d.id)}`, { status }), async () => setDetail(await api.get<DeviceLoaded>(`/devices/${encodeURIComponent(d.id)}`)));
 
   return (
+    <View style={styles.root}>
     <AdminScreen
       title="Sites & Devices"
       subtitle={s ? `${s.devices} devices · ${s.customers} customers` : undefined}
@@ -244,11 +246,6 @@ export default function SitesDevicesScreen({ onBack }: Props) {
       onRefresh={data.reload}
       loading={data.loading}
       error={data.error}
-      headerRight={
-        <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add device">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
-      }
       toolbar={
         <>
           <SearchField value={query} onChangeText={setQuery} placeholder="Customer, brand, model or serial" />
@@ -410,8 +407,8 @@ export default function SitesDevicesScreen({ onBack }: Props) {
               {[{ id: '', name: 'No site' }, ...sites].map((x) => {
                 const on = siteId === x.id && !newSite;
                 return (
-                  <Pressable key={x.id || 'none'} onPress={() => { setSiteId(x.id); setNewSite(''); }} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                    <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{x.name}</Text>
+                  <Pressable key={x.id || 'none'} onPress={() => { setSiteId(x.id); setNewSite(''); }} style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}>
+                    <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{x.name}</Text>
                   </Pressable>
                 );
               })}
@@ -424,8 +421,8 @@ export default function SitesDevicesScreen({ onBack }: Props) {
           {CATEGORIES.map(([k, l]) => {
             const on = cat === k;
             return (
-              <Pressable key={k} onPress={() => setCat(k)} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{l}</Text>
+              <Pressable key={k} onPress={() => setCat(k)} style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}>
+                <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{l}</Text>
               </Pressable>
             );
           })}
@@ -439,7 +436,7 @@ export default function SitesDevicesScreen({ onBack }: Props) {
         <Field label="Warranty until" value={warranty} onChangeText={setWarranty} hint="YYYY-MM-DD" />
         <View style={styles.chips}>
           {[1, 2, 3].map((y) => (
-            <Pressable key={y} onPress={() => setWarranty(plusYears(installed, y))} style={[styles.chip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+            <Pressable key={y} onPress={() => setWarranty(plusYears(installed, y))} style={[styles.chip, { borderColor: theme.border, backgroundColor: theme.panel }]}>
               <Text style={[styles.chipText, { color: theme.text2 }]}>+{y} yr</Text>
             </Pressable>
           ))}
@@ -451,8 +448,8 @@ export default function SitesDevicesScreen({ onBack }: Props) {
               {[{ id: '', contract_no: 'Not covered', title: null }, ...amcs].map((a) => {
                 const on = amcId === a.id;
                 return (
-                  <Pressable key={a.id || 'none'} onPress={() => setAmcId(a.id)} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                    <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{a.contract_no}</Text>
+                  <Pressable key={a.id || 'none'} onPress={() => setAmcId(a.id)} style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}>
+                    <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{a.contract_no}</Text>
                   </Pressable>
                 );
               })}
@@ -493,8 +490,8 @@ export default function SitesDevicesScreen({ onBack }: Props) {
           {[['service', 'Serviced'], ['repair', 'Repaired'], ['note', 'Note']].map(([k, l]) => {
             const on = evKind === k;
             return (
-              <Pressable key={k} onPress={() => setEvKind(k)} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{l}</Text>
+              <Pressable key={k} onPress={() => setEvKind(k)} style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}>
+                <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{l}</Text>
               </Pressable>
             );
           })}
@@ -546,12 +543,16 @@ export default function SitesDevicesScreen({ onBack }: Props) {
         <Field label="Warranty until" value={rpWarranty} onChangeText={setRpWarranty} hint="YYYY-MM-DD" />
         <Field label="Why was it replaced?" value={rpReason} onChangeText={setRpReason} multiline />
       </FormSheet>
+      <View style={styles.fabSpace} />
     </AdminScreen>
+    <AdminFab label="Add" accessibilityLabel="Add device" onPress={() => openEditor('new')} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1 },
+  fabSpace: { height: 64 },
   kv: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: StyleSheet.hairlineWidth },
   k: { ...typography.caption, fontSize: 12 },
   v: { ...typography.body, fontSize: 14, textAlign: 'right', flexShrink: 1 },

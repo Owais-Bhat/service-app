@@ -8,7 +8,6 @@ import { api } from '../../api/client';
 import { ServiceLogRow } from '../../api/adminOps';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand } from '../../theme/tokens';
 import { todayIso } from '../../utils/format';
 
 interface TicketHit {
@@ -173,9 +172,9 @@ export default function ServiceLogEntrySheet({ visible, entry, onClose, onSaved 
             <Pressable
               key={t.id || 'none'}
               onPress={() => setTechId(t.id)}
-              style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
+              style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}
             >
-              <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{t.full_name}</Text>
+              <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{t.full_name}</Text>
             </Pressable>
           );
         })}
@@ -194,9 +193,9 @@ export default function ServiceLogEntrySheet({ visible, entry, onClose, onSaved 
             <Pressable
               key={s}
               onPress={() => setStatus(s)}
-              style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
+              style={[styles.chip, { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.okS : theme.panel }]}
             >
-              <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{s[0].toUpperCase() + s.slice(1)}</Text>
+              <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{s[0].toUpperCase() + s.slice(1)}</Text>
             </Pressable>
           );
         })}

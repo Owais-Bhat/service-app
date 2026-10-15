@@ -1,19 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { SITE_BASE_URL } from '../api/client';
-import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
-import PulseDot from '../components/PulseDot';
-import BackLink from '../components/BackLink';
-import Icon from '../components/Icon';
+import AdminScreen from '../components/admin/AdminScreen';
+import ActionButton from '../components/admin/ActionButton';
+import FilterChips from '../components/admin/FilterChips';
+import Field from '../components/admin/Field';
+import EmptyNote from '../components/admin/EmptyNote';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 import { fetchLiveLocations, fetchLocationHistory, LiveLocationRow, TrailPoint } from '../api/liveLocation';
 import { dataGet } from '../api/client';
+import { initials } from '../utils/format';
 import { todayIso } from '../utils/format';
 
 interface Props {
@@ -22,6 +21,8 @@ interface Props {
 
 const POLL_MS = 10000;
 const GIG_COLOR = '#7c5cfc';
+// A location older than this is "stale" (design legend: < 5 min / Stale).
+const STALE_MS = 5 * 60 * 1000;
 // Networking Experts is based in Srinagar — sensible map center when no one
 // is clocked in yet, instead of dropping the admin somewhere off Africa (0,0).
 const FALLBACK_CENTER = { latitude: 34.0837, longitude: 74.7973 };
@@ -46,11 +47,12 @@ window.updateMarkers = function(rows) {
   var seen = {};
   rows.forEach(function(r) {
     seen[r.user_id] = true;
-    var color = r.worker_type === 'gig' ? '${GIG_COLOR}' : '${brand.primary}';
+    var color = r.color || '${brand.primary}';
+    var ring = r.worker_type === 'gig' ? '${GIG_COLOR}' : '#fff';
     if (markers[r.user_id]) {
       markers[r.user_id].setLatLng([r.latitude, r.longitude]);
     } else {
-      var m = L.circleMarker([r.latitude, r.longitude], { radius: 9, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map);
+      var m = L.circleMarker([r.latitude, r.longitude], { radius: 9, color: ring, weight: 3, fillColor: color, fillOpacity: 1 }).addTo(map);
       m.bindTooltip(r.full_name, { permanent: false, direction: 'top' });
       m.on('click', function() {
         window.ReactNativeWebView.postMessage(JSON.stringify({ lat: r.latitude, lng: r.longitude }));
@@ -101,6 +103,8 @@ window.seekTrail = function(f) {
 };
 </script></body></html>`;
 
+const isFresh = (r: LiveLocationRow) => Date.now() - new Date(r.updated_at).getTime() < STALE_MS;
+
 function timeAgo(iso: string): string {
   const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (sec < 60) return `${sec}s ago`;
@@ -110,11 +114,9 @@ function timeAgo(iso: string): string {
 }
 
 export default function LiveLocationsScreen({ onBack }: Props) {
-  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [rows, setRows] = useState<LiveLocationRow[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [webReady, setWebReady] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -152,8 +154,8 @@ export default function LiveLocationsScreen({ onBack }: Props) {
   // Pushed in after the page finishes loading, and again on every poll —
   // updates marker positions in place instead of reloading the WebView.
   useEffect(() => {
-    if (webReady) webRef.current?.injectJavaScript(`window.updateMarkers(${JSON.stringify(rows)}); true;`);
-  }, [rows, webReady]);
+    if (webReady) webRef.current?.injectJavaScript(`window.updateMarkers(${JSON.stringify(rows.map((r) => ({ ...r, color: isFresh(r) ? theme.ok : theme.warn })))}); true;`);
+  }, [rows, webReady, theme.ok, theme.warn]);
 
   useEffect(() => {
     dataGet<{ id: string; full_name: string | null; worker_type: string | null }[]>('profiles', { select: 'id,full_name,worker_type', eq: 'role:employee' })
@@ -181,8 +183,8 @@ export default function LiveLocationsScreen({ onBack }: Props) {
     [],
   );
 
-  const showTrail = async () => {
-    if (!trailUser || !/^\d{4}-\d{2}-\d{2}$/.test(trailDate)) {
+  const showTrail = async (userId: string = trailUser) => {
+    if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(trailDate)) {
       setTrailMsg('Pick an employee and a date as YYYY-MM-DD.');
       return;
     }
@@ -190,7 +192,7 @@ export default function LiveLocationsScreen({ onBack }: Props) {
     setTrailBusy(true);
     setTrailMsg('');
     try {
-      const pts = await fetchLocationHistory(trailUser, trailDate);
+      const pts = await fetchLocationHistory(userId, trailDate);
       if (pts.length === 0) {
         webRef.current?.injectJavaScript('window.clearTrail(); true;');
         setTrail(null);
@@ -234,12 +236,6 @@ export default function LiveLocationsScreen({ onBack }: Props) {
     }, 250);
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  };
-
   // Directions mode (not just a search pin) — opens Google Maps straight
   // into guided turn-by-turn navigation to the employee's last position.
   const openMaps = (lat: number, lng: number) => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`);
@@ -251,152 +247,173 @@ export default function LiveLocationsScreen({ onBack }: Props) {
     } catch { /* ignore malformed messages */ }
   };
 
+  const fresh = rows.filter(isFresh).length;
+  const peopleOptions = people.map((p) => ({ key: p.id, label: `${p.full_name || 'Employee'} (${p.worker_type === 'gig' ? 'Gig' : 'Fixed'})` }));
+
   return (
-    <View style={styles.root}>
-      <MeshBackground />
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(10) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
-      >
-        <BackLink onPress={onBack} />
-        <Text style={[styles.title, { color: theme.text }]}>Live Locations</Text>
-        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>
-          Fixed and gig employees currently clocked in · updates every {POLL_MS / 1000}s
-        </Text>
+    <AdminScreen
+      title="Live Locations"
+      subtitle={`Fixed and gig employees clocked in · updates every ${POLL_MS / 1000}s`}
+      onBack={onBack}
+      onRefresh={load}
+    >
+      {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
-        {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
-
-        {loaded && (
-          <View style={[styles.mapWrap, { borderColor: theme.line }]}>
-            <WebView
-              ref={webRef}
-              style={StyleSheet.absoluteFill}
-              originWhitelist={['*']}
-              source={{ html: MAP_HTML, baseUrl: SITE_BASE_URL }}
-              scrollEnabled={false}
-              onLoadEnd={() => setWebReady(true)}
-              onMessage={handleMapMessage}
-            />
-          </View>
-        )}
-
-        <GlassCard style={styles.row}>
-          <Text style={[styles.name, { color: theme.text }]}>Day trail</Text>
-          <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(2) }]}>Where an employee went on a given day, with playback.</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing(2), paddingBottom: spacing(2) }}>
-            {people.map((p) => (
-              <Pressable
-                key={p.id}
-                onPress={() => setTrailUser(p.id)}
-                style={[styles.chip, { borderColor: trailUser === p.id ? brand.primary : theme.line, backgroundColor: trailUser === p.id ? brand.primary + '22' : theme.panel2 }]}
-              >
-                <Text style={[styles.chipText, { color: trailUser === p.id ? brand.primary : theme.text2 }]}>
-                  {p.full_name || 'Employee'} ({p.worker_type === 'gig' ? 'Gig' : 'Fixed'})
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          <TextInput
-            value={trailDate}
-            onChangeText={setTrailDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={theme.text3}
-            keyboardType="numbers-and-punctuation"
-            style={[styles.dateInput, { color: theme.text, borderColor: theme.line, backgroundColor: theme.panel2 }]}
+      {loaded && (
+        <View style={[styles.mapWrap, { borderColor: theme.border }]}>
+          <WebView
+            ref={webRef}
+            style={StyleSheet.absoluteFill}
+            originWhitelist={['*']}
+            source={{ html: MAP_HTML, baseUrl: SITE_BASE_URL }}
+            scrollEnabled={false}
+            onLoadEnd={() => setWebReady(true)}
+            onMessage={handleMapMessage}
           />
-          <View style={styles.trailBtns}>
-            <Pressable onPress={showTrail} disabled={trailBusy} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-              <Text style={[styles.mapsBtnText, { color: brand.primary }]}>{trailBusy ? 'Loading…' : 'Show trail'}</Text>
-            </Pressable>
-            {trail ? (
-              <Pressable onPress={clearTrail} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                <Text style={[styles.mapsBtnText, { color: semantic.danger }]}>Clear trail</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          {trailMsg ? <Text style={[styles.caption, { color: theme.text2, marginTop: spacing(2) }]}>{trailMsg}</Text> : null}
-          {trail ? (
-            <View style={{ marginTop: spacing(3) }}>
-              <View style={[styles.scrubTrack, { backgroundColor: theme.line }]}>
-                <View style={[styles.scrubFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: brand.fill }]} />
-              </View>
-              <Text style={[styles.caption, { color: theme.text3, marginVertical: spacing(1) }]}>
-                {new Date(trail[0].t + frac * (trail[trail.length - 1].t - trail[0].t)).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
-              </Text>
-              <View style={styles.trailBtns}>
-                <Pressable onPress={() => { stopPlay(); seek(frac - 0.1); }} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                  <Text style={[styles.mapsBtnText, { color: theme.text2 }]}>−10%</Text>
-                </Pressable>
-                <Pressable onPress={togglePlay} style={[styles.mapsBtn, { borderColor: brand.primary, backgroundColor: brand.primary + '22' }]}>
-                  <Text style={[styles.mapsBtnText, { color: brand.primary }]}>{playing ? 'Pause' : 'Play'}</Text>
-                </Pressable>
-                <Pressable onPress={() => { stopPlay(); seek(frac + 0.1); }} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                  <Text style={[styles.mapsBtnText, { color: theme.text2 }]}>+10%</Text>
-                </Pressable>
-                {[1, 4, 16].map((s) => (
-                  <Pressable
-                    key={s}
-                    onPress={() => setSpeed(s)}
-                    style={[styles.mapsBtn, { borderColor: speed === s ? brand.primary : theme.line, backgroundColor: speed === s ? brand.primary + '22' : theme.panel2 }]}
-                  >
-                    <Text style={[styles.mapsBtnText, { color: speed === s ? brand.primary : theme.text2 }]}>{s}x</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          ) : null}
-        </GlassCard>
+        </View>
+      )}
 
+      <View style={[styles.sheet, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+        <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+        <View style={styles.sheetHead}>
+          <Text style={[styles.sheetTitle, { color: theme.text }]}>{rows.length} clocked in</Text>
+          <View style={styles.legend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: theme.ok }]} />
+              <Text style={[styles.legendText, { color: theme.text2 }]}>{'< 5 min'}</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: theme.warn }]} />
+              <Text style={[styles.legendText, { color: theme.text2 }]}>Stale</Text>
+            </View>
+          </View>
+        </View>
         {rows.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3, textAlign: 'center', marginTop: spacing(8) }]}>
+          <Text style={[styles.empty, { color: theme.text3 }]}>
             No one is currently clocked in with a reported location.{'\n\n'}
             Locations only appear while an employee is clocked in — tracking continues in the background
             once they clock in, even if the app isn't open.
           </Text>
         ) : (
-          rows.map((r, idx) => (
-            <Animated.View key={r.user_id} entering={FadeInUp.delay(idx * 60).duration(400)}>
-              <GlassCard shadow style={styles.row}>
-                <View style={styles.rowHeader}>
-                  <PulseDot color={brand.primary} size={7} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.name, { color: theme.text }]}>{r.full_name}</Text>
-                    <Text style={[styles.caption, { color: theme.text3 }]}>
-                      {(r.worker_type || 'fixed').replace(/^\w/, (c) => c.toUpperCase())} · {timeAgo(r.updated_at)}
-                    </Text>
-                  </View>
+          rows.map((r, idx) => {
+            const tone = isFresh(r) ? theme.ok : theme.warn;
+            return (
+              <View key={r.user_id} style={[styles.person, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.line }]}>
+                <View style={[styles.avatar, { backgroundColor: tone }]}>
+                  <Text style={styles.avatarText}>{initials(r.full_name)}</Text>
                 </View>
-                <Text style={[styles.coords, { color: theme.text2 }]}>
-                  {r.latitude.toFixed(5)}, {r.longitude.toFixed(5)}
-                </Text>
-                <Pressable onPress={() => openMaps(r.latitude, r.longitude)} style={[styles.mapsBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                  <Icon name="pin" size={14} color={brand.primary} />
-                  <Text style={[styles.mapsBtnText, { color: brand.primary }]}>Open in Maps</Text>
-                </Pressable>
-              </GlassCard>
-            </Animated.View>
-          ))
+                <View style={styles.flex}>
+                  <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{r.full_name}</Text>
+                  <Text style={[styles.sub, { color: tone }]} numberOfLines={1}>
+                    {(r.worker_type || 'fixed').replace(/^\w/, (c) => c.toUpperCase())} · {timeAgo(r.updated_at)}
+                  </Text>
+                  <Text style={[styles.coords, { color: theme.text3 }]}>
+                    {r.latitude.toFixed(5)}, {r.longitude.toFixed(5)}
+                  </Text>
+                </View>
+                <View style={styles.personActions}>
+                  <Pressable onPress={() => openMaps(r.latitude, r.longitude)} hitSlop={8} accessibilityRole="button">
+                    <Text style={[styles.link, { color: theme.accent }]}>Open in Maps</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setTrailUser(r.user_id);
+                      showTrail(r.user_id);
+                    }}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[styles.link, { color: theme.accent }]}>Day trail</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })
         )}
-      </ScrollView>
-    </View>
+        {rows.length > 0 && fresh === 0 ? (
+          <Text style={[styles.empty, { color: theme.warn }]}>Every location is older than 5 minutes.</Text>
+        ) : null}
+      </View>
+
+      <View style={[styles.trailCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+        <Text style={[styles.sheetTitle, { color: theme.text }]}>Day trail</Text>
+        <Text style={[styles.hintText, { color: theme.text2 }]}>Where an employee went on a given day, with playback.</Text>
+        {people.length === 0 ? (
+          <EmptyNote text="No employees to show a trail for" icon="people" />
+        ) : (
+          <FilterChips items={peopleOptions} activeKey={trailUser} onSelect={setTrailUser} />
+        )}
+        <Field label="Date" value={trailDate} onChangeText={setTrailDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <View style={styles.btnRow}>
+          <ActionButton label={trailBusy ? 'Loading…' : 'Show trail'} busy={trailBusy} onPress={() => showTrail()} />
+          {trail ? <ActionButton label="Clear trail" tone="neutral" onPress={clearTrail} /> : null}
+        </View>
+        {trailMsg ? <Text style={[styles.hintText, { color: theme.text2 }]}>{trailMsg}</Text> : null}
+        {trail ? (
+          <View style={styles.scrub}>
+            <View style={styles.scrubRow}>
+              <Pressable
+                onPress={togglePlay}
+                accessibilityRole="button"
+                accessibilityLabel={playing ? 'Pause trail' : 'Play trail'}
+                style={[styles.playBtn, { backgroundColor: brand.fill }]}
+              >
+                <Text style={styles.playText}>{playing ? '❚❚' : '▶'}</Text>
+              </Pressable>
+              <View style={styles.flex}>
+                <View style={[styles.scrubTrack, { backgroundColor: theme.panel2 }]}>
+                  <View style={[styles.scrubFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: theme.accent }]} />
+                </View>
+                <Text style={[styles.time, { color: theme.text2 }]}>
+                  {new Date(trail[0].t + frac * (trail[trail.length - 1].t - trail[0].t)).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.btnRow}>
+              <ActionButton label="−10%" tone="neutral" onPress={() => { stopPlay(); seek(frac - 0.1); }} />
+              <ActionButton label="+10%" tone="neutral" onPress={() => { stopPlay(); seek(frac + 0.1); }} />
+            </View>
+            <FilterChips
+              items={[1, 4, 16].map((n) => ({ key: String(n), label: `${n}x` }))}
+              activeKey={String(speed)}
+              onSelect={(k) => setSpeed(Number(k))}
+            />
+          </View>
+        ) : null}
+      </View>
+    </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  title: { ...typography.title, marginTop: spacing(4) },
-  caption: { ...typography.caption, lineHeight: 18 },
-  mapWrap: { height: 320, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: spacing(4) },
-  row: { marginBottom: spacing(3) },
-  chip: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
-  chipText: { ...typography.caption, fontWeight: '700' },
-  dateInput: { ...typography.body, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), minHeight: 44, marginBottom: spacing(2) },
-  trailBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  scrubTrack: { height: 8, borderRadius: radius.sm, overflow: 'hidden' },
-  scrubFill: { height: '100%' },
-  rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), marginBottom: spacing(2.5) },
-  name: { fontFamily: 'Manrope_700Bold', fontSize: 15 },
-  coords: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12, marginBottom: spacing(3) },
-  mapsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 38, borderRadius: radius.sm, borderWidth: 1 },
-  mapsBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  flex: { flex: 1, minWidth: 0 },
+  error: { ...typography.caption, marginBottom: spacing(3) },
+  mapWrap: { height: 320, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: spacing(3) },
+  sheet: { borderWidth: 1, borderRadius: radius.sheet, paddingHorizontal: spacing(4), paddingTop: spacing(2.5), paddingBottom: spacing(3), marginBottom: spacing(3) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(3) },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(2), marginBottom: spacing(2) },
+  sheetTitle: { ...typography.heading, fontSize: 16, lineHeight: 22 },
+  legend: { flexDirection: 'row', gap: spacing(2.5) },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing(1) },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  empty: { ...typography.supporting, textAlign: 'center', paddingVertical: spacing(3) },
+  person: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2.5) },
+  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
+  name: { fontFamily: 'Manrope_700Bold', fontSize: 14, lineHeight: 19 },
+  sub: { fontFamily: 'Manrope_600SemiBold', fontSize: 12, lineHeight: 16 },
+  coords: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 11, lineHeight: 15, marginTop: 1 },
+  personActions: { alignItems: 'flex-end', gap: spacing(2) },
+  link: { fontFamily: 'Manrope_600SemiBold', fontSize: 12 },
+  trailCard: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), gap: spacing(3), marginBottom: spacing(3) },
+  hintText: { ...typography.supporting },
+  btnRow: { flexDirection: 'row', gap: spacing(2.5) },
+  scrub: { gap: spacing(3) },
+  scrubRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
+  playBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  playText: { color: '#fff', fontSize: 14 },
+  scrubTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  scrubFill: { height: '100%', borderRadius: 3 },
+  time: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 11, marginTop: spacing(1.5) },
 });

@@ -115,7 +115,7 @@ export default function StatsAdminScreen({ onBack }: Props) {
             items={[
               { label: 'New requests', value: view.ops.newCount, color: semantic.info },
               { label: 'Pending assignment', value: view.ops.pendingAssign, color: view.ops.pendingAssign ? semantic.warning : undefined },
-              { label: 'In progress', value: view.ops.inProgress, color: '#7c5cfc' },
+              { label: 'In progress', value: view.ops.inProgress, color: theme.vio },
               { label: 'Resolved today', value: view.ops.resolvedToday, color: semantic.success },
               { label: 'Overdue (SLA)', value: view.ops.overdue, color: view.ops.overdue ? semantic.danger : undefined },
             ]}
@@ -141,7 +141,7 @@ export default function StatsAdminScreen({ onBack }: Props) {
           <SectionLabel>Service pipeline</SectionLabel>
           <View style={styles.pipe}>
             {view.pipe.map((p) => (
-              <View key={p.label} style={[styles.pipeCell, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+              <View key={p.label} style={[styles.pipeCell, { backgroundColor: theme.panel, borderColor: theme.border }]}>
                 <Text style={[styles.pipeValue, { color: theme.text }]}>{p.n}</Text>
                 <Text style={[styles.pipeLabel, { color: theme.text3 }]} numberOfLines={1}>{p.label}</Text>
               </View>
@@ -182,16 +182,16 @@ export default function StatsAdminScreen({ onBack }: Props) {
             activeKey={String(days)}
             onSelect={(k) => setDays(Number(k))}
           />
-          <View style={[styles.chart, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+          <View style={[styles.chart, { backgroundColor: theme.panel, borderColor: theme.border }]}>
             <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
               <Defs>
                 <LinearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={brand.primary} stopOpacity="0.3" />
-                  <Stop offset="1" stopColor={brand.primary} stopOpacity="0" />
+                  <Stop offset="0" stopColor={theme.accent} stopOpacity="0.3" />
+                  <Stop offset="1" stopColor={theme.accent} stopOpacity="0" />
                 </LinearGradient>
               </Defs>
               {area ? <Path d={area} fill="url(#trendFill)" /> : null}
-              {line ? <Path d={line} fill="none" stroke={brand.primary} strokeWidth={2} /> : null}
+              {line ? <Path d={line} fill="none" stroke={theme.accent} strokeWidth={2} /> : null}
             </Svg>
             <View style={styles.chartFoot}>
               <Text style={[styles.chartNote, { color: theme.text2 }]}>
@@ -218,7 +218,7 @@ export default function StatsAdminScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   pipe: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  pipeCell: { flexBasis: '30%', flexGrow: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing(3), alignItems: 'center' },
+  pipeCell: { flexBasis: '30%', flexGrow: 1, borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), alignItems: 'center' },
   pipeValue: { ...typography.heading, fontSize: 20 },
   pipeLabel: { ...typography.caption, fontSize: 11 },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(1.5) },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   catTrack: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden' },
   catFill: { height: 8, borderRadius: 4 },
   catN: { ...typography.caption, fontSize: 11, width: 66, textAlign: 'right' },
-  chart: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(3) },
+  chart: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), marginTop: spacing(3) },
   chartFoot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing(2) },
   chartNote: { ...typography.caption, fontSize: 12 },
 });
