@@ -5,7 +5,6 @@ import Icon from '../Icon';
 import { uploadImage } from '../../api/upload';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 
 interface Props {
   label: string;
@@ -44,7 +43,7 @@ export default function ImageUploadField({ label, value, onChange, hint }: Props
   return (
     <View style={styles.wrap}>
       <Text style={[styles.label, { color: theme.text2 }]}>{label}</Text>
-      <View style={[styles.box, { borderColor: value ? brand.primary : theme.line, backgroundColor: theme.panel2 }]}>
+      <View style={[styles.box, { borderColor: value ? theme.accent : theme.border, backgroundColor: theme.panel2 }]}>
         {value ? (
           <Image source={{ uri: value }} style={styles.thumb} resizeMode="contain" />
         ) : (
@@ -53,30 +52,30 @@ export default function ImageUploadField({ label, value, onChange, hint }: Props
           </View>
         )}
         <View style={styles.actions}>
-          <Pressable onPress={pick} disabled={busy} style={[styles.btn, { borderColor: theme.line }]} accessibilityLabel={`Upload ${label}`}>
-            {busy ? <ActivityIndicator size="small" color={brand.primary} /> : <Text style={[styles.btnText, { color: brand.primary }]}>{value ? 'Replace' : 'Upload'}</Text>}
+          <Pressable onPress={pick} disabled={busy} style={[styles.btn, { borderColor: theme.border }]} accessibilityLabel={`Upload ${label}`}>
+            {busy ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={[styles.btnText, { color: theme.accent }]}>{value ? 'Replace' : 'Upload'}</Text>}
           </Pressable>
           {value ? (
-            <Pressable onPress={() => onChange(null)} style={[styles.btn, { borderColor: theme.line }]} accessibilityLabel={`Remove ${label}`}>
-              <Text style={[styles.btnText, { color: semantic.danger }]}>Remove</Text>
+            <Pressable onPress={() => onChange(null)} style={[styles.btn, { borderColor: theme.border }]} accessibilityLabel={`Remove ${label}`}>
+              <Text style={[styles.btnText, { color: theme.err }]}>Remove</Text>
             </Pressable>
           ) : null}
         </View>
       </View>
       {hint ? <Text style={[styles.hint, { color: theme.text3 }]}>{hint}</Text> : null}
-      {error ? <Text style={[styles.hint, { color: semantic.danger }]}>{error}</Text> : null}
+      {error ? <Text style={[styles.hint, { color: theme.err }]}>{error}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing(3) },
-  label: { ...typography.caption, fontWeight: '700', marginBottom: spacing(1) },
-  box: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.md, padding: spacing(2) },
+  label: { ...typography.caption, fontFamily: 'Manrope_700Bold', marginBottom: spacing(1) },
+  box: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.lg, padding: spacing(2) },
   thumb: { width: 72, height: 48, borderRadius: radius.sm },
   empty: { alignItems: 'center', justifyContent: 'center' },
   actions: { flex: 1, flexDirection: 'row', gap: spacing(2), justifyContent: 'flex-end' },
   btn: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(3), paddingVertical: spacing(2), minWidth: 72, alignItems: 'center' },
-  btnText: { ...typography.caption, fontWeight: '700' },
+  btnText: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
   hint: { ...typography.caption, marginTop: spacing(1) },
 });

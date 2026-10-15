@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, HeaderAction, ToggleSwitch } from '../../components/admin/FinanceKit';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -9,7 +10,6 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import { fetchItems, ItemRow } from '../../api/adminBooks';
 import {
   bulkActive,
@@ -26,7 +26,7 @@ import {
 } from '../../api/adminItems';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { brand } from '../../theme/tokens';
 import { dateTime, inr } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -222,20 +222,15 @@ export default function ItemsScreen({ onBack }: Props) {
       error={data.error}
       headerRight={
         <>
-          <Pressable
+          <HeaderAction
+            icon="check-circle"
+            label="Select items"
             onPress={() => {
               setSelecting((v) => !v);
               setPicked(new Set());
             }}
-            hitSlop={8}
-            style={[styles.add, { backgroundColor: selecting ? brand.primary + '33' : theme.panel2, borderColor: theme.line, borderWidth: 1 }]}
-            accessibilityLabel="Select items"
-          >
-            <Icon name="check-circle" size={18} color={selecting ? brand.primary : theme.text2} />
-          </Pressable>
-          <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New item">
-            <Icon name="add" size={20} color="#fff" />
-          </Pressable>
+          />
+          <HeaderAction icon="add" label="New item" onPress={() => openEditor('new')} />
         </>
       }
       toolbar={
@@ -256,7 +251,7 @@ export default function ItemsScreen({ onBack }: Props) {
       }
     >
       {selecting ? (
-        <View style={[styles.bar, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+        <View style={[styles.bar, { backgroundColor: theme.panel, borderColor: theme.border }]}>
           <Text style={[styles.barText, { color: theme.text }]}>{picked.size} selected</Text>
           <View style={styles.barActions}>
             <ActionButton label="Activate" tone="success" busy={busy} disabled={!picked.size} onPress={() => setActive(true)} />
@@ -273,18 +268,18 @@ export default function ItemsScreen({ onBack }: Props) {
             <ListRow
               key={m.id}
               icon="swap"
-              iconColor={Number(m.quantity) > 0 ? semantic.success : semantic.warning}
+              iconColor={Number(m.quantity) > 0 ? theme.ok : theme.warn}
               title={m.item_name}
               subtitle={`${MOVEMENT_LABEL[m.type] || m.type}${m.note ? ` · ${m.note}` : ''}`}
               meta={`${dateTime(m.created_at)}${m.employee_name ? ` · ${m.employee_name}` : ''}${m.rate != null ? ` · @ ${inr(m.rate)}` : ''}`}
               value={`${Number(m.quantity) > 0 ? '+' : ''}${Number(m.quantity)} ${m.unit || ''}`}
-              valueColor={Number(m.quantity) > 0 ? semantic.success : semantic.danger}
+              valueColor={Number(m.quantity) > 0 ? theme.ok : theme.err}
             />
           ))}
         </>
       ) : (
         <>
-          <StatGrid items={[{ label: 'Live items', value: live.length }, { label: 'Low stock', value: lowCount, color: lowCount ? semantic.danger : semantic.success }]} />
+          <StatGrid items={[{ label: 'Live items', value: live.length }, { label: 'Low stock', value: lowCount, color: lowCount ? theme.err : theme.ok }]} />
           {visible.length === 0 ? <EmptyNote text="No item matches" icon="box" /> : null}
           {visible.map((i) => {
             const low = isLow(i);
@@ -293,14 +288,14 @@ export default function ItemsScreen({ onBack }: Props) {
               <ListRow
                 key={i.id}
                 icon={selecting ? (on ? 'check-circle' : 'tasks') : 'box'}
-                iconColor={selecting ? (on ? brand.primary : undefined) : low ? semantic.danger : undefined}
+                iconColor={selecting ? (on ? theme.accent : undefined) : low ? theme.err : undefined}
                 title={i.name}
                 subtitle={[i.brand, i.model, i.category].filter(Boolean).join(' · ') || undefined}
                 meta={`${i.sku ? `${i.sku} · ` : ''}${i.purchase_rate != null ? `buy ${inr(i.purchase_rate)} · ` : ''}GST ${Number(i.gst_rate) || 0}%`}
                 value={inr(i.selling_rate)}
                 badge={{
                   label: Number(i.active) !== 1 ? 'Hidden' : `${Number(i.quantity) || 0} ${i.unit || 'pcs'}${low ? ' · low' : ''}`,
-                  color: Number(i.active) !== 1 ? brand.grey : low ? semantic.danger : semantic.success,
+                  color: Number(i.active) !== 1 ? theme.grey : low ? theme.err : theme.ok,
                 }}
                 onPress={() => (selecting ? toggle(i.id) : openEditor(i))}
                 footer={
@@ -351,7 +346,7 @@ export default function ItemsScreen({ onBack }: Props) {
         ) : null}
         <View style={[styles.switchRow, { borderBottomColor: theme.line }]}>
           <Text style={[styles.switchLabel, { color: theme.text }]}>Active</Text>
-          <Switch value={form.active} onValueChange={(v) => setForm((f) => ({ ...f, active: v }))} trackColor={{ true: brand.primary, false: theme.line }} />
+          <ToggleSwitch value={form.active} onValueChange={(v) => setForm((f) => ({ ...f, active: v }))} />
         </View>
       </FormSheet>
 
@@ -367,20 +362,7 @@ export default function ItemsScreen({ onBack }: Props) {
           </>
         }
       >
-        <View style={styles.chips}>
-          {MOVES.map((m) => {
-            const on = moveType === m.key;
-            return (
-              <Pressable
-                key={m.key}
-                onPress={() => setMoveType(m.key)}
-                style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-              >
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{m.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ChoiceChips items={MOVES.map((m) => [m.key, m.label] as [string, string])} value={moveType} onChange={(k) => setMoveType(k as MovementType)} />
         <Field label="Quantity" value={moveQty} onChangeText={setMoveQty} keyboardType="numeric" />
         <Field label="Rate (₹, optional)" value={moveRate} onChangeText={setMoveRate} keyboardType="numeric" hint="Leave blank to use the purchase rate" />
         <Field label="Note (optional)" value={moveNote} onChangeText={setMoveNote} multiline />
@@ -422,13 +404,9 @@ export default function ItemsScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  bar: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginBottom: spacing(3), gap: spacing(2) },
+  bar: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), marginBottom: spacing(3), gap: spacing(2) },
   barText: { ...typography.body, fontFamily: 'Manrope_700Bold' },
   barActions: { flexDirection: 'row', gap: spacing(2) },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
-  chipText: { ...typography.caption, fontSize: 12 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing(2), borderBottomWidth: 1 },
   switchLabel: { ...typography.body, fontSize: 14 },
   note: { ...typography.body, fontSize: 14 },

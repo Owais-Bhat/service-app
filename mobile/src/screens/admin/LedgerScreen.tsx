@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, HeaderAction, Notice, Overline, RowPanel, ToggleSwitch } from '../../components/admin/FinanceKit';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -9,7 +10,6 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import SectionLabel from '../../components/admin/SectionLabel';
 import Icon from '../../components/Icon';
 import { fetchTrialBalance, rupees } from '../../api/adminBooks';
 import {
@@ -32,7 +32,6 @@ import {
 } from '../../api/adminLedger';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { dateTime, humanize, inr, shortDate, todayIso } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -42,13 +41,6 @@ interface Props {
 
 type Tab = 'journals' | 'trial' | 'coa' | 'opening' | 'locks' | 'audit';
 
-const TYPE_COLOR: Record<string, string> = {
-  asset: semantic.info,
-  liability: semantic.warning,
-  equity: '#7c5cfc',
-  income: semantic.success,
-  expense: semantic.danger,
-};
 const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'];
 
 interface EntryLine {
@@ -66,6 +58,7 @@ const blankLine = (): EntryLine => ({ key: `e${++k}`, account: null, debit: '', 
 // journal is never edited — a mistake is reversed and both stay visible.
 export default function LedgerScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const TYPE_COLOR: Record<string, string> = { asset: theme.info, liability: theme.warn, equity: theme.vio, income: theme.ok, expense: theme.err };
   const [tab, setTab] = useState<Tab>('journals');
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -174,7 +167,9 @@ export default function LedgerScreen({ onBack }: Props) {
       error={data.error}
       headerRight={
         tab === 'journals' || tab === 'coa' ? (
-          <Pressable
+          <HeaderAction
+            icon="add"
+            label="Add"
             onPress={() => {
               if (tab === 'coa') return openAccount('new');
               setEDate(todayIso());
@@ -182,12 +177,7 @@ export default function LedgerScreen({ onBack }: Props) {
               setELines([blankLine(), blankLine()]);
               setEntering(true);
             }}
-            hitSlop={8}
-            style={[styles.add, { backgroundColor: brand.fill }]}
-            accessibilityLabel="Add"
-          >
-            <Icon name="add" size={20} color="#fff" />
-          </Pressable>
+          />
         ) : undefined
       }
       toolbar={
@@ -215,12 +205,12 @@ export default function LedgerScreen({ onBack }: Props) {
             <ListRow
               key={j.id}
               icon="book"
-              iconColor={j.status === 'reversed' ? semantic.danger : undefined}
+              iconColor={j.status === 'reversed' ? theme.err : undefined}
               title={`${j.journal_no || 'Journal'} · ${humanize(j.source_type)}`}
               subtitle={j.narration || undefined}
               meta={`${shortDate(j.journal_date)}${j.posted_by_name ? ` · ${j.posted_by_name}` : ''}`}
               value={inr(rupees(j.total_paise))}
-              badge={j.status === 'reversed' ? { label: 'Reversed', color: semantic.danger } : j.reversal_of_id ? { label: 'Reversal', color: semantic.warning } : undefined}
+              badge={j.status === 'reversed' ? { label: 'Reversed', color: theme.err } : j.reversal_of_id ? { label: 'Reversal', color: theme.warn } : undefined}
               onPress={() => openJournal(j.id)}
             />
           ))}
@@ -233,7 +223,7 @@ export default function LedgerScreen({ onBack }: Props) {
             items={[
               { label: 'Total debit', value: inr(rupees(t.totals.debit_paise)) },
               { label: 'Total credit', value: inr(rupees(t.totals.credit_paise)) },
-              { label: balances ? 'Books balance' : 'Books do NOT balance', value: balances ? '✓' : '!', color: balances ? semantic.success : semantic.danger },
+              { label: balances ? 'Books balance' : 'Books do NOT balance', value: balances ? '✓' : '!', color: balances ? theme.ok : theme.err },
             ]}
           />
           {trialRows.length === 0 ? <EmptyNote text="No account has movement" icon="book" /> : null}
@@ -245,7 +235,7 @@ export default function LedgerScreen({ onBack }: Props) {
               title={`${a.code} · ${a.name}`}
               subtitle={`Dr ${inr(rupees(a.debit_paise))} · Cr ${inr(rupees(a.credit_paise))}`}
               value={inr(rupees(a.balance_paise))}
-              badge={{ label: humanize(a.type), color: TYPE_COLOR[a.type] ?? semantic.info }}
+              badge={{ label: humanize(a.type), color: TYPE_COLOR[a.type] ?? theme.info }}
             />
           ))}
         </>
@@ -262,7 +252,7 @@ export default function LedgerScreen({ onBack }: Props) {
               title={`${a.code} · ${a.name}`}
               subtitle={`${humanize(a.type)}${a.subtype ? ` · ${humanize(a.subtype)}` : ''}`}
               meta={Number(a.opening_balance_paise) ? `Opening ${inr(rupees(a.opening_balance_paise))}` : undefined}
-              badge={Number(a.is_system) === 1 ? { label: 'System', color: brand.grey } : Number(a.active) !== 1 ? { label: 'Inactive', color: semantic.danger } : undefined}
+              badge={Number(a.is_system) === 1 ? { label: 'System', color: theme.grey } : Number(a.active) !== 1 ? { label: 'Inactive', color: theme.err } : undefined}
               onPress={() => openAccount(a)}
             />
           ))}
@@ -310,13 +300,13 @@ export default function LedgerScreen({ onBack }: Props) {
               act('lock', () => createLock(lockDate, lockWhy.trim()), () => setLockWhy(''));
             }}
           />
-          <SectionLabel>Locks</SectionLabel>
+          <Overline>Locks</Overline>
           {(d?.locks ?? []).length === 0 ? <EmptyNote text="No period is locked" icon="lock" /> : null}
           {(d?.locks ?? []).map((l) => (
             <ListRow
               key={l.id}
               icon="lock"
-              iconColor={semantic.warning}
+              iconColor={theme.warn}
               title={`Locked up to ${shortDate(l.locked_upto)}`}
               subtitle={l.reason || undefined}
               meta={`${l.locked_by_name || ''} · ${dateTime(l.created_at)}`}
@@ -371,18 +361,20 @@ export default function LedgerScreen({ onBack }: Props) {
         {detail ? (
           <>
             {detail.journal.narration ? <Text style={[styles.note, { color: theme.text }]}>{detail.journal.narration}</Text> : null}
-            {detail.lines.map((l) => (
-              <View key={l.id} style={[styles.kv, { borderBottomColor: theme.line }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.v, { color: theme.text, textAlign: 'left' }]} numberOfLines={1}>{l.account_code} · {l.account_name}</Text>
-                  <Text style={[styles.k, { color: theme.text3 }]}>{[l.party_name, l.memo].filter(Boolean).join(' · ') || '—'}</Text>
+            <RowPanel>
+              {detail.lines.map((l, i) => (
+                <View key={l.id} style={[styles.jLine, { borderBottomColor: theme.line }, i === detail.lines.length - 1 && { borderBottomWidth: 0 }]}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.v, { color: theme.text, textAlign: 'left' }]} numberOfLines={1}>{l.account_code} · {l.account_name}</Text>
+                    <Text style={[styles.k, { color: theme.text3 }]} numberOfLines={1}>{[l.party_name, l.memo].filter(Boolean).join(' · ') || '—'}</Text>
+                  </View>
+                  <Text style={[styles.mono, { color: Number(l.debit_paise) ? theme.text : theme.ok }]}>
+                    {Number(l.debit_paise) ? `Dr ${inr(rupees(l.debit_paise))}` : `Cr ${inr(rupees(l.credit_paise))}`}
+                  </Text>
                 </View>
-                <Text style={[styles.v, { color: Number(l.debit_paise) ? theme.text : semantic.success }]}>
-                  {Number(l.debit_paise) ? `Dr ${inr(rupees(l.debit_paise))}` : `Cr ${inr(rupees(l.credit_paise))}`}
-                </Text>
-              </View>
-            ))}
-            {detail.journal.reversal_reason ? <Text style={[styles.note, { color: semantic.danger }]}>Reversed — {detail.journal.reversal_reason}</Text> : null}
+              ))}
+            </RowPanel>
+            {detail.journal.reversal_reason ? <Text style={[styles.note, { color: theme.err }]}>Reversed — {detail.journal.reversal_reason}</Text> : null}
             {reversing ? <Field label="Why is it being reversed?" value={reverseWhy} onChangeText={setReverseWhy} multiline /> : null}
           </>
         ) : null}
@@ -412,10 +404,11 @@ export default function LedgerScreen({ onBack }: Props) {
           </>
         }
       >
+        <Notice icon="lock">An entry dated inside a locked period is rejected - check Period locks first.</Notice>
         <Field label="Date" value={eDate} onChangeText={setEDate} hint="YYYY-MM-DD" />
         <Field label="Narration" value={eNarr} onChangeText={setENarr} placeholder="What is this entry for?" />
         {eLines.map((l, i) => (
-          <View key={l.key} style={[styles.line, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+          <View key={l.key} style={[styles.line, { backgroundColor: theme.panel, borderColor: theme.border }]}>
             <View style={styles.lineHead}>
               <Text style={[styles.k, { color: theme.text3 }]}>Line {i + 1}</Text>
               <Pressable onPress={() => (eLines.length > 2 ? setELines((p) => p.filter((x) => x.key !== l.key)) : Alert.alert('Lines', 'An entry needs at least two lines'))} hitSlop={10}>
@@ -444,12 +437,15 @@ export default function LedgerScreen({ onBack }: Props) {
           </View>
         ))}
         <ActionButton label="+ Add line" tone="neutral" onPress={() => setELines((p) => [...p, blankLine()])} />
-        <View style={[styles.totals, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-          <View style={styles.totalRow}><Text style={[styles.k, { color: theme.text2 }]}>Debit</Text><Text style={[styles.v, { color: theme.text }]}>{inr(debit / 100)}</Text></View>
-          <View style={styles.totalRow}><Text style={[styles.k, { color: theme.text2 }]}>Credit</Text><Text style={[styles.v, { color: theme.text }]}>{inr(credit / 100)}</Text></View>
-          <Text style={[styles.k, { color: balanced ? semantic.success : semantic.warning }]}>
-            {balanced ? 'Balanced — ready to post' : debit === credit ? 'Enter amounts' : `Difference ${inr(Math.abs(debit - credit) / 100)}`}
-          </Text>
+        <View style={[styles.totals, { backgroundColor: balanced ? theme.okS : theme.panel2 }]}>
+          <View style={styles.totalRow}><Text style={[styles.k, { color: theme.text2 }]}>Debit</Text><Text style={[styles.mono, { color: theme.text }]}>{inr(debit / 100)}</Text></View>
+          <View style={styles.totalRow}><Text style={[styles.k, { color: theme.text2 }]}>Credit</Text><Text style={[styles.mono, { color: theme.text }]}>{inr(credit / 100)}</Text></View>
+          <View style={styles.balanceRow}>
+            {balanced ? <Icon name="check-circle" size={16} color={theme.ok} filled /> : null}
+            <Text style={[styles.balanceText, { color: balanced ? theme.ok : theme.warn }]}>
+              {balanced ? 'Balanced — ready to post' : debit === credit ? 'Enter amounts' : `Difference ${inr(Math.abs(debit - credit) / 100)}`}
+            </Text>
+          </View>
         </View>
       </FormSheet>
 
@@ -486,23 +482,16 @@ export default function LedgerScreen({ onBack }: Props) {
       >
         <Field label="Code" value={aCode} onChangeText={setACode} placeholder="e.g. 5810" />
         <Field label="Name" value={aName} onChangeText={setAName} />
-        <Text style={[styles.k, { color: theme.text3 }]}>Type</Text>
-        <View style={styles.chips}>
-          {TYPES.map((x) => {
-            const on = aType === x;
-            return (
-              <Pressable key={x} disabled={editing !== 'new'} onPress={() => setAType(x)} style={[styles.chip, { opacity: editing !== 'new' && !on ? 0.4 : 1, borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{humanize(x)}</Text>
-              </Pressable>
-            );
-          })}
+        <Text style={[styles.k, { color: theme.text2 }]}>Type</Text>
+        <View style={editing !== 'new' ? { opacity: 0.5 } : undefined}>
+          <ChoiceChips items={TYPES.map((x) => [x, humanize(x)] as [string, string])} value={aType} onChange={(x) => editing === 'new' && setAType(x)} />
         </View>
         <Field label="Sub-type" value={aSub} onChangeText={setASub} />
         <Field label="Opening balance ₹" value={aOpen} onChangeText={setAOpen} keyboardType="numeric" />
         {editing && editing !== 'new' && Number(editing.is_system) !== 1 ? (
           <View style={styles.switchRow}>
             <Text style={[styles.v, { color: theme.text, textAlign: 'left' }]}>Active</Text>
-            <Switch value={aActive} onValueChange={setAActive} trackColor={{ true: brand.primary, false: theme.line }} />
+            <ToggleSwitch value={aActive} onValueChange={setAActive} />
           </View>
         ) : null}
       </FormSheet>
@@ -535,19 +524,18 @@ export default function LedgerScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   note: { ...typography.body, fontSize: 14 },
-  kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: StyleSheet.hairlineWidth },
+  jLine: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(3.5), paddingVertical: spacing(3), borderBottomWidth: 1 },
+  mono: { ...typography.monoId, fontSize: 13 },
+  balanceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginTop: spacing(1) },
+  balanceText: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
   k: { ...typography.caption, fontSize: 12 },
   v: { ...typography.body, fontSize: 14, fontFamily: 'Manrope_700Bold', textAlign: 'right' },
-  line: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), gap: spacing(2) },
+  line: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), gap: spacing(2) },
   lineHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   row: { flexDirection: 'row', gap: spacing(2) },
   cell: { flex: 1 },
-  totals: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), gap: spacing(1.5) },
+  totals: { borderRadius: radius.lg, padding: spacing(3.5), gap: spacing(1.5) },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
-  chipText: { ...typography.caption, fontSize: 12 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

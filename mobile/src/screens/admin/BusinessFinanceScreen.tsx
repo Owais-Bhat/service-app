@@ -3,7 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
+import { Overline, ReportHero } from '../../components/admin/FinanceKit';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
@@ -11,7 +11,6 @@ import Field from '../../components/admin/Field';
 import { askFinanceAi, buildInsights, fetchFinanceSummary, FinanceSummary } from '../../api/adminFinance';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { inr, shortDate } from '../../utils/format';
 
 interface Props {
@@ -110,7 +109,7 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
     return `${g >= 0 ? '▲' : '▼'} ${Math.abs(g).toFixed(0)}% vs previous`;
   };
   const insights = data ? buildInsights(data) : [];
-  const toneColor = { good: semantic.success, warn: semantic.warning, bad: semantic.danger } as const;
+  const toneColor = { good: theme.ok, warn: theme.warn, bad: theme.err } as const;
   const maxTrend = Math.max(1, ...(data?.trend.map((m) => m.billed) ?? [1]));
   const maxTech = Math.max(1, ...(data?.byTechnician.map((m) => m.billed) ?? [1]));
   const maxCat = Math.max(1, ...(data?.byCategory.map((m) => m.revenue) ?? [1]));
@@ -129,27 +128,30 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
     >
       {data && t ? (
         <>
-          <SectionLabel>Business health</SectionLabel>
+          <Overline>Business health</Overline>
+          <ReportHero
+            label="Total billed"
+            value={inr(t.billed)}
+            insight={
+              data.previous
+                ? `Billed ${delta(t.billed, data.previous.billed) || '—'} · received ${delta(t.received, data.previous.received) || '—'} (previous ${shortDate(data.previous.from)} to ${shortDate(data.previous.to)})`
+                : undefined
+            }
+          />
           <StatGrid
             items={[
-              { label: 'Total billed', value: inr(t.billed) },
-              { label: 'Received', value: inr(t.received), color: semantic.success },
-              { label: 'Pending', value: inr(t.pending), color: t.pending ? semantic.warning : undefined },
+              { label: 'Received', value: inr(t.received), color: theme.ok },
+              { label: 'Pending', value: inr(t.pending), color: t.pending ? theme.warn : undefined },
               { label: 'Collection rate', value: `${t.billed ? Math.round((t.received / t.billed) * 100) : 0}%` },
               { label: `Bills · ${t.paidCount} paid`, value: t.billsCount },
               { label: 'Average ticket', value: inr(t.avgTicket) },
               { label: 'GST collected', value: inr(t.gst) },
-              { label: 'Discounts given', value: inr(t.discounts), color: t.discounts ? semantic.danger : undefined },
-              { label: 'Cash not deposited', value: inr(t.cashInHand), color: t.cashInHand ? semantic.warning : undefined },
+              { label: 'Discounts given', value: inr(t.discounts), color: t.discounts ? theme.err : undefined },
+              { label: 'Cash not deposited', value: inr(t.cashInHand), color: t.cashInHand ? theme.warn : undefined },
             ]}
           />
-          {data.previous ? (
-            <Text style={[styles.note, { color: theme.text3 }]}>
-              Billed {delta(t.billed, data.previous.billed) || '—'} · received {delta(t.received, data.previous.received) || '—'} (previous {shortDate(data.previous.from)} to {shortDate(data.previous.to)})
-            </Text>
-          ) : null}
 
-          <SectionLabel>Revenue trend — last 12 months</SectionLabel>
+          <Overline>Revenue trend — last 12 months</Overline>
           {data.trend.length === 0 ? <EmptyNote text="No billed work in the last 12 months" icon="chart" /> : null}
           {data.trend.map((m) => (
             <View key={m.month} style={styles.rowBlock}>
@@ -159,19 +161,19 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
                   {inr(m.received)} of {inr(m.billed)}
                 </Text>
               </View>
-              <Bar value={m.billed} inner={m.received} max={maxTrend} color={brand.primary} />
+              <Bar value={m.billed} inner={m.received} max={maxTrend} color={theme.accent} />
             </View>
           ))}
 
-          <SectionLabel>Receivables aging — how old is the pending money</SectionLabel>
+          <Overline>Receivables aging — how old is the pending money</Overline>
           {aging && agingTotal > 0 ? (
             <>
-              <Bar value={aging['0-7']} max={agingTotal} color={semantic.success} />
+              <Bar value={aging['0-7']} max={agingTotal} color={theme.ok} />
               <StatGrid
                 items={[
-                  { label: '0–7 days', value: inr(aging['0-7']), color: semantic.success },
-                  { label: '8–30 days', value: inr(aging['8-30']), color: semantic.warning },
-                  { label: '31+ days', value: inr(aging['31+']), color: aging['31+'] ? semantic.danger : undefined },
+                  { label: '0–7 days', value: inr(aging['0-7']), color: theme.ok },
+                  { label: '8–30 days', value: inr(aging['8-30']), color: theme.warn },
+                  { label: '31+ days', value: inr(aging['31+']), color: aging['31+'] ? theme.err : undefined },
                 ]}
               />
             </>
@@ -179,7 +181,7 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
             <EmptyNote text="Nothing pending" icon="check-circle" />
           )}
 
-          <SectionLabel>Payment method</SectionLabel>
+          <Overline>Payment method</Overline>
           <StatGrid
             items={[
               { label: 'Cash', value: inr(data.byMethod.cash) },
@@ -188,7 +190,7 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
             ]}
           />
 
-          <SectionLabel>Revenue by category</SectionLabel>
+          <Overline>Revenue by category</Overline>
           {data.byCategory.length === 0 ? <EmptyNote text="No category data in this period" icon="box" /> : null}
           {data.byCategory.map((c) => (
             <View key={c.category} style={styles.rowBlock}>
@@ -198,11 +200,11 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
                   {inr(c.revenue)} · {c.items} item{c.items === 1 ? '' : 's'}
                 </Text>
               </View>
-              <Bar value={c.revenue} max={maxCat} color={semantic.info} />
+              <Bar value={c.revenue} max={maxCat} color={theme.info} />
             </View>
           ))}
 
-          <SectionLabel>Technician performance — collected vs billed</SectionLabel>
+          <Overline>Technician performance — collected vs billed</Overline>
           {data.byTechnician.length === 0 ? <EmptyNote text="No technician data in this period" icon="people" /> : null}
           {data.byTechnician.slice(0, 12).map((r) => (
             <View key={r.name} style={styles.rowBlock}>
@@ -214,50 +216,50 @@ export default function BusinessFinanceScreen({ onBack }: Props) {
                   {inr(r.received)} of {inr(r.billed)}
                 </Text>
               </View>
-              <Bar value={r.billed} inner={r.received} max={maxTech} color={brand.primary} />
+              <Bar value={r.billed} inner={r.received} max={maxTech} color={theme.accent} />
             </View>
           ))}
 
-          {data.byCompany.length ? <SectionLabel>By company</SectionLabel> : null}
+          {data.byCompany.length ? <Overline>By company</Overline> : null}
           {data.byCompany.slice(0, 10).map((c) => (
             <ListRow key={c.company} icon="people" title={c.company} subtitle={`Received ${inr(c.received)}`} value={inr(c.billed)} />
           ))}
 
           {data.gig.count > 0 ? (
             <>
-              <SectionLabel>{`Gig worker pool — ${data.gig.count} job${data.gig.count === 1 ? '' : 's'}`}</SectionLabel>
+              <Overline>{`Gig worker pool — ${data.gig.count} job${data.gig.count === 1 ? '' : 's'}`}</Overline>
               <StatGrid
                 items={[
                   { label: 'Gig billed', value: inr(data.gig.billed) },
-                  { label: 'Company keeps (GST + platform)', value: inr(data.gig.companyKeeps), color: semantic.success },
+                  { label: 'Company keeps (GST + platform)', value: inr(data.gig.companyKeeps), color: theme.ok },
                   { label: 'Worker payouts', value: inr(data.gig.payout) },
-                  { label: 'Awaiting payout', value: inr(data.gig.unpaidPayout), color: data.gig.unpaidPayout ? semantic.warning : undefined },
+                  { label: 'Awaiting payout', value: inr(data.gig.unpaidPayout), color: data.gig.unpaidPayout ? theme.warn : undefined },
                 ]}
               />
             </>
           ) : null}
 
-          <SectionLabel>Job card activity — this month</SectionLabel>
+          <Overline>Job card activity — this month</Overline>
           <StatGrid
             items={[
               { label: 'Jobs logged', value: data.jobCards.logged },
-              { label: 'Awaiting verification', value: data.jobCards.awaitingVerification, color: data.jobCards.awaitingVerification ? semantic.warning : undefined },
-              { label: 'Verified', value: data.jobCards.verified, color: semantic.success },
+              { label: 'Awaiting verification', value: data.jobCards.awaitingVerification, color: data.jobCards.awaitingVerification ? theme.warn : undefined },
+              { label: 'Verified', value: data.jobCards.verified, color: theme.ok },
               { label: 'Monthly award', value: data.jobCards.award ? `₹${data.jobCards.award.amount} — ${data.jobCards.award.name}` : 'Not yet awarded' },
             ]}
           />
 
-          <SectionLabel>Growth advisor — what to do next</SectionLabel>
+          <Overline>Growth advisor — what to do next</Overline>
           {insights.map((x) => (
             <ListRow key={x.title} icon={x.tone === 'good' ? 'check-circle' : 'alert'} iconColor={toneColor[x.tone]} title={x.title} subtitle={x.text} />
           ))}
 
-          <SectionLabel>AI business report</SectionLabel>
+          <Overline>AI business report</Overline>
           <ActionButton label="Generate report" busy={asking} onPress={() => ask(null)} />
           <Field label="Or ask a question about these numbers" value={question} onChangeText={setQuestion} placeholder="e.g. Why is pending money high?" />
           <ActionButton label="Ask" tone="neutral" busy={asking} onPress={() => ask(question.trim() || null)} />
           {answer ? (
-            <Text selectable style={[styles.answer, { color: theme.text, backgroundColor: theme.panel2, borderColor: theme.line }]}>
+            <Text selectable style={[styles.answer, { color: theme.text, backgroundColor: theme.panel, borderColor: theme.border }]}>
               {answer.replace(/\*\*(.+?)\*\*/g, '$1')}
             </Text>
           ) : null}
@@ -275,5 +277,5 @@ const styles = StyleSheet.create({
   rowVal: { ...typography.caption },
   track: { height: 10, borderRadius: radius.sm, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: radius.sm, overflow: 'hidden' },
-  answer: { ...typography.body, lineHeight: 21, borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(3) },
+  answer: { ...typography.body, lineHeight: 21, borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginTop: spacing(3) },
 });

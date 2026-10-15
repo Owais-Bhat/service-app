@@ -9,7 +9,6 @@ import { useAuth } from '../../context/AuthContext';
 import { BilledJob, fetchCashJobs, fetchPeople, recordCashSubmission } from '../../api/adminMoney';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { inr, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -87,8 +86,8 @@ export default function CashCollectionsScreen({ onBack }: Props) {
     >
       <StatGrid
         items={[
-          { label: 'Pending', value: inr(sum(allPending)), color: semantic.warning },
-          { label: 'Submitted', value: inr(sum(allSubmitted)), color: semantic.success },
+          { label: 'Pending', value: inr(sum(allPending)), color: theme.warn },
+          { label: 'Submitted', value: inr(sum(allSubmitted)), color: theme.ok },
           { label: 'Pending records', value: allPending.length },
           { label: 'Employees', value: groups.length },
         ]}
@@ -97,7 +96,7 @@ export default function CashCollectionsScreen({ onBack }: Props) {
       {groups.map((g) => {
         const chosen = g.pending.filter((j) => isOn(j.id));
         return (
-          <View key={g.id} style={[styles.card, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+          <View key={g.id} style={[styles.card, { backgroundColor: theme.panel2, borderColor: theme.border }]}>
             <View style={styles.head}>
               <View style={styles.headText}>
                 <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{g.name}</Text>
@@ -105,7 +104,7 @@ export default function CashCollectionsScreen({ onBack }: Props) {
                   Submitted {inr(sum(g.submitted))} · {g.submitted.length} records
                 </Text>
               </View>
-              <Text style={[styles.pending, { color: g.pending.length ? semantic.warning : theme.text3 }]}>{inr(sum(g.pending))}</Text>
+              <Text style={[styles.pending, { color: g.pending.length ? theme.warn : theme.text3 }]}>{inr(sum(g.pending))}</Text>
             </View>
             {g.pending.length === 0 ? (
               <Text style={[styles.sub, { color: theme.text3 }]}>No pending cash from this employee.</Text>
@@ -115,7 +114,7 @@ export default function CashCollectionsScreen({ onBack }: Props) {
                   const on = isOn(j.id);
                   return (
                     <Pressable key={j.id} onPress={() => toggle(j.id)} style={[styles.line, { borderTopColor: theme.line }]}>
-                      <Icon name={on ? 'check-circle' : 'tasks'} size={20} color={on ? brand.primary : theme.text3} filled={on} />
+                      <Icon name={on ? 'check-circle' : 'tasks'} size={20} color={on ? theme.accent : theme.text3} filled={on} />
                       <View style={styles.headText}>
                         <Text style={[styles.lineTitle, { color: theme.text }]} numberOfLines={1}>{j.full_name || 'Customer'}</Text>
                         <Text style={[styles.sub, { color: theme.text3 }]} numberOfLines={1}>
@@ -139,7 +138,7 @@ export default function CashCollectionsScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginBottom: spacing(3) },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginBottom: spacing(3) },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2) },
   headText: { flex: 1, minWidth: 0 },
   name: { ...typography.body, fontFamily: 'Manrope_700Bold' },

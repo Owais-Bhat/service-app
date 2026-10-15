@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -10,7 +10,8 @@ import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import StockImportSheet from '../../components/admin/StockImportSheet';
 import Field from '../../components/admin/Field';
-import SectionLabel from '../../components/admin/SectionLabel';
+import StatusBadge from '../../components/admin/StatusBadge';
+import { ActionTile, ChoiceChips, Overline } from '../../components/admin/FinanceKit';
 import { fetchStockValuation, fetchItems, ItemRow, rupees } from '../../api/adminBooks';
 import {
   fetchAvailability,
@@ -30,7 +31,7 @@ import {
 import { dataGet } from '../../api/client';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { brand } from '../../theme/tokens';
 import { humanize, inr, todayIso } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -41,26 +42,8 @@ interface Props {
 type Tab = 'onhand' | 'locations' | 'serials' | 'count';
 type Mode = 'give' | 'takeback' | 'transfer';
 
-const SERIAL_COLOR: Record<string, string> = { in_stock: semantic.success, with_technician: semantic.warning, installed: brand.grey };
-
 function Choice<T extends string>({ items, value, onChange }: { items: { key: T; label: string }[]; value: T; onChange: (v: T) => void }) {
-  const { theme } = useTheme();
-  return (
-    <View style={styles.chips}>
-      {items.map((c) => {
-        const on = c.key === value;
-        return (
-          <Pressable
-            key={c.key || 'none'}
-            onPress={() => onChange(c.key)}
-            style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-          >
-            <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]} numberOfLines={1}>{c.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+  return <ChoiceChips items={items.map((c) => [c.key, c.label] as [string, string])} value={value} onChange={(k) => onChange(k as T)} />;
 }
 
 // What is on the shelf and in the vans, valued at moving-average cost from the
@@ -68,6 +51,7 @@ function Choice<T extends string>({ items, value, onChange }: { items: { key: T;
 // back, transfer between places, adjust, count and create locations.
 export default function StockScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const SERIAL_COLOR: Record<string, string> = { in_stock: theme.ok, with_technician: theme.warn, installed: theme.grey };
   const data = useLoader(async () => {
     const [valuation, locations, items, staff] = await Promise.all([
       fetchStockValuation(),
@@ -325,23 +309,20 @@ export default function StockScreen({ onBack }: Props) {
         <StatGrid
           items={[
             { label: 'Stock value', value: inr(rupees(v.total_value_paise)) },
-            { label: 'Count mismatches', value: v.discrepancies.length, color: v.discrepancies.length ? semantic.danger : semantic.success },
+            { label: 'Count mismatches', value: v.discrepancies.length, color: v.discrepancies.length ? theme.err : theme.ok },
           ]}
         />
       ) : null}
 
       {tab === 'onhand' ? (
         <>
-          <View style={styles.actions}>
-            <ActionButton label="Give to technician" onPress={() => openTransfer('give')} />
-            <ActionButton label="Take back" tone="neutral" onPress={() => openTransfer('takeback')} />
-          </View>
-          <View style={styles.actions}>
-            <ActionButton label="Transfer" tone="neutral" onPress={() => openTransfer('transfer')} />
-            <ActionButton label="Import CSV" tone="neutral" onPress={() => setImporting(true)} />
-            <ActionButton
+          <View style={styles.tiles}>
+            <ActionTile icon="user" label="Give to technician" onPress={() => openTransfer('give')} />
+            <ActionTile icon="box" label="Take back" onPress={() => openTransfer('takeback')} />
+            <ActionTile icon="swap" label="Transfer" onPress={() => openTransfer('transfer')} />
+            <ActionTile
+              icon="calculator"
               label="Adjust stock"
-              tone="neutral"
               onPress={() => {
                 setAdjItem(null);
                 setAdjType('adjust_in');
@@ -352,6 +333,7 @@ export default function StockScreen({ onBack }: Props) {
                 setAdjusting(true);
               }}
             />
+            <ActionTile icon="document" label="Import CSV" onPress={() => setImporting(true)} />
           </View>
           <FilterChips
             activeKey={locFilter}
@@ -360,16 +342,28 @@ export default function StockScreen({ onBack }: Props) {
           />
           {onHand.length === 0 ? <EmptyNote text="No stock on hand" icon="cube" /> : null}
           {onHand.map((i) => (
-            <ListRow
-              key={i.id}
-              icon="cube"
-              iconColor={i.mismatch ? semantic.danger : undefined}
-              title={i.name}
-              subtitle={`${i.qty} ${i.unit}${i.sku ? ` · ${i.sku}` : ''}`}
-              value={i.value != null ? inr(rupees(i.value)) : undefined}
-              badge={i.mismatch ? { label: 'Ledger differs', color: semantic.danger } : undefined}
-              footer={<ActionButton label="Availability" tone="neutral" onPress={() => showAvailability(i.id)} />}
-            />
+            <View key={i.id} style={[styles.item, { backgroundColor: theme.panel, borderColor: i.mismatch ? theme.err : theme.border }]}>
+              <View style={styles.itemHead}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[styles.itemName, { color: theme.text }]} numberOfLines={2}>{i.name}</Text>
+                  {i.sku ? <Text style={[styles.itemSku, { color: theme.text3 }]} numberOfLines={1}>{i.sku}</Text> : null}
+                </View>
+                {i.mismatch ? <StatusBadge label="Ledger differs" color={theme.err} /> : null}
+              </View>
+              <View style={styles.itemStats}>
+                <View style={[styles.itemStat, { backgroundColor: theme.panel2 }]}>
+                  <Text style={[styles.itemStatLabel, { color: theme.text3 }]}>On hand</Text>
+                  <Text style={[styles.itemStatValue, { color: i.mismatch ? theme.err : theme.text }]} numberOfLines={1}>{i.qty} {i.unit}</Text>
+                </View>
+                {i.value != null ? (
+                  <View style={[styles.itemStat, { backgroundColor: theme.panel2 }]}>
+                    <Text style={[styles.itemStatLabel, { color: theme.text3 }]}>Value</Text>
+                    <Text style={[styles.itemStatValue, { color: theme.text }]} numberOfLines={1}>{inr(rupees(i.value))}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <ActionButton label="Availability" tone="neutral" onPress={() => showAvailability(i.id)} />
+            </View>
           ))}
         </>
       ) : null}
@@ -385,14 +379,14 @@ export default function StockScreen({ onBack }: Props) {
               setNewLoc(true);
             }}
           />
-          <SectionLabel>Places</SectionLabel>
+          <Overline>Places</Overline>
           {locations.map((l: StockLocationRow) => (
             <ListRow
               key={l.id}
               icon={l.kind === 'van' ? 'user' : 'storefront'}
               title={l.name}
               subtitle={l.employee_name ? `Van of ${l.employee_name}` : humanize(l.kind || 'store')}
-              badge={Number(l.is_default) === 1 ? { label: 'Default', color: semantic.success } : undefined}
+              badge={Number(l.is_default) === 1 ? { label: 'Default', color: theme.ok } : undefined}
               onPress={() => {
                 setLocFilter(l.id);
                 setTab('onhand');
@@ -412,7 +406,7 @@ export default function StockScreen({ onBack }: Props) {
               title={s.serial_no}
               subtitle={s.item_name}
               meta={[s.location_name, s.customer_name && `customer ${s.customer_name}`, s.supplier_name && `supplier ${s.supplier_name}`].filter(Boolean).join(' · ') || undefined}
-              badge={{ label: humanize(s.status), color: SERIAL_COLOR[s.status] ?? semantic.info }}
+              badge={{ label: humanize(s.status), color: SERIAL_COLOR[s.status] ?? theme.info }}
             />
           ))}
         </>
@@ -449,16 +443,16 @@ export default function StockScreen({ onBack }: Props) {
       >
         {mode === 'transfer' ? (
           <>
-            <Text style={[styles.label, { color: theme.text3 }]}>From</Text>
+            <Text style={[styles.label, { color: theme.text2 }]}>From</Text>
             <Choice items={owned.map((l) => ({ key: l.id, label: l.name }))} value={fromId} onChange={setFromId} />
-            <Text style={[styles.label, { color: theme.text3 }]}>To</Text>
+            <Text style={[styles.label, { color: theme.text2 }]}>To</Text>
             <Choice items={owned.map((l) => ({ key: l.id, label: l.name }))} value={toId} onChange={setToId} />
           </>
         ) : (
           <>
-            <Text style={[styles.label, { color: theme.text3 }]}>Technician</Text>
+            <Text style={[styles.label, { color: theme.text2 }]}>Technician</Text>
             <Choice items={staff.map((s) => ({ key: s.id, label: s.full_name }))} value={techId} onChange={setTechId} />
-            <Text style={[styles.label, { color: theme.text3 }]}>{mode === 'give' ? 'From the store' : 'Into the store'}</Text>
+            <Text style={[styles.label, { color: theme.text2 }]}>{mode === 'give' ? 'From the store' : 'Into the store'}</Text>
             <Choice items={stores.map((l) => ({ key: l.id, label: l.name }))} value={storeId} onChange={setStoreId} />
           </>
         )}
@@ -467,7 +461,7 @@ export default function StockScreen({ onBack }: Props) {
           <ListRow key={i.id} icon="box" title={i.name} subtitle={`${Number(i.quantity) || 0} ${i.unit || 'pcs'} on hand`} onPress={() => addLine(i)} />
         ))}
         {lines.map((l) => (
-          <View key={l.item.id} style={[styles.line, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+          <View key={l.item.id} style={[styles.line, { backgroundColor: theme.panel, borderColor: theme.border }]}>
             <Text style={[styles.lineName, { color: theme.text }]} numberOfLines={1}>{l.item.name}</Text>
             <View style={styles.qty}>
               <Field label="Qty" value={l.qty} onChangeText={(t) => setLines((p) => p.map((x) => (x.item.id === l.item.id ? { ...x, qty: t } : x)))} keyboardType="numeric" />
@@ -491,7 +485,7 @@ export default function StockScreen({ onBack }: Props) {
         <SearchField value={itemQ} onChangeText={setItemQ} placeholder="Search an item" />
         {adjItem ? <ListRow icon="box" title={adjItem.name} subtitle={`${Number(adjItem.quantity) || 0} ${adjItem.unit || 'pcs'} on hand`} /> : null}
         {!adjItem ? itemMatches.map((i) => <ListRow key={i.id} icon="box" title={i.name} subtitle={`${Number(i.quantity) || 0} on hand`} onPress={() => { setAdjItem(i); setItemQ(''); }} />) : null}
-        <Text style={[styles.label, { color: theme.text3 }]}>What happened</Text>
+        <Text style={[styles.label, { color: theme.text2 }]}>What happened</Text>
         <Choice
           items={[
             { key: 'adjust_in' as AdjustType, label: 'Found more' },
@@ -502,7 +496,7 @@ export default function StockScreen({ onBack }: Props) {
           onChange={setAdjType}
         />
         <Field label="Quantity" value={adjQty} onChangeText={setAdjQty} keyboardType="numeric" />
-        <Text style={[styles.label, { color: theme.text3 }]}>Location</Text>
+        <Text style={[styles.label, { color: theme.text2 }]}>Location</Text>
         <Choice items={owned.map((l) => ({ key: l.id, label: l.name }))} value={adjLoc} onChange={setAdjLoc} />
         <Field label="Reason (required)" value={adjReason} onChangeText={setAdjReason} hint="Kept in the audit trail with who made it" />
       </FormSheet>
@@ -522,7 +516,7 @@ export default function StockScreen({ onBack }: Props) {
         <Choice items={[{ key: 'store', label: 'Store / shelf' }, { key: 'van', label: 'Technician van' }]} value={locKind} onChange={setLocKind} />
         {locKind === 'van' ? (
           <>
-            <Text style={[styles.label, { color: theme.text3 }]}>Whose van</Text>
+            <Text style={[styles.label, { color: theme.text2 }]}>Whose van</Text>
             <Choice items={staff.map((s) => ({ key: s.id, label: s.full_name }))} value={locEmp} onChange={setLocEmp} />
           </>
         ) : null}
@@ -540,20 +534,20 @@ export default function StockScreen({ onBack }: Props) {
           </>
         }
       >
-        <Text style={[styles.label, { color: theme.text3 }]}>Location</Text>
+        <Text style={[styles.label, { color: theme.text2 }]}>Location</Text>
         <Choice items={owned.map((l) => ({ key: l.id, label: l.name }))} value={countLoc} onChange={setCountLoc} />
         {countRows.length === 0 ? <EmptyNote text="Nothing is recorded at this place" icon="cube" /> : null}
         {countRows.map((r) => {
           const diff = r.counted === '' ? null : Number(r.counted) - Number(r.held_qty);
           return (
-            <View key={r.id} style={[styles.line, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+            <View key={r.id} style={[styles.line, { backgroundColor: theme.panel, borderColor: theme.border }]}>
               <Text style={[styles.lineName, { color: theme.text }]} numberOfLines={1}>{r.name}</Text>
               <Text style={[styles.note, { color: theme.text3 }]}>System: {Number(r.held_qty)} {r.unit || r.base_unit || ''}</Text>
               <View style={styles.qty}>
                 <Field label="Counted" value={r.counted} onChangeText={(t) => setCountRows((p) => p.map((x) => (x.id === r.id ? { ...x, counted: t } : x)))} keyboardType="numeric" />
               </View>
               {diff != null ? (
-                <Text style={[styles.note, { color: diff === 0 ? theme.text3 : diff > 0 ? semantic.success : semantic.danger }]}>
+                <Text style={[styles.note, { color: diff === 0 ? theme.text3 : diff > 0 ? theme.ok : theme.err }]}>
                   Difference {diff > 0 ? '+' : ''}{diff}
                 </Text>
               ) : null}
@@ -571,10 +565,16 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing(2.5), marginBottom: spacing(2.5) },
   label: { ...typography.caption, fontSize: 12 },
   note: { ...typography.caption, fontSize: 12 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2), maxWidth: '100%' },
-  chipText: { ...typography.caption, fontSize: 12 },
-  line: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), gap: spacing(1.5) },
+  line: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), gap: spacing(1.5) },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginBottom: spacing(3) },
+  item: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), gap: spacing(2.5), marginBottom: spacing(2.5) },
+  itemHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2) },
+  itemName: { ...typography.rowTitle },
+  itemSku: { ...typography.supporting, fontSize: 12 },
+  itemStats: { flexDirection: 'row', gap: spacing(1.5) },
+  itemStat: { flex: 1, paddingVertical: spacing(2), paddingHorizontal: spacing(2.5), borderRadius: radius.sm },
+  itemStatLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  itemStatValue: { ...typography.monoId, fontSize: 15, lineHeight: 20 },
   lineName: { ...typography.body, fontFamily: 'Manrope_700Bold' },
   qty: { maxWidth: 160 },
 });

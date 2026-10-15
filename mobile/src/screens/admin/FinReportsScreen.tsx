@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
+import { Overline, ReportHero, ReportRow, ReportTable } from '../../components/admin/FinanceKit';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
@@ -48,7 +48,6 @@ import {
 } from '../../api/adminReports';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { semantic } from '../../theme/tokens';
 import { inr, shortDate, timeAgo, todayIso } from '../../utils/format';
 
 interface Props {
@@ -281,7 +280,7 @@ export default function FinReportsScreen({ onBack }: Props) {
           subtitle={[withParty ? x.party : null, x.debit_paise ? `Dr ${money(x.debit_paise)}` : `Cr ${money(x.credit_paise)}`].filter(Boolean).join(' · ')}
           meta={`${shortDate(x.date)} · ${x.journal_no}${x.status === 'reversed' ? ' · reversed' : ''}`}
           value={dr(x.balance_paise)}
-          valueColor={x.status === 'reversed' ? semantic.danger : undefined}
+          valueColor={x.status === 'reversed' ? theme.err : undefined}
         />
       ))
     );
@@ -303,47 +302,47 @@ export default function FinReportsScreen({ onBack }: Props) {
           <>
             {s.attention.failing_checks.length > 0 || s.attention.unposted_tickets > 0 ? (
               <>
-                <SectionLabel>Needs attention</SectionLabel>
+                <Overline>Needs attention</Overline>
                 {s.attention.failing_checks.map((c) => (
-                  <ListRow key={c} icon="alert" iconColor={semantic.danger} title={c} subtitle="A books check is failing" />
+                  <ListRow key={c} icon="alert" iconColor={theme.err} title={c} subtitle="A books check is failing" />
                 ))}
                 {s.attention.unposted_tickets > 0 ? (
-                  <ListRow icon="alert" iconColor={semantic.warning} title={`${s.attention.unposted_tickets} billed tickets not posted to the books`} />
+                  <ListRow icon="alert" iconColor={theme.warn} title={`${s.attention.unposted_tickets} billed tickets not posted to the books`} />
                 ) : null}
               </>
             ) : null}
-            <SectionLabel>Today</SectionLabel>
+            <Overline>Today</Overline>
             <StatGrid
               items={[
                 { label: 'Sales', value: money(s.today.sales_paise) },
-                { label: 'Collected', value: money(s.today.collected_paise), color: semantic.success },
+                { label: 'Collected', value: money(s.today.collected_paise), color: theme.ok },
               ]}
             />
-            <SectionLabel>This month</SectionLabel>
+            <Overline>This month</Overline>
             <StatGrid
               items={[
                 { label: 'Sales', value: money(s.month.sales_paise) },
-                { label: 'Collected', value: money(s.month.collected_paise), color: semantic.success },
-                { label: 'Expenses', value: money(s.month.expenses_paise), color: semantic.warning },
-                { label: 'Profit', value: money(s.month.profit_paise), color: s.month.profit_paise >= 0 ? semantic.success : semantic.danger },
+                { label: 'Collected', value: money(s.month.collected_paise), color: theme.ok },
+                { label: 'Expenses', value: money(s.month.expenses_paise), color: theme.warn },
+                { label: 'Profit', value: money(s.month.profit_paise), color: s.month.profit_paise >= 0 ? theme.ok : theme.err },
               ]}
             />
-            <SectionLabel>Where the money is</SectionLabel>
+            <Overline>Where the money is</Overline>
             <StatGrid
               items={[
                 { label: 'Cash in hand', value: money(s.money.cash_in_hand_paise) },
                 { label: 'Bank', value: money(s.money.bank_paise) },
-                { label: `With technicians (${s.money.technician_cash_tickets})`, value: money(s.money.with_technicians_paise), color: semantic.warning },
+                { label: `With technicians (${s.money.technician_cash_tickets})`, value: money(s.money.with_technicians_paise), color: theme.warn },
                 { label: 'Stock value', value: money(s.stock.value_paise) },
               ]}
             />
-            <SectionLabel>Owed to us</SectionLabel>
+            <Overline>Owed to us</Overline>
             <StatGrid
               items={[
-                { label: 'Receivable', value: money(s.receivable.total_paise), color: semantic.warning },
-                { label: 'Overdue', value: money(s.receivable.overdue_paise), color: s.receivable.overdue_paise ? semantic.danger : undefined },
+                { label: 'Receivable', value: money(s.receivable.total_paise), color: theme.warn },
+                { label: 'Overdue', value: money(s.receivable.overdue_paise), color: s.receivable.overdue_paise ? theme.err : undefined },
                 { label: 'Payable', value: money(s.payable.total_paise) },
-                { label: 'Payable overdue', value: money(s.payable.overdue_paise), color: s.payable.overdue_paise ? semantic.danger : undefined },
+                { label: 'Payable overdue', value: money(s.payable.overdue_paise), color: s.payable.overdue_paise ? theme.err : undefined },
               ]}
             />
             {s.receivable.top.length === 0 ? <EmptyNote text="Nobody owes anything" icon="check-circle" /> : null}
@@ -358,13 +357,13 @@ export default function FinReportsScreen({ onBack }: Props) {
                 footer={p.phone ? <ActionButton label="Call" tone="neutral" onPress={() => Linking.openURL(`tel:${p.phone}`)} /> : undefined}
               />
             ))}
-            <SectionLabel>GST this month</SectionLabel>
+            <Overline>GST this month</Overline>
             <StatGrid
               items={[
                 { label: 'Collected', value: money(s.gst.collected_paise) },
-                { label: 'Claimable', value: money(s.gst.claimable_paise), color: semantic.success },
-                { label: 'Payable', value: money(s.gst.month_payable_paise), color: semantic.warning },
-                { label: 'Low-stock items', value: s.stock.low_items, color: s.stock.low_items ? semantic.danger : undefined },
+                { label: 'Claimable', value: money(s.gst.claimable_paise), color: theme.ok },
+                { label: 'Payable', value: money(s.gst.month_payable_paise), color: theme.warn },
+                { label: 'Low-stock items', value: s.stock.low_items, color: s.stock.low_items ? theme.err : undefined },
               ]}
             />
           </>
@@ -378,11 +377,11 @@ export default function FinReportsScreen({ onBack }: Props) {
             <Text style={[styles.note, { color: theme.text3 }]}>{r.scope.basis}</Text>
             <StatGrid
               items={[
-                { label: 'Overdue from customers', value: money(r.totals.customers_paise), color: r.totals.customers_paise ? semantic.danger : undefined },
+                { label: 'Overdue from customers', value: money(r.totals.customers_paise), color: r.totals.customers_paise ? theme.err : undefined },
                 { label: 'Overdue to suppliers', value: money(r.totals.suppliers_paise) },
               ]}
             />
-            <SectionLabel>Customers to remind</SectionLabel>
+            <Overline>Customers to remind</Overline>
             {r.customers.length === 0 ? <EmptyNote text="Nobody is overdue" icon="check-circle" /> : null}
             {r.customers.map((c) => (
               <ListRow
@@ -392,7 +391,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 subtitle={c.phone || 'No phone number'}
                 meta={`Oldest ${c.oldest_days} days · ${c.times_reminded ? `reminded ${timeAgo(c.last_reminded_at)} (${c.times_reminded}×)` : 'never reminded'}`}
                 value={money(c.overdue_paise)}
-                valueColor={semantic.danger}
+                valueColor={theme.err}
                 footer={
                   <View style={styles.actions}>
                     {c.phone ? (
@@ -422,7 +421,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 }
               />
             ))}
-            {r.suppliers.length > 0 ? <SectionLabel>Suppliers you owe</SectionLabel> : null}
+            {r.suppliers.length > 0 ? <Overline>Suppliers you owe</Overline> : null}
             {r.suppliers.map((s) => (
               <ListRow key={s.party} icon="user" title={s.party} meta={`Oldest ${s.oldest_days} days · total ${money(s.outstanding_paise)}`} value={money(s.overdue_paise)} />
             ))}
@@ -436,21 +435,19 @@ export default function FinReportsScreen({ onBack }: Props) {
         const section = (title: string, rows: { code: string; name: string; amount_paise: number }[]) =>
           rows.length ? (
             <>
-              <SectionLabel>{title}</SectionLabel>
-              {rows.map((a) => (
-                <ListRow key={a.code} title={a.name} subtitle={a.code} value={money(a.amount_paise)} />
-              ))}
+              <Overline>{title}</Overline>
+              <ReportTable rows={rows.map((a): ReportRow => ({ label: a.name, sub: a.code, value: money(a.amount_paise) }))} />
             </>
           ) : null;
         return (
           <>
-            <Text style={[styles.note, { color: theme.text3 }]}>{r.scope.basis}</Text>
-            <StatGrid
-              items={[
-                { label: 'Income', value: money(t.income_paise), color: semantic.success },
+            <ReportHero label="Net profit" value={money(t.net_profit_paise)} valueColor={t.net_profit_paise >= 0 ? theme.ok : theme.err} insight={r.scope.basis} />
+            <ReportTable
+              rows={[
+                { label: 'Income', value: money(t.income_paise), tone: 'ok' },
                 { label: 'Gross profit', value: money(t.gross_profit_paise) },
-                { label: 'Expenses', value: money(t.expenses_paise), color: semantic.warning },
-                { label: 'Net profit', value: money(t.net_profit_paise), color: t.net_profit_paise >= 0 ? semantic.success : semantic.danger },
+                { label: 'Expenses', value: money(t.expenses_paise), tone: 'warn' },
+                { label: 'Net profit', value: money(t.net_profit_paise), strong: true, tone: t.net_profit_paise >= 0 ? 'ok' : 'err' },
               ]}
             />
             {section('Income', r.income)}
@@ -466,26 +463,20 @@ export default function FinReportsScreen({ onBack }: Props) {
         return (
           <>
             <Text style={[styles.note, { color: theme.text3 }]}>{r.scope.basis}</Text>
-            {!r.balanced ? <ListRow icon="alert" iconColor={semantic.danger} title={`Out by ${money(t.difference_paise)}`} subtitle="This should not be possible — see Health Check" /> : null}
-            <StatGrid
-              items={[
-                { label: 'Assets', value: money(t.assets_paise) },
-                { label: 'Liabilities & equity', value: money(t.liabilities_and_equity_paise) },
+            {!r.balanced ? <ListRow icon="alert" iconColor={theme.err} title={`Out by ${money(t.difference_paise)}`} subtitle="This should not be possible — see Health Check" /> : null}
+            <ReportTable
+              rows={[
+                { label: 'Assets', value: money(t.assets_paise), strong: true },
+                { label: 'Liabilities & equity', value: money(t.liabilities_and_equity_paise), strong: true },
               ]}
             />
-            <SectionLabel>Assets</SectionLabel>
-            {r.assets.map((a) => (
-              <ListRow key={a.code} title={a.name} subtitle={a.code} value={money(a.balance_paise)} />
-            ))}
-            <SectionLabel>Liabilities</SectionLabel>
-            {r.liabilities.map((a) => (
-              <ListRow key={a.code} title={a.name} subtitle={a.code} value={money(a.balance_paise)} />
-            ))}
-            <SectionLabel>Equity</SectionLabel>
-            {r.equity.map((a) => (
-              <ListRow key={a.code} title={a.name} subtitle={a.code} value={money(a.balance_paise)} />
-            ))}
-            <ListRow title="Profit / (loss) to date" value={money(t.profit_to_date_paise)} valueColor={t.profit_to_date_paise >= 0 ? semantic.success : semantic.danger} />
+            <Overline>Assets</Overline>
+            <ReportTable rows={r.assets.map((a): ReportRow => ({ label: a.name, sub: a.code, value: money(a.balance_paise) }))} />
+            <Overline>Liabilities</Overline>
+            <ReportTable rows={r.liabilities.map((a): ReportRow => ({ label: a.name, sub: a.code, value: money(a.balance_paise) }))} />
+            <Overline>Equity</Overline>
+            <ReportTable rows={r.equity.map((a): ReportRow => ({ label: a.name, sub: a.code, value: money(a.balance_paise) }))} />
+            <ReportTable rows={[{ label: 'Profit / (loss) to date', value: money(t.profit_to_date_paise), strong: true, tone: t.profit_to_date_paise >= 0 ? 'ok' : 'err' }]} />
           </>
         );
       }
@@ -500,8 +491,8 @@ export default function FinReportsScreen({ onBack }: Props) {
               items={[
                 { label: '0–30 days', value: money(t.d0_30) },
                 { label: '31–60 days', value: money(t.d31_60) },
-                { label: '61–90 days', value: money(t.d61_90), color: t.d61_90 ? semantic.warning : undefined },
-                { label: '90+ days', value: money(t.d90_plus), color: t.d90_plus ? semantic.danger : undefined },
+                { label: '61–90 days', value: money(t.d61_90), color: t.d61_90 ? theme.warn : undefined },
+                { label: '90+ days', value: money(t.d90_plus), color: t.d90_plus ? theme.err : undefined },
                 { label: 'Outstanding', value: money(t.outstanding_paise) },
                 { label: 'Paid ahead', value: money(t.advance_paise) },
               ]}
@@ -515,7 +506,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 subtitle={`0–30 ${money(p.d0_30)} · 31–60 ${money(p.d31_60)} · 61–90 ${money(p.d61_90)} · 90+ ${money(p.d90_plus)}`}
                 meta={[p.phone, p.advance_paise ? `paid ahead ${money(p.advance_paise)}` : null].filter(Boolean).join(' · ') || undefined}
                 value={money(p.outstanding_paise)}
-                valueColor={p.d90_plus ? semantic.danger : undefined}
+                valueColor={p.d90_plus ? theme.err : undefined}
                 footer={p.phone ? <ActionButton label="Call" tone="neutral" onPress={() => Linking.openURL(`tel:${p.phone}`)} /> : undefined}
               />
             ))}
@@ -568,33 +559,33 @@ export default function FinReportsScreen({ onBack }: Props) {
             <StatGrid
               items={[
                 { label: 'Tax on sales', value: money(s.output.tax_paise) },
-                { label: 'Tax you can claim', value: money(s.input.tax_paise), color: semantic.success },
-                { label: 'Net payable', value: money(s.payable.total_paise), color: s.payable.total_paise > 0 ? semantic.danger : undefined },
+                { label: 'Tax you can claim', value: money(s.input.tax_paise), color: theme.ok },
+                { label: 'Net payable', value: money(s.payable.total_paise), color: s.payable.total_paise > 0 ? theme.err : undefined },
               ]}
             />
-            <SectionLabel>Sales</SectionLabel>
+            <Overline>Sales</Overline>
             <ListRow title="Taxable value" value={money(s.output.taxable_paise)} subtitle={`CGST ${money(s.output.cgst_paise)} · SGST ${money(s.output.sgst_paise)} · IGST ${money(s.output.igst_paise)}`} />
-            <SectionLabel>Purchases (claimable)</SectionLabel>
+            <Overline>Purchases (claimable)</Overline>
             <ListRow title="Taxable value" value={money(s.input.taxable_paise)} subtitle={`CGST ${money(s.input.cgst_paise)} · SGST ${money(s.input.sgst_paise)} · IGST ${money(s.input.igst_paise)}`} />
             {s.input.ineligible_tax_paise ? (
               <Text style={[styles.note, { color: theme.text3 }]}>{money(s.input.ineligible_tax_paise)} of purchase tax was marked not claimable and is kept in the cost.</Text>
             ) : null}
-            <SectionLabel>Payable</SectionLabel>
+            <Overline>Payable</Overline>
             <ListRow title="Net tax payable" value={money(s.payable.total_paise)} subtitle={`CGST ${money(s.payable.cgst_paise)} · SGST ${money(s.payable.sgst_paise)} · IGST ${money(s.payable.igst_paise)}`} />
-            <SectionLabel>Sales by category</SectionLabel>
+            <Overline>Sales by category</Overline>
             {s.output.by_category.map((c) => (
               <ListRow key={c.category} title={c.category} subtitle={`${c.documents} documents · taxable ${money(c.taxable_paise)}`} value={money(c.total_paise)} />
             ))}
-            <SectionLabel>Do the documents agree with the tax accounts?</SectionLabel>
+            <Overline>Do the documents agree with the tax accounts?</Overline>
             {against.map(([k, v]) => (
               <ListRow
                 key={k}
                 icon={v.difference_paise ? 'alert' : 'check-circle'}
-                iconColor={v.difference_paise ? semantic.danger : semantic.success}
+                iconColor={v.difference_paise ? theme.err : theme.ok}
                 title={k.replace('_', ' ').toUpperCase()}
                 subtitle={`Documents ${money(v.documents_paise)} · ledger ${money(v.ledger_paise)}`}
                 value={v.difference_paise ? money(v.difference_paise) : 'Agrees'}
-                valueColor={v.difference_paise ? semantic.danger : semantic.success}
+                valueColor={v.difference_paise ? theme.err : theme.ok}
               />
             ))}
           </>
@@ -616,7 +607,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 subtitle={`${r.category}${r.gstin ? ` · ${r.gstin}` : ''}`}
                 meta={`${shortDate(r.date)} · taxable ${money(r.taxable_paise)} · CGST ${money(r.cgst_paise)} · SGST ${money(r.sgst_paise)} · IGST ${money(r.igst_paise)}`}
                 value={money(r.total_paise)}
-                badge={r.source === 'ticket' ? { label: 'Ticket', color: semantic.warning } : undefined}
+                badge={r.source === 'ticket' ? { label: 'Ticket', color: theme.warn } : undefined}
               />
             ))}
           </>
@@ -636,7 +627,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 title={r.hsn_sac || 'No HSN / SAC'}
                 subtitle={`${r.quantity} ${r.unit} · ${r.rate_pct}% · CGST ${money(r.cgst_paise)} · SGST ${money(r.sgst_paise)} · IGST ${money(r.igst_paise)}`}
                 value={money(r.taxable_paise)}
-                badge={r.hsn_sac ? undefined : { label: 'Missing', color: semantic.warning }}
+                badge={r.hsn_sac ? undefined : { label: 'Missing', color: theme.warn }}
               />
             ))}
           </>
@@ -657,7 +648,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 subtitle={[r.supplier_ref ? `Bill ${r.supplier_ref}` : null, r.gstin].filter(Boolean).join(' · ') || undefined}
                 meta={`${shortDate(r.date)} · CGST ${money(r.cgst_paise)} · SGST ${money(r.sgst_paise)} · IGST ${money(r.igst_paise)}`}
                 value={money(r.taxable_paise)}
-                badge={r.eligible ? undefined : { label: 'Not claimable', color: semantic.warning }}
+                badge={r.eligible ? undefined : { label: 'Not claimable', color: theme.warn }}
               />
             ))}
           </>
@@ -679,12 +670,12 @@ export default function FinReportsScreen({ onBack }: Props) {
             {v.difference_paise ? (
               <ListRow
                 icon="alert"
-                iconColor={semantic.warning}
+                iconColor={theme.warn}
                 title={`${money(v.difference_paise)} gap`}
                 subtitle="Stock the books have not been told about — usually stock on the shelf before accounting started."
               />
             ) : (
-              <ListRow icon="check-circle" iconColor={semantic.success} title="Stock and the Inventory account agree" />
+              <ListRow icon="check-circle" iconColor={theme.ok} title="Stock and the Inventory account agree" />
             )}
             {items.map((i, n) => (
               <ListRow
@@ -693,7 +684,7 @@ export default function FinReportsScreen({ onBack }: Props) {
                 title={i.name}
                 subtitle={`${i.quantity} ${i.unit || ''} × ${money(i.avg_cost_paise)}${i.sku ? ` · ${i.sku}` : ''}`}
                 value={money(i.value_paise)}
-                badge={i.quantity_matches === false ? { label: 'Ledger mismatch', color: semantic.danger } : undefined}
+                badge={i.quantity_matches === false ? { label: 'Ledger mismatch', color: theme.err } : undefined}
               />
             ))}
           </>
@@ -710,8 +701,8 @@ export default function FinReportsScreen({ onBack }: Props) {
               items={[
                 { label: 'Revenue', value: money(t.revenue_paise) },
                 { label: 'Cost', value: money(t.cost_paise) },
-                { label: 'Margin', value: money(t.margin_paise), color: t.margin_paise < 0 ? semantic.danger : semantic.success },
-                ...(t.unbilled_jobs ? [{ label: `Not billed (${t.unbilled_jobs})`, value: money(t.unbilled_cost_paise), color: semantic.warning }] : []),
+                { label: 'Margin', value: money(t.margin_paise), color: t.margin_paise < 0 ? theme.err : theme.ok },
+                ...(t.unbilled_jobs ? [{ label: `Not billed (${t.unbilled_jobs})`, value: money(t.unbilled_cost_paise), color: theme.warn }] : []),
               ]}
             />
             {r.jobs.length === 0 ? <EmptyNote text="No jobs in this period" icon="wrench" /> : null}
@@ -723,8 +714,8 @@ export default function FinReportsScreen({ onBack }: Props) {
                 subtitle={j.unbilled ? `Not billed · cost ${money(j.total_cost_paise)}` : `Revenue ${money(j.revenue_paise)} · cost ${money(j.total_cost_paise)}`}
                 meta={`${shortDate(j.job_date)}${j.margin_pct === null ? '' : ` · ${j.margin_pct}%`}`}
                 value={money(j.margin_paise)}
-                valueColor={j.margin_paise < 0 ? semantic.danger : undefined}
-                badge={j.unbilled ? { label: 'Not billed', color: semantic.warning } : undefined}
+                valueColor={j.margin_paise < 0 ? theme.err : undefined}
+                badge={j.unbilled ? { label: 'Not billed', color: theme.warn } : undefined}
               />
             ))}
           </>
@@ -738,7 +729,7 @@ export default function FinReportsScreen({ onBack }: Props) {
           <>
             <ListRow
               icon={r.ok ? 'check-circle' : 'alert'}
-              iconColor={r.ok ? semantic.success : semantic.danger}
+              iconColor={r.ok ? theme.ok : theme.err}
               title={r.ok ? 'The books agree with themselves' : 'Something does not agree'}
               subtitle="Each line sets two independent sources side by side."
             />
@@ -746,12 +737,12 @@ export default function FinReportsScreen({ onBack }: Props) {
               <ListRow
                 key={c.label}
                 icon={c.ok ? 'check-circle' : 'alert'}
-                iconColor={c.ok ? semantic.success : semantic.danger}
+                iconColor={c.ok ? theme.ok : theme.err}
                 title={c.label}
                 subtitle={c.note || undefined}
                 meta={`One side ${show(c, c.a_paise)} · other side ${show(c, c.b_paise)}`}
                 value={c.ok ? 'OK' : show(c, c.difference_paise)}
-                valueColor={c.ok ? semantic.success : semantic.danger}
+                valueColor={c.ok ? theme.ok : theme.err}
               />
             ))}
           </>

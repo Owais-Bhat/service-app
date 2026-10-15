@@ -1,15 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { HeaderAction, Overline, RowPanel, SwitchRow } from '../../components/admin/FinanceKit';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AdminScreen from '../../components/admin/AdminScreen';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import { resolveUploadUrl } from '../../api/client';
 import { uploadMedia } from '../../api/upload';
 import {
@@ -23,7 +22,6 @@ import {
 } from '../../api/adminTutorials';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { timeAgo } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -178,9 +176,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => open(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Upload tutorial">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="Upload tutorial" onPress={() => open(null)} />
       }
     >
       {d ? (
@@ -189,8 +185,8 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
             items={[
               { label: 'Tutorials', value: items.length },
               { label: 'Employees', value: employees.length },
-              { label: 'Avg completion', value: `${avg}%`, color: semantic.success },
-              { label: 'Fully completed', value: fullyDone, color: semantic.warning },
+              { label: 'Avg completion', value: `${avg}%`, color: theme.ok },
+              { label: 'Fully completed', value: fullyDone, color: theme.warn },
             ]}
           />
           {items.length === 0 ? <EmptyNote text="No tutorials uploaded yet — add your first" icon="tutorial" /> : null}
@@ -202,7 +198,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
                 {i.kind === 'image' ? <Image source={{ uri: resolveUploadUrl(i.url) }} style={styles.thumb} resizeMode="cover" /> : null}
                 <ListRow
                   icon="tutorial"
-                  iconColor={Number(i.active) === 1 ? semantic.success : brand.grey}
+                  iconColor={Number(i.active) === 1 ? theme.ok : theme.grey}
                   title={i.title}
                   subtitle={`${i.category || 'General'} · ${i.kind === 'video' ? 'Video' : 'Image'} · ${Number(i.required) !== 0 ? 'Required' : 'Optional'}`}
                   meta={
@@ -211,8 +207,8 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
                       : `All ${employees.length} employees complete`
                   }
                   value={`${pct(i)}%`}
-                  valueColor={pct(i) === 100 ? semantic.success : undefined}
-                  badge={Number(i.active) === 1 ? undefined : { label: 'Hidden', color: brand.grey }}
+                  valueColor={pct(i) === 100 ? theme.ok : undefined}
+                  badge={Number(i.active) === 1 ? undefined : { label: 'Hidden', color: theme.grey }}
                   footer={
                     <>
                       <ActionButton label={i.kind === 'video' ? 'Watch' : 'View'} tone="neutral" onPress={() => Linking.openURL(resolveUploadUrl(i.url))} />
@@ -228,7 +224,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
 
           {videos.length ? (
             <>
-              <SectionLabel>Live watch tracking</SectionLabel>
+              <Overline>Live watch tracking</Overline>
               <ActionButton label="Refresh watch progress" tone="neutral" onPress={refreshWatch} />
               {videos.map((v) => {
                 const rows = watchRows.filter((r) => r.item_id === v.id).slice().sort((a, b) => (b.percent || 0) - (a.percent || 0));
@@ -247,7 +243,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
                           title={r.full_name || 'Employee'}
                           meta={r.updated_at ? timeAgo(r.updated_at) : undefined}
                           value={`${r.percent || 0}%`}
-                          valueColor={(r.percent || 0) >= 90 ? semantic.success : undefined}
+                          valueColor={(r.percent || 0) >= 90 ? theme.ok : undefined}
                         />
                       ))
                     )}
@@ -275,40 +271,37 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
             <Field label="Position" value={draft.position} onChangeText={(v) => setDraft({ ...draft, position: v })} keyboardType="number-pad" />
           </View>
         </View>
-        <View style={[styles.media, { borderColor: draft.url ? brand.primary : theme.line, backgroundColor: theme.panel2 }]}>
+        <View style={[styles.media, { borderColor: draft.url ? theme.accent : theme.border, backgroundColor: theme.panel2 }]}>
           <View style={styles.mediaText}>
             <Text style={[styles.mediaTitle, { color: theme.text }]}>{draft.url ? (draft.kind === 'video' ? 'Video ready' : 'Image ready') : 'No file chosen'}</Text>
             <Text style={[styles.hint, { color: theme.text3 }]}>Keep videos under 3 minutes, max 50 MB.</Text>
           </View>
-          <Pressable onPress={pick} disabled={uploading} style={[styles.pick, { borderColor: theme.line }]} accessibilityLabel="Choose file">
-            {uploading ? <ActivityIndicator size="small" color={brand.primary} /> : <Text style={[styles.pickText, { color: brand.primary }]}>{draft.url ? 'Replace' : 'Choose'}</Text>}
+          <Pressable onPress={pick} disabled={uploading} style={[styles.pick, { borderColor: theme.border }]} accessibilityLabel="Choose file">
+            {uploading ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={[styles.pickText, { color: theme.accent }]}>{draft.url ? 'Replace' : 'Choose'}</Text>}
           </Pressable>
         </View>
-        <View style={styles.switchRow}>
-          <Switch value={draft.required} onValueChange={(v) => setDraft({ ...draft, required: v })} trackColor={{ true: brand.primary }} />
-          <Text style={[styles.switchText, { color: theme.text }]}>Required for all employees</Text>
-        </View>
-        <View style={styles.switchRow}>
-          <Switch value={draft.active} onValueChange={(v) => setDraft({ ...draft, active: v })} trackColor={{ true: brand.primary }} />
-          <Text style={[styles.switchText, { color: theme.text }]}>Active (visible to employees)</Text>
-        </View>
+        <RowPanel>
+            <SwitchRow label="Required for all employees" value={draft.required} onValueChange={(v) => setDraft({ ...draft, required: v })} last />
+          </RowPanel>
+        <RowPanel>
+            <SwitchRow label="Active (visible to employees)" value={draft.active} onValueChange={(v) => setDraft({ ...draft, active: v })} last />
+          </RowPanel>
       </FormSheet>
     </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  thumb: { width: '100%', height: 120, borderRadius: radius.md, marginBottom: spacing(2) },
-  videoTitle: { ...typography.body, fontWeight: '700', marginTop: spacing(3), marginBottom: spacing(1) },
+  thumb: { width: '100%', height: 120, borderRadius: radius.sm, marginBottom: spacing(2) },
+  videoTitle: { ...typography.body, fontFamily: 'Manrope_700Bold', marginTop: spacing(3), marginBottom: spacing(1) },
   hint: { ...typography.caption },
   pair: { flexDirection: 'row', gap: spacing(3) },
   half: { flex: 1 },
-  media: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginVertical: spacing(3) },
+  media: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), marginVertical: spacing(3) },
   mediaText: { flex: 1 },
-  mediaTitle: { ...typography.body, fontWeight: '700' },
+  mediaTitle: { ...typography.body, fontFamily: 'Manrope_700Bold' },
   pick: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(3), paddingVertical: spacing(2), minWidth: 72, alignItems: 'center' },
-  pickText: { ...typography.caption, fontWeight: '700' },
+  pickText: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginVertical: spacing(2) },
   switchText: { ...typography.body, flex: 1 },
 });

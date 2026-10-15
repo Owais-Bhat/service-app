@@ -4,7 +4,7 @@ import StatGrid from '../../components/admin/StatGrid';
 import ListRow from '../../components/admin/ListRow';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchLeaves, fetchMonthAttendance, fetchPeople, SalaryLeave } from '../../api/adminMoney';
-import { semantic } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 import { inr } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -22,6 +22,7 @@ function daysInclusive(from: string, to: string): number {
 // Attendance-based estimate for the current month, the same formula as the web
 // Salary page: monthly salary ÷ days in month × (days present + approved leave).
 export default function SalaryScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const data = useLoader(async () => {
     const [people, attendance, leaves] = await Promise.all([fetchPeople('employee'), fetchMonthAttendance(), fetchLeaves()]);
     return { people, attendance, leaves };
@@ -62,7 +63,7 @@ export default function SalaryScreen({ onBack }: Props) {
         items={[
           { label: 'Employees', value: rows.length },
           { label: 'Monthly payroll', value: inr(payroll) },
-          { label: 'Earned so far', value: inr(earned), color: semantic.success },
+          { label: 'Earned so far', value: inr(earned), color: theme.ok },
         ]}
       />
       {rows.length === 0 ? <EmptyNote text="No employees found" icon="people" /> : null}
@@ -73,8 +74,8 @@ export default function SalaryScreen({ onBack }: Props) {
           title={r.emp.full_name || 'Employee'}
           subtitle={`${r.present} days present${r.leave ? ` + ${r.leave} leave` : ''} · salary ${inr(r.monthly)}`}
           value={inr(r.earned)}
-          valueColor={semantic.success}
-          badge={r.monthly ? undefined : { label: 'No salary set', color: semantic.warning }}
+          valueColor={theme.ok}
+          badge={r.monthly ? undefined : { label: 'No salary set', color: theme.warn }}
         />
       ))}
     </AdminScreen>

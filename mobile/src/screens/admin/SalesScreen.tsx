@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ChoiceChips, DocHero, HeaderAction, KvLine, LinesPanel, Overline, RowPanel, TotalsBox } from '../../components/admin/FinanceKit';
+import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -9,9 +10,7 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import SectionLabel from '../../components/admin/SectionLabel';
 import SalesEditor from '../../components/admin/SalesEditor';
-import Icon from '../../components/Icon';
 import { fetchReceivables, fetchSalesDocs, rupees, OpenInvoice } from '../../api/adminBooks';
 import {
   acceptSales,
@@ -29,8 +28,7 @@ import {
   sendSalesWhatsapp,
 } from '../../api/adminSales';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { spacing, typography } from '../../theme';
 import { humanize, inr, shortDate, todayIso } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -41,16 +39,6 @@ interface Props {
 type SalesView = 'invoice' | 'estimate' | 'credit_note' | 'receipts' | 'owed';
 type DocKind = 'invoice' | 'estimate' | 'credit_note';
 
-const STATUS_COLOR: Record<string, string> = {
-  draft: brand.grey,
-  issued: semantic.info,
-  paid: semantic.success,
-  accepted: semantic.success,
-  cancelled: semantic.danger,
-  rejected: semantic.danger,
-  expired: semantic.warning,
-};
-
 const METHODS = ['cash', 'upi', 'bank', 'card', 'cheque', 'other'];
 
 // Quotations, invoices, credit notes, receipts and who still owes — the whole
@@ -58,6 +46,15 @@ const METHODS = ['cash', 'upi', 'bank', 'card', 'cheque', 'other'];
 // customer is quoted and what the invoice carries are the same numbers.
 export default function SalesScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const STATUS_COLOR: Record<string, string> = {
+    draft: theme.grey,
+    issued: theme.info,
+    paid: theme.ok,
+    accepted: theme.ok,
+    cancelled: theme.err,
+    rejected: theme.err,
+    expired: theme.warn,
+  };
   const [payment, setPayment] = useState<PaymentLoaded | null>(null);
   const [payOpen, setPayOpen] = useState<OpenInvoice[]>([]);
   const [payTarget, setPayTarget] = useState('');
@@ -212,9 +209,7 @@ export default function SalesScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => setChooser(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New document">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New document" onPress={() => setChooser(true)} />
       }
       toolbar={
         <>
@@ -235,18 +230,18 @@ export default function SalesScreen({ onBack }: Props) {
     >
       {view === 'owed' ? (
         <>
-          <StatGrid items={[{ label: 'Outstanding', value: inr(rupees(owed.reduce((s, x) => s + x.outstanding_paise, 0))), color: semantic.warning }, { label: 'Open invoices', value: owed.length }]} />
+          <StatGrid items={[{ label: 'Outstanding', value: inr(rupees(owed.reduce((s, x) => s + x.outstanding_paise, 0))), color: theme.warn }, { label: 'Open invoices', value: owed.length }]} />
           {owed.length === 0 ? <EmptyNote text="Nothing is owed" icon="check-circle" /> : null}
           {owed.map((x) => (
             <ListRow
               key={x.id}
               icon="receipt"
-              iconColor={x.days_overdue > 0 ? semantic.danger : semantic.warning}
+              iconColor={x.days_overdue > 0 ? theme.err : theme.warn}
               title={x.party_name || 'Customer'}
               subtitle={`${x.doc_no} · ${shortDate(x.doc_date)}`}
               meta={x.days_overdue > 0 ? `${x.days_overdue} days overdue` : 'Not yet due'}
               value={inr(rupees(x.outstanding_paise))}
-              badge={{ label: x.days_overdue > 0 ? 'Overdue' : 'Open', color: x.days_overdue > 0 ? semantic.danger : semantic.info }}
+              badge={{ label: x.days_overdue > 0 ? 'Overdue' : 'Open', color: x.days_overdue > 0 ? theme.err : theme.info }}
               onPress={() => openDoc(x.id)}
               footer={
                 <>
@@ -264,12 +259,12 @@ export default function SalesScreen({ onBack }: Props) {
             <ListRow
               key={r.id}
               icon="cash"
-              iconColor={semantic.success}
+              iconColor={theme.ok}
               title={r.party_name || 'Customer'}
               subtitle={`${r.payment_no || ''} · ${shortDate(r.payment_date)}`}
               meta={`${humanize(r.method)}${r.reference ? ` · ${r.reference}` : ''}${r.unallocated_paise > 0 ? ` · ${inr(rupees(r.unallocated_paise))} on account` : ''}`}
               value={inr(rupees(r.amount_paise))}
-              valueColor={semantic.success}
+              valueColor={theme.ok}
               onPress={() => openPayment(r.id)}
             />
           ))}
@@ -277,7 +272,7 @@ export default function SalesScreen({ onBack }: Props) {
       ) : (
         <>
           {view === 'invoice' ? (
-            <StatGrid items={[{ label: 'Billed', value: inr(rupees(billed)) }, { label: 'Received', value: inr(rupees(paid)), color: semantic.success }]} />
+            <StatGrid items={[{ label: 'Billed', value: inr(rupees(billed)) }, { label: 'Received', value: inr(rupees(paid)), color: theme.ok }]} />
           ) : null}
           {docs.length === 0 ? <EmptyNote text="No documents here — tap + to create one" icon="receipt" /> : null}
           {docs.map((x) => (
@@ -289,7 +284,7 @@ export default function SalesScreen({ onBack }: Props) {
               subtitle={`${x.doc_no || 'Draft'} · ${shortDate(x.doc_date)}`}
               meta={x.doc_type === 'invoice' && x.paid_paise > 0 ? `Paid ${inr(rupees(x.paid_paise))} of ${inr(rupees(x.total_paise))}` : x.bill_type ? humanize(x.bill_type) : undefined}
               value={inr(rupees(x.total_paise))}
-              badge={{ label: humanize(x.status), color: STATUS_COLOR[x.status] ?? semantic.info }}
+              badge={{ label: humanize(x.status), color: STATUS_COLOR[x.status] ?? theme.info }}
               onPress={() => openDoc(x.id)}
             />
           ))}
@@ -310,14 +305,14 @@ export default function SalesScreen({ onBack }: Props) {
               {humanize(payment.payment.method)}
               {payment.payment.reference ? ` · ${payment.payment.reference}` : ''}
             </Text>
-            <SectionLabel>Put against</SectionLabel>
+            <Overline>Put against</Overline>
             {payment.allocations.length === 0 ? <Text style={[styles.payNote, { color: theme.text3 }]}>Not put against any invoice yet.</Text> : null}
             {payment.allocations.map((a, i) => (
               <ListRow key={i} icon="receipt" title={a.doc_no || 'Invoice'} subtitle={a.doc_date ? shortDate(a.doc_date) : undefined} value={inr(rupees(a.amount_paise))} />
             ))}
             {payment.unallocated_paise > 0 ? (
               <View>
-                <SectionLabel>{`On account: ${inr(rupees(payment.unallocated_paise))}`}</SectionLabel>
+                <Overline>{`On account: ${inr(rupees(payment.unallocated_paise))}`}</Overline>
                 {payOpen.length === 0 ? (
                   <Text style={[styles.payNote, { color: theme.text3 }]}>This customer has no outstanding invoices to apply it to.</Text>
                 ) : (
@@ -326,7 +321,7 @@ export default function SalesScreen({ onBack }: Props) {
                       <ListRow
                         key={o.id}
                         icon={payTarget === o.id ? 'check-circle' : 'receipt'}
-                        iconColor={payTarget === o.id ? semantic.success : undefined}
+                        iconColor={payTarget === o.id ? theme.ok : undefined}
                         title={o.doc_no}
                         subtitle={`${inr(rupees(o.outstanding_paise))} due`}
                         onPress={() => {
@@ -384,55 +379,48 @@ export default function SalesScreen({ onBack }: Props) {
       >
         {detail && d ? (
           <>
-            <StatGrid
-              items={[
-                { label: partyName, value: inr(rupees(d.total_paise)) },
-                ...(d.doc_type === 'invoice' && !isDraft
-                  ? [{ label: detail.balance_paise > 0 ? `Paid ${inr(rupees(detail.paid_paise))}` : 'Paid in full', value: detail.balance_paise > 0 ? `${inr(rupees(detail.balance_paise))} due` : '✓', color: detail.balance_paise > 0 ? semantic.warning : semantic.success }]
-                  : []),
-              ]}
+            <DocHero
+              party={partyName}
+              total={inr(rupees(d.total_paise))}
+              note={d.doc_type === 'invoice' && !isDraft ? (detail.balance_paise > 0 ? `Paid ${inr(rupees(detail.paid_paise))} · ${inr(rupees(detail.balance_paise))} due` : 'Paid in full') : undefined}
+              noteColor={detail.balance_paise > 0 ? theme.warn : theme.ok}
+              meta={`${shortDate(d.doc_date)}${d.due_date ? ` · due ${shortDate(d.due_date)}` : ''}${d.supply_type ? ` · ${d.supply_type === 'inter' ? 'inter-state (IGST)' : 'intra-state (CGST+SGST)'}` : ''}`}
             />
-            <Text style={[styles.meta, { color: theme.text3 }]}>
-              {shortDate(d.doc_date)}
-              {d.due_date ? ` · due ${shortDate(d.due_date)}` : ''}
-              {d.supply_type ? ` · ${d.supply_type === 'inter' ? 'inter-state (IGST)' : 'intra-state (CGST+SGST)'}` : ''}
-            </Text>
 
-            <SectionLabel>Lines</SectionLabel>
-            {detail.lines.map((l, i) => (
-              <View key={l.id || i} style={[styles.kv, { borderBottomColor: theme.line }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.v, { color: theme.text, textAlign: 'left' }]} numberOfLines={2}>{l.description}</Text>
-                  <Text style={[styles.k, { color: theme.text3 }]}>
-                    {Number(l.quantity)}{l.unit ? ` ${l.unit}` : ''} × {inr(rupees(l.rate_paise))}
-                    {l.tax_treatment && l.tax_treatment !== 'gst' ? ` · ${humanize(l.tax_treatment)}` : ` · ${Number(l.tax_rate_bps) / 100}%`}
-                  </Text>
-                </View>
-                <Text style={[styles.v, { color: theme.text }]}>{inr(rupees(l.amount_paise))}</Text>
-              </View>
-            ))}
-            <View style={styles.kv}><Text style={[styles.k, { color: theme.text3 }]}>Taxable</Text><Text style={[styles.v, { color: theme.text }]}>{inr(rupees(d.taxable_paise))}</Text></View>
-            {Number(d.cgst_paise) ? <View style={styles.kv}><Text style={[styles.k, { color: theme.text3 }]}>CGST + SGST</Text><Text style={[styles.v, { color: theme.text }]}>{inr(rupees(Number(d.cgst_paise) + Number(d.sgst_paise) + Number(d.utgst_paise)))}</Text></View> : null}
-            {Number(d.igst_paise) ? <View style={styles.kv}><Text style={[styles.k, { color: theme.text3 }]}>IGST</Text><Text style={[styles.v, { color: theme.text }]}>{inr(rupees(d.igst_paise))}</Text></View> : null}
-            <View style={styles.kv}><Text style={[styles.k, { color: theme.text }]}>Total</Text><Text style={[styles.v, { color: semantic.success }]}>{inr(rupees(d.total_paise))}</Text></View>
+            <Overline>Lines</Overline>
+            <LinesPanel
+              rows={detail.lines.map((l, i) => ({
+                key: String(l.id || i),
+                name: l.description,
+                meta: `${Number(l.quantity)}${l.unit ? ` ${l.unit}` : ''} × ${inr(rupees(l.rate_paise))}${l.tax_treatment && l.tax_treatment !== 'gst' ? ` · ${humanize(l.tax_treatment)}` : ` · GST ${Number(l.tax_rate_bps) / 100}%`}`,
+                amount: inr(rupees(l.amount_paise)),
+              }))}
+            />
+            <TotalsBox
+              rows={[
+                ['Taxable value', inr(rupees(d.taxable_paise))],
+                ...(Number(d.cgst_paise) ? [['CGST + SGST', inr(rupees(Number(d.cgst_paise) + Number(d.sgst_paise) + Number(d.utgst_paise)))] as [string, string]] : []),
+                ...(Number(d.igst_paise) ? [['IGST', inr(rupees(d.igst_paise))] as [string, string]] : []),
+              ]}
+              grand={['Total', inr(rupees(d.total_paise))]}
+            />
 
             {detail.allocations.length ? (
               <>
-                <SectionLabel>Payments received</SectionLabel>
-                {detail.allocations.map((a, i) => (
-                  <View key={i} style={[styles.kv, { borderBottomColor: theme.line }]}>
-                    <Text style={[styles.k, { color: theme.text2, flex: 1 }]}>{a.payment_no || ''} {shortDate(a.payment_date)} · {humanize(a.method)}{a.reference ? ` · ${a.reference}` : ''}</Text>
-                    <Text style={[styles.v, { color: theme.text }]}>{inr(rupees(a.amount_paise))}</Text>
-                  </View>
-                ))}
+                <Overline>Payments received</Overline>
+                <RowPanel>
+                  {detail.allocations.map((a, i, all) => (
+                    <KvLine key={i} label={`${a.payment_no || ''} ${shortDate(a.payment_date)} · ${humanize(a.method)}${a.reference ? ` · ${a.reference}` : ''}`} value={inr(rupees(a.amount_paise))} mono last={i === all.length - 1} />
+                  ))}
+                </RowPanel>
               </>
             ) : null}
 
-            {d.status === 'cancelled' ? <Text style={[styles.meta, { color: semantic.danger }]}>Cancelled {shortDate(d.cancelled_at)} — {d.cancel_reason}. The ledger entry was reversed.</Text> : null}
+            {d.status === 'cancelled' ? <Text style={[styles.meta, { color: theme.err }]}>Cancelled {shortDate(d.cancelled_at)} — {d.cancel_reason}. The ledger entry was reversed.</Text> : null}
             {d.converted_to_id ? <Text style={[styles.meta, { color: theme.text3 }]}>This quotation has already been converted.</Text> : null}
             {d.doc_type === 'estimate' && d.accepted_at ? <Text style={[styles.meta, { color: theme.text3 }]}>Accepted {shortDate(d.accepted_at)}{d.acceptance_method ? ` via ${d.acceptance_method}` : ''}.</Text> : null}
 
-            <SectionLabel>Actions</SectionLabel>
+            <Overline>Actions</Overline>
             <View style={styles.actions}>
               {!isDraft ? <ActionButton label="Open PDF" tone="neutral" busy={busy === 'pdf'} onPress={() => openPdf(d.id)} /> : null}
               {!isDraft && d.status !== 'cancelled' && d.doc_type !== 'credit_note' ? (
@@ -561,16 +549,7 @@ export default function SalesScreen({ onBack }: Props) {
         <Field label="Amount received ₹" value={recAmount} onChangeText={setRecAmount} keyboardType="numeric" />
         <Field label="Date" value={recDate} onChangeText={setRecDate} hint="YYYY-MM-DD" />
         <Text style={[styles.k, { color: theme.text3 }]}>Method</Text>
-        <View style={styles.chips}>
-          {METHODS.map((m) => {
-            const on = recMethod === m;
-            return (
-              <Pressable key={m} onPress={() => setRecMethod(m)} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{humanize(m)}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ChoiceChips items={METHODS.map((m) => [m, humanize(m)] as [string, string])} value={recMethod} onChange={setRecMethod} />
         <Field label="Reference" value={recRef} onChangeText={setRecRef} placeholder="UPI ref, cheque no" />
         <Field label="Note" value={recNote} onChangeText={setRecNote} />
       </FormSheet>
@@ -593,15 +572,9 @@ export default function SalesScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  payAmount: { ...typography.heading, fontWeight: '800' },
+  payAmount: { ...typography.kpi },
   payNote: { ...typography.caption, marginVertical: spacing(1) },
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   meta: { ...typography.caption, fontSize: 12 },
-  kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: StyleSheet.hairlineWidth },
   k: { ...typography.caption, fontSize: 12 },
-  v: { ...typography.body, fontSize: 14, fontFamily: 'Manrope_700Bold', textAlign: 'right' },
   actions: { flexDirection: 'row', gap: spacing(2.5), marginBottom: spacing(2) },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
-  chipText: { ...typography.caption, fontSize: 12 },
 });

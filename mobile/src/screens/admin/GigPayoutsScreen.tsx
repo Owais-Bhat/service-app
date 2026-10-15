@@ -7,7 +7,7 @@ import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchGigJobs, fetchPeople, markGigPayoutPaid } from '../../api/adminMoney';
-import { semantic } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 import { inr, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -20,6 +20,7 @@ type Filter = 'unpaid' | 'paid' | 'all';
 // Public-pool jobs: the company keeps GST + platform fee, the worker is paid
 // the rest. This is where that payout is marked as handed over.
 export default function GigPayoutsScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const data = useLoader(async () => {
     const [jobs, people] = await Promise.all([fetchGigJobs(), fetchPeople()]);
     return { jobs, names: new Map(people.map((p) => [p.id, p.full_name || 'Worker'])) };
@@ -78,8 +79,8 @@ export default function GigPayoutsScreen({ onBack }: Props) {
     >
       <StatGrid
         items={[
-          { label: 'Awaiting payout', value: inr(payout(unpaid)), color: semantic.warning },
-          { label: 'Paid out', value: inr(payout(paid)), color: semantic.success },
+          { label: 'Awaiting payout', value: inr(payout(unpaid)), color: theme.warn },
+          { label: 'Paid out', value: inr(payout(paid)), color: theme.ok },
         ]}
       />
       {visible.length === 0 ? <EmptyNote text="No gig-worker jobs here" icon="wallet" /> : null}
@@ -91,12 +92,12 @@ export default function GigPayoutsScreen({ onBack }: Props) {
           <ListRow
             key={j.id}
             icon="wallet"
-            iconColor={isPaid ? semantic.success : semantic.warning}
+            iconColor={isPaid ? theme.ok : theme.warn}
             title={who}
             subtitle={`${j.full_name || 'Customer'}${j.service_item ? ` · ${j.service_item}` : ''}`}
             meta={`${j.ticket_no || ''} · billed ${inr(j.bill_total)} · ${shortDate(j.bill_generated_at || j.created_at)}`}
             value={inr(amount)}
-            badge={{ label: isPaid ? 'Paid' : 'Awaiting', color: isPaid ? semantic.success : semantic.warning }}
+            badge={{ label: isPaid ? 'Paid' : 'Awaiting', color: isPaid ? theme.ok : theme.warn }}
             footer={!isPaid ? <ActionButton label="Mark paid" tone="success" busy={busy === j.id} onPress={() => pay(j.id, who, amount)} /> : undefined}
           />
         );

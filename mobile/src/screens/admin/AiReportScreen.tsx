@@ -1,14 +1,13 @@
 import React from 'react';
+import { Overline } from '../../components/admin/FinanceKit';
 import { StyleSheet, Text } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchAiReport } from '../../api/ai';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { semantic, brand } from '../../theme/tokens';
 import { inr } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -29,12 +28,12 @@ export default function AiReportScreen({ onBack }: Props) {
         <>
           <StatGrid
             items={[
-              { label: 'Paid revenue', value: inr(r.paidRevenue), color: semantic.success },
-              { label: 'Awaiting payment', value: inr(r.unpaid), color: r.unpaid ? semantic.danger : undefined },
-              { label: 'Cash pending', value: inr(r.cashPending), color: r.cashPending ? semantic.warning : undefined },
+              { label: 'Paid revenue', value: inr(r.paidRevenue), color: theme.ok },
+              { label: 'Awaiting payment', value: inr(r.unpaid), color: r.unpaid ? theme.err : undefined },
+              { label: 'Cash pending', value: inr(r.cashPending), color: r.cashPending ? theme.warn : undefined },
               { label: 'Resolved services', value: r.resolved },
-              { label: 'Issue not resolved', value: r.issues, color: r.issues ? semantic.danger : undefined },
-              { label: 'Active services', value: r.active, color: semantic.warning },
+              { label: 'Issue not resolved', value: r.issues, color: r.issues ? theme.err : undefined },
+              { label: 'Active services', value: r.active, color: theme.warn },
               ...(r.gigJobs
                 ? [
                     { label: `Gig pool revenue · ${r.gigJobs} job${r.gigJobs === 1 ? '' : 's'}`, value: inr(r.gigRevenue) },
@@ -44,7 +43,7 @@ export default function AiReportScreen({ onBack }: Props) {
             ]}
           />
 
-          <SectionLabel>Business notes</SectionLabel>
+          <Overline>Business notes</Overline>
           <Text style={[styles.note, { color: theme.text2 }]}>
             <Text style={styles.bold}>Finance: </Text>
             {r.unpaid > 0 ? `Collect ${inr(r.unpaid)} from unpaid bills. ` : 'No unpaid bill amount is pending. '}
@@ -59,17 +58,17 @@ export default function AiReportScreen({ onBack }: Props) {
             {r.eodCount} EOD reports are recorded. {r.online} employee(s) are currently clocked in.
           </Text>
 
-          <SectionLabel>Employee progress</SectionLabel>
+          <Overline>Employee progress</Overline>
           {r.employees.length === 0 ? <EmptyNote text="No employees found" icon="people" /> : null}
           {r.employees.map((e) => (
             <ListRow
               key={e.id}
               icon="user"
-              iconColor={e.online ? semantic.success : undefined}
+              iconColor={e.online ? theme.ok : undefined}
               title={e.name}
               subtitle={`${e.gig ? 'Gig' : 'Fixed'} · ${e.assigned} assigned · ${e.resolved} resolved`}
               meta={e.issues ? `${e.issues} issue${e.issues === 1 ? '' : 's'} not resolved` : undefined}
-              badge={e.online ? { label: 'Online', color: semantic.success } : { label: 'Offline', color: brand.grey }}
+              badge={e.online ? { label: 'Online', color: theme.ok } : { label: 'Offline', color: theme.grey }}
             />
           ))}
         </>
@@ -80,5 +79,5 @@ export default function AiReportScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   note: { ...typography.body, marginBottom: spacing(2), lineHeight: 21 },
-  bold: { fontWeight: '700' },
+  bold: { fontFamily: 'Manrope_700Bold' },
 });

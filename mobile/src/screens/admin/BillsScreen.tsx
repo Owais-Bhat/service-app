@@ -9,7 +9,7 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { resolveUploadUrl } from '../../api/client';
 import { BilledJob, fetchBilledJobs } from '../../api/adminMoney';
-import { semantic } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 import { dateTime, inr } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -32,6 +32,7 @@ function whatsappLink(job: BilledJob): string | null {
 // Generated invoices. The PDF opens in the phone's viewer; the WhatsApp action
 // pre-writes the same message the web "Share" sends.
 export default function BillsScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const jobs = useLoader(fetchBilledJobs, 'Could not load bills');
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -73,8 +74,8 @@ export default function BillsScreen({ onBack }: Props) {
       <StatGrid
         items={[
           { label: 'Billed', value: inr(billed) },
-          { label: 'Received', value: inr(received), color: semantic.success },
-          { label: 'Pending', value: inr(billed - received), color: semantic.warning },
+          { label: 'Received', value: inr(received), color: theme.ok },
+          { label: 'Pending', value: inr(billed - received), color: theme.warn },
         ]}
       />
       {visible.length === 0 ? <EmptyNote text="No bills match" icon="document" /> : null}
@@ -85,12 +86,12 @@ export default function BillsScreen({ onBack }: Props) {
           <ListRow
             key={r.id}
             icon="document"
-            iconColor={isPaid ? semantic.success : semantic.warning}
+            iconColor={isPaid ? theme.ok : theme.warn}
             title={r.full_name || 'Customer'}
             subtitle={r.service_item || undefined}
             meta={`${r.bill_no || r.ticket_no || ''} · ${dateTime(r.bill_generated_at || r.created_at)}`}
             value={inr(r.bill_total)}
-            badge={{ label: isPaid ? 'Paid' : 'Unpaid', color: isPaid ? semantic.success : semantic.warning }}
+            badge={{ label: isPaid ? 'Paid' : 'Unpaid', color: isPaid ? theme.ok : theme.warn }}
             footer={
               r.bill_pdf_url || wa ? (
                 <>

@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, HeaderAction, RowPanel, Segmented, SwitchRow } from '../../components/admin/FinanceKit';
+import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
-import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
+import StatusBadge from '../../components/admin/StatusBadge';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
@@ -14,7 +15,6 @@ import { uploadMedia } from '../../api/upload';
 import { AdInput, AdRow, createAd, deleteAd, fetchAds, saveAd, updateAd } from '../../api/adminPeople';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { humanize, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -184,9 +184,7 @@ export default function AdsAdminScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add ad">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="Add ad" onPress={() => openEditor(null)} />
       }
       toolbar={
         <FilterChips
@@ -203,25 +201,39 @@ export default function AdsAdminScreen({ onBack }: Props) {
     >
       {visible.length === 0 ? <EmptyNote text="No ads here" icon="megaphone" /> : null}
       {visible.map((a) => (
-        <View key={a.id}>
-          {a.kind === 'image' ? <Image source={{ uri: resolveUploadUrl(a.url) }} style={styles.thumb} resizeMode="cover" /> : null}
-          <ListRow
-            icon="megaphone"
-            iconColor={live(a) ? semantic.success : brand.grey}
-            title={a.caption || (a.kind === 'video' ? 'Video ad' : 'Image ad')}
-            subtitle={`${PLACEMENT_LABEL[a.placement || 'landing'] || humanize(a.placement)} · ${humanize(a.device_target || 'both')} · ${Math.round((a.duration_ms || 6000) / 1000)}s`}
-            meta={`Position ${a.position ?? 0}${a.expires_at ? ` · expires ${shortDate(a.expires_at)}` : ''}`}
-            badge={{ label: live(a) ? 'Live' : Number(a.active) === 1 ? 'Expired' : 'Hidden', color: live(a) ? semantic.success : brand.grey }}
-            footer={
-              <>
-                <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(a)} />
-                <ActionButton label={Number(a.active) === 1 ? 'Hide' : 'Show'} tone="neutral" onPress={() => toggle(a)} />
-                <ActionButton label="Delete" tone="danger" onPress={() => remove(a)} />
-              </>
-            }
-          />
+        <View key={a.id} style={[styles.card, { backgroundColor: theme.panel, borderColor: theme.border, opacity: live(a) || Number(a.active) === 1 ? 1 : 0.7 }]}>
+          <View style={styles.cardTop}>
+            <View style={[styles.thumb, { backgroundColor: theme.panel2, borderColor: theme.border }]}>
+              {a.kind === 'image' ? (
+                <Image source={{ uri: resolveUploadUrl(a.url) }} style={styles.thumbImg} resizeMode="cover" />
+              ) : (
+                <Icon name="tutorial" size={20} color={theme.text3} />
+              )}
+            </View>
+            <View style={styles.cardText}>
+              <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>{a.caption || (a.kind === 'video' ? 'Video ad' : 'Image ad')}</Text>
+              <Text style={[styles.cardMeta, { color: theme.text3 }]} numberOfLines={2}>
+                {`${PLACEMENT_LABEL[a.placement || 'landing'] || humanize(a.placement)} · ${humanize(a.device_target || 'both')} · ${Math.round((a.duration_ms || 6000) / 1000)}s${a.expires_at ? ` · till ${shortDate(a.expires_at)}` : ''}`}
+              </Text>
+              <View style={styles.statusRow}>
+                <StatusBadge label={live(a) ? 'Live' : Number(a.active) === 1 ? 'Expired' : 'Hidden'} color={live(a) ? theme.ok : theme.grey} />
+              </View>
+            </View>
+            <View style={styles.position}>
+              <Text style={[styles.positionLabel, { color: theme.text3 }]}>Position</Text>
+              <View style={[styles.positionBox, { backgroundColor: theme.panel2, borderColor: theme.border }]}>
+                <Text style={[styles.positionValue, { color: theme.text }]}>{a.position ?? 0}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.cardActions}>
+            <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(a)} />
+            <ActionButton label={Number(a.active) === 1 ? 'Hide' : 'Show'} tone="neutral" onPress={() => toggle(a)} />
+            <ActionButton label="Delete" tone="danger" onPress={() => remove(a)} />
+          </View>
         </View>
       ))}
+      {visible.length > 0 ? <Text style={[styles.hint, { color: theme.text3 }]}>Lower positions show first. Change the number in Edit to reorder.</Text> : null}
 
       <FormSheet
         visible={!!editing}
@@ -230,7 +242,7 @@ export default function AdsAdminScreen({ onBack }: Props) {
         footer={<ActionButton label={editing?.ad ? 'Save' : 'Add ad'} busy={saving} onPress={save} grow />}
       >
         <Text style={[styles.cap, { color: theme.text2 }]}>Creative</Text>
-        <View style={[styles.media, { borderColor: draft.url ? brand.primary : theme.line, backgroundColor: theme.panel2 }]}>
+        <View style={[styles.media, { borderColor: draft.url ? theme.accent : theme.border, backgroundColor: theme.panel2 }]}>
           {draft.url && draft.kind === 'image' ? (
             <Image source={{ uri: resolveUploadUrl(draft.url) }} style={styles.preview} resizeMode="cover" />
           ) : (
@@ -244,8 +256,8 @@ export default function AdsAdminScreen({ onBack }: Props) {
               Images under 2 MB; popup videos under 15 seconds and 20 MB.
             </Text>
           </View>
-          <Pressable onPress={pickMedia} disabled={uploading} style={[styles.pick, { borderColor: theme.line }]} accessibilityLabel="Choose media">
-            {uploading ? <ActivityIndicator size="small" color={brand.primary} /> : <Text style={[styles.pickText, { color: brand.primary }]}>{draft.url ? 'Replace' : 'Choose'}</Text>}
+          <Pressable onPress={pickMedia} disabled={uploading} style={[styles.pick, { borderColor: theme.border }]} accessibilityLabel="Choose media">
+            {uploading ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={[styles.pickText, { color: theme.accent }]}>{draft.url ? 'Replace' : 'Choose'}</Text>}
           </Pressable>
         </View>
         <Field
@@ -260,10 +272,10 @@ export default function AdsAdminScreen({ onBack }: Props) {
         {editing?.ad ? (
           <Text style={[styles.hint, { color: theme.text3 }]}>{PLACEMENT_LABEL[draft.placement] || draft.placement}</Text>
         ) : (
-          <FilterChips items={PLACEMENTS} activeKey={draft.placement} onSelect={(k) => setDraft({ ...draft, placement: k })} />
+          <ChoiceChips items={PLACEMENTS.map((p) => [p.key, p.label] as [string, string])} value={draft.placement} onChange={(k) => setDraft({ ...draft, placement: k })} />
         )}
         <Text style={[styles.cap, { color: theme.text2 }]}>Device</Text>
-        <FilterChips items={DEVICES} activeKey={draft.device} onSelect={(k) => setDraft({ ...draft, device: k })} />
+        <Segmented items={DEVICES.map((d) => [d.key, d.label] as [string, string])} value={draft.device} onChange={(k) => setDraft({ ...draft, device: k })} />
 
         <Field label="Caption" value={draft.caption} onChangeText={(v) => setDraft({ ...draft, caption: v })} placeholder="Title or description (optional)" />
         <View style={styles.pair}>
@@ -284,27 +296,32 @@ export default function AdsAdminScreen({ onBack }: Props) {
             </View>
           </View>
         ) : null}
-        <View style={styles.switchRow}>
-          <Switch value={draft.active} onValueChange={(v) => setDraft({ ...draft, active: v })} trackColor={{ true: brand.primary }} />
-          <Text style={[styles.switchText, { color: theme.text }]}>Active (show it)</Text>
-        </View>
-        {draft.kind === 'video' ? (
-          <View style={styles.switchRow}>
-            <Switch value={draft.audio} onValueChange={(v) => setDraft({ ...draft, audio: v })} trackColor={{ true: brand.primary }} />
-            <Text style={[styles.switchText, { color: theme.text }]}>Play the video with sound</Text>
-          </View>
-        ) : null}
+        <RowPanel>
+          <SwitchRow label="Active (show it)" value={draft.active} onValueChange={(v) => setDraft({ ...draft, active: v })} last={draft.kind !== 'video'} />
+          {draft.kind === 'video' ? <SwitchRow label="Play the video with sound" value={draft.audio} onValueChange={(v) => setDraft({ ...draft, audio: v })} last /> : null}
+        </RowPanel>
       </FormSheet>
     </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  thumb: { width: '100%', height: 120, borderRadius: radius.md, marginBottom: spacing(2) },
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  cap: { ...typography.caption, fontWeight: '700', marginTop: spacing(2), marginBottom: spacing(1) },
-  hint: { ...typography.caption },
-  media: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.md, padding: spacing(2), marginBottom: spacing(3) },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), marginBottom: spacing(2.5), gap: spacing(3) },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
+  thumb: { width: 96, height: 54, borderRadius: radius.sm, borderWidth: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumbImg: { width: '100%', height: '100%' },
+  cardText: { flex: 1, minWidth: 0 },
+  cardTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, lineHeight: 20 },
+  cardMeta: { ...typography.supporting, fontSize: 12, lineHeight: 16, marginTop: 2 },
+  statusRow: { marginTop: spacing(1.5) },
+  cardActions: { flexDirection: 'row', gap: spacing(2) },
+  position: { width: 56 },
+  positionLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 10, textAlign: 'center' },
+  positionBox: { height: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  positionValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 15 },
+  cap: { ...typography.caption, marginTop: spacing(2), marginBottom: spacing(1.5) },
+  hint: { ...typography.caption, marginTop: spacing(1) },
+  media: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.lg, padding: spacing(2), marginBottom: spacing(3) },
   preview: { width: 72, height: 54, borderRadius: radius.sm },
   previewEmpty: { alignItems: 'center', justifyContent: 'center' },
   mediaText: { flex: 1 },
@@ -313,6 +330,4 @@ const styles = StyleSheet.create({
   pickText: { ...typography.caption, fontWeight: '700' },
   pair: { flexDirection: 'row', gap: spacing(3) },
   half: { flex: 1 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginVertical: spacing(2) },
-  switchText: { ...typography.body, flex: 1 },
 });

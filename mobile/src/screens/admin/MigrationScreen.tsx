@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { AlertCard, FileCard, Notice, Overline, RowPanel, Segmented, SummaryCard, SwitchRow } from '../../components/admin/FinanceKit';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
@@ -37,7 +37,6 @@ import {
 } from '../../api/adminMigration';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { dateTime, inr, shortDate, todayIso } from '../../utils/format';
 
 interface Props {
@@ -161,7 +160,7 @@ export default function MigrationScreen({ onBack }: Props) {
     const before = new Map(ba.before.checks.map((c) => [c.key, c]));
     return (
       <>
-        <SectionLabel>The books' own checks</SectionLabel>
+        <Overline>The books' own checks</Overline>
         {ba.after.checks.map((a) => {
           const b = before.get(a.key) || a;
           const changed = b.difference_paise !== a.difference_paise || b.ok !== a.ok;
@@ -169,7 +168,7 @@ export default function MigrationScreen({ onBack }: Props) {
             <ListRow
               key={a.key}
               icon={a.ok ? 'check-circle' : 'alert'}
-              iconColor={a.ok ? semantic.success : semantic.danger}
+              iconColor={a.ok ? theme.ok : theme.err}
               title={a.label}
               subtitle={`Before: ${b.ok ? 'OK' : `gap ${a.key === 'service_blocked' ? b.a_paise : money(b.difference_paise)}`}`}
               meta={`After: ${a.ok ? 'OK' : `gap ${a.key === 'service_blocked' ? a.a_paise : money(a.difference_paise)}`}${changed ? ' · changed' : ''}`}
@@ -348,9 +347,9 @@ export default function MigrationScreen({ onBack }: Props) {
           </Text>
           <ActionButton label="Email it to me" busy={busy === 'backup'} onPress={sendBackup} />
           {status ? <Text style={[styles.note, { color: theme.text3 }]}>{status}</Text> : null}
-          <Text style={[styles.note, { color: theme.text3 }]}>
+          <Notice icon="mail">
             The ZIP is sent to the address you sign in with. It is built on the server and can take a minute or two; on the web portal you can also download it directly.
-          </Text>
+          </Notice>
         </View>
       ) : null}
 
@@ -359,17 +358,20 @@ export default function MigrationScreen({ onBack }: Props) {
           <Text style={[styles.note, { color: theme.text2 }]}>
             Bring your Vyapar data in: customers and suppliers with what they owe today, items with the stock really on the shelf, and every old record to look up. Each party's balance becomes its opening balance; old records are kept for lookup and never posted twice.
           </Text>
-          <SectionLabel>1. Choose the Vyapar backup file</SectionLabel>
+          <Overline>1. Choose the Vyapar backup file</Overline>
           <ActionButton label={vy ? `Replace ${vy.file}` : 'Choose backup file'} busy={busy === 'vy-file'} onPress={pickVyapar} />
           <Text style={[styles.note, { color: theme.text3 }]}>
             {status || 'In Vyapar: Backup → Backup to device. The file ends in .vyb. It is read here and kept for an hour; it is not saved on the server.'}
           </Text>
           {vy ? (
             <View>
-              <StatGrid
-                items={[
+              <FileCard tag="VYP" name={vy.file} detail="Read here and kept for an hour — not saved on the server" />
+              <SummaryCard
+                icon="document"
+                title="Read from the backup · nothing written yet"
+                rows={[
                   { label: 'Customers & suppliers', value: vy.summary.parties.count },
-                  { label: 'They owe you', value: money(vy.summary.parties.owe_us.paise) },
+                  { label: 'They owe you', value: money(vy.summary.parties.owe_us.paise), color: theme.warn },
                   { label: 'You owe them', value: money(vy.summary.parties.we_owe.paise) },
                   { label: 'Items', value: vy.summary.items.count },
                   { label: 'Items with stock', value: vy.summary.items.with_stock },
@@ -378,10 +380,10 @@ export default function MigrationScreen({ onBack }: Props) {
                 ]}
               />
               {vy.summary.items.negative_stock ? (
-                <ListRow icon="alert" iconColor={semantic.warning} title={`${vy.summary.items.negative_stock} items show negative stock in Vyapar`} subtitle="They come in with zero opening stock" />
+                <AlertCard title={`${vy.summary.items.negative_stock} items show negative stock in Vyapar`}>They come in with zero opening stock.</AlertCard>
               ) : null}
               {vy.summary.warnings_total ? (
-                <ListRow icon="alert" iconColor={semantic.warning} title={`${vy.summary.warnings_total} thing(s) to check`} subtitle={vy.summary.warnings.slice(0, 5).join(' · ')} />
+                <AlertCard title={`${vy.summary.warnings_total} thing(s) to check`}>{vy.summary.warnings.slice(0, 5).join(' · ')}</AlertCard>
               ) : null}
               {Object.entries(vy.summary.documents.by_type)
                 .sort((a, b) => b[1].count - a[1].count)
@@ -389,7 +391,7 @@ export default function MigrationScreen({ onBack }: Props) {
                   <ListRow key={k} icon="document" title={TYPE_NAMES[k] || k} subtitle={`${shortDate(v.from)} – ${shortDate(v.to)}`} value={`${v.count}`} meta={money(v.total_paise)} />
                 ))}
 
-              <SectionLabel>2. Bring it in — in this order</SectionLabel>
+              <Overline>2. Bring it in — in this order</Overline>
               <Field label="Balances and stock are as on" value={vyAsOn} onChangeText={setVyAsOn} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" hint="Use the day the backup was taken" />
               <ListRow
                 icon="people"
@@ -440,12 +442,12 @@ export default function MigrationScreen({ onBack }: Props) {
                   { label: 'Customers', value: tickets.totals.customers },
                   { label: 'Billed', value: money(tickets.totals.billed_paise) },
                   { label: 'Already paid', value: money(tickets.totals.collected_paise) },
-                  { label: 'Still owed', value: money(tickets.totals.outstanding_paise), color: tickets.totals.outstanding_paise ? semantic.danger : undefined },
+                  { label: 'Still owed', value: money(tickets.totals.outstanding_paise), color: tickets.totals.outstanding_paise ? theme.err : undefined },
                   { label: 'Cash with technicians', value: money(tickets.totals.with_technicians_paise) },
                 ]}
               />
               {tickets.warnings.map((w) => (
-                <ListRow key={w} icon="alert" iconColor={semantic.warning} title={w} />
+                <ListRow key={w} icon="alert" iconColor={theme.warn} title={w} />
               ))}
               {tickets.months.map((m) => (
                 <ListRow key={m.month} icon="calendar" title={m.month} subtitle={`${m.tickets} tickets · billed ${money(m.billed_paise)}`} meta={`Paid ${money(m.collected_paise)}`} value={money(m.outstanding_paise)} />
@@ -461,7 +463,7 @@ export default function MigrationScreen({ onBack }: Props) {
           ) : null}
           {ticketAfter ? (
             <View>
-              <ListRow icon="check-circle" iconColor={semantic.success} title={ticketAfter.text} />
+              <ListRow icon="check-circle" iconColor={theme.ok} title={ticketAfter.text} />
               {checksBlock(ticketAfter.ba)}
             </View>
           ) : null}
@@ -479,13 +481,13 @@ export default function MigrationScreen({ onBack }: Props) {
                 items={[
                   { label: 'Items to bring in', value: stock.totals.items },
                   { label: 'Value', value: money(stock.totals.value_paise) },
-                  { label: 'Need a look first', value: stock.totals.flagged, color: stock.totals.flagged ? semantic.danger : undefined },
+                  { label: 'Need a look first', value: stock.totals.flagged, color: stock.totals.flagged ? theme.err : undefined },
                 ]}
               />
               {stock.ledger_vs_movements_paise ? (
                 <ListRow
                   icon="alert"
-                  iconColor={semantic.warning}
+                  iconColor={theme.warn}
                   title="The Inventory account and the stock movements already differ"
                   subtitle={`Account ${money(stock.ledger_inventory_paise)} · movements ${money(stock.movements_value_paise)}`}
                 />
@@ -497,7 +499,7 @@ export default function MigrationScreen({ onBack }: Props) {
                   <ListRow
                     key={r.item_id}
                     icon={on ? 'check-circle' : 'box'}
-                    iconColor={on ? semantic.success : undefined}
+                    iconColor={on ? theme.ok : undefined}
                     title={r.name}
                     subtitle={`${r.on_hand} ${r.unit || ''} on hand · ${r.unbooked_qty > 0 ? `${r.unbooked_qty} not in the books` : 'value only'} · ${money(r.avg_cost_paise)} each`}
                     meta={r.sku || undefined}
@@ -512,15 +514,15 @@ export default function MigrationScreen({ onBack }: Props) {
                   <ActionButton label={`Bring the ticked items in (${stockPick.size})`} busy={busy === 'stock-apply'} onPress={postStock} />
                 </View>
               ) : null}
-              {stock.flagged.length ? <SectionLabel>Need a look first — not brought in</SectionLabel> : null}
+              {stock.flagged.length ? <Overline>Need a look first — not brought in</Overline> : null}
               {stock.flagged.map((f, i) => (
-                <ListRow key={`${f.name}-${i}`} icon="alert" iconColor={semantic.danger} title={f.name} subtitle={f.reason} meta={`On hand ${f.on_hand}`} />
+                <ListRow key={`${f.name}-${i}`} icon="alert" iconColor={theme.err} title={f.name} subtitle={f.reason} meta={`On hand ${f.on_hand}`} />
               ))}
             </View>
           ) : null}
           {stockAfter ? (
             <View>
-              <ListRow icon="check-circle" iconColor={semantic.success} title={stockAfter.text} />
+              <ListRow icon="check-circle" iconColor={theme.ok} title={stockAfter.text} />
               {checksBlock(stockAfter.ba)}
               <ActionButton label="Look again" tone="neutral" onPress={load} />
             </View>
@@ -537,7 +539,7 @@ export default function MigrationScreen({ onBack }: Props) {
                 items={[
                   { label: 'Entries to bring in', value: log.totals.entries },
                   { label: 'Billed', value: money(log.totals.billed_paise) },
-                  { label: 'Paid', value: money(log.totals.paid_paise), color: semantic.success },
+                  { label: 'Paid', value: money(log.totals.paid_paise), color: theme.ok },
                   { label: 'On a ticket already', value: log.counts.on_a_ticket },
                   { label: 'Already brought in', value: log.counts.already_in },
                 ]}
@@ -545,34 +547,34 @@ export default function MigrationScreen({ onBack }: Props) {
               {log.candidates.length === 0 ? <EmptyNote text="Nothing left to bring in" icon="check-circle" /> : null}
               {log.candidates.length ? (
                 <View>
-                  <FilterChips
+                  <Segmented
                     items={[
-                      { key: 'cash', label: 'Paid money → Cash in hand' },
-                      { key: 'bank', label: 'Paid money → Bank' },
+                      ['cash', 'Paid → Cash in hand'],
+                      ['bank', 'Paid → Bank'],
                     ]}
-                    activeKey={paidInto}
-                    onSelect={(k) => setPaidInto(k as 'cash' | 'bank')}
+                    value={paidInto}
+                    onChange={(k) => setPaidInto(k as 'cash' | 'bank')}
                   />
-                  <View style={styles.switchRow}>
-                    <Switch
+                  <RowPanel style={{ marginTop: spacing(3) }}>
+                    <SwitchRow
+                      label={`Select all (${logPick.size} ticked)`}
                       value={logPick.size === log.candidates.length}
                       onValueChange={(v) => setLogPick(v ? new Set(log.candidates.map((c) => c.id)) : new Set())}
-                      trackColor={{ true: brand.primary }}
+                      last
                     />
-                    <Text style={[styles.note, { color: theme.text }]}>Select all ({logPick.size} ticked)</Text>
-                  </View>
+                  </RowPanel>
                   {log.candidates.map((r) => {
                     const on = logPick.has(r.id);
                     return (
                       <ListRow
                         key={r.id}
                         icon={on ? 'check-circle' : 'document'}
-                        iconColor={on ? semantic.success : undefined}
+                        iconColor={on ? theme.ok : undefined}
                         title={r.customer}
                         subtitle={`${r.service || '—'} · ${r.technician || '—'}`}
                         meta={`${shortDate(r.date)}${r.phone ? ` · ${r.phone}` : ''}`}
                         value={money(r.amount_paise)}
-                        badge={{ label: r.status, color: r.status === 'paid' ? semantic.success : semantic.warning }}
+                        badge={{ label: r.status, color: r.status === 'paid' ? theme.ok : theme.warn }}
                         onPress={() => toggleIn(logPick, r.id, setLogPick)}
                       />
                     );
@@ -584,7 +586,7 @@ export default function MigrationScreen({ onBack }: Props) {
           ) : null}
           {logAfter ? (
             <View>
-              <ListRow icon="check-circle" iconColor={semantic.success} title={logAfter} />
+              <ListRow icon="check-circle" iconColor={theme.ok} title={logAfter} />
               <ActionButton label="Look again" tone="neutral" onPress={load} />
             </View>
           ) : null}
@@ -601,10 +603,10 @@ export default function MigrationScreen({ onBack }: Props) {
                 title={KIND[r.kind] || r.kind}
                 subtitle={runLine(r)}
                 meta={`${dateTime(r.created_at)}${r.by ? ` · ${r.by}` : ''}`}
-                badge={r.status === 'partial' ? { label: 'Partly done', color: semantic.warning } : undefined}
+                badge={r.status === 'partial' ? { label: 'Partly done', color: theme.warn } : undefined}
               />
               {r.after?.checks?.filter((c) => !c.ok).map((c) => (
-                <ListRow key={c.key} icon="alert" iconColor={semantic.danger} title={c.label} subtitle="Still not agreeing after this run" />
+                <ListRow key={c.key} icon="alert" iconColor={theme.err} title={c.label} subtitle="Still not agreeing after this run" />
               ))}
             </View>
           ))}
@@ -616,10 +618,9 @@ export default function MigrationScreen({ onBack }: Props) {
           <Text style={[styles.note, { color: theme.text2 }]}>
             Each evening after 8 pm the admins get one notification: the day's sales and collections, the month so far, what customers owe and cash still with technicians.
           </Text>
-          <View style={styles.switchRow}>
-            <Switch value={auto.owner_digest_on} onValueChange={toggleDigest} trackColor={{ true: brand.primary }} />
-            <Text style={[styles.note, { color: theme.text }]}>Send the evening summary</Text>
-          </View>
+          <RowPanel>
+            <SwitchRow label="Send the evening summary" value={auto.owner_digest_on} onValueChange={toggleDigest} last />
+          </RowPanel>
           <Text style={[styles.note, { color: theme.text3 }]}>{auto.last_digest ? `Last sent for ${shortDate(auto.last_digest)}.` : 'Not sent yet.'}</Text>
           <ActionButton
             label="Send it now to see it"
@@ -645,5 +646,4 @@ export default function MigrationScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   note: { ...typography.caption, marginVertical: spacing(2), lineHeight: 18 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginVertical: spacing(2) },
 });

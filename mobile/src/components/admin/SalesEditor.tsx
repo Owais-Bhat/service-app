@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, ToggleSwitch } from './FinanceKit';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import FormSheet from './FormSheet';
 import Field from './Field';
 import ActionButton from './ActionButton';
@@ -22,7 +23,7 @@ import {
 } from '../../api/adminSales';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { brand } from '../../theme/tokens';
 import { inr, todayIso } from '../../utils/format';
 
 interface Props {
@@ -296,7 +297,7 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
       }
     >
       {amending ? (
-        <View style={[styles.notice, { borderColor: semantic.warning, backgroundColor: semantic.warning + '18' }]}>
+        <View style={[styles.notice, { borderColor: theme.warn, backgroundColor: theme.warn + '18' }]}>
           <Text style={[styles.noticeText, { color: theme.text }]}>
             Saving corrects this {label} in place — it keeps its number ({doc?.doc_no}); the old entry in the books is reversed and the corrected one posted.
           </Text>
@@ -342,31 +343,22 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
       {type !== 'credit_note' ? (
         <>
           <Text style={[styles.label, { color: theme.text3 }]}>Type of bill</Text>
-          <View style={styles.chips}>
-            {BILL_TYPES.map((b) => {
-              const on = billType === b.key;
-              return (
-                <Pressable
-                  key={b.key}
-                  onPress={() => setBillType(b.key)}
-                  style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-                >
-                  <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{b.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <ChoiceChips
+            items={BILL_TYPES.map((b) => [b.key, b.label] as [string, string])}
+            value={billType}
+            onChange={(k) => setBillType(k as typeof billType)}
+          />
           <Text style={[styles.hint, { color: theme.text3 }]}>{BILL_TYPES.find((b) => b.key === billType)?.hint}</Text>
           {billType === 'service' ? (
             <View style={styles.switchRow}>
               <Text style={[styles.switchLabel, { color: theme.text }]}>Charge GST on this bill</Text>
-              <Switch value={serviceGst} onValueChange={setServiceGst} trackColor={{ true: brand.primary, false: theme.line }} />
+              <ToggleSwitch value={serviceGst} onValueChange={setServiceGst} />
             </View>
           ) : null}
           {billType === 'non_gst' ? (
             <View style={styles.switchRow}>
               <Text style={[styles.switchLabel, { color: theme.text }]}>Show the GST inside the price</Text>
-              <Switch value={showGst} onValueChange={setShowGst} trackColor={{ true: brand.primary, false: theme.line }} />
+              <ToggleSwitch value={showGst} onValueChange={setShowGst} />
             </View>
           ) : null}
         </>
@@ -375,13 +367,13 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
       {!noTax ? (
         <View style={styles.switchRow}>
           <Text style={[styles.switchLabel, { color: theme.text }]}>The rates below already include tax</Text>
-          <Switch value={inclusive} onValueChange={setInclusive} trackColor={{ true: brand.primary, false: theme.line }} />
+          <ToggleSwitch value={inclusive} onValueChange={setInclusive} />
         </View>
       ) : null}
 
       <Text style={[styles.label, { color: theme.text3 }]}>Lines</Text>
       {lines.map((l, idx) => (
-        <View key={l.key} style={[styles.line, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+        <View key={l.key} style={[styles.line, { backgroundColor: theme.panel, borderColor: theme.border }]}>
           <View style={styles.lineHead}>
             <Text style={[styles.lineNo, { color: theme.text3 }]}>Line {idx + 1}</Text>
             <View style={styles.lineAmount}>
@@ -427,9 +419,9 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
                   <Pressable
                     key={o.key}
                     onPress={() => patch(l.key, { tax: o.key })}
-                    style={[styles.taxChip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : 'transparent' }]}
+                    style={[styles.taxChip, on ? { borderColor: brand.fill, backgroundColor: brand.fill } : { borderColor: theme.border, backgroundColor: theme.panel }]}
                   >
-                    <Text style={[styles.chipText, { color: on ? brand.primary : theme.text3 }]}>{o.label}</Text>
+                    <Text style={[styles.chipText, { color: on ? '#ffffff' : theme.text2 }]}>{o.label}</Text>
                   </Pressable>
                 );
               })}
@@ -443,7 +435,7 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
       <Field label="Notes for the customer" value={notes} onChangeText={setNotes} multiline />
       <Field label="Terms" value={terms} onChangeText={setTerms} multiline />
 
-      <View style={[styles.totals, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+      <View style={[styles.totals, { backgroundColor: theme.panel2 }]}>
         {t ? (
           <>
             <TotalRow label="Taxable value" value={inr(rupees(t.taxable_paise))} />
@@ -457,7 +449,7 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
             </Text>
           </>
         ) : priceError ? (
-          <Text style={[styles.hint, { color: semantic.danger }]}>{priceError}</Text>
+          <Text style={[styles.hint, { color: theme.err }]}>{priceError}</Text>
         ) : (
           <Text style={[styles.hint, { color: theme.text3 }]}>Add a line to see the total</Text>
         )}
@@ -469,33 +461,33 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
 function TotalRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   const { theme } = useTheme();
   return (
-    <View style={styles.totalRow}>
-      <Text style={[styles.totalLabel, { color: theme.text2 }, strong && { fontFamily: 'Manrope_700Bold', color: theme.text }]}>{label}</Text>
-      <Text style={[styles.totalValue, { color: strong ? semantic.success : theme.text }, strong && { fontSize: 18 }]}>{value}</Text>
+    <View style={[styles.totalRow, strong && { borderTopWidth: 1, borderTopColor: theme.line, paddingTop: spacing(2), marginTop: spacing(1) }]}>
+      <Text style={[styles.totalLabel, { color: theme.text2 }, strong && { fontFamily: 'Manrope_700Bold', fontSize: 16, color: theme.text }]}>{label}</Text>
+      <Text style={[styles.totalValue, { color: theme.text }, strong && styles.totalStrong]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  label: { ...typography.caption, fontSize: 12 },
+  label: { ...typography.caption, fontSize: 13 },
   hint: { ...typography.caption, fontSize: 11 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2) },
-  taxChip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.5) },
-  chipText: { ...typography.caption, fontSize: 12 },
+  taxChip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), height: 32, justifyContent: 'center' },
+  chipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(3) },
   switchLabel: { ...typography.body, fontSize: 14, flex: 1 },
-  notice: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), gap: spacing(2) },
+  notice: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), gap: spacing(2) },
   noticeText: { ...typography.caption, fontSize: 12 },
-  line: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), gap: spacing(2) },
+  line: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3), gap: spacing(2) },
   lineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   lineNo: { ...typography.caption, fontSize: 11 },
   lineAmount: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
-  amount: { ...typography.body, fontFamily: 'Manrope_700Bold' },
+  amount: { ...typography.monoId, fontSize: 14 },
   row: { flexDirection: 'row', gap: spacing(2) },
   cell: { flex: 1 },
-  totals: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), gap: spacing(1.5) },
+  totals: { borderRadius: radius.lg, padding: spacing(3.5), gap: spacing(1.5) },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  totalLabel: { ...typography.body, fontSize: 14 },
-  totalValue: { ...typography.body, fontFamily: 'Manrope_700Bold' },
+  totalLabel: { ...typography.body, fontSize: 13 },
+  totalValue: { ...typography.monoId, fontSize: 13 },
+  totalStrong: { ...typography.kpi, fontSize: 18, lineHeight: 24 },
 });

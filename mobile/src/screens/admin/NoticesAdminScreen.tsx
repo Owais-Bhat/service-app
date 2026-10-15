@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { HeaderAction, RowPanel, SwitchRow } from '../../components/admin/FinanceKit';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import StatGrid from '../../components/admin/StatGrid';
@@ -7,12 +8,10 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import { useAuth } from '../../context/AuthContext';
 import { createNotice, deleteNotice, fetchAllNotices, NoticeRow, updateNotice } from '../../api/adminPeople';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { humanize, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -20,13 +19,13 @@ interface Props {
   onBack: () => void;
 }
 
-const PRIORITY_COLOR: Record<string, string> = { normal: semantic.info, high: semantic.warning, urgent: semantic.danger };
 const BLANK = { title: '', body: '', priority: 'normal', expires: '', active: true };
 
 // Notices shown on the employee dashboard: priority-coloured, optional expiry,
 // hide/show without deleting.
 export default function NoticesAdminScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const PRIORITY_COLOR: Record<string, string> = { normal: theme.info, high: theme.warn, urgent: theme.err };
   const { user } = useAuth();
   const list = useLoader(fetchAllNotices, 'Could not load notices');
   const [editing, setEditing] = useState<NoticeRow | 'new' | null>(null);
@@ -105,15 +104,13 @@ export default function NoticesAdminScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New notice">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New notice" onPress={() => open('new')} />
       }
     >
       <StatGrid
         items={[
           { label: 'Total', value: rows.length },
-          { label: 'Live', value: rows.filter((n) => Number(n.active) === 1 && !expired(n)).length, color: semantic.success },
+          { label: 'Live', value: rows.filter((n) => Number(n.active) === 1 && !expired(n)).length, color: theme.ok },
           { label: 'Hidden', value: rows.filter((n) => Number(n.active) !== 1).length },
         ]}
       />
@@ -124,11 +121,11 @@ export default function NoticesAdminScreen({ onBack }: Props) {
           <ListRow
             key={n.id}
             icon="notification"
-            iconColor={PRIORITY_COLOR[n.priority] ?? semantic.info}
+            iconColor={PRIORITY_COLOR[n.priority] ?? theme.info}
             title={n.title}
             subtitle={n.body}
             meta={`Posted ${shortDate(n.created_at)}${n.expires_at ? ` · expires ${shortDate(n.expires_at)}` : ''}`}
-            badge={{ label: live ? humanize(n.priority) : expired(n) ? 'Expired' : 'Hidden', color: live ? PRIORITY_COLOR[n.priority] ?? semantic.info : brand.grey }}
+            badge={{ label: live ? humanize(n.priority) : expired(n) ? 'Expired' : 'Hidden', color: live ? PRIORITY_COLOR[n.priority] ?? theme.info : theme.grey }}
             onPress={() => open(n)}
             footer={
               <>
@@ -153,7 +150,7 @@ export default function NoticesAdminScreen({ onBack }: Props) {
       >
         <Field label="Title" value={form.title} onChangeText={(v) => setForm((f) => ({ ...f, title: v }))} />
         <Field label="Message" value={form.body} onChangeText={(v) => setForm((f) => ({ ...f, body: v }))} multiline />
-        <Text style={[styles.label, { color: theme.text3 }]}>Priority</Text>
+        <Text style={[styles.label, { color: theme.text2 }]}>Priority</Text>
         <View style={styles.chipRow}>
           {(['normal', 'high', 'urgent'] as const).map((p) => {
             const on = form.priority === p;
@@ -161,7 +158,7 @@ export default function NoticesAdminScreen({ onBack }: Props) {
               <Pressable
                 key={p}
                 onPress={() => setForm((f) => ({ ...f, priority: p }))}
-                style={[styles.chip, { borderColor: on ? PRIORITY_COLOR[p] : theme.line, backgroundColor: on ? PRIORITY_COLOR[p] + '22' : theme.panel2 }]}
+                style={[styles.chip, { borderColor: on ? PRIORITY_COLOR[p] : theme.border, backgroundColor: on ? PRIORITY_COLOR[p] + '22' : theme.panel }]}
               >
                 <Text style={[styles.chipText, { color: on ? PRIORITY_COLOR[p] : theme.text2 }]}>{humanize(p)}</Text>
               </Pressable>
@@ -169,21 +166,17 @@ export default function NoticesAdminScreen({ onBack }: Props) {
           })}
         </View>
         <Field label="Expires (optional)" value={form.expires} onChangeText={(v) => setForm((f) => ({ ...f, expires: v }))} hint="YYYY-MM-DD or YYYY-MM-DD HH:MM" />
-        <Pressable onPress={() => setForm((f) => ({ ...f, active: !f.active }))} style={styles.check}>
-          <Icon name={form.active ? 'check-circle' : 'tasks'} size={20} color={form.active ? brand.primary : theme.text3} filled={form.active} />
-          <Text style={[styles.checkText, { color: theme.text }]}>Publish to the employee dashboard</Text>
-        </Pressable>
+        <RowPanel>
+          <SwitchRow label="Publish to the employee dashboard" value={form.active} onValueChange={(v) => setForm((f) => ({ ...f, active: v }))} last />
+        </RowPanel>
       </FormSheet>
     </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  label: { ...typography.caption, fontSize: 12 },
+  label: { ...typography.caption, fontSize: 13 },
   chipRow: { flexDirection: 'row', gap: spacing(2) },
-  chip: { flex: 1, borderWidth: 1, borderRadius: radius.md, paddingVertical: spacing(2.5), alignItems: 'center' },
+  chip: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center' },
   chipText: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
-  check: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
-  checkText: { ...typography.body, flex: 1 },
 });

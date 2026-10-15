@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { HeaderAction } from '../../components/admin/FinanceKit';
+import { Alert, StyleSheet } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import ListRow from '../../components/admin/ListRow';
@@ -7,7 +8,6 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import {
   fetchCompanyList,
   fetchDeviceTypes,
@@ -17,8 +17,6 @@ import {
   saveCompany,
   saveDeviceType,
 } from '../../api/adminManage';
-import { radius } from '../../theme';
-import { brand } from '../../theme/tokens';
 import { useLoader } from '../../utils/useLoader';
 
 interface Props {
@@ -98,9 +96,7 @@ export default function DeviceTypesScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="Add" onPress={() => open('new')} />
       }
       toolbar={
         <FilterChips
@@ -149,5 +145,4 @@ export default function DeviceTypesScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });

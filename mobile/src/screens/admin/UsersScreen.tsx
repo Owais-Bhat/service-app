@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, DangerButton, HeaderAction, Overline, RowPanel, SwitchRow } from '../../components/admin/FinanceKit';
+import { Alert, Linking, StyleSheet, Text } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
 import FilterChips from '../../components/admin/FilterChips';
@@ -8,12 +9,11 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import UserEditor from '../../components/admin/UserEditor';
-import Icon from '../../components/Icon';
 import { deleteUser, fetchUsers, patchUserAccess, UserPatch, UserRow } from '../../api/adminPeople';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { semantic } from '../../theme/tokens';
 import { humanize, inr } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -130,9 +130,7 @@ export default function UsersScreen({ onBack }: Props) {
       loading={users.loading}
       error={users.error}
       headerRight={
-        <Pressable onPress={() => setEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New user">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New user" onPress={() => setEditor('new')} />
       }
       toolbar={
         <>
@@ -160,7 +158,7 @@ export default function UsersScreen({ onBack }: Props) {
           title={u.full_name || u.email || 'Unnamed'}
           subtitle={u.email || undefined}
           meta={[u.phone, u.role === 'employee' || u.role === 'team_lead' ? `${humanize(u.worker_type || 'fixed')}${Number(u.salary) ? ` · ${inr(u.salary)}` : ''}` : null].filter(Boolean).join(' · ')}
-          badge={{ label: humanize(u.role), color: ROLE_COLOR[u.role] ?? semantic.info }}
+          badge={{ label: humanize(u.role), color: ROLE_COLOR[u.role] ?? theme.info }}
           onPress={() => setPicked(u.id)}
         />
       ))}
@@ -175,68 +173,46 @@ export default function UsersScreen({ onBack }: Props) {
             <>
               {current.phone ? <ActionButton label="Call" tone="neutral" onPress={() => Linking.openURL(`tel:${current.phone}`)} /> : null}
               <ActionButton label="Edit" tone="neutral" onPress={() => { setEditor(current); setPicked(null); }} />
-              <ActionButton label="Delete" tone="danger" onPress={() => remove(current)} />
             </>
           ) : undefined
         }
       >
         {current ? (
           <>
-            <Text style={[styles.label, { color: theme.text3 }]}>Role</Text>
-            <View style={styles.chipRow}>
-              {(['employee', 'team_lead', 'admin', 'client'] as const).map((r) => {
-                const on = current.role === r;
-                return (
-                  <Pressable
-                    key={r}
-                    disabled={saving === 'role'}
-                    onPress={() => changeRole(current, r)}
-                    style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-                  >
-                    <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{humanize(r)}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Overline>Access</Overline>
+            <Text style={[styles.label, { color: theme.text2 }]}>Role</Text>
+            <ChoiceChips
+              items={(['employee', 'team_lead', 'admin', 'client'] as const).map((r) => [r, humanize(r)] as [string, string])}
+              value={current.role}
+              onChange={(r) => saving !== 'role' && changeRole(current, r as NonNullable<UserPatch['role']>)}
+            />
 
             {current.role === 'employee' || current.role === 'team_lead' ? (
               <>
-                <Text style={[styles.label, { color: theme.text3 }]}>Worker type</Text>
-                <View style={styles.chipRow}>
-                  {(['fixed', 'gig'] as const).map((t) => {
-                    const on = (current.worker_type || 'fixed') === t;
-                    return (
-                      <Pressable
-                        key={t}
-                        onPress={() => !on && apply(current, { workerType: t }, 'worker')}
-                        style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-                      >
-                        <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{t === 'fixed' ? 'Fixed employee' : 'Gig (public pool)'}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <Text style={[styles.label, { color: theme.text2, marginTop: spacing(3) }]}>Worker type</Text>
+                <ChoiceChips
+                  items={[['fixed', 'Fixed employee'], ['gig', 'Gig (public pool)']]}
+                  value={current.worker_type || 'fixed'}
+                  onChange={(t) => (current.worker_type || 'fixed') !== t && apply(current, { workerType: t as 'fixed' | 'gig' }, 'worker')}
+                />
 
-                <Text style={[styles.label, { color: theme.text3 }]}>Access</Text>
-                {SWITCHES.map((s) => {
-                  const on = Number(current[s.column]) === 1;
-                  return (
-                    <View key={s.key} style={[styles.switchRow, { borderBottomColor: theme.line }]}>
-                      <View style={styles.switchText}>
-                        <Text style={[styles.switchLabel, { color: theme.text }]}>{s.label}</Text>
-                        <Text style={[styles.switchHint, { color: theme.text3 }]}>{s.hint}</Text>
-                      </View>
-                      <Switch
-                        value={on}
-                        disabled={saving === s.key}
-                        onValueChange={(v) => apply(current, { [s.key]: v } as UserPatch, String(s.key))}
-                        trackColor={{ true: brand.primary, false: theme.line }}
-                      />
-                    </View>
-                  );
-                })}
+                <Overline style={{ marginTop: spacing(4) }}>Work policy</Overline>
+                <RowPanel>
+                  {SWITCHES.map((s, i) => (
+                    <SwitchRow
+                      key={s.key}
+                      label={s.label}
+                      hint={s.hint}
+                      value={Number(current[s.column]) === 1}
+                      disabled={saving === s.key}
+                      onValueChange={(v) => apply(current, { [s.key]: v } as UserPatch, String(s.key))}
+                      last={i === SWITCHES.length - 1}
+                    />
+                  ))}
+                </RowPanel>
               </>
             ) : null}
+            <DangerButton icon="trash" label="Delete account" onPress={() => remove(current)} />
           </>
         ) : null}
       </FormSheet>
@@ -254,13 +230,5 @@ export default function UsersScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   label: { ...typography.caption, fontSize: 12 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3.5), paddingVertical: spacing(2) },
-  chipText: { ...typography.caption, fontSize: 12 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2.5), borderBottomWidth: 1 },
-  switchText: { flex: 1, minWidth: 0 },
-  switchLabel: { ...typography.body, fontSize: 14 },
-  switchHint: { ...typography.caption, fontSize: 11 },
 });

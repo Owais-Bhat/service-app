@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { HeaderAction, RowPanel, Segmented, SwitchRow } from '../../components/admin/FinanceKit';
+import { Alert } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import { Coupon, createCoupon, deleteCoupon, fetchCoupons, updateCoupon } from '../../api/adminMoney';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { ThemeTokens } from '../../theme/tokens';
 import { inr, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -21,11 +20,11 @@ interface Props {
 const valueText = (c: Coupon) =>
   c.type === 'percent' ? `${Number(c.value)}% off${c.max_discount ? ` (max ${inr(c.max_discount)})` : ''}` : `${inr(c.value)} off`;
 
-function stateOf(c: Coupon): { label: string; color: string } {
-  if (Number(c.active) !== 1) return { label: 'Hidden', color: brand.grey };
-  if (c.expires_at && new Date(c.expires_at).getTime() < Date.now()) return { label: 'Expired', color: semantic.danger };
-  if (c.usage_limit != null && Number(c.used_count) >= Number(c.usage_limit)) return { label: 'Used up', color: semantic.warning };
-  return { label: 'Active', color: semantic.success };
+function stateOf(c: Coupon, t: ThemeTokens): { label: string; color: string } {
+  if (Number(c.active) !== 1) return { label: 'Hidden', color: t.grey };
+  if (c.expires_at && new Date(c.expires_at).getTime() < Date.now()) return { label: 'Expired', color: t.err };
+  if (c.usage_limit != null && Number(c.used_count) >= Number(c.usage_limit)) return { label: 'Used up', color: t.warn };
+  return { label: 'Active', color: t.ok };
 }
 
 const EMPTY = { code: '', type: 'fixed' as 'fixed' | 'percent', value: '', max: '', min: '', limit: '', expires: '', desc: '', active: true };
@@ -128,14 +127,12 @@ export default function CouponsScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add coupon">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="Add coupon" onPress={() => open('new')} />
       }
     >
       {(list.data ?? []).length === 0 ? <EmptyNote text="No coupons yet — tap + to create one" icon="ticket" /> : null}
       {(list.data ?? []).map((c) => {
-        const st = stateOf(c);
+        const st = stateOf(c, theme);
         return (
           <ListRow
             key={c.id}
@@ -168,40 +165,22 @@ export default function CouponsScreen({ onBack }: Props) {
         }
       >
         <Field label="Code" value={form.code} onChangeText={(v) => set('code', v.toUpperCase())} autoCapitalize="characters" placeholder="DIWALI100" />
-        <View style={styles.typeRow}>
-          {(['fixed', 'percent'] as const).map((t) => {
-            const on = form.type === t;
-            return (
-              <Pressable
-                key={t}
-                onPress={() => set('type', t)}
-                style={[styles.type, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-              >
-                <Text style={[styles.typeText, { color: on ? brand.primary : theme.text2 }]}>{t === 'fixed' ? 'Fixed ₹' : 'Percent %'}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Segmented
+          items={[['fixed', 'Fixed ₹'], ['percent', 'Percent %']]}
+          value={form.type}
+          onChange={(t) => set('type', t as 'fixed' | 'percent')}
+        />
         <Field label={form.type === 'percent' ? 'Percent off' : 'Amount off (₹)'} value={form.value} onChangeText={(v) => set('value', v)} keyboardType="numeric" />
         {form.type === 'percent' ? <Field label="Max discount (₹, optional)" value={form.max} onChangeText={(v) => set('max', v)} keyboardType="numeric" /> : null}
         <Field label="Minimum bill (₹, optional)" value={form.min} onChangeText={(v) => set('min', v)} keyboardType="numeric" />
         <Field label="Usage limit (optional)" value={form.limit} onChangeText={(v) => set('limit', v)} keyboardType="numeric" hint="Leave empty for unlimited" />
         <Field label="Expires (optional)" value={form.expires} onChangeText={(v) => set('expires', v)} hint="YYYY-MM-DD or YYYY-MM-DD HH:MM" />
         <Field label="Internal note (optional)" value={form.desc} onChangeText={(v) => set('desc', v)} multiline />
-        <Pressable onPress={() => set('active', !form.active)} style={styles.check}>
-          <Icon name={form.active ? 'check-circle' : 'tasks'} size={20} color={form.active ? brand.primary : theme.text3} filled={form.active} />
-          <Text style={[styles.checkText, { color: theme.text }]}>Active</Text>
-        </Pressable>
+        <RowPanel>
+          <SwitchRow label="Active" value={form.active} onValueChange={(v) => set('active', v)} last />
+        </RowPanel>
       </FormSheet>
     </AdminScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  typeRow: { flexDirection: 'row', gap: spacing(2) },
-  type: { flex: 1, borderWidth: 1, borderRadius: radius.md, paddingVertical: spacing(2.5), alignItems: 'center' },
-  typeText: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
-  check: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
-  checkText: { ...typography.body },
-});

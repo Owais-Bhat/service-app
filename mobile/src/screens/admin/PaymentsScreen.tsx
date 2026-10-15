@@ -8,7 +8,7 @@ import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { BilledJob, fetchBilledJobs, markJobPaid } from '../../api/adminMoney';
-import { semantic } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 import { inr, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -22,6 +22,7 @@ type Filter = 'all' | 'unpaid' | 'paid';
 // applies exactly what the web button does — it records cash unless a method
 // is already set, and resolves the job if it was still open.
 export default function PaymentsScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const jobs = useLoader(fetchBilledJobs, 'Could not load payments');
   const [filter, setFilter] = useState<Filter>('unpaid');
   const [query, setQuery] = useState('');
@@ -84,8 +85,8 @@ export default function PaymentsScreen({ onBack }: Props) {
     >
       <StatGrid
         items={[
-          { label: 'Received', value: inr(total(paid)), color: semantic.success },
-          { label: 'Pending', value: inr(total(unpaid)), color: semantic.warning },
+          { label: 'Received', value: inr(total(paid)), color: theme.ok },
+          { label: 'Pending', value: inr(total(unpaid)), color: theme.warn },
         ]}
       />
       {visible.length === 0 ? <EmptyNote text="No payment records here" icon="cash" /> : null}
@@ -95,12 +96,12 @@ export default function PaymentsScreen({ onBack }: Props) {
           <ListRow
             key={r.id}
             icon="cash"
-            iconColor={isPaid ? semantic.success : semantic.warning}
+            iconColor={isPaid ? theme.ok : theme.warn}
             title={r.full_name || 'Customer'}
             subtitle={r.service_item || undefined}
             meta={`${r.ticket_no || ''} · ${shortDate(r.bill_generated_at || r.created_at)}${r.payment_method ? ` · ${r.payment_method}` : ''}`}
             value={inr(amt(r))}
-            badge={{ label: isPaid ? 'Paid' : 'Unpaid', color: isPaid ? semantic.success : semantic.warning }}
+            badge={{ label: isPaid ? 'Paid' : 'Unpaid', color: isPaid ? theme.ok : theme.warn }}
             footer={
               !isPaid || r.payment_link ? (
                 <>

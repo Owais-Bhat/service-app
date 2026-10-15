@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { HeaderAction } from '../../components/admin/FinanceKit';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import StatGrid from '../../components/admin/StatGrid';
 import ListRow from '../../components/admin/ListRow';
@@ -8,13 +9,11 @@ import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import StatusBadge from '../../components/admin/StatusBadge';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import CourseEditorSheet from '../../components/admin/CourseEditorSheet';
 import { createCourse, deleteCourse } from '../../api/adminTraining';
 import { CourseProgress, fetchCourseProgress, fetchTrainingCompliance, fetchTrainingCourses, setCourseActive } from '../../api/adminSettings';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { spacing, typography } from '../../theme';
 import { shortDate, timeAgo } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -101,9 +100,7 @@ export default function TrainingAdminScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => setCreating(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New course">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New course" onPress={() => setCreating(true)} />
       }
     >
       <StatGrid
@@ -111,7 +108,7 @@ export default function TrainingAdminScreen({ onBack }: Props) {
           { label: 'Courses', value: courses.length },
           { label: 'Lessons', value: courses.reduce((s, c) => s + Number(c.lesson_count || 0), 0) },
           { label: 'Quiz questions', value: courses.reduce((s, c) => s + Number(c.quiz_count || 0), 0) },
-          { label: 'Completions', value: [...(data.data?.compliance.values() ?? [])].reduce((s, c) => s + Number(c.completed || 0), 0), color: semantic.success },
+          { label: 'Completions', value: [...(data.data?.compliance.values() ?? [])].reduce((s, c) => s + Number(c.completed || 0), 0), color: theme.ok },
         ]}
       />
       {courses.length === 0 ? <EmptyNote text="No courses yet — tap + to create one" icon="training" /> : null}
@@ -121,11 +118,11 @@ export default function TrainingAdminScreen({ onBack }: Props) {
           <ListRow
             key={c.id}
             icon="training"
-            iconColor={Number(c.active) === 1 ? undefined : brand.grey}
+            iconColor={Number(c.active) === 1 ? undefined : theme.grey}
             title={c.title}
             subtitle={`${c.category || 'General'} · ${c.lesson_count} lessons · ${c.quiz_count} questions`}
             meta={`${comp?.completed ?? 0} completed · ${c.assign_count} assignments`}
-            badge={Number(c.active) === 1 ? undefined : { label: 'Hidden', color: brand.grey }}
+            badge={Number(c.active) === 1 ? undefined : { label: 'Hidden', color: theme.grey }}
             onPress={() => open(c.id)}
             footer={
               <>
@@ -150,7 +147,7 @@ export default function TrainingAdminScreen({ onBack }: Props) {
         {progress?.employees.map((e) => {
           const total = progress.lessons.length;
           const done = e.completion ? 'Completed' : e.done_count > 0 ? 'In progress' : 'Not started';
-          const color = e.completion ? semantic.success : e.done_count > 0 ? semantic.warning : brand.grey;
+          const color = e.completion ? theme.ok : e.done_count > 0 ? theme.warn : theme.grey;
           const overdue = !e.completion && !!e.due_date && new Date(e.due_date).getTime() < Date.now();
           return (
             <View key={e.employee_id} style={[styles.person, { borderBottomColor: theme.line }]}>
@@ -163,7 +160,7 @@ export default function TrainingAdminScreen({ onBack }: Props) {
                   {overdue ? ` · due ${shortDate(e.due_date)}` : ''}
                 </Text>
               </View>
-              <StatusBadge label={overdue ? 'Overdue' : done} color={overdue ? semantic.danger : color} />
+              <StatusBadge label={overdue ? 'Overdue' : done} color={overdue ? theme.err : color} />
             </View>
           );
         })}
@@ -185,7 +182,6 @@ export default function TrainingAdminScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   note: { ...typography.body, textAlign: 'center', paddingVertical: spacing(4) },
   person: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2.5), borderBottomWidth: 1 },
   personText: { flex: 1, minWidth: 0 },

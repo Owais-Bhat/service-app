@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
+import { Overline } from '../../components/admin/FinanceKit';
 import { StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import EmptyNote from '../../components/admin/EmptyNote';
 import ExportButton from '../../components/admin/ExportButton';
@@ -12,7 +12,6 @@ import Field from '../../components/admin/Field';
 import { amounts, BillLine, CollectionRow, fetchBillLines, fetchCollections, paidDay } from '../../api/adminCollections';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { semantic } from '../../theme/tokens';
 import { inr, shortDate, todayIso } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -170,19 +169,19 @@ export default function CollectionsScreen({ onBack }: Props) {
               { label: 'Travel', value: inr(totals.travel) },
               { label: 'Platform fee', value: inr(totals.platform) },
               { label: 'GST', value: inr(totals.gst) },
-              { label: 'Discount given', value: inr(totals.discount), color: totals.discount ? semantic.danger : undefined },
-              { label: 'Net collected', value: inr(totals.net), color: semantic.success },
+              { label: 'Discount given', value: inr(totals.discount), color: totals.discount ? theme.err : undefined },
+              { label: 'Net collected', value: inr(totals.net), color: theme.ok },
             ]}
           />
 
           {gig.rows.length > 0 ? (
             <>
-              <SectionLabel>{`Gig pool earnings${gig.unpaid ? ` · ${gig.unpaid} unpaid` : ''}`}</SectionLabel>
+              <Overline>{`Gig pool earnings${gig.unpaid ? ` · ${gig.unpaid} unpaid` : ''}`}</Overline>
               <StatGrid
                 items={[
                   { label: `Gig jobs billed · ${gig.rows.length}`, value: inr(gig.net) },
                   { label: 'Company keeps', value: inr(gig.net - gig.payout) },
-                  { label: 'Gig worker payouts', value: inr(gig.payout), color: semantic.warning },
+                  { label: 'Gig worker payouts', value: inr(gig.payout), color: theme.warn },
                 ]}
               />
               {gig.workers.map((g) => (
@@ -191,7 +190,7 @@ export default function CollectionsScreen({ onBack }: Props) {
             </>
           ) : null}
 
-          <SectionLabel>By employee</SectionLabel>
+          <Overline>By employee</Overline>
           {byEmployee.length === 0 ? <EmptyNote text="No collections found" icon="wallet" /> : null}
           {byEmployee.map((e) => (
             <ListRow
@@ -212,7 +211,7 @@ export default function CollectionsScreen({ onBack }: Props) {
               return { Date: paidDay(r), Ticket: r.ticket_no, Customer: r.full_name, Employee: r.assigned_employee_id ? names.get(r.assigned_employee_id) : '', Service: a.service, Travel: a.travel, Platform: a.platform, GST: a.gst, Discount: a.discount, Net: a.net, Method: r.payment_method === 'cash' ? 'cash' : 'online' };
             })}
           />
-          <SectionLabel>Tickets</SectionLabel>
+          <Overline>Tickets</Overline>
           {visible.map((r) => {
             const a = amounts(r);
             return (
@@ -237,7 +236,7 @@ export default function CollectionsScreen({ onBack }: Props) {
               {open.service_item || ''}
               {paidDay(open) ? ` · ${shortDate(paidDay(open))}` : ''}
             </Text>
-            <SectionLabel>Services</SectionLabel>
+            <Overline>Services</Overline>
             {lines === null ? <Text style={[styles.sub, { color: theme.text3 }]}>Loading…</Text> : null}
             {lines && lines.length === 0 ? <ListRow title="Service charge" value={inr(Math.max(0, m.service - m.extra))} /> : null}
             {(lines || []).map((l, i) => (
@@ -246,10 +245,10 @@ export default function CollectionsScreen({ onBack }: Props) {
             {m.extra > 0 ? <ListRow title={`Additional charges${open.extra_cost_reason ? ` (${open.extra_cost_reason})` : ''}`} value={inr(m.extra)} /> : null}
             {m.platform > 0 ? <ListRow title="Platform fee" value={inr(m.platform)} /> : null}
             <ListRow title="Travel" value={inr(m.travel)} />
-            {m.discount > 0 ? <ListRow title="Discount given (your profit cut)" value={`−${inr(m.discount)}`} valueColor={semantic.danger} /> : null}
+            {m.discount > 0 ? <ListRow title="Discount given (your profit cut)" value={`−${inr(m.discount)}`} valueColor={theme.err} /> : null}
             <ListRow title="Taxable" value={inr(m.taxable)} />
             {m.gst > 0 ? <ListRow title={`GST${m.gstRate ? ` (${m.gstRate}%)` : ''}`} value={inr(m.gst)} /> : null}
-            <ListRow title="Net collected" value={inr(m.net)} valueColor={semantic.success} subtitle={open.payment_method === 'cash' ? 'Paid in cash' : 'Paid online'} />
+            <ListRow title="Net collected" value={inr(m.net)} valueColor={theme.ok} subtitle={open.payment_method === 'cash' ? 'Paid in cash' : 'Paid online'} />
           </View>
         ) : null}
       </FormSheet>

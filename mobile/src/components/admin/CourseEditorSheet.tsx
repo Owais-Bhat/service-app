@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Overline, RowPanel, SwitchRow } from './FinanceKit';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import FormSheet from './FormSheet';
 import FilterChips from './FilterChips';
@@ -7,7 +8,6 @@ import Field from './Field';
 import ListRow from './ListRow';
 import ActionButton from './ActionButton';
 import EmptyNote from './EmptyNote';
-import SectionLabel from './SectionLabel';
 import {
   addLesson,
   addQuestion,
@@ -31,7 +31,6 @@ import { shareCsv } from '../../utils/shareCsv';
 import { uploadMedia } from '../../api/upload';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 
 interface Props {
   courseId: string | null;
@@ -258,7 +257,7 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
   return (
     <FormSheet visible={!!courseId} title={full?.course.title || 'Course'} subtitle={full ? `${full.lessons.length} lessons · ${full.quiz.length} questions` : undefined} onClose={onClose}>
       <FilterChips items={TABS} activeKey={tab} onSelect={(k) => setTab(k as Tab)} />
-      {loading && !full ? <ActivityIndicator color={brand.primary} style={styles.spin} /> : null}
+      {loading && !full ? <ActivityIndicator color={theme.accent} style={styles.spin} /> : null}
 
       {full && tab === 'lessons' ? (
         <View>
@@ -273,7 +272,7 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
               footer={<ActionButton label="Delete" tone="danger" busy={busy === `l-${l.id}`} onPress={() => dropLesson(l.id)} />}
             />
           ))}
-          <SectionLabel>Add a lesson</SectionLabel>
+          <Overline>Add a lesson</Overline>
           <Field label="Lesson title" value={lesson.title} onChangeText={(v) => setLesson({ ...lesson, title: v })} placeholder="e.g. How to install a DVR" />
           <FilterChips items={LESSON_TYPES} activeKey={lesson.type} onSelect={(k) => setLesson({ ...lesson, type: k })} />
           {lesson.type !== 'text' ? (
@@ -285,7 +284,7 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
                   disabled={uploading}
                   style={[styles.upload, { borderColor: theme.line, backgroundColor: theme.panel2 }]}
                 >
-                  {uploading ? <ActivityIndicator size="small" color={brand.primary} /> : <Text style={[styles.uploadText, { color: brand.primary }]}>{lesson.media ? 'Replace file' : 'Upload from phone'}</Text>}
+                  {uploading ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={[styles.uploadText, { color: theme.accent }]}>{lesson.media ? 'Replace file' : 'Upload from phone'}</Text>}
                 </Pressable>
               ) : null}
             </View>
@@ -311,7 +310,7 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
               />
             );
           })}
-          <SectionLabel>Import many from a CSV</SectionLabel>
+          <Overline>Import many from a CSV</Overline>
           <Text style={[styles.cap, { color: theme.text3 }]}>
             Columns: Type (mcq, fill, image, match), Question, OptionA–D, Correct (A–D), ImageURL. For match, write each option as Left=Right.
           </Text>
@@ -319,15 +318,15 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
             <ActionButton label="Sample CSV" tone="neutral" onPress={() => shareCsv('quiz-upload-sample.csv', QUIZ_SAMPLE)} />
             <ActionButton label="Import CSV" busy={busy === 'qimport'} onPress={importCsv} />
           </View>
-          <SectionLabel>Add a question</SectionLabel>
+          <Overline>Add a question</Overline>
           <FilterChips items={Q_TYPES} activeKey={q.type} onSelect={(k) => setQ({ ...q, type: k })} />
           {q.type === 'image' ? (
             <Pressable
               onPress={() => pickMedia(['images'], (url) => setQ((x) => ({ ...x, img: url })))}
               disabled={uploading}
-              style={[styles.upload, { borderColor: q.img ? brand.primary : theme.line, backgroundColor: theme.panel2 }]}
+              style={[styles.upload, { borderColor: q.img ? theme.accent : theme.line, backgroundColor: theme.panel2 }]}
             >
-              {uploading ? <ActivityIndicator size="small" color={brand.primary} /> : <Text style={[styles.uploadText, { color: brand.primary }]}>{q.img ? 'Question image ready — replace' : 'Pick the question image'}</Text>}
+              {uploading ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={[styles.uploadText, { color: theme.accent }]}>{q.img ? 'Question image ready — replace' : 'Pick the question image'}</Text>}
             </Pressable>
           ) : null}
           <Field
@@ -341,7 +340,7 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
             <View key={i} style={styles.optRow}>
               <Pressable
                 onPress={() => setQ({ ...q, correct: i })}
-                style={[styles.dot, { borderColor: q.correct === i ? semantic.success : theme.text3, backgroundColor: q.correct === i ? semantic.success : 'transparent' }]}
+                style={[styles.dot, { borderColor: q.correct === i ? theme.ok : theme.text3, backgroundColor: q.correct === i ? theme.ok : 'transparent' }]}
                 accessibilityLabel={`Mark option ${i + 1} correct`}
               />
               <View style={styles.optField}>
@@ -355,10 +354,9 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
 
       {full && tab === 'assign' ? (
         <View>
-          <View style={styles.switchRow}>
-            <Switch value={all} onValueChange={setAll} trackColor={{ true: brand.primary }} />
-            <Text style={[styles.switchText, { color: theme.text }]}>Assign to all employees (current and future)</Text>
-          </View>
+          <RowPanel>
+            <SwitchRow label="Assign to all employees (current and future)" value={all} onValueChange={setAll} last />
+          </RowPanel>
           {all ? null : (
             <View>
               {employees.map((e) => {
@@ -367,9 +365,9 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
                   <ListRow
                     key={e.id}
                     icon="user"
-                    iconColor={on ? semantic.success : undefined}
+                    iconColor={on ? theme.ok : undefined}
                     title={e.full_name || 'Employee'}
-                    badge={on ? { label: 'Assigned', color: semantic.success } : undefined}
+                    badge={on ? { label: 'Assigned', color: theme.ok } : undefined}
                     onPress={() =>
                       setPicked((prev) => {
                         const next = new Set(prev);
@@ -402,8 +400,8 @@ export default function CourseEditorSheet({ courseId, onClose, onChanged }: Prop
 
 const styles = StyleSheet.create({
   spin: { marginVertical: spacing(6) },
-  upload: { borderWidth: 1, borderRadius: radius.md, paddingVertical: spacing(3), alignItems: 'center', marginBottom: spacing(3) },
-  uploadText: { ...typography.caption, fontWeight: '700' },
+  upload: { borderWidth: 1, borderRadius: radius.lg, paddingVertical: spacing(3), alignItems: 'center', marginBottom: spacing(3) },
+  uploadText: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
   cap: { ...typography.caption, marginBottom: spacing(2) },
   optRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
   optField: { flex: 1 },

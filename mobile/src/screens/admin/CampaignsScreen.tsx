@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, HeaderAction, KvLine, Overline, RowPanel, Segmented, SwitchRow } from '../../components/admin/FinanceKit';
+import Icon from '../../components/Icon';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import StatGrid from '../../components/admin/StatGrid';
-import SectionLabel from '../../components/admin/SectionLabel';
 import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import Icon from '../../components/Icon';
 import { fetchCampaigns } from '../../api/adminExtra';
 import {
   addOptouts,
@@ -38,7 +38,6 @@ import {
 import { uploadFile } from '../../api/upload';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { dateTime, humanize } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -49,24 +48,7 @@ interface Props {
 type Filter = 'all' | 'running' | 'scheduled' | 'done' | 'draft';
 type View_ = 'campaigns' | 'optouts';
 
-const COLOR: Record<string, string> = {
-  draft: brand.grey,
-  scheduled: semantic.info,
-  sending: semantic.warning,
-  running: semantic.warning,
-  paused: semantic.danger,
-  completed: semantic.success,
-  done: semantic.success,
-  cancelled: brand.grey,
-  standing: semantic.success,
-};
 const VAR_LABEL: Record<string, string> = { name: "Customer's name", business: 'Business name', text: 'Fixed text' };
-const RECIPIENT: Record<string, [string, string]> = {
-  sent: [semantic.success, 'Accepted'],
-  failed: [semantic.danger, 'Failed'],
-  queued: [brand.grey, 'Waiting'],
-  skipped: [brand.grey, 'Skipped'],
-};
 const DATETIME_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const errText = (e: unknown, f: string) => (e instanceof Error && e.message ? e.message : f);
@@ -94,6 +76,23 @@ const blankDraft = (): Draft => ({
 // itself. The do-not-message list is kept here too.
 export default function CampaignsScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const COLOR: Record<string, string> = {
+    draft: theme.grey,
+    scheduled: theme.info,
+    sending: theme.warn,
+    running: theme.warn,
+    paused: theme.err,
+    completed: theme.ok,
+    done: theme.ok,
+    cancelled: theme.grey,
+    standing: theme.ok,
+  };
+  const RECIPIENT: Record<string, [string, string]> = {
+    sent: [theme.ok, 'Accepted'],
+    failed: [theme.err, 'Failed'],
+    queued: [theme.grey, 'Waiting'],
+    skipped: [theme.grey, 'Skipped'],
+  };
   const list = useLoader(fetchCampaigns, 'Could not load campaigns');
   const optouts = useLoader<OptOut[]>(fetchOptouts, 'Could not load the do-not-message list');
   const [meta, setMeta] = useState<CampaignMeta | null>(null);
@@ -427,9 +426,7 @@ export default function CampaignsScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New campaign">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New campaign" onPress={() => openEditor(null)} />
       }
       toolbar={
         <View>
@@ -466,8 +463,8 @@ export default function CampaignsScreen({ onBack }: Props) {
           ) : null}
           <StatGrid
             items={[
-              { label: 'Messages sent', value: sent, color: semantic.success },
-              { label: 'Failed', value: failed, color: failed ? semantic.danger : undefined },
+              { label: 'Messages sent', value: sent, color: theme.ok },
+              { label: 'Failed', value: failed, color: failed ? theme.err : undefined },
             ]}
           />
           {visible.length === 0 ? <EmptyNote text="No campaigns here" icon="megaphone" /> : null}
@@ -479,7 +476,7 @@ export default function CampaignsScreen({ onBack }: Props) {
               title={c.name}
               subtitle={`${c.progress.sent} sent · ${c.progress.queued} queued · ${c.progress.failed} failed · ${c.progress.skipped} skipped`}
               meta={`${c.scheduled_at ? dateTime(c.scheduled_at) : 'Not scheduled'}${c.is_standing ? ` · repeats ${c.recurrence}` : ''}`}
-              badge={{ label: humanize(c.status), color: COLOR[c.status] ?? semantic.info }}
+              badge={{ label: humanize(c.status), color: COLOR[c.status] ?? theme.info }}
               onPress={() => openDetail(c.id)}
             />
           ))}
@@ -510,12 +507,12 @@ export default function CampaignsScreen({ onBack }: Props) {
       <FormSheet visible={!!d} title={d?.name || 'Campaign'} subtitle={d ? humanize(d.status) : undefined} onClose={() => { setDetail(null); setDetailId(null); }} footer={d ? footerFor(d) : undefined}>
         {d ? (
           <View>
-            {d.pause_reason ? <ListRow icon="alert" iconColor={semantic.warning} title={d.pause_reason} /> : null}
+            {d.pause_reason ? <ListRow icon="alert" iconColor={theme.warn} title={d.pause_reason} /> : null}
             {d.is_standing ? (
               <View>
                 <ListRow
                   icon={d.auto_enabled ? 'check-circle' : 'alert'}
-                  iconColor={d.auto_enabled ? semantic.success : semantic.warning}
+                  iconColor={d.auto_enabled ? theme.ok : theme.warn}
                   title={d.auto_enabled ? `Automatic — ${dayText(d.run_day ?? 0)} at ${d.run_time}` : 'Automatic sending is off'}
                   subtitle={
                     d.auto_enabled
@@ -524,20 +521,20 @@ export default function CampaignsScreen({ onBack }: Props) {
                   }
                   meta={d.offer_is_fresh ? 'The offer is ready — it will be sent.' : d.fresh_offer_required ? 'The offer has not been updated since the last send — this month is skipped unless you change it.' : 'It will be sent again as it is.'}
                 />
-                <SectionLabel>This month's offer</SectionLabel>
+                <Overline>This month's offer</Overline>
                 {d.variables.filter((v) => v.type === 'text').map((v, i) => (
                   <Text key={i} style={[styles.offer, { color: theme.text }]}>“{v.value}”</Text>
                 ))}
                 {d.variables.every((v) => v.type !== 'text') ? <Text style={[styles.note, { color: theme.text3 }]}>No fixed text — the message uses only the name.</Text> : null}
                 <ActionButton label="Change this month's offer" tone="neutral" onPress={() => openOffer(d)} />
-                {(d.runs || []).length ? <SectionLabel>Sent so far</SectionLabel> : null}
+                {(d.runs || []).length ? <Overline>Sent so far</Overline> : null}
                 {(d.runs || []).map((r) => (
                   <ListRow
                     key={r.id}
                     icon="whatsapp"
                     title={r.name}
                     subtitle={`${r.progress.sent} of ${r.progress.total} sent${r.progress.failed ? ` · ${r.progress.failed} failed` : ''}`}
-                    badge={{ label: humanize(r.status), color: COLOR[r.status] ?? semantic.info }}
+                    badge={{ label: humanize(r.status), color: COLOR[r.status] ?? theme.info }}
                     onPress={() => openDetail(r.id)}
                   />
                 ))}
@@ -545,24 +542,26 @@ export default function CampaignsScreen({ onBack }: Props) {
             ) : (
               <StatGrid
                 items={[
-                  { label: `Accepted of ${d.progress.total || '—'}`, value: d.progress.sent, color: semantic.success },
-                  { label: 'Failed', value: d.progress.failed, color: d.progress.failed ? semantic.danger : undefined },
+                  { label: `Accepted of ${d.progress.total || '—'}`, value: d.progress.sent, color: theme.ok },
+                  { label: 'Failed', value: d.progress.failed, color: d.progress.failed ? theme.err : undefined },
                   { label: 'Waiting', value: d.progress.queued },
                   { label: 'Skipped', value: d.progress.skipped },
                 ]}
               />
             )}
-            <SectionLabel>Setup</SectionLabel>
-            <ListRow title="Template" subtitle={`${d.message_id}${d.media_path ? ' · with a picture / PDF header' : ''}`} />
-            <ListRow
-              title="Blanks"
-              subtitle={d.variables.length ? d.variables.map((v, i) => `{{${i + 1}}} = ${v.type === 'text' ? `“${v.value}”` : VAR_LABEL[v.type]}`).join(' · ') : 'None'}
-            />
-            <ListRow title="Goes to" subtitle={audienceLabel(d.audience)} />
-            {d.scheduled_at ? <ListRow title="Starts" subtitle={dateTime(d.scheduled_at)} meta={d.finished_at ? `Finished ${dateTime(d.finished_at)}` : undefined} /> : null}
-            {(d.recipients || []).length ? <SectionLabel>Recipients</SectionLabel> : null}
+            <Overline>Setup</Overline>
+            <RowPanel>
+              <KvLine label="Template" value={`${d.message_id}${d.media_path ? ' · with a picture / PDF header' : ''}`} mono />
+              <KvLine
+                label="Blanks"
+                value={d.variables.length ? d.variables.map((v, i) => `{{${i + 1}}} = ${v.type === 'text' ? `“${v.value}”` : VAR_LABEL[v.type]}`).join(' · ') : 'None'}
+              />
+              <KvLine label="Goes to" value={audienceLabel(d.audience)} last={!d.scheduled_at} />
+              {d.scheduled_at ? <KvLine label="Starts" value={`${dateTime(d.scheduled_at)}${d.finished_at ? ` · finished ${dateTime(d.finished_at)}` : ''}`} last /> : null}
+            </RowPanel>
+            {(d.recipients || []).length ? <Overline>Recipients</Overline> : null}
             {(d.recipients || []).slice(0, 100).map((r, i) => {
-              const [color, label] = RECIPIENT[r.status] || [brand.grey, r.status];
+              const [color, label] = RECIPIENT[r.status] || [theme.grey, r.status];
               return (
                 <ListRow
                   key={`${r.phone}-${i}`}
@@ -597,15 +596,15 @@ export default function CampaignsScreen({ onBack }: Props) {
           hint="The short MESSAGE ID of the approved Marketing template in Fast2SMS, not the long Template ID"
         />
 
-        <SectionLabel>What fills the blanks</SectionLabel>
+        <Overline>What fills the blanks</Overline>
         {draft.variables.length === 0 ? <Text style={[styles.note, { color: theme.text3 }]}>None — the template has no blanks.</Text> : null}
         {draft.variables.map((v, i) => (
           <View key={i}>
             <Text style={[styles.cap, { color: theme.text2 }]}>{`{{${i + 1}}}`}</Text>
-            <FilterChips
-              items={Object.entries(VAR_LABEL).map(([key, label]) => ({ key, label }))}
-              activeKey={v.type}
-              onSelect={(k) => setVar(i, { type: k as CampaignVariable['type'], value: '' })}
+            <ChoiceChips
+              items={Object.entries(VAR_LABEL) as [string, string][]}
+              value={v.type}
+              onChange={(k) => setVar(i, { type: k as CampaignVariable['type'], value: '' })}
             />
             {v.type === 'text' ? <Field label="The words to put here" value={v.value || ''} onChangeText={(t) => setVar(i, { value: t })} /> : null}
             <ActionButton label="Remove this blank" tone="neutral" onPress={() => setDraft((x) => ({ ...x, variables: x.variables.filter((_, n) => n !== i) }))} />
@@ -620,7 +619,7 @@ export default function CampaignsScreen({ onBack }: Props) {
           }}
         />
 
-        <SectionLabel>Picture or PDF in the header</SectionLabel>
+        <Overline>Picture or PDF in the header</Overline>
         <Text style={[styles.note, { color: theme.text3 }]}>{draft.media ? `Attached: ${draft.media.split('/').pop()}` : 'Only if your template has one. Up to 5 MB.'}</Text>
         <View style={styles.actions}>
           <ActionButton label={draft.media ? 'Replace file' : 'Choose file'} tone="neutral" busy={busy === 'upload'} onPress={() => pickHeader((url) => setDraft((x) => ({ ...x, media: url })))} />
@@ -629,15 +628,15 @@ export default function CampaignsScreen({ onBack }: Props) {
 
         {editing?.existing && !editing.existing.is_standing ? null : (
           <View>
-            <SectionLabel>When it goes out</SectionLabel>
+            <Overline>When it goes out</Overline>
             {editing?.existing ? null : (
-              <FilterChips
+              <Segmented
                 items={[
-                  { key: 'once', label: 'One time — I will schedule it' },
-                  { key: 'monthly', label: 'Every month, automatically' },
+                  ['once', 'One time'],
+                  ['monthly', 'Every month'],
                 ]}
-                activeKey={draft.monthly ? 'monthly' : 'once'}
-                onSelect={(k) => setDraft({ ...draft, monthly: k === 'monthly' })}
+                value={draft.monthly ? 'monthly' : 'once'}
+                onChange={(k) => setDraft({ ...draft, monthly: k === 'monthly' })}
               />
             )}
             {draft.monthly ? (
@@ -650,43 +649,41 @@ export default function CampaignsScreen({ onBack }: Props) {
                   placeholder="10:00"
                   hint={meta ? `Between ${meta.hours.from}:00 and ${meta.hours.until - 1}:00` : undefined}
                 />
-                <View style={styles.switchRow}>
-                  <Switch value={draft.fresh} onValueChange={(v) => setDraft({ ...draft, fresh: v })} trackColor={{ true: brand.primary }} />
-                  <Text style={[styles.switchText, { color: theme.text }]}>Send only if I have updated the offer since the last time</Text>
-                </View>
+                <RowPanel>
+                  <SwitchRow label="Send only if I have updated the offer since the last time" value={draft.fresh} onValueChange={(v) => setDraft({ ...draft, fresh: v })} last />
+                </RowPanel>
               </View>
             ) : null}
           </View>
         )}
 
-        <SectionLabel>Who it goes to</SectionLabel>
-        <View style={styles.switchRow}>
-          <Switch value={draft.customers} onValueChange={(v) => setDraft({ ...draft, customers: v })} trackColor={{ true: brand.primary }} />
-          <Text style={[styles.switchText, { color: theme.text }]}>Customers (Customers & Suppliers with a mobile number)</Text>
-        </View>
-        <View style={styles.switchRow}>
-          <Switch
+        <Overline>Who it goes to</Overline>
+        <RowPanel>
+          <SwitchRow label="Customers" hint="Customers & Suppliers with a mobile number" value={draft.customers} onValueChange={(v) => setDraft({ ...draft, customers: v })} />
+          <SwitchRow
+            label="Contacts"
+            labelColor={draft.segment === 'all' ? theme.text : theme.text3}
             value={draft.contacts && draft.segment === 'all'}
-            disabled={draft.segment !== 'all'}
-            onValueChange={(v) => setDraft({ ...draft, contacts: v })}
-            trackColor={{ true: brand.primary }}
+            onValueChange={(v) => draft.segment === 'all' && setDraft({ ...draft, contacts: v })}
+            last
           />
-          <Text style={[styles.switchText, { color: draft.segment === 'all' ? theme.text : theme.text3 }]}>Contacts</Text>
-        </View>
+        </RowPanel>
         <Text style={[styles.cap, { color: theme.text2 }]}>Narrow it down</Text>
-        <FilterChips
-          items={segKeys.map((k) => ({ key: k, label: meta?.segments[k] || k }))}
-          activeKey={draft.segment}
-          onSelect={(k) => setDraft({ ...draft, segment: k, contacts: k === 'all' ? draft.contacts : false })}
+        <ChoiceChips
+          items={segKeys.map((k) => [k, meta?.segments[k] || k] as [string, string])}
+          value={draft.segment}
+          onChange={(k) => setDraft({ ...draft, segment: k, contacts: k === 'all' ? draft.contacts : false })}
         />
         <ActionButton label="Check who this reaches" tone="neutral" busy={busy === 'check'} onPress={check} />
         {reach ? (
-          <Text style={[styles.note, { color: theme.text }]}>
-            {reach.will_send} people would receive it
-            {reach.invalid || reach.duplicates || reach.opted_out
-              ? ` (left out: ${[reach.invalid ? `${reach.invalid} without a valid number` : null, reach.duplicates ? `${reach.duplicates} duplicates` : null, reach.opted_out ? `${reach.opted_out} on the do-not-message list` : null].filter(Boolean).join(', ')})`
-              : ''}
-          </Text>
+          <View style={[styles.audience, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            <Text style={[styles.audienceCount, { color: theme.accent }]}>{reach.will_send} will receive</Text>
+            {reach.invalid || reach.duplicates || reach.opted_out ? (
+              <Text style={[styles.note, { color: theme.text2 }]}>
+                Left out: {[reach.invalid ? `${reach.invalid} without a valid number` : null, reach.duplicates ? `${reach.duplicates} duplicates` : null, reach.opted_out ? `${reach.opted_out} on the do-not-message list` : null].filter(Boolean).join(', ')}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </FormSheet>
 
@@ -699,23 +696,30 @@ export default function CampaignsScreen({ onBack }: Props) {
       >
         {schedule ? (
           <View>
-            <ListRow
-              icon={schedule.reach.will_send ? 'check-circle' : 'alert'}
-              iconColor={schedule.reach.will_send ? semantic.success : semantic.danger}
-              title={schedule.reach.will_send ? `${schedule.reach.will_send} people will receive it` : 'Nobody would receive this'}
-              subtitle={
-                schedule.reach.will_send
-                  ? `${schedule.reach.opted_out ? `${schedule.reach.opted_out} on the do-not-message list are left out. ` : ''}The list is fixed when you confirm.`
-                  : 'There is no customer with a valid mobile number in that audience. Go back and change who it goes to.'
-              }
-            />
-            <FilterChips
+            <View style={[styles.confirmIcon, { backgroundColor: schedule.reach.will_send ? theme.okS : theme.errS }]}>
+              <Icon name={schedule.reach.will_send ? 'megaphone' : 'alert'} size={22} color={schedule.reach.will_send ? theme.ok : theme.err} />
+            </View>
+            <Text style={[styles.confirmTitle, { color: theme.text }]}>
+              {schedule.reach.will_send ? `Schedule to ${schedule.reach.will_send} customers?` : 'Nobody would receive this'}
+            </Text>
+            <Text style={[styles.confirmBody, { color: theme.text2 }]}>
+              {schedule.reach.will_send
+                ? 'The list is fixed when you confirm. You can cancel until it starts sending.'
+                : 'There is no customer with a valid mobile number in that audience. Go back and change who it goes to.'}
+            </Text>
+            {schedule.reach.will_send ? (
+              <View style={[styles.summary, { backgroundColor: theme.panel2 }]}>
+                <View style={styles.summaryRow}><Text style={[styles.summaryLabel, { color: theme.text2 }]}>Recipients</Text><Text style={[styles.summaryValue, { color: theme.text }]}>{schedule.reach.will_send}</Text></View>
+                <View style={styles.summaryRow}><Text style={[styles.summaryLabel, { color: theme.text2 }]}>Left out</Text><Text style={[styles.summaryValue, { color: theme.text }]}>{(schedule.reach.opted_out || 0) + (schedule.reach.invalid || 0) + (schedule.reach.duplicates || 0)}</Text></View>
+              </View>
+            ) : null}
+            <Segmented
               items={[
-                { key: 'now', label: 'As soon as sending hours allow' },
-                { key: 'at', label: 'Start at a set time' },
+                ['now', 'As soon as allowed'],
+                ['at', 'At a set time'],
               ]}
-              activeKey={startNow ? 'now' : 'at'}
-              onSelect={(k) => setStartNow(k === 'now')}
+              value={startNow ? 'now' : 'at'}
+              onChange={(k) => setStartNow(k === 'now')}
             />
             {startNow ? null : <Field label="Start at" value={at} onChangeText={setAt} placeholder="YYYY-MM-DD HH:MM" keyboardType="numbers-and-punctuation" />}
             {meta ? (
@@ -737,7 +741,7 @@ export default function CampaignsScreen({ onBack }: Props) {
         {offer ? (
           <View>
             {Object.keys(offer.texts).length === 0 ? (
-              <ListRow icon="alert" iconColor={semantic.warning} title="No fixed-text blank" subtitle="Use Edit to add one." />
+              <ListRow icon="alert" iconColor={theme.warn} title="No fixed-text blank" subtitle="Use Edit to add one." />
             ) : null}
             {Object.entries(offer.texts).map(([i, t]) => (
               <Field key={i} label={`Offer text (fills {{${Number(i) + 1}}})`} value={t} onChangeText={(v) => setOffer({ ...offer, texts: { ...offer.texts, [Number(i)]: v } })} multiline />
@@ -766,11 +770,17 @@ export default function CampaignsScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   note: { ...typography.caption, marginVertical: spacing(2), lineHeight: 18 },
   cap: { ...typography.caption, fontWeight: '700', marginTop: spacing(2), marginBottom: spacing(1) },
   offer: { ...typography.body, marginVertical: spacing(1) },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginVertical: spacing(2) },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginVertical: spacing(2) },
-  switchText: { ...typography.body, flex: 1 },
+  audience: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), gap: spacing(1) },
+  audienceCount: { ...typography.monoId, fontSize: 14 },
+  confirmIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
+  confirmTitle: { ...typography.heading, fontSize: 20, lineHeight: 26 },
+  confirmBody: { ...typography.supporting, fontSize: 14, lineHeight: 20, marginTop: spacing(1.5), marginBottom: spacing(3.5) },
+  summary: { borderRadius: radius.md + 2, padding: spacing(3), gap: spacing(1.5), marginBottom: spacing(3.5) },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  summaryLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 13 },
+  summaryValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13 },
 });

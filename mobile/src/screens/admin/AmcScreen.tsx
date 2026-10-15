@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { HeaderAction, Overline } from '../../components/admin/FinanceKit';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import SearchField from '../../components/admin/SearchField';
@@ -9,7 +10,6 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import SectionLabel from '../../components/admin/SectionLabel';
 import Icon from '../../components/Icon';
 import { fetchAmc, fetchParties, PartyRow, rupees } from '../../api/adminBooks';
 import {
@@ -31,7 +31,6 @@ import {
 import { fetchTaxRates, TaxRate } from '../../api/adminSales';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { humanize, inr, shortDate, todayIso } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -40,14 +39,6 @@ interface Props {
 }
 
 type Filter = 'active' | 'lapsing' | 'expired' | 'renewals' | 'all';
-
-const STATE_COLOR: Record<string, string> = {
-  active: semantic.success,
-  upcoming: semantic.info,
-  renewed: brand.grey,
-  expired: semantic.danger,
-  cancelled: brand.grey,
-};
 
 const oneYearOn = (start: string) => {
   const d = new Date(`${start}T00:00:00`);
@@ -61,6 +52,7 @@ const oneYearOn = (start: string) => {
 // invoice, so it ages and is chased and paid like any other.
 export default function AmcScreen({ onBack }: Props) {
   const { theme } = useTheme();
+  const STATE_COLOR: Record<string, string> = { active: theme.ok, upcoming: theme.info, renewed: theme.grey, expired: theme.err, cancelled: theme.grey };
   const data = useLoader(async () => {
     const [list, renewals, tax] = await Promise.all([fetchAmc(), fetchRenewals().catch(() => [] as RenewalDue[]), fetchTaxRates().catch(() => [] as TaxRate[])]);
     return { list, renewals, tax };
@@ -223,9 +215,7 @@ export default function AmcScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New contract">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New contract" onPress={() => openEditor('new')} />
       }
       toolbar={
         <>
@@ -247,8 +237,8 @@ export default function AmcScreen({ onBack }: Props) {
       {s ? (
         <StatGrid
           items={[
-            { label: 'Not invoiced yet', value: s.not_invoiced, color: s.not_invoiced ? semantic.warning : undefined },
-            { label: 'Unpaid on invoices', value: inr(rupees(s.unpaid_paise)), color: s.unpaid_paise ? semantic.danger : undefined },
+            { label: 'Not invoiced yet', value: s.not_invoiced, color: s.not_invoiced ? theme.warn : undefined },
+            { label: 'Unpaid on invoices', value: inr(rupees(s.unpaid_paise)), color: s.unpaid_paise ? theme.err : undefined },
           ]}
         />
       ) : null}
@@ -260,7 +250,7 @@ export default function AmcScreen({ onBack }: Props) {
             <ListRow
               key={c.id}
               icon="shield"
-              iconColor={c.state === 'expired' ? semantic.danger : semantic.warning}
+              iconColor={c.state === 'expired' ? theme.err : theme.warn}
               title={c.party_name || c.contract_no}
               subtitle={`${c.contract_no}${c.title ? ` · ${c.title}` : ''}`}
               meta={`${shortDate(c.end_date)} · ${c.state === 'expired' ? `${c.days_overdue} days ago` : `${c.days_left} days left`} · reminded ${c.reminders_sent || 0}×`}
@@ -324,7 +314,7 @@ export default function AmcScreen({ onBack }: Props) {
                 c.state === 'active' && c.days_left != null ? ` · ${c.days_left}d left` : c.state === 'expired' && c.days_overdue != null ? ` · lapsed ${c.days_overdue}d ago` : ''
               }`}
               value={inr(rupees(c.amount_paise))}
-              badge={{ label: humanize(c.state), color: STATE_COLOR[c.state] ?? semantic.info }}
+              badge={{ label: humanize(c.state), color: STATE_COLOR[c.state] ?? theme.info }}
               onPress={() => open(c.id)}
             />
           ))}
@@ -338,7 +328,7 @@ export default function AmcScreen({ onBack }: Props) {
             <StatGrid
               items={[
                 { label: 'Amount (before GST)', value: inr(rupees(k.amount_paise)) },
-                { label: k.visits_left == null ? 'Visits (unlimited)' : 'Free visits left', value: k.visits_left == null ? `${k.visits_used} used` : `${k.visits_left} of ${k.visits_included}`, color: k.visits_left === 0 ? semantic.warning : undefined },
+                { label: k.visits_left == null ? 'Visits (unlimited)' : 'Free visits left', value: k.visits_left == null ? `${k.visits_used} used` : `${k.visits_left} of ${k.visits_included}`, color: k.visits_left === 0 ? theme.warn : undefined },
               ]}
             />
             <Text style={[styles.meta, { color: theme.text2 }]}>{k.title}</Text>
@@ -354,10 +344,10 @@ export default function AmcScreen({ onBack }: Props) {
                 {k.invoice_due_paise ? ` · ${inr(rupees(k.invoice_due_paise))} due` : ' · paid'}
               </Text>
             ) : (
-              <Text style={[styles.meta, { color: semantic.warning }]}>This term has not been invoiced yet.</Text>
+              <Text style={[styles.meta, { color: theme.warn }]}>This term has not been invoiced yet.</Text>
             )}
 
-            <SectionLabel>{`Visits (${detail.visits.length})`}</SectionLabel>
+            <Overline>{`Visits (${detail.visits.length})`}</Overline>
             {detail.visits.length === 0 ? <Text style={[styles.meta, { color: theme.text3 }]}>No visits logged yet.</Text> : null}
             {detail.visits.map((v) => (
               <View key={v.id} style={[styles.kv, { borderBottomColor: theme.line }]}>
@@ -377,12 +367,12 @@ export default function AmcScreen({ onBack }: Props) {
                   }
                   hitSlop={10}
                 >
-                  <Icon name="trash" size={18} color={semantic.danger} />
+                  <Icon name="trash" size={18} color={theme.err} />
                 </Pressable>
               </View>
             ))}
 
-            <SectionLabel>Actions</SectionLabel>
+            <Overline>Actions</Overline>
             <View style={styles.actions}>
               <ActionButton
                 label="Log a visit"
@@ -442,7 +432,7 @@ export default function AmcScreen({ onBack }: Props) {
         }
       >
         {editing && editing !== 'new' && editing.contract.has_invoice ? (
-          <Text style={[styles.meta, { color: semantic.warning }]}>This term has been invoiced, so the amount and tax are fixed. To change them, cancel the invoice in Sales first.</Text>
+          <Text style={[styles.meta, { color: theme.warn }]}>This term has been invoiced, so the amount and tax are fixed. To change them, cancel the invoice in Sales first.</Text>
         ) : null}
         <Text style={[styles.k, { color: theme.text3 }]}>Customer</Text>
         {partyId ? (
@@ -477,8 +467,8 @@ export default function AmcScreen({ onBack }: Props) {
               {[...gst.map((t) => ({ key: String(t.rate_bps), label: `${Number(t.rate_bps) / 100}%` })), { key: 'exempt', label: 'Exempt' }, { key: 'nil_rated', label: 'Nil rated' }, { key: 'non_gst', label: 'Non-GST' }].map((o) => {
                 const on = tax === o.key;
                 return (
-                  <Pressable key={o.key} onPress={() => setTax(o.key)} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                    <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{o.label}</Text>
+                  <Pressable key={o.key} onPress={() => setTax(o.key)} style={[styles.chip, { borderColor: on ? theme.accent : theme.line, backgroundColor: on ? theme.accent + '22' : theme.panel2 }]}>
+                    <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{o.label}</Text>
                   </Pressable>
                 );
               })}
@@ -512,14 +502,14 @@ export default function AmcScreen({ onBack }: Props) {
           </>
         }
       >
-        {visitFor && visitFor.contract.visits_left === 0 ? <Text style={[styles.meta, { color: semantic.warning }]}>The free visits are used up. This visit will be marked chargeable.</Text> : null}
+        {visitFor && visitFor.contract.visits_left === 0 ? <Text style={[styles.meta, { color: theme.warn }]}>The free visits are used up. This visit will be marked chargeable.</Text> : null}
         <Field label="Date" value={vDate} onChangeText={setVDate} hint="YYYY-MM-DD" />
         <View style={styles.chips}>
           {[['scheduled', 'Scheduled check-up'], ['complaint', 'Complaint / fault']].map(([key, label]) => {
             const on = vKind === key;
             return (
-              <Pressable key={key} onPress={() => setVKind(key)} style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}>
-                <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{label}</Text>
+              <Pressable key={key} onPress={() => setVKind(key)} style={[styles.chip, { borderColor: on ? theme.accent : theme.line, backgroundColor: on ? theme.accent + '22' : theme.panel2 }]}>
+                <Text style={[styles.chipText, { color: on ? theme.accent : theme.text2 }]}>{label}</Text>
               </Pressable>
             );
           })}
@@ -564,7 +554,7 @@ export default function AmcScreen({ onBack }: Props) {
         <Field label="New term starts" value={rnStart} onChangeText={setRnStart} hint="YYYY-MM-DD" />
         <Field label="Amount ₹ (before GST)" value={rnAmount} onChangeText={setRnAmount} keyboardType="numeric" />
         <Pressable onPress={() => setRnInvoice((v) => !v)} style={styles.check}>
-          <Icon name={rnInvoice ? 'check-circle' : 'tasks'} size={20} color={rnInvoice ? brand.primary : theme.text3} filled={rnInvoice} />
+          <Icon name={rnInvoice ? 'check-circle' : 'tasks'} size={20} color={rnInvoice ? theme.accent : theme.text3} filled={rnInvoice} />
           <Text style={[styles.checkText, { color: theme.text }]}>Raise the invoice for the new term now</Text>
         </Pressable>
       </FormSheet>
@@ -599,7 +589,6 @@ function shortIso(v: string): string {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   meta: { ...typography.caption, fontSize: 12 },
   kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: StyleSheet.hairlineWidth },
   k: { ...typography.caption, fontSize: 12 },

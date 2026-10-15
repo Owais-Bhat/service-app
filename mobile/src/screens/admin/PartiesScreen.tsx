@@ -11,6 +11,7 @@ import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
 import SectionLabel from '../../components/admin/SectionLabel';
 import PartyEditor from '../../components/admin/PartyEditor';
+import { ContactButton, HeaderAction, InitialsTile, KvLine, MiniStat, RowPanel } from '../../components/admin/FinanceKit';
 import Icon from '../../components/Icon';
 import { fetchParties, fetchPartySummary, rupees } from '../../api/adminBooks';
 import {
@@ -24,7 +25,6 @@ import {
 } from '../../api/adminParties';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { GST_TREATMENTS, stateName } from '../../utils/gst';
 import { humanize, inr, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
@@ -124,9 +124,7 @@ export default function PartiesScreen({ onBack }: Props) {
       loading={data.loading && !data.data}
       error={!data.data ? data.error : null}
       headerRight={
-        <Pressable onPress={() => setEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New party">
-          <Icon name="add" size={20} color="#fff" />
-        </Pressable>
+        <HeaderAction icon="add" label="New party" onPress={() => setEditor('new')} />
       }
       toolbar={
         <>
@@ -150,19 +148,19 @@ export default function PartiesScreen({ onBack }: Props) {
           {dups.map((g, gi) => {
             const chosen = keep[gi] || g.parties[0].id;
             return (
-              <View key={gi} style={[styles.dup, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
+              <View key={gi} style={[styles.dup, { backgroundColor: theme.panel, borderColor: theme.border }]}>
                 <Text style={[styles.dupTitle, { color: theme.text }]}>{g.parties[0].display_name}</Text>
                 <Text style={[styles.dupNote, { color: theme.text3 }]}>matched on {g.reason}</Text>
                 {g.parties.map((pt) => {
                   const on = chosen === pt.id;
                   return (
                     <Pressable key={pt.id} onPress={() => setKeep((k) => ({ ...k, [gi]: pt.id }))} style={styles.dupRow}>
-                      <Icon name={on ? 'check-circle' : 'tasks'} size={20} color={on ? brand.primary : theme.text3} filled={on} />
+                      <Icon name={on ? 'check-circle' : 'tasks'} size={20} color={on ? theme.accent : theme.text3} filled={on} />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.dupName, { color: theme.text }]}>{pt.display_name}</Text>
                         <Text style={[styles.dupNote, { color: theme.text3 }]}>{[pt.phone, pt.gstin].filter(Boolean).join(' · ') || '—'}</Text>
                       </View>
-                      {on ? <Text style={[styles.dupKeep, { color: brand.primary }]}>Keep</Text> : null}
+                      {on ? <Text style={[styles.dupKeep, { color: theme.accent }]}>Keep</Text> : null}
                     </Pressable>
                   );
                 })}
@@ -177,8 +175,8 @@ export default function PartiesScreen({ onBack }: Props) {
           {s ? (
             <StatGrid
               items={[
-                { label: `Owe us (${s.owing_count})`, value: inr(rupees(s.owing_paise)), color: s.owing_paise ? semantic.warning : undefined },
-                { label: `We owe (${s.credit_count})`, value: inr(rupees(s.credit_paise)), color: s.credit_paise ? semantic.danger : undefined },
+                { label: `Owe us (${s.owing_count})`, value: inr(rupees(s.owing_paise)), color: s.owing_paise ? theme.warn : undefined },
+                { label: `We owe (${s.credit_count})`, value: inr(rupees(s.credit_paise)), color: s.credit_paise ? theme.err : undefined },
               ]}
             />
           ) : null}
@@ -193,8 +191,8 @@ export default function PartiesScreen({ onBack }: Props) {
                 subtitle={[pt.phone, pt.gstin].filter(Boolean).join(' · ') || undefined}
                 meta={`${humanize(pt.kind)}${busy === pt.id ? ' · opening…' : ''}`}
                 value={bal === 0 ? undefined : inr(Math.abs(bal))}
-                valueColor={bal > 0 ? semantic.warning : semantic.danger}
-                badge={bal === 0 ? { label: 'Settled', color: semantic.success } : { label: bal > 0 ? 'Owes us' : 'We owe', color: bal > 0 ? semantic.warning : semantic.danger }}
+                valueColor={bal > 0 ? theme.warn : theme.err}
+                badge={bal === 0 ? { label: 'Settled', color: theme.ok } : { label: bal > 0 ? 'Owes us' : 'We owe', color: bal > 0 ? theme.warn : theme.err }}
                 onPress={() => open(pt.id)}
               />
             );
@@ -210,35 +208,52 @@ export default function PartiesScreen({ onBack }: Props) {
         footer={
           p ? (
             <>
-              {p.phone ? <ActionButton label="Call" tone="neutral" onPress={() => Linking.openURL(`tel:${p.phone}`)} /> : null}
-              <ActionButton label="Edit" onPress={() => { setEditor(p); setDetail(null); }} />
+                <ActionButton label="Edit" onPress={() => { setEditor(p); setDetail(null); }} />
             </>
           ) : undefined
         }
       >
         {p ? (
           <>
-            <StatGrid
-              items={[
-                { label: balance > 0 ? 'Owes us' : balance < 0 ? (p.kind === 'supplier' ? 'We owe them' : 'In advance') : 'Settled', value: inr(Math.abs(balance)), color: balance > 0 ? semantic.warning : balance < 0 ? semantic.danger : semantic.success },
-                { label: 'Terms', value: Number(p.credit_days) ? `${p.credit_days} days` : 'On delivery' },
-              ]}
-            />
-            {[
-              ['Phone', p.phone || '—'],
-              ['Email', p.email || '—'],
-              ['GST treatment', GST_TREATMENTS.find(([k]) => k === p.gst_treatment)?.[1] || '—'],
-              ['GSTIN', p.gstin || '—'],
-              ['Place of supply', stateName(p.place_of_supply_state_code) || '—'],
-              ['Credit limit', Number(p.credit_limit_paise) ? inr(rupees(p.credit_limit_paise)) : 'None'],
-              ['Opening balance', `${inr(rupees(p.opening_balance_paise))} ${p.opening_balance_type || ''}`],
-              ['Active', Number(p.active) === 1 ? 'Yes' : 'No'],
-            ].map(([k, v]) => (
-              <View key={k} style={[styles.kv, { borderBottomColor: theme.line }]}>
-                <Text style={[styles.k, { color: theme.text3 }]}>{k}</Text>
-                <Text style={[styles.v, { color: theme.text }]} numberOfLines={2}>{v}</Text>
+            <View style={[styles.hero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={styles.heroTop}>
+                <InitialsTile name={p.display_name} tint={theme.info} tintBg={theme.infoS} />
+                <View style={styles.heroText}>
+                  <Text style={[styles.heroName, { color: theme.text }]} numberOfLines={2}>{p.display_name}</Text>
+                  <Text style={[styles.heroSub, { color: theme.text3 }]} numberOfLines={1}>
+                    {[p.gstin ? `GSTIN ${p.gstin}` : null, humanize(p.kind)].filter(Boolean).join(' · ')}
+                  </Text>
+                </View>
               </View>
-            ))}
+              <View style={styles.heroStats}>
+                <MiniStat
+                  label={balance > 0 ? 'Owes us' : balance < 0 ? (p.kind === 'supplier' ? 'We owe them' : 'In advance') : 'Settled'}
+                  value={inr(Math.abs(balance))}
+                  color={balance > 0 ? theme.warn : balance < 0 ? theme.err : theme.ok}
+                />
+                <MiniStat label="Credit terms" value={Number(p.credit_days) ? `${p.credit_days} days` : 'On delivery'} mono={false} />
+              </View>
+              {p.phone ? (
+                <View style={styles.contactRow}>
+                  <ContactButton icon="phone" label="Call" onPress={() => Linking.openURL(`tel:${p.phone}`)} />
+                  <ContactButton icon="whatsapp" label="WhatsApp" onPress={() => Linking.openURL(`https://wa.me/${String(p.phone).replace(/\D/g, '')}`)} />
+                </View>
+              ) : null}
+            </View>
+            <RowPanel>
+              {[
+                ['Phone', p.phone || '—'],
+                ['Email', p.email || '—'],
+                ['GST treatment', GST_TREATMENTS.find(([k]) => k === p.gst_treatment)?.[1] || '—'],
+                ['GSTIN', p.gstin || '—'],
+                ['Place of supply', stateName(p.place_of_supply_state_code) || '—'],
+                ['Credit limit', Number(p.credit_limit_paise) ? inr(rupees(p.credit_limit_paise)) : 'None'],
+                ['Opening balance', `${inr(rupees(p.opening_balance_paise))} ${p.opening_balance_type || ''}`],
+                ['Active', Number(p.active) === 1 ? 'Yes' : 'No'],
+              ].map(([k, v], i, all) => (
+                <KvLine key={k} label={k} value={v} mono={k === 'GSTIN' || k === 'Opening balance' || k === 'Credit limit' || k === 'Phone'} last={i === all.length - 1} />
+              ))}
+            </RowPanel>
             {detail?.addresses.length ? (
               <>
                 <SectionLabel>Addresses</SectionLabel>
@@ -261,17 +276,16 @@ export default function PartiesScreen({ onBack }: Props) {
                 <StatGrid
                   items={[
                     { label: 'Bought (bills)', value: inr(rupees(supplier.totals.bought_paise)) },
-                    { label: 'Paid', value: inr(rupees(supplier.totals.paid_paise)), color: semantic.success },
-                    { label: 'Due on bills', value: inr(rupees(supplier.totals.billed_due_paise)), color: semantic.warning },
+                    { label: 'Paid', value: inr(rupees(supplier.totals.paid_paise)), color: theme.ok },
+                    { label: 'Due on bills', value: inr(rupees(supplier.totals.billed_due_paise)), color: theme.warn },
                     { label: 'Returned', value: inr(rupees(supplier.totals.returned_paise)) },
                   ]}
                 />
-                {supplier.bills.slice(0, 8).map((b) => (
-                  <View key={b.id} style={[styles.kv, { borderBottomColor: theme.line }]}>
-                    <Text style={[styles.v, { color: theme.text, flex: 1 }]} numberOfLines={1}>{b.doc_no} · {shortDate(b.doc_date)}</Text>
-                    <Text style={[styles.v, { color: b.balance_paise > 0 ? semantic.warning : theme.text2 }]}>{inr(rupees(b.total_paise))}</Text>
-                  </View>
-                ))}
+                <RowPanel>
+                  {supplier.bills.slice(0, 8).map((b, i, all) => (
+                    <KvLine key={b.id} label={`${b.doc_no} · ${shortDate(b.doc_date)}`} value={inr(rupees(b.total_paise))} mono valueColor={b.balance_paise > 0 ? theme.warn : theme.text2} last={i === all.length - 1} />
+                  ))}
+                </RowPanel>
               </>
             ) : null}
           </>
@@ -293,14 +307,18 @@ export default function PartiesScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  dup: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginBottom: spacing(3), gap: spacing(2) },
+  dup: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginBottom: spacing(3), gap: spacing(2) },
   dupTitle: { ...typography.body, fontFamily: 'Manrope_700Bold' },
   dupNote: { ...typography.caption, fontSize: 11 },
   dupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(1.5) },
   dupName: { ...typography.body, fontSize: 14 },
   dupKeep: { ...typography.caption, fontFamily: 'Manrope_700Bold' },
-  kv: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: 1 },
-  k: { ...typography.caption, fontSize: 12 },
+  hero: { borderWidth: 1, borderRadius: radius.xl, padding: spacing(4), gap: spacing(2.5) },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
+  heroText: { flex: 1, minWidth: 0 },
+  heroName: { ...typography.heading },
+  heroSub: { fontFamily: 'JetBrainsMono_500Medium', fontSize: 12, marginTop: 2 },
+  heroStats: { flexDirection: 'row', gap: spacing(2.5) },
+  contactRow: { flexDirection: 'row', gap: spacing(2) },
   v: { ...typography.body, fontSize: 14, textAlign: 'right', flexShrink: 1 },
 });

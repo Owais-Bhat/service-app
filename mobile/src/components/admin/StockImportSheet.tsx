@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { Overline, RowPanel, SwitchRow } from './FinanceKit';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import FormSheet from './FormSheet';
 import ActionButton from './ActionButton';
 import ListRow from './ListRow';
 import Field from './Field';
-import SectionLabel from './SectionLabel';
 import StatGrid from './StatGrid';
 import { api } from '../../api/client';
 import { parseCsv } from '../../api/servicePricing';
 import { shareCsv } from '../../utils/shareCsv';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { todayIso } from '../../utils/format';
 
 interface Props {
@@ -148,21 +147,20 @@ export default function StockImportSheet({ visible, onClose, onDone }: Props) {
           <StatGrid
             items={[
               { label: 'Rows', value: sm.rows },
-              { label: 'New', value: sm.create, color: semantic.success },
-              { label: 'Already there — updated', value: sm.update, color: semantic.warning },
+              { label: 'New', value: sm.create, color: theme.ok },
+              { label: 'Already there — updated', value: sm.update, color: theme.warn },
               { label: 'With opening stock', value: sm.with_stock },
-              ...(sm.restock ? [{ label: `Stock counts changed (${sm.restock_up} up, ${sm.restock_down} down)`, value: sm.restock, color: semantic.warning }] : []),
+              ...(sm.restock ? [{ label: `Stock counts changed (${sm.restock_up} up, ${sm.restock_down} down)`, value: sm.restock, color: theme.warn }] : []),
             ]}
           />
-          <View style={styles.switchRow}>
-            <Switch value={updateStock} disabled={busy === 'recheck'} onValueChange={recheck} trackColor={{ true: brand.primary }} />
-            <Text style={[styles.switchText, { color: theme.text }]}>Items already in stock: set their quantity to the Opening Qty in this file</Text>
-          </View>
+          <RowPanel>
+            <SwitchRow label="Items already in stock: set their quantity to the Opening Qty in this file" value={updateStock} onValueChange={recheck} disabled={busy === 'recheck'} last />
+          </RowPanel>
           {check.errors.length ? (
             <>
-              <SectionLabel>Nothing will be imported until these are fixed</SectionLabel>
+              <Overline>Nothing will be imported until these are fixed</Overline>
               {check.errors.slice(0, 30).map((e, i) => (
-                <ListRow key={i} icon="alert" iconColor={semantic.danger} title={e} />
+                <ListRow key={i} icon="alert" iconColor={theme.err} title={e} />
               ))}
               {check.errors.length > 30 ? <Text style={[styles.note, { color: theme.text3 }]}>…and {check.errors.length - 30} more</Text> : null}
               <Text style={[styles.note, { color: theme.text3 }]}>Fix the sheet, then choose it again.</Text>
@@ -173,7 +171,7 @@ export default function StockImportSheet({ visible, onClose, onDone }: Props) {
             <ListRow
               key={r.row}
               icon={r.problems.length ? 'alert' : 'box'}
-              iconColor={r.problems.length ? semantic.danger : undefined}
+              iconColor={r.problems.length ? theme.err : undefined}
               title={r.name}
               subtitle={r.problems.length ? r.problems.join('; ') : `${r.action === 'create' ? 'New' : 'Update'}${r.sku ? ` · ${r.sku}` : ''}`}
               meta={`Row ${r.row}`}

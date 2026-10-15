@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, Overline, RowPanel, SwitchRow } from './FinanceKit';
+import { Alert, StyleSheet, Text } from 'react-native';
 import FormSheet from './FormSheet';
 import Field from './Field';
 import ActionButton from './ActionButton';
 import { createUser, EMPLOYEE_TABS, updateUser, UserRow, UserSave } from '../../api/adminPeople';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing, typography } from '../../theme';
-import { brand } from '../../theme/tokens';
+import { typography } from '../../theme';
 
 interface Props {
   visible: boolean;
@@ -151,25 +151,12 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
         hint="At least 8 characters"
       />
 
-      <Text style={[styles.label, { color: theme.text3 }]}>Role</Text>
-      <View style={styles.chips}>
-        {[
-          { k: 'employee', l: 'Staff' },
-          { k: 'team_lead', l: 'Team lead' },
-          { k: 'admin', l: 'Admin' },
-        ].map((r) => {
-          const on = role === r.k;
-          return (
-            <Pressable
-              key={r.k}
-              onPress={() => setRole(r.k)}
-              style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-            >
-              <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{r.l}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text style={[styles.label, { color: theme.text2 }]}>Role</Text>
+      <ChoiceChips
+        items={[['employee', 'Staff'], ['team_lead', 'Team lead'], ['admin', 'Admin']]}
+        value={role}
+        onChange={setRole}
+      />
 
       <Field label="Phone (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
       {staff ? <Field label="Monthly salary (₹)" value={salary} onChangeText={setSalary} keyboardType="numeric" /> : null}
@@ -178,45 +165,27 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
 
       {staff ? (
         <>
-          <Text style={[styles.label, { color: theme.text3 }]}>Worker type</Text>
-          <View style={styles.chips}>
-            {[
-              { k: 'fixed', l: 'Fixed employee' },
-              { k: 'gig', l: 'Gig (public pool, online-only payment)' },
-            ].map((r) => {
-              const on = worker === r.k;
-              return (
-                <Pressable
-                  key={r.k}
-                  onPress={() => setWorker(r.k)}
-                  style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-                >
-                  <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]}>{r.l}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Text style={[styles.label, { color: theme.text2 }]}>Worker type</Text>
+          <ChoiceChips
+            items={[['fixed', 'Fixed employee'], ['gig', 'Gig (public pool, online-only payment)']]}
+            value={worker}
+            onChange={setWorker}
+          />
 
-          <Text style={[styles.label, { color: theme.text3 }]}>Access</Text>
-          {SWITCHES.map((s) => (
-            <View key={s.key} style={[styles.switchRow, { borderBottomColor: theme.line }]}>
-              <Text style={[styles.switchLabel, { color: theme.text }]}>{s.label}</Text>
-              <Switch
-                value={!!flags[s.key]}
-                onValueChange={(v) => setFlags((p) => ({ ...p, [s.key]: v }))}
-                trackColor={{ true: brand.primary, false: theme.line }}
-              />
-            </View>
-          ))}
+          <Overline>Work policy</Overline>
+          <RowPanel>
+            {SWITCHES.map((s, i) => (
+              <SwitchRow key={s.key} label={s.label} value={!!flags[s.key]} onValueChange={(v) => setFlags((p) => ({ ...p, [s.key]: v }))} last={i === SWITCHES.length - 1} />
+            ))}
+          </RowPanel>
 
-          <Text style={[styles.label, { color: theme.text3 }]}>Tabs this person can see</Text>
+          <Overline>Tabs this person can see</Overline>
           <Text style={[styles.hint, { color: theme.text3 }]}>Dashboard, notifications and profile are always visible.</Text>
-          {EMPLOYEE_TABS.map((t) => (
-            <View key={t.id} style={[styles.switchRow, { borderBottomColor: theme.line }]}>
-              <Text style={[styles.switchLabel, { color: theme.text }]}>{t.label}</Text>
-              <Switch value={tabs.has(t.id)} onValueChange={() => toggleTab(t.id)} trackColor={{ true: brand.primary, false: theme.line }} />
-            </View>
-          ))}
+          <RowPanel>
+            {EMPLOYEE_TABS.map((t, i) => (
+              <SwitchRow key={t.id} label={t.label} value={tabs.has(t.id)} onValueChange={() => toggleTab(t.id)} last={i === EMPLOYEE_TABS.length - 1} />
+            ))}
+          </RowPanel>
         </>
       ) : null}
     </FormSheet>
@@ -224,11 +193,6 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
 }
 
 const styles = StyleSheet.create({
-  label: { ...typography.caption, fontSize: 12 },
+  label: { ...typography.caption, fontSize: 13 },
   hint: { ...typography.caption, fontSize: 11 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3.5), paddingVertical: spacing(2) },
-  chipText: { ...typography.caption, fontSize: 12 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: 1 },
-  switchLabel: { ...typography.body, fontSize: 14, flex: 1 },
 });

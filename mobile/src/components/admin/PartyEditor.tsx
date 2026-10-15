@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, ToggleSwitch } from './FinanceKit';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import FormSheet from './FormSheet';
 import Field from './Field';
 import ActionButton from './ActionButton';
 import { createParty, lookupGstin, PartyFull, PartyInput, updateParty } from '../../api/adminParties';
 import { GST_STATES, GST_TREATMENTS } from '../../utils/gst';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { spacing, typography } from '../../theme';
 
 interface Props {
   visible: boolean;
@@ -19,23 +19,7 @@ interface Props {
 }
 
 function Choice({ items, value, onChange }: { items: [string, string][]; value: string; onChange: (v: string) => void }) {
-  const { theme } = useTheme();
-  return (
-    <View style={styles.chips}>
-      {items.map(([k, l]) => {
-        const on = k === value;
-        return (
-          <Pressable
-            key={k || 'none'}
-            onPress={() => onChange(k)}
-            style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-          >
-            <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]} numberOfLines={1}>{l}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+  return <ChoiceChips items={items} value={value} onChange={onChange} />;
 }
 
 const rupee = (paise: number | null | undefined) => (paise ? String(Number(paise) / 100) : '');
@@ -182,16 +166,16 @@ export default function PartyEditor({ visible, party, defaultKind = 'customer', 
       <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
       <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
 
-      <Text style={[styles.label, { color: theme.text3 }]}>They are a</Text>
+      <Text style={[styles.label, { color: theme.text2 }]}>They are a</Text>
       <Choice items={[['customer', 'Customer'], ['supplier', 'Supplier'], ['both', 'Both']]} value={kind} onChange={setKind} />
 
-      <Text style={[styles.label, { color: theme.text3 }]}>GST treatment</Text>
+      <Text style={[styles.label, { color: theme.text2 }]}>GST treatment</Text>
       <Choice items={GST_TREATMENTS} value={treatment} onChange={setTreatment} />
 
       <Field label="GSTIN" value={gstin} onChangeText={onGstin} autoCapitalize="characters" hint={gstNote || '15 characters'} />
       <ActionButton label={fetching ? 'Fetching…' : 'Fetch from GST portal'} tone="neutral" busy={fetching} onPress={fetchGst} />
 
-      <Text style={[styles.label, { color: theme.text3 }]}>Place of supply</Text>
+      <Text style={[styles.label, { color: theme.text2 }]}>Place of supply</Text>
       <Choice items={[['', 'Not set'], ...GST_STATES]} value={stateCode} onChange={setStateCode} />
 
       <Field label="Credit days" value={creditDays} onChangeText={setCreditDays} keyboardType="numeric" />
@@ -201,7 +185,7 @@ export default function PartyEditor({ visible, party, defaultKind = 'customer', 
 
       {!isEdit ? (
         <>
-          <Text style={[styles.label, { color: theme.text3 }]}>Billing address</Text>
+          <Text style={[styles.label, { color: theme.text2 }]}>Billing address</Text>
           <Field label="Address" value={line1} onChangeText={setLine1} />
           <Field label="City" value={city} onChangeText={setCity} />
           <Field label="Pincode" value={pin} onChangeText={setPin} keyboardType="numeric" />
@@ -211,14 +195,14 @@ export default function PartyEditor({ visible, party, defaultKind = 'customer', 
       <Field label="Notes" value={notes} onChangeText={setNotes} multiline />
       <View style={[styles.switchRow, { borderBottomColor: theme.line }]}>
         <Text style={[styles.switchLabel, { color: theme.text }]}>Can book a new service even with a payment pending</Text>
-        <Switch value={exempt} onValueChange={setExempt} trackColor={{ true: brand.primary, false: theme.line }} />
+        <ToggleSwitch value={exempt} onValueChange={setExempt} />
       </View>
       {isEdit ? (
         <>
           <Field label="Reason for this change" value={reason} onChangeText={setReason} hint="Kept in the audit trail" />
           <View style={[styles.switchRow, { borderBottomColor: theme.line }]}>
-            <Text style={[styles.switchLabel, { color: active ? theme.text : semantic.danger }]}>Active</Text>
-            <Switch value={active} onValueChange={setActive} trackColor={{ true: brand.primary, false: theme.line }} />
+            <Text style={[styles.switchLabel, { color: active ? theme.text : theme.err }]}>Active</Text>
+            <ToggleSwitch value={active} onValueChange={setActive} />
           </View>
         </>
       ) : null}
@@ -227,10 +211,7 @@ export default function PartyEditor({ visible, party, defaultKind = 'customer', 
 }
 
 const styles = StyleSheet.create({
-  label: { ...typography.caption, fontSize: 12 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2), maxWidth: '100%' },
-  chipText: { ...typography.caption, fontSize: 12 },
+  label: { ...typography.caption, fontSize: 13 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(3), paddingVertical: spacing(2), borderBottomWidth: 1 },
   switchLabel: { ...typography.body, fontSize: 14, flex: 1 },
 });

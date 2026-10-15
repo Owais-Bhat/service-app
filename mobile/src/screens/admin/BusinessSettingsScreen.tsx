@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { ChoiceChips, Overline, RowPanel, Segmented, SwitchRow } from '../../components/admin/FinanceKit';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import FilterChips from '../../components/admin/FilterChips';
 import ListRow from '../../components/admin/ListRow';
@@ -7,7 +8,6 @@ import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
-import SectionLabel from '../../components/admin/SectionLabel';
 import StatGrid from '../../components/admin/StatGrid';
 import ImageUploadField from '../../components/admin/ImageUploadField';
 import {
@@ -34,7 +34,6 @@ import {
 } from '../../api/adminBusiness';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
 import { dateTime, shortDate, todayIso } from '../../utils/format';
 
 interface Props {
@@ -310,7 +309,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
       title={r.name}
       subtitle={`${TREATMENT[r.treatment] || r.treatment}${r.treatment === 'gst' ? ` · ${Number(r.rate_bps) / 100}%` : ''}`}
       meta={`From ${shortDate(r.effective_from)} · ${r.effective_to ? `to ${shortDate(r.effective_to)}` : 'current'}`}
-      badge={r.is_default ? { label: 'Default', color: semantic.success } : undefined}
+      badge={r.is_default ? { label: 'Default', color: theme.ok } : undefined}
       footer={r.effective_to ? undefined : <ActionButton label="Change rate" tone="neutral" onPress={() => openTax(r)} />}
     />
   );
@@ -327,27 +326,27 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
     >
       {info && (info.setup_pending || []).length > 0 ? (
         <>
-          <SectionLabel>Still needed before tax documents can be issued</SectionLabel>
+          <Overline>Still needed before tax documents can be issued</Overline>
           {(info.setup_pending || []).map((p) => (
-            <ListRow key={p} icon="alert" iconColor={semantic.warning} title={p} />
+            <ListRow key={p} icon="alert" iconColor={theme.warn} title={p} />
           ))}
         </>
       ) : null}
 
       {tab === 'business' && info ? (
         <View>
-          <SectionLabel>Legal identity</SectionLabel>
+          <Overline>Legal identity</Overline>
           {text('legal_name', 'Legal name *', { hint: 'Exactly as registered — prints on the invoice' })}
           {text('trade_name', 'Trade name')}
           <Text style={[styles.cap, { color: theme.text2 }]}>Registration</Text>
-          <FilterChips
+          <ChoiceChips
             items={[
-              { key: 'unregistered', label: 'Not GST registered' },
-              { key: 'regular', label: 'Regular (GST)' },
-              { key: 'composition', label: 'Composition' },
+              ['unregistered', 'Not GST registered'],
+              ['regular', 'Regular (GST)'],
+              ['composition', 'Composition'],
             ]}
-            activeKey={form.registration_type}
-            onSelect={set('registration_type')}
+            value={form.registration_type}
+            onChange={set('registration_type')}
           />
           {text('gstin', 'GSTIN', { autoCapitalize: 'characters', hint: '15 characters — checked before it is saved' })}
           {text('pan', 'PAN', { autoCapitalize: 'characters' })}
@@ -358,7 +357,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
           />
           <Text style={[styles.hint, { color: theme.text3 }]}>Decides CGST+SGST versus IGST on every sale</Text>
 
-          <SectionLabel>Address & contact</SectionLabel>
+          <Overline>Address & contact</Overline>
           {text('address_line1', 'Address line 1')}
           {text('address_line2', 'Address line 2')}
           {text('city', 'City')}
@@ -367,7 +366,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
           {text('email', 'Email', { keyboardType: 'email-address', autoCapitalize: 'none' })}
           {text('website', 'Website', { autoCapitalize: 'none' })}
 
-          <SectionLabel>Money & documents</SectionLabel>
+          <Overline>Money & documents</Overline>
           {text('bank_name', 'Bank name')}
           {text('bank_account_no', 'Account number', { keyboardType: 'number-pad' })}
           {text('bank_ifsc', 'IFSC', { autoCapitalize: 'characters' })}
@@ -376,22 +375,21 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
           <ImageUploadField label="Logo" value={form.logo_url || null} onChange={(u) => set('logo_url')(u || '')} hint="Printed top-left on every document. A PNG about 400px wide works well." />
           <ImageUploadField label="Signature" value={form.signature_url || null} onChange={(u) => set('signature_url')(u || '')} hint="Printed above Authorised signatory. A transparent PNG looks best." />
           <Text style={[styles.cap, { color: theme.text2 }]}>Financial year starts</Text>
-          <FilterChips
+          <Segmented
             items={[
-              { key: '4', label: 'April (India)' },
-              { key: '1', label: 'January' },
+              ['4', 'April (India)'],
+              ['1', 'January'],
             ]}
-            activeKey={String(Number(form.fy_start_month) || 4)}
-            onSelect={set('fy_start_month')}
+            value={String(Number(form.fy_start_month) || 4)}
+            onChange={set('fy_start_month')}
           />
           <Text style={[styles.hint, { color: theme.text3 }]}>Current year: {info.fy_label}</Text>
           {text('invoice_footer', 'Invoice footer / terms', { multiline: true })}
           {text('payment_instructions', 'Payment instructions', { multiline: true })}
 
-          <View style={styles.switchRow}>
-            <Switch value={confirmed} onValueChange={setConfirmed} trackColor={{ true: brand.primary }} />
-            <Text style={[styles.switchText, { color: theme.text }]}>I confirm these are the correct legal details for issuing documents</Text>
-          </View>
+          <RowPanel>
+            <SwitchRow label="I confirm these are the correct legal details for issuing documents" value={confirmed} onValueChange={setConfirmed} last />
+          </RowPanel>
           <ActionButton label="Save business details" busy={busy === 'business'} onPress={saveBiz} />
           <Text style={[styles.hint, { color: theme.text3 }]}>
             Tax features stay locked until this is confirmed. An invoice issuer is a legal fact, not a default.
@@ -406,7 +404,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
             .sort((a, c) => c[0].localeCompare(a[0]))
             .map(([year, list]) => (
               <View key={year}>
-                <SectionLabel>{`${year} · ${list.length} series`}</SectionLabel>
+                <Overline>{`${year} · ${list.length} series`}</Overline>
                 {list.map((s) => (
                   <ListRow
                     key={s.id}
@@ -428,9 +426,9 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
       {tab === 'tax' ? (
         <View>
           <ActionButton label="Add rate" onPress={() => openTax(null)} />
-          <SectionLabel>{`In force · ${live.length}`}</SectionLabel>
+          <Overline>{`In force · ${live.length}`}</Overline>
           {live.length === 0 ? <EmptyNote text="No tax rates" icon="pricetag" /> : live.map(rateRow)}
-          {past.length ? <SectionLabel>{`Superseded · ${past.length}`}</SectionLabel> : null}
+          {past.length ? <Overline>{`Superseded · ${past.length}`}</Overline> : null}
           {past.map(rateRow)}
           <Text style={[styles.hint, { color: theme.text3 }]}>
             Changing a rate never rewrites an old document: it closes the current rate the day before the new one starts.
@@ -442,7 +440,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
         <View>
           <ListRow
             icon={service.enabled ? 'check-circle' : 'alert'}
-            iconColor={service.enabled ? semantic.success : semantic.warning}
+            iconColor={service.enabled ? theme.ok : theme.warn}
             title="Service & installation income in the ledger"
             subtitle={service.enabled ? `On from ${shortDate(service.from)}` : 'Off — tickets are not being posted'}
           />
@@ -459,15 +457,15 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
             items={[
               { label: 'Bills in the books', value: service.billed },
               { label: 'Payments recorded', value: service.collected },
-              { label: 'Need attention', value: service.attention.length, color: service.attention.length ? semantic.danger : undefined },
+              { label: 'Need attention', value: service.attention.length, color: service.attention.length ? theme.err : undefined },
             ]}
           />
-          {service.attention.length ? <SectionLabel>Could not be posted</SectionLabel> : null}
+          {service.attention.length ? <Overline>Could not be posted</Overline> : null}
           {service.attention.map((a) => (
             <ListRow
               key={a.source_id}
               icon="alert"
-              iconColor={semantic.danger}
+              iconColor={theme.err}
               title={a.ticket_ref || a.source_id.slice(0, 8)}
               subtitle={a.note || undefined}
               meta={a.source_type === 'installation' ? 'Installation' : 'Service'}
@@ -480,18 +478,17 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
         <View>
           <ListRow
             icon="whatsapp"
-            iconColor={waReady ? semantic.success : semantic.warning}
+            iconColor={waReady ? theme.ok : theme.warn}
             title="WhatsApp sending (Fast2SMS)"
             subtitle={waReady ? 'Ready' : 'Not set up'}
           />
-          {wa.api_key_set ? null : <ListRow icon="alert" iconColor={semantic.danger} title="The Fast2SMS API key is not set on the server, so nothing can be sent." />}
+          {wa.api_key_set ? null : <ListRow icon="alert" iconColor={theme.err} title="The Fast2SMS API key is not set on the server, so nothing can be sent." />}
           <Text style={[styles.hint, { color: theme.text3 }]}>
             Create each template in your Fast2SMS dashboard with the suggested wording, wait for approval, then paste its MESSAGE ID here.
           </Text>
-          <View style={styles.switchRow}>
-            <Switch value={wa.enabled} onValueChange={(v) => setWa({ ...wa, enabled: v })} trackColor={{ true: brand.primary }} />
-            <Text style={[styles.switchText, { color: theme.text }]}>Sending is switched on</Text>
-          </View>
+          <RowPanel>
+            <SwitchRow label="Sending is switched on" value={wa.enabled} onValueChange={(v) => setWa({ ...wa, enabled: v })} last />
+          </RowPanel>
           <Field
             label="WhatsApp phone number id"
             value={str(wa.phone_number_id)}
@@ -501,7 +498,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
           />
           {wa.templates.map((t) => (
             <View key={t.purpose}>
-              <SectionLabel>{t.label}</SectionLabel>
+              <Overline>{t.label}</Overline>
               <Field
                 label="Message ID"
                 value={str(t.message_id)}
@@ -509,10 +506,9 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
                 keyboardType="number-pad"
                 hint="The short MESSAGE ID in Fast2SMS — not the long Template ID"
               />
-              <View style={styles.switchRow}>
-                <Switch value={!!t.enabled} onValueChange={(v) => patchTemplate(t.purpose, { enabled: v })} trackColor={{ true: brand.primary }} />
-                <Text style={[styles.switchText, { color: theme.text }]}>Use it</Text>
-              </View>
+              <RowPanel>
+            <SwitchRow label="Use it" value={!!t.enabled} onValueChange={(v) => patchTemplate(t.purpose, { enabled: v })} last />
+          </RowPanel>
               <Text style={[styles.hint, { color: theme.text3 }]}>
                 Variables in order: {t.vars.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}
               </Text>
@@ -532,7 +528,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
           <View style={styles.saveGap}>
             <ActionButton label="Save WhatsApp settings" busy={busy === 'wa'} onPress={saveWa} />
           </View>
-          <SectionLabel>Recent messages</SectionLabel>
+          <Overline>Recent messages</Overline>
           {waLog.length === 0 ? <EmptyNote text="Nothing sent yet" icon="chat" /> : null}
           {waLog.map((m, i) => (
             <ListRow
@@ -543,10 +539,10 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
               meta={`${dateTime(m.created_at)}${m.error ? ` · ${m.error}` : ''}`}
               badge={
                 m.status === 'sent'
-                  ? { label: 'Accepted', color: semantic.success }
+                  ? { label: 'Accepted', color: theme.ok }
                   : m.status === 'failed'
-                    ? { label: 'Failed', color: semantic.danger }
-                    : { label: m.status, color: semantic.warning }
+                    ? { label: 'Failed', color: theme.err }
+                    : { label: m.status, color: theme.warn }
               }
             />
           ))}
@@ -609,10 +605,10 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
         {taxEdit.from ? (
           <Text style={[styles.hint, { color: theme.text3 }]}>{TREATMENT[tf.treatment] || tf.treatment}</Text>
         ) : (
-          <FilterChips
-            items={Object.entries(TREATMENT).map(([key, label]) => ({ key, label }))}
-            activeKey={tf.treatment}
-            onSelect={(v) => setTf({ ...tf, treatment: v })}
+          <ChoiceChips
+            items={Object.entries(TREATMENT) as [string, string][]}
+            value={tf.treatment}
+            onChange={(v) => setTf({ ...tf, treatment: v })}
           />
         )}
         <Field label="Rate %" value={tf.rate} onChangeText={(v) => setTf({ ...tf, rate: v })} keyboardType="decimal-pad" />
@@ -624,7 +620,7 @@ export default function BusinessSettingsScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  cap: { ...typography.caption, fontWeight: '700', marginTop: spacing(2), marginBottom: spacing(1) },
+  cap: { ...typography.caption, marginTop: spacing(2), marginBottom: spacing(1.5) },
   hint: { ...typography.caption, marginVertical: spacing(1) },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginVertical: spacing(2) },
   switchText: { ...typography.body, flex: 1 },

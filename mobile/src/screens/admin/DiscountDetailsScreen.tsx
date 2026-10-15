@@ -5,7 +5,7 @@ import StatGrid from '../../components/admin/StatGrid';
 import ListRow from '../../components/admin/ListRow';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchBilledJobs, fetchPeople } from '../../api/adminMoney';
-import { semantic } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 import { inr, shortDate } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -16,6 +16,7 @@ interface Props {
 // Every bill where a technician gave a discount, with who gave it and why — the
 // audit view for the "Employee Discount" and coupon paths on the Bill tab.
 export default function DiscountDetailsScreen({ onBack }: Props) {
+  const { theme } = useTheme();
   const data = useLoader(async () => {
     const [jobs, people] = await Promise.all([fetchBilledJobs(), fetchPeople()]);
     return { jobs, names: new Map(people.map((p) => [p.id, p.full_name || 'Employee'])) };
@@ -41,7 +42,7 @@ export default function DiscountDetailsScreen({ onBack }: Props) {
       <StatGrid
         items={[
           { label: 'Discounted bills', value: rows.length },
-          { label: 'Total discount', value: inr(rows.reduce((s, r) => s + Number(r.discount_amount), 0)), color: semantic.success },
+          { label: 'Total discount', value: inr(rows.reduce((s, r) => s + Number(r.discount_amount), 0)), color: theme.ok },
         ]}
       />
       {visible.length === 0 ? <EmptyNote text="No discounts applied" icon="pricetag" /> : null}
@@ -53,8 +54,8 @@ export default function DiscountDetailsScreen({ onBack }: Props) {
           subtitle={r.discount_reason || (r.discount_preset_id ? 'Admin preset — no reason required' : 'Automatic discount')}
           meta={`${r.ticket_no || ''} · ${data.data?.names.get(r.assigned_employee_id || '') || 'Employee'} · ${shortDate(r.bill_generated_at || r.created_at)}`}
           value={inr(r.discount_amount)}
-          valueColor={semantic.success}
-          badge={r.discount_label ? { label: r.discount_label, color: semantic.info } : undefined}
+          valueColor={theme.ok}
+          badge={r.discount_label ? { label: r.discount_label, color: theme.info } : undefined}
         />
       ))}
     </AdminScreen>
