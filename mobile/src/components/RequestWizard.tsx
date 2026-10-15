@@ -12,6 +12,7 @@ import { brand, semantic } from '../theme/tokens';
 import { sendOtp, verifyOtp, resendOtp } from '../api/otp';
 import { submitInquiry, precheckBooking, Inquiry } from '../api/inquiries';
 import { IssueOption } from '../api/landing';
+import { PHONE_TEL, WHATSAPP_URL } from './ContactCard';
 
 interface Props {
   mode: 'request' | 'install';
@@ -56,6 +57,8 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
   const [issueValue, setIssueValue] = useState(issueOptions[0]?.value ?? '');
   const [otherIssue, setOtherIssue] = useState('');
   const [description, setDescription] = useState('');
+  const [siteContact, setSiteContact] = useState('');
+  const [blocked, setBlocked] = useState<{ message: string; dues: string[] } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<Inquiry | null>(null);
@@ -137,6 +140,7 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
       if (issueValue === 'other' && !otherIssue.trim()) { setFormError('Please describe the issue'); return; }
     }
     setFormError(null);
+    setBlocked(null);
     setSubmitting(true);
     const service_item = installType
       ? `Installation — ${installType.label}`
@@ -146,16 +150,21 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
     try {
       const check = await precheckBooking({ phone: '+91' + phone, lat: coords?.lat ?? null, lng: coords?.lng ?? null, location: locationValue.trim() });
       if (!check.ok) {
-        const dues = (check.pending || []).map((p) => `${p.what}${p.ref ? ` (${p.ref})` : ''} — ₹${Math.round(p.amount_paise / 100)}`).join('\n');
-        setFormError(`${check.message || 'We cannot take this booking right now.'}${dues ? `\n${dues}` : ''}\nCall or WhatsApp us if you think this is a mistake.`);
+        const dues = (check.pending || []).map((p) => `${p.what}${p.ref ? ` (${p.ref})` : ''} — ₹${Math.round(p.amount_paise / 100)}`);
+        setBlocked({ message: check.message || 'We cannot take this booking right now.', dues });
         return;
       }
+      // Installations have no "describe the problem" — the site details and the
+      // on-site contact travel in the description the technician reads.
+      const fullDescription = installType
+        ? [description.trim(), siteContact.trim() ? `Contact at site: ${siteContact.trim()}` : ''].filter(Boolean).join('\n')
+        : description.trim();
       const inquiry = await submitInquiry({
         full_name: name.trim(),
         phone: '+91' + phone,
         location: locationValue.trim(),
         service_item,
-        description: description.trim() || null,
+        description: fullDescription || null,
         bill_no: billNo.trim() || null,
         customer_lat: coords?.lat ?? null,
         customer_lng: coords?.lng ?? null,
@@ -350,19 +359,70 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
               </>
             )}
 
-            <Text style={[styles.label, { color: theme.text3 }]}>Describe the problem (optional)</Text>
+            <Text style={[styles.label, { color: theme.text3 }]}>
+              {installType ? 'Site details (optional)' : 'Describe the problem (optional)'}
+            </Text>
             <TextInput
               value={description}
               onChangeText={(v) => setDescription(v.slice(0, 1000))}
-              placeholder="Anything our technician should know…"
+              placeholder={installType ? 'e.g. Ground floor shop + godown, approx. 6 cameras, need mobile viewing' : 'Anything our technician should know…'}
               placeholderTextColor={theme.text3}
               multiline
               numberOfLines={3}
               style={[styles.textarea, { borderColor: theme.line, backgroundColor: theme.panel2, color: theme.text }]}
             />
 
+            {installType && (
+              <>
+                <Text style={[styles.label, { color: theme.text3 }]}>Contact at site (optional)</Text>
+                <View style={[styles.inputWrap, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                  <Icon name="user" size={16} color={theme.text3} />
+                  <TextInput
+                    value={siteContact}
+                    onChangeText={(v) => setSiteContact(v.slice(0, 120))}
+                    placeholder="Same as above — or name and number"
+                    placeholderTextColor={theme.text3}
+                    style={[styles.input, { color: theme.text }]}
+                  />
+                </View>
+              </>
+            )}
+
+            {blocked && (
+              <View style={[styles.blocked, { borderColor: semantic.danger + '66', backgroundColor: semantic.danger + '14' }]}>
+                <Text style={[styles.blockedTitle, { color: theme.text }]}>We can&apos;t book this online yet</Text>
+                <Text style={[styles.body, { color: theme.text2, marginTop: spacing(1) }]}>{blocked.message}</Text>
+                {blocked.dues.map((d) => (
+                  <Text key={d} style={[styles.body, { color: theme.text, marginTop: spacing(1) }]}>{d}</Text>
+                ))}
+                <Text style={[styles.body, { color: theme.text3, marginTop: spacing(2) }]}>
+                  Your details are saved. Call or WhatsApp us if you think this is a mistake.
+                </Text>
+                <View style={{ flexDirection: 'row', gap: spacing(3), marginTop: spacing(3) }}>
+                  <Pressable
+                    onPress={() => Linking.openURL(PHONE_TEL)}
+                    style={({ pressed }) => [styles.blockedAction, { backgroundColor: theme.surfaceStrong }, pressed && { opacity: 0.75 }]}
+                  >
+                    <Icon name="phone" size={16} color={theme.text} />
+                    <Text style={{ color: theme.text, fontSize: 12, fontFamily: 'Manrope_700Bold' }}>Call support</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => Linking.openURL(WHATSAPP_URL)}
+                    style={({ pressed }) => [styles.blockedAction, { backgroundColor: semantic.success + '33' }, pressed && { opacity: 0.75 }]}
+                  >
+                    <Icon name="whatsapp" size={16} color={semantic.success} filled />
+                    <Text style={{ color: semantic.success, fontSize: 12, fontFamily: 'Manrope_700Bold' }}>WhatsApp</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
             {formError && <Text style={styles.error}>{formError}</Text>}
-            <GlowButton label={submitting ? 'Submitting…' : 'Submit request'} onPress={handleSubmit} loading={submitting} />
+            <GlowButton
+              label={submitting ? 'Submitting…' : installType ? 'Book installation' : 'Submit request'}
+              onPress={handleSubmit}
+              loading={submitting}
+            />
           </>
         )}
       </GlassCard>
@@ -389,6 +449,9 @@ const styles = StyleSheet.create({
   segment: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(2), borderRadius: radius.sm, borderWidth: 1 },
   issueChip: { paddingHorizontal: spacing(3), paddingVertical: spacing(2), borderRadius: radius.full, borderWidth: 1 },
   textarea: { borderWidth: 1, borderRadius: radius.sm, padding: spacing(3), fontSize: 13, minHeight: 84, textAlignVertical: 'top', fontFamily: 'Manrope_400Regular' },
+  blocked: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(3) },
+  blockedTitle: { ...typography.heading, fontSize: 14 },
+  blockedAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), paddingVertical: spacing(3), borderRadius: radius.md },
   installBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginBottom: spacing(4) },
   installBannerLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
   installBannerName: { fontFamily: 'Manrope_700Bold', fontSize: 13, marginTop: 2 },

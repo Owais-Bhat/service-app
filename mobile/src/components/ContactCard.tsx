@@ -7,8 +7,8 @@ import { brand, semantic } from '../theme/tokens';
 import Icon from './Icon';
 
 const PHONE_DISPLAY = '+91 88991 33144';
-const PHONE_TEL = 'tel:+918899133144';
-const WHATSAPP_URL =
+export const PHONE_TEL = 'tel:+918899133144';
+export const WHATSAPP_URL =
   'https://wa.me/918899133144?text=' +
   encodeURIComponent('Hello Networking Experts, I need help with a service request.');
 
