@@ -41,6 +41,7 @@ export interface ManageContextInquiry {
   description: string | null;
   location: string | null;
   preferred_time: string | null;
+  photo_urls?: string | null;
   status: string;
   assignment_status: string | null;
   decline_reason: string | null;

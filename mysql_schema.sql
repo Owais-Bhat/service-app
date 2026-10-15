@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS inquiries (
     employee_rating INT CHECK (employee_rating >= 1 AND employee_rating <= 5),
     feedback_employee_id VARCHAR(36),
     preferred_time TEXT,
+    photo_urls TEXT, -- JSON array of /uploads/... paths attached by the customer
     assignment_status VARCHAR(20) DEFAULT 'pending',
     decline_reason TEXT,
     assigned_employee_id VARCHAR(36),

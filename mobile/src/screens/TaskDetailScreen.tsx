@@ -10,6 +10,7 @@ import Icon from '../components/Icon';
 import PressScale from '../components/PressScale';
 import TaskStatusModal from '../components/TaskStatusModal';
 import LocationMapModal from '../components/LocationMapModal';
+import RequestPhotos from '../components/RequestPhotos';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
@@ -176,6 +177,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
             {item.preferredTime ? (
               <Text style={[styles.contactLine, { color: brand.primary, marginTop: spacing(1) }]}>Preferred: {item.preferredTime}</Text>
             ) : null}
+            <RequestPhotos raw={item.photoUrls} />
 
             <View style={styles.actionRow}>
               {item.phone ? (

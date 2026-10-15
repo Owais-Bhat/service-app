@@ -16,6 +16,7 @@ import {
   ManageContextEmployee,
 } from '../api/adminInquiries';
 import { ApiError, resolveUploadUrl } from '../api/client';
+import RequestPhotos from './RequestPhotos';
 import { deleteInquiry, releaseToPool, transferInquiry } from '../api/adminManage';
 import CustomerEquipment from './CustomerEquipment';
 
@@ -244,6 +245,7 @@ export default function AdminServiceRequestDetailModal({ inquiryId, onDismiss, o
                     </Text>
                   </View>
                 </View>
+                <RequestPhotos raw={inq.photo_urls} />
                 {!isTerminal && slaDeadlineInfo ? (
                   <Text style={[styles.fieldValue, { color: theme.text3, fontSize: 11, marginTop: -spacing(1) }]}>
                     Deadline: {slaDeadlineInfo.label}

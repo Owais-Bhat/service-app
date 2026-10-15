@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import GlassCard from './GlassCard';
 import GlowButton from './GlowButton';
 import Icon from './Icon';
@@ -12,7 +13,12 @@ import { brand, semantic } from '../theme/tokens';
 import { sendOtp, verifyOtp, resendOtp } from '../api/otp';
 import { submitInquiry, precheckBooking, Inquiry } from '../api/inquiries';
 import { IssueOption } from '../api/landing';
+import { uploadPublicPhoto } from '../api/upload';
 import { PHONE_TEL, WHATSAPP_URL } from './ContactCard';
+
+const MAX_PHOTOS = 3;
+// `path` is the server-relative /uploads path once the upload has finished.
+interface AttachedPhoto { uri: string; path: string | null; failed?: boolean }
 
 interface Props {
   mode: 'request' | 'install';
@@ -58,6 +64,7 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
   const [otherIssue, setOtherIssue] = useState('');
   const [description, setDescription] = useState('');
   const [siteContact, setSiteContact] = useState('');
+  const [photos, setPhotos] = useState<AttachedPhoto[]>([]);
   const [blocked, setBlocked] = useState<{ message: string; dues: string[] } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -131,8 +138,57 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
     }
   };
 
+  // Photos upload as soon as they are picked, so submit only has to send paths.
+  const addPhotoAssets = async (uris: string[]) => {
+    const room = MAX_PHOTOS - photos.length;
+    const picked = uris.slice(0, Math.max(room, 0));
+    if (!picked.length) return;
+    setPhotos((prev) => [...prev, ...picked.map((uri) => ({ uri, path: null }))]);
+    await Promise.all(
+      picked.map(async (uri) => {
+        try {
+          const path = await uploadPublicPhoto(uri);
+          setPhotos((prev) => prev.map((p) => (p.uri === uri ? { ...p, path } : p)));
+        } catch {
+          setPhotos((prev) => prev.map((p) => (p.uri === uri ? { ...p, failed: true } : p)));
+        }
+      }),
+    );
+  };
+
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { setFormError('Camera permission is needed to take a photo'); return; }
+    const res = await ImagePicker.launchCameraAsync({ quality: 0.6, allowsEditing: false });
+    if (!res.canceled && res.assets?.length) await addPhotoAssets(res.assets.map((a) => a.uri));
+  };
+
+  const pickPhotos = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { setFormError('Photo library permission is needed to attach a photo'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.6,
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_PHOTOS - photos.length,
+    });
+    if (!res.canceled && res.assets?.length) await addPhotoAssets(res.assets.map((a) => a.uri));
+  };
+
+  const handleAddPhoto = () => {
+    setFormError(null);
+    Alert.alert('Add a photo', undefined, [
+      { text: 'Take photo', onPress: () => { void takePhoto(); } },
+      { text: 'Choose from library', onPress: () => { void pickPhotos(); } },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const uploadingPhotos = photos.some((p) => !p.path && !p.failed);
+
   const handleSubmit = async () => {
     const issueLabel = issueOptions.find((o) => o.value === issueValue)?.label || '';
+    if (uploadingPhotos) { setFormError('Photos are still uploading — one moment'); return; }
     if (!name.trim()) { setFormError('Please enter your name'); return; }
     if (!locationValue.trim()) { setFormError('Please add your location'); return; }
     if (!installType) {
@@ -165,6 +221,7 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
         location: locationValue.trim(),
         service_item,
         description: fullDescription || null,
+        photo_urls: photos.map((p) => p.path).filter((p): p is string => !!p),
         bill_no: billNo.trim() || null,
         customer_lat: coords?.lat ?? null,
         customer_lng: coords?.lng ?? null,
@@ -388,6 +445,34 @@ export default function RequestWizard({ mode, issueOptions }: Props) {
               </>
             )}
 
+            <Text style={[styles.label, { color: theme.text3 }]}>Photos (optional, up to {MAX_PHOTOS})</Text>
+            <View style={styles.photoRow}>
+              {photos.map((p) => (
+                <View key={p.uri} style={[styles.photoBox, { borderColor: p.failed ? semantic.danger : theme.line }]}>
+                  <Image source={{ uri: p.uri }} style={styles.photoImg} />
+                  {!p.path && !p.failed && (
+                    <View style={styles.photoOverlay}><ActivityIndicator color="#fff" /></View>
+                  )}
+                  {p.failed && (
+                    <View style={styles.photoOverlay}><Text style={styles.photoFail}>Failed</Text></View>
+                  )}
+                  <Pressable
+                    onPress={() => setPhotos((prev) => prev.filter((x) => x.uri !== p.uri))}
+                    style={styles.photoRemove}
+                    accessibilityLabel="Remove photo"
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, lineHeight: 14 }}>×</Text>
+                  </Pressable>
+                </View>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <Pressable onPress={handleAddPhoto} style={[styles.photoBox, styles.photoAdd, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+                  <Icon name="add" size={18} color={brand.primary} />
+                  <Text style={{ color: brand.primary, fontSize: 11, marginTop: 2 }}>Add</Text>
+                </Pressable>
+              )}
+            </View>
+
             {blocked && (
               <View style={[styles.blocked, { borderColor: semantic.danger + '66', backgroundColor: semantic.danger + '14' }]}>
                 <Text style={[styles.blockedTitle, { color: theme.text }]}>We can&apos;t book this online yet</Text>
@@ -449,6 +534,13 @@ const styles = StyleSheet.create({
   segment: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(2), borderRadius: radius.sm, borderWidth: 1 },
   issueChip: { paddingHorizontal: spacing(3), paddingVertical: spacing(2), borderRadius: radius.full, borderWidth: 1 },
   textarea: { borderWidth: 1, borderRadius: radius.sm, padding: spacing(3), fontSize: 13, minHeight: 84, textAlignVertical: 'top', fontFamily: 'Manrope_400Regular' },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
+  photoBox: { width: 76, height: 76, borderRadius: radius.sm, borderWidth: 1, overflow: 'hidden' },
+  photoAdd: { alignItems: 'center', justifyContent: 'center' },
+  photoImg: { width: '100%', height: '100%' },
+  photoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  photoFail: { color: '#fff', fontSize: 11, fontFamily: 'Manrope_700Bold' },
+  photoRemove: { position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   blocked: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(3) },
   blockedTitle: { ...typography.heading, fontSize: 14 },
   blockedAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), paddingVertical: spacing(3), borderRadius: radius.md },

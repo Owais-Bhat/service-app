@@ -1556,6 +1556,7 @@ const requiredColumns = {
         { name: 'feedback_token_expires_at', definition: 'TIMESTAMP NULL' },
         { name: 'feedback_token_used_at', definition: 'TIMESTAMP NULL' },
         { name: 'preferred_time', definition: 'TEXT' },
+        { name: 'photo_urls', definition: "TEXT COMMENT 'JSON array of /uploads/... paths the customer attached when requesting (max 3)'" },
         { name: 'assignment_status', definition: "VARCHAR(20) DEFAULT 'pending'" },
         { name: 'decline_reason', definition: 'TEXT' },
         { name: 'assigned_employee_id', definition: 'VARCHAR(36)' },
@@ -3361,8 +3362,24 @@ function parseSelectClause(select) {
 const PUBLIC_INQUIRY_FEEDBACK_FIELDS = new Set(['feedback_rating', 'feedback_comment', 'feedback_at', 'employee_rating', 'feedback_employee_id']);
 const PUBLIC_INQUIRY_CREATE_FIELDS = new Set([
     'id', 'full_name', 'phone', 'location', 'customer_lat', 'customer_lng',
-    'bill_no', 'service_item', 'description', 'ticket_no', 'preferred_time', 'status', 'assignment_status',
+    'bill_no', 'service_item', 'description', 'ticket_no', 'preferred_time', 'photo_urls', 'status', 'assignment_status',
 ]);
+// Public requests may attach up to 3 photos, uploaded earlier through
+// /api/public/upload. Only that route's own /uploads/<id> paths are accepted so
+// a guest can't plant an arbitrary URL on a ticket the staff will open.
+const PUBLIC_PHOTO_MAX = 3;
+const PUBLIC_PHOTO_PATH_RE = /^\/uploads\/[A-Za-z0-9._-]{1,120}$/;
+function normalizePublicPhotoUrls(raw) {
+    if (raw === undefined || raw === null || raw === '') return { value: null };
+    let list = raw;
+    if (typeof raw === 'string') {
+        try { list = JSON.parse(raw); } catch { return { error: 'photo_urls must be a JSON array' }; }
+    }
+    if (!Array.isArray(list)) return { error: 'photo_urls must be a JSON array' };
+    if (list.length > PUBLIC_PHOTO_MAX) return { error: `At most ${PUBLIC_PHOTO_MAX} photos are allowed` };
+    if (!list.every((u) => typeof u === 'string' && PUBLIC_PHOTO_PATH_RE.test(u))) return { error: 'Invalid photo reference' };
+    return { value: list.length ? JSON.stringify(list) : null };
+}
 // Public complaint submissions: anyone with a valid ticket_no + phone (verified
 // in the POST handler) can file a complaint. Field set is intentionally minimal
 // so admins control status / admin_response / resolved_at.
@@ -3938,6 +3955,50 @@ function sendOtpResponse(res, result, successPayload = {}) {
     const status = result.status === 401 ? 503 : (result.status && result.status >= 400 ? result.status : 400);
     return res.status(status).json({ ok: false, error: result.error || 'OTP request failed' });
 }
+
+// Guests attach photos to a service request before they have an account, so this
+// is the one unauthenticated upload. It is deliberately narrow: images only
+// (verified from the file's magic bytes, not the client-supplied type), 5 MB
+// max, and rate-limited per IP both per-minute and per-hour. The stored mime
+// comes from the detected type, so /uploads/<id> can never serve it as HTML.
+const PUBLIC_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const publicImageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PUBLIC_UPLOAD_MAX_BYTES, files: 1 } });
+function sniffImage(buf) {
+    if (!buf || buf.length < 12) return null;
+    if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return { mime: 'image/jpeg', ext: '.jpg' };
+    if (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG') return { mime: 'image/png', ext: '.png' };
+    if (buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return { mime: 'image/webp', ext: '.webp' };
+    return null;
+}
+app.post(
+    '/api/public/upload',
+    rateLimit({ windowMs: 60_000, max: 10, key: 'public-upload-min' }),
+    rateLimit({ windowMs: 60 * 60_000, max: 40, key: 'public-upload-hour' }),
+    (req, res, next) => {
+        publicImageUpload.single('file')(req, res, (err) => {
+            if (!err) return next();
+            if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Photo is too large (max 5 MB)' });
+            return res.status(400).json({ error: 'Upload error' });
+        });
+    },
+    async (req, res) => {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const kind = sniffImage(req.file.buffer);
+        if (!kind) return res.status(415).json({ error: 'Only JPEG, PNG or WebP photos are allowed' });
+        const id = `${Date.now()}-${Math.round(Math.random() * 1E9)}${kind.ext}`;
+        let connection;
+        try {
+            connection = await getConn();
+            await connection.query('INSERT INTO uploaded_files (id, mime, data) VALUES (?, ?, ?)', [id, kind.mime, req.file.buffer]);
+            res.json({ url: `/uploads/${id}` });
+        } catch (err) {
+            console.error('[public-upload] DB store error:', err);
+            res.status(500).json({ error: 'Could not store photo' });
+        } finally {
+            if (connection) connection.release();
+        }
+    }
+);
 
 app.post('/api/otp/send', rateLimit({ windowMs: 60_000, max: 5, key: 'otp-send' }), async (req, res) => {
     try {
@@ -8846,6 +8907,9 @@ app.post('/api/data/:table', rateLimit({ windowMs: 60_000, max: 30, key: 'data-p
             if (blocked.length) return res.status(403).json({ error: `Not allowed to set: ${blocked.join(', ')}` });
             const verdict = await bookingRules.check({ phone: data.phone, lat: data.customer_lat, lng: data.customer_lng, location: data.location });
             if (!verdict.ok) return res.status(422).json({ error: verdict.message, ...verdict });
+            const photos = normalizePublicPhotoUrls(data.photo_urls);
+            if (photos.error) return res.status(400).json({ error: photos.error });
+            data.photo_urls = photos.value;
             data.status = 'open';
             data.assignment_status = 'none';
         } else if (table === 'complaints') {

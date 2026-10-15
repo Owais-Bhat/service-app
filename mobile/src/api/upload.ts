@@ -15,6 +15,21 @@ export async function uploadImage(uri: string): Promise<string> {
   return resolveUploadUrl(res.url);
 }
 
+// Guest photo for a service request — no login needed, so it goes to the
+// narrow public endpoint (JPEG/PNG/WebP, 5 MB, rate-limited). Returns the
+// server-relative `/uploads/<id>` path, which is what the request stores;
+// resolveUploadUrl() turns it into something an <Image> can load.
+export async function uploadPublicPhoto(uri: string): Promise<string> {
+  const form = new FormData();
+  const filename = uri.split('/').pop() || `photo-${Date.now()}.jpg`;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const blob = await localUriToBlob(uri, mime);
+  form.append('file', blob, filename);
+  const res = await postForm<{ url: string }>('/public/upload', form);
+  return res.url;
+}
+
 // Same endpoint, for the ad creatives that may be a short video.
 export async function uploadMedia(uri: string, kind: 'image' | 'video'): Promise<string> {
   const form = new FormData();

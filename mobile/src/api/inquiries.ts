@@ -8,6 +8,8 @@ export interface NewInquiry {
   description?: string | null;
   bill_no?: string | null;
   preferred_time?: string;
+  // Server-relative /uploads/... paths from uploadPublicPhoto (max 3).
+  photo_urls?: string[] | null;
   customer_lat?: number | null;
   customer_lng?: number | null;
 }
@@ -41,6 +43,7 @@ export function submitInquiry(input: NewInquiry) {
     ...input,
     description: input.description ?? null,
     bill_no: input.bill_no ?? null,
+    photo_urls: input.photo_urls?.length ? JSON.stringify(input.photo_urls) : null,
     customer_lat: input.customer_lat ?? null,
     customer_lng: input.customer_lng ?? null,
     status: 'open',

@@ -23,6 +23,7 @@ interface RawInquiry {
   location: string | null;
   service_item: string | null;
   preferred_time: string | null;
+  photo_urls?: string | null;
   status: string;
   assignment_status: string | null;
   employee_update_detail: string | null;
@@ -63,6 +64,7 @@ export interface TaskItem {
   ticketNo: string | null;
   serviceItem: string | null;
   preferredTime: string | null;
+  photoUrls?: string | null;
   employeeUpdateDetail: string | null;
   companyName: string | null;
   scheduledAt: string | null;
@@ -119,6 +121,7 @@ function fromInquiry(inq: RawInquiry, ticketId: string | null): TaskItem {
     ticketNo: inq.ticket_no,
     serviceItem: inq.service_item,
     preferredTime: inq.preferred_time,
+    photoUrls: inq.photo_urls ?? null,
     employeeUpdateDetail: inq.employee_update_detail,
     companyName: inq.company_name,
     scheduledAt: inq.scheduled_at,
