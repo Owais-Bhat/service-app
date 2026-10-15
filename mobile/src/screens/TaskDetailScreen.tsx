@@ -1,19 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
-import BackLink from '../components/BackLink';
+import ToolHeader from '../components/ToolHeader';
+import StatusBadge from '../components/admin/StatusBadge';
 import Icon from '../components/Icon';
-import PressScale from '../components/PressScale';
 import TaskStatusModal from '../components/TaskStatusModal';
 import LocationMapModal from '../components/LocationMapModal';
 import RequestPhotos from '../components/RequestPhotos';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { brand, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { fetchTaskByTicketId, TaskItem, acceptAssignment, declineAssignment } from '../api/tasks';
 import { useAttendanceStatus } from '../context/AttendanceContext';
 
@@ -74,64 +73,70 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
     return (
       <View style={styles.root}>
         <MeshBackground />
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <ToolHeader title="Task" onBack={onBack} />
+        <View style={styles.centered}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Ticket not found'}</Text>
-          <BackLink onPress={onBack} />
         </View>
       </View>
     );
   }
 
   if (item.assignmentStatus === 'pending') {
+    const blocked = !clockedIn;
+    const guard = () => {
+      if (!attendance?.clock_in) showGate();
+    };
     return (
       <View style={styles.root}>
         <MeshBackground />
-        <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: spacing(5) }]}>
-          <Text style={[styles.heading, { color: theme.text, marginBottom: spacing(3) }]}>New Assignment</Text>
-          <GlassCard style={{ width: '100%', marginBottom: spacing(4) }}>
-            <Text style={[styles.label, { color: theme.text3 }]}>Customer</Text>
-            <Text style={[styles.body, { color: theme.text }]}>{item.fullName}</Text>
+        <ToolHeader title="New assignment" subtitle={item.ticketNo || undefined} onBack={onBack} />
+        <ScrollView contentContainerStyle={styles.content}>
+          <Panel style={styles.pendingPanel}>
+            <Text style={[styles.overline, { color: theme.text3 }]}>Customer</Text>
+            <Text style={[styles.rowTitle, { color: theme.text }]}>{item.fullName}</Text>
             {item.serviceItem ? (
               <>
-                <Text style={[styles.label, { color: theme.text3, marginTop: spacing(3) }]}>Service</Text>
-                <Text style={[styles.body, { color: theme.text }]}>{item.serviceItem}</Text>
+                <Text style={[styles.overline, { color: theme.text3, marginTop: spacing(3) }]}>Service</Text>
+                <Text style={[styles.supporting, { color: theme.text }]}>{item.serviceItem}</Text>
               </>
             ) : null}
             {item.location ? (
               <>
-                <Text style={[styles.label, { color: theme.text3, marginTop: spacing(3) }]}>Location</Text>
-                <Text style={[styles.body, { color: theme.text }]}>{item.location}</Text>
+                <Text style={[styles.overline, { color: theme.text3, marginTop: spacing(3) }]}>Location</Text>
+                <Text style={[styles.supporting, { color: theme.text }]}>{item.location}</Text>
               </>
             ) : null}
-          </GlassCard>
-          <PressScale
-            style={[styles.acceptBtn, !clockedIn && styles.updateBtnDisabled]}
-            onPress={async () => {
-              if (!clockedIn) return void (!attendance?.clock_in && showGate());
-              await acceptAssignment(item);
-              load();
-            }}
-          >
-            <Text style={styles.acceptBtnText}>Accept</Text>
-          </PressScale>
-          <PressScale
-            style={[styles.declineBtn, { marginTop: spacing(3) }, !clockedIn && styles.updateBtnDisabled]}
-            onPress={async () => {
-              if (!clockedIn) return void (!attendance?.clock_in && showGate());
-              if (item.inquiryId) await declineAssignment(item.inquiryId, 'declined by employee');
-              onBack();
-            }}
-          >
-            <Text style={[styles.body, { color: theme.text }]}>Decline</Text>
-          </PressScale>
-          {!clockedIn ? (
+          </Panel>
+          {blocked ? (
             <Text style={[styles.clockHint, { color: theme.text3 }]}>
               {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to accept or decline.'}
             </Text>
           ) : null}
-          <View style={{ marginTop: spacing(4) }}>
-            <BackLink onPress={onBack} />
-          </View>
+        </ScrollView>
+        <View style={[styles.sticky, { backgroundColor: theme.surfaceStrong, borderTopColor: theme.line, paddingBottom: insets.bottom + 22 }]}>
+          <Pressable
+            onPress={async () => {
+              if (blocked) return guard();
+              if (item.inquiryId) await declineAssignment(item.inquiryId, 'declined by employee');
+              onBack();
+            }}
+            accessibilityRole="button"
+            style={[styles.stickyBtn, { flex: 1, borderColor: theme.border, borderWidth: 1 }, blocked && styles.dim]}
+          >
+            <Text style={[styles.stickyBtnText, { color: theme.text }]}>Decline</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              if (blocked) return guard();
+              await acceptAssignment(item);
+              load();
+            }}
+            accessibilityRole="button"
+            style={[styles.stickyBtn, { flex: 1.4, backgroundColor: brand.fill }, blocked && styles.dim]}
+          >
+            <Icon name={blocked ? 'lock' : 'check'} size={18} color="#ffffff" />
+            <Text style={[styles.stickyBtnText, { color: '#ffffff' }]}>Accept</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -143,96 +148,91 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(10) }}>
-        <BackLink onPress={onBack} />
-
-        <Animated.View entering={FadeInUp.duration(450).springify()}>
-          <GlassCard shadow>
-            {item.reopened ? (
-              <View style={styles.reopenedTag}>
-                <Text style={styles.reopenedTagText}>🔁 Reopened — free rework</Text>
-              </View>
-            ) : null}
-            <View style={styles.headerRow}>
-              <Text style={styles.ticketId}>{item.ticketNo || 'No ticket'}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-              </View>
+      <ToolHeader title={item.ticketNo || 'No ticket'} subtitle={item.serviceItem || undefined} onBack={onBack} />
+      <ScrollView contentContainerStyle={[styles.content, !locked && { paddingBottom: spacing(6) }]}>
+        <GlassCard>
+          {item.reopened ? (
+            <View style={[styles.reopenedTag, { backgroundColor: theme.warnS }]}>
+              <Icon name="refresh" size={12} color={theme.warn} />
+              <Text style={[styles.reopenedTagText, { color: theme.warn }]}>Reopened — free rework</Text>
             </View>
-            <Text style={[styles.title, { color: theme.text }]}>{item.serviceItem || item.fullName}</Text>
-            {item.companyName ? (
-              <View style={styles.categoryChip}>
-                <Text style={styles.categoryChipText}>{item.companyName}</Text>
-              </View>
-            ) : null}
-          </GlassCard>
-        </Animated.View>
+          ) : null}
+          <View style={styles.heroTop}>
+            <StatusBadge label={statusStyle.label} color={statusStyle.color} />
+            <Text style={[styles.ticketId, { color: theme.accent }]}>{item.ticketNo || ''}</Text>
+          </View>
+          <Text style={[styles.customer, { color: theme.text }]}>{item.fullName}</Text>
+          {item.phone ? <Text style={[styles.supporting, { color: theme.text2, marginTop: 2 }]}>{item.phone}</Text> : null}
+          {item.location ? <Text style={[styles.supporting, { color: theme.text2, marginTop: spacing(1) }]}>{item.location}</Text> : null}
 
-        <Animated.View entering={FadeInUp.delay(80).duration(450).springify()}>
-          <Panel style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Customer</Text>
-            <Text style={[styles.contactName, { color: theme.text }]}>{item.fullName}</Text>
-            {item.phone ? <Text style={[styles.contactLine, { color: theme.text2 }]}>{item.phone}</Text> : null}
-            {item.location ? <Text style={[styles.contactLine, { color: theme.text3 }]}>{item.location}</Text> : null}
-            {item.preferredTime ? (
-              <Text style={[styles.contactLine, { color: brand.primary, marginTop: spacing(1) }]}>Preferred: {item.preferredTime}</Text>
-            ) : null}
-            <RequestPhotos raw={item.photoUrls} />
-
-            <View style={styles.actionRow}>
+          {item.phone || item.location ? (
+            <View style={styles.contactRow}>
               {item.phone ? (
-                <>
-                  <Pressable onPress={() => call(item.phone!)} style={[styles.iconAction, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                    <Icon name="phone" size={16} color={theme.text} />
-                  </Pressable>
-                  <Pressable onPress={() => whatsapp(item.phone!)} style={[styles.iconAction, { backgroundColor: '#25D366' }]}>
-                    <Icon name="whatsapp" size={16} color="#fff" filled />
-                  </Pressable>
-                </>
+                <Pressable onPress={() => call(item.phone!)} accessibilityRole="button" style={[styles.contactBtn, { borderColor: theme.border, backgroundColor: theme.panel }]}>
+                  <Icon name="phone" size={16} color={theme.text} />
+                  <Text style={[styles.contactText, { color: theme.text }]}>Call</Text>
+                </Pressable>
+              ) : null}
+              {item.phone ? (
+                <Pressable onPress={() => whatsapp(item.phone!)} accessibilityRole="button" style={[styles.contactBtn, { borderColor: theme.border, backgroundColor: theme.panel }]}>
+                  <Icon name="whatsapp" size={16} color={theme.text} />
+                  <Text style={[styles.contactText, { color: theme.text }]}>WhatsApp</Text>
+                </Pressable>
               ) : null}
               {item.location ? (
-                <Pressable onPress={() => setShowMap(true)} style={[styles.iconAction, { backgroundColor: brand.fill }]}>
-                  <Icon name="pin" size={16} color="#fff" />
+                <Pressable onPress={() => setShowMap(true)} accessibilityRole="button" style={[styles.contactBtn, { borderColor: theme.border, backgroundColor: theme.panel }]}>
+                  <Icon name="pin" size={16} color={theme.text} />
+                  <Text style={[styles.contactText, { color: theme.text }]}>Directions</Text>
                 </Pressable>
               ) : null}
             </View>
-          </Panel>
-        </Animated.View>
+          ) : null}
+        </GlassCard>
 
-        {item.employeeUpdateDetail ? (
-          <Animated.View entering={FadeInUp.delay(140).duration(450).springify()}>
-            <Panel style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Employee Update</Text>
-              <Text style={[styles.body, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
-            </Panel>
-          </Animated.View>
+        {item.serviceItem || item.photoUrls ? (
+          <View style={styles.section}>
+            <Text style={[styles.heading, { color: theme.text }]}>Issue</Text>
+            {item.serviceItem ? <Text style={[styles.body, { color: theme.text2 }]}>{item.serviceItem}</Text> : null}
+            <RequestPhotos raw={item.photoUrls} />
+          </View>
         ) : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {item.employeeUpdateDetail ? (
+          <View style={styles.section}>
+            <Text style={[styles.heading, { color: theme.text }]}>Employee update</Text>
+            <Text style={[styles.body, { color: theme.text2 }]}>{item.employeeUpdateDetail}</Text>
+          </View>
+        ) : null}
 
-        <Animated.View entering={FadeInUp.delay(200).duration(450).springify()} style={styles.section}>
-          {locked ? (
-            <View style={[styles.doneBanner, { borderColor: theme.line }]}>
-              <Icon name="check" size={16} color={semantic.success} />
-              <Text style={[styles.doneBannerText, { color: theme.text2 }]}>This service is completed and locked.</Text>
-            </View>
-          ) : (
-            <>
-              <PressScale onPress={() => (clockedIn ? setShowStatus(true) : !attendance?.clock_in && showGate())}>
-                <View style={[styles.updateBtn, !clockedIn && styles.updateBtnDisabled]}>
-                  <Icon name={clockedIn ? 'edit' : 'lock'} size={16} color="#fff" />
-                  <Text style={styles.updateBtnText}>Update Status</Text>
-                </View>
-              </PressScale>
-              {!clockedIn ? (
-                <Text style={[styles.clockHint, { color: theme.text3 }]}>
-                  {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to update this task.'}
-                </Text>
-              ) : null}
-            </>
-          )}
-        </Animated.View>
+        {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
+
+        {locked ? (
+          <View style={[styles.doneBanner, { borderColor: theme.border, backgroundColor: theme.okS }]}>
+            <Icon name="check-circle" size={18} color={theme.ok} />
+            <Text style={[styles.doneBannerText, { color: theme.text }]}>This service is completed and locked.</Text>
+          </View>
+        ) : null}
       </ScrollView>
+
+      {!locked ? (
+        <View style={[styles.sticky, { backgroundColor: theme.surfaceStrong, borderTopColor: theme.line, paddingBottom: insets.bottom + 22 }]}>
+          <View style={{ flex: 1 }}>
+            <Pressable
+              onPress={() => (clockedIn ? setShowStatus(true) : !attendance?.clock_in && showGate())}
+              accessibilityRole="button"
+              style={[styles.stickyBtn, { backgroundColor: brand.fill }, !clockedIn && styles.dim]}
+            >
+              <Icon name={clockedIn ? 'swap' : 'lock'} size={18} color="#ffffff" />
+              <Text style={[styles.stickyBtnText, { color: '#ffffff' }]}>Update status</Text>
+            </Pressable>
+            {!clockedIn ? (
+              <Text style={[styles.clockHint, { color: theme.text3 }]}>
+                {attendance?.clock_in ? 'You have clocked out for today.' : 'Clock in to update this task.'}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {showStatus && (
         <TaskStatusModal
@@ -261,32 +261,28 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing(6), gap: spacing(3) },
-  body: { ...typography.body, textAlign: 'center' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing(2) },
-  ticketId: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13, color: brand.primary },
-  statusBadge: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.sm },
-  statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
-  title: { ...typography.heading, marginBottom: spacing(2) },
-  categoryChip: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.sm, alignSelf: 'flex-start', backgroundColor: 'rgba(21,160,90,0.14)' },
-  categoryChipText: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: brand.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  reopenedTag: { alignSelf: 'flex-start', backgroundColor: 'rgba(224,138,20,0.16)', borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), marginBottom: spacing(2.5) },
-  reopenedTagText: { fontFamily: 'Manrope_700Bold', fontSize: 10, color: semantic.warning },
-  section: { marginTop: spacing(4) },
-  sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
-  contactName: { ...typography.body, fontFamily: 'Manrope_700Bold', marginBottom: spacing(0.5) },
-  contactLine: { ...typography.caption, marginBottom: spacing(0.5) },
-  actionRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(3) },
-  iconAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  error: { ...typography.caption, color: brand.danger, marginTop: spacing(3), textAlign: 'center' },
+  content: { padding: spacing(4), paddingBottom: spacing(10), gap: spacing(5) },
+  body: { ...typography.body, fontSize: 14, lineHeight: 20 },
+  supporting: { ...typography.supporting },
+  rowTitle: { ...typography.rowTitle },
+  heading: { ...typography.heading, fontSize: 16, lineHeight: 22 },
+  overline: { ...typography.overline, marginBottom: spacing(1) },
+  pendingPanel: { gap: 2 },
+  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(3) },
+  ticketId: { ...typography.monoId },
+  customer: { ...typography.heading, fontSize: 20, lineHeight: 26 },
+  contactRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(3) },
+  contactBtn: { flex: 1, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderRadius: radius.md, borderWidth: 1 },
+  contactText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  section: { gap: spacing(2) },
+  error: { ...typography.caption, textAlign: 'center' },
+  reopenedTag: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), alignSelf: 'flex-start', borderRadius: radius.full, paddingHorizontal: spacing(2.5), height: 24, marginBottom: spacing(2.5) },
+  reopenedTagText: { fontFamily: 'Manrope_700Bold', fontSize: 11 },
   doneBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5) },
-  doneBannerText: { ...typography.body, fontSize: 13 },
-  updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.fill, height: 52, borderRadius: radius.md },
-  updateBtnDisabled: { opacity: 0.45 },
-  clockHint: { ...typography.caption, textAlign: 'center', marginTop: spacing(2) },
-  updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
-  heading: { fontFamily: 'Manrope_700Bold', fontSize: 20 },
-  label: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  acceptBtn: { width: '100%', backgroundColor: brand.fill, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  acceptBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
-  declineBtn: { width: '100%', height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(128,128,128,0.3)' },
+  doneBannerText: { ...typography.supporting, flex: 1 },
+  sticky: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingTop: spacing(1), paddingHorizontal: spacing(4), borderTopWidth: 1 },
+  stickyBtn: { height: 52, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2) },
+  stickyBtnText: { ...typography.button },
+  dim: { opacity: 0.5 },
+  clockHint: { ...typography.supporting, fontSize: 12, textAlign: 'center', marginTop: spacing(1) },
 });

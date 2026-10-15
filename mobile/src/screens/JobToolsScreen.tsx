@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
 import AppHeaderBar from '../components/AppHeaderBar';
 import Icon from '../components/Icon';
@@ -10,7 +9,7 @@ import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
 
 interface Props {
   onGoDashboard: () => void;
@@ -32,24 +31,31 @@ interface Props {
   onOpenAssistant: () => void;
 }
 
+type Tone = 'ok' | 'info' | 'vio' | 'teal' | 'warn';
+
 interface Tool {
   key: string;
   label: string;
   desc: string;
-  color: string;
+  tone: Tone;
   icon: IconName;
+  group: string;
 }
 
+const GROUPS = ['Work', 'Field', 'Money & help'];
+
+// Grouped as in the design (Work / Field / Money & help); tool tiles take the
+// tinted status hues rather than raw hex values.
 const BASE_TOOLS: Tool[] = [
-  { key: 'tasks', label: 'Manage Tasks', desc: 'Assigned jobs, service requests & assignments', color: '#15a05a', icon: 'tasks' },
-  { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', color: '#15a05a', icon: 'estimator' },
-  { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', color: '#0ea5a5', icon: 'device' },
-  { key: 'eod', label: 'EOD Report', desc: 'Submit end-of-day summary', color: '#6366f1', icon: 'report' },
-  { key: 'mystats', label: 'My Stats', desc: 'Personal KPIs: tasks, attendance & collections', color: '#7c5cfc', icon: 'star' },
-  { key: 'pricing', label: 'Service Pricing', desc: 'Browse service rates on-site', color: '#0ea5a5', icon: 'estimator' },
-  { key: 'calendar', label: 'Calendar', desc: 'Your dated installation jobs', color: '#2e9bff', icon: 'calendar' },
-  { key: 'materials', label: 'Materials Used', desc: 'Record stock fitted on, or returned from, a job', color: '#e08a14', icon: 'box' },
-  { key: 'assistant', label: 'AI Assistant', desc: 'Describe a fault, get fix steps and a solution video', color: '#a855f7', icon: 'chat' },
+  { key: 'tasks', label: 'My Tasks', desc: 'Status, billing, devices', tone: 'ok', icon: 'tasks', group: 'Work' },
+  { key: 'calendar', label: 'Calendar', desc: 'Your dated installation jobs', tone: 'info', icon: 'calendar', group: 'Work' },
+  { key: 'devices', label: 'Device Follow-up', desc: 'Devices under service', tone: 'teal', icon: 'device', group: 'Field' },
+  { key: 'materials', label: 'Materials Used', desc: 'Record stock fitted on, or returned from, a job', tone: 'info', icon: 'box', group: 'Field' },
+  { key: 'eod', label: 'EOD Report', desc: 'Due before clock out', tone: 'warn', icon: 'report', group: 'Field' },
+  { key: 'estimator', label: 'Estimator', desc: 'Build an on-site quote', tone: 'ok', icon: 'estimator', group: 'Money & help' },
+  { key: 'pricing', label: 'Service Pricing', desc: 'Browse service rates on-site', tone: 'ok', icon: 'pricetag', group: 'Money & help' },
+  { key: 'mystats', label: 'My Stats', desc: 'Personal KPIs: tasks, attendance & collections', tone: 'vio', icon: 'chart', group: 'Money & help' },
+  { key: 'assistant', label: 'AI Assistant', desc: 'Describe a fault, get fix steps and a solution video', tone: 'vio', icon: 'sparkles', group: 'Money & help' },
 ];
 
 export default function JobToolsScreen({
@@ -81,19 +87,21 @@ export default function JobToolsScreen({
   const canAssignTickets = user?.can_assign_tickets === 1 || user?.can_assign_tickets === true;
   const canRegister = user?.can_add_service === 1 || user?.can_add_service === true;
 
+  const [query, setQuery] = useState('');
+
   const tools: Tool[] = [
     ...BASE_TOOLS,
     ...(installationsOn
-      ? [{ key: 'installations', label: 'My Installations', desc: 'Assigned installation jobs', color: '#e08a14', icon: 'box' as IconName }]
+      ? [{ key: 'installations', label: 'My Installations', desc: 'Assigned installation jobs', tone: 'teal' as Tone, icon: 'construct' as IconName, group: 'Work' }]
       : []),
     ...(isGigWorker
-      ? [{ key: 'gigpool', label: 'Public Jobs', desc: 'Unclaimed jobs open to any gig worker', color: '#7c5cfc', icon: 'star' as IconName }]
+      ? [{ key: 'gigpool', label: 'Public Jobs', desc: 'Unclaimed jobs open to any gig worker', tone: 'vio' as Tone, icon: 'briefcase' as IconName, group: 'Work' }]
       : []),
     ...(canRegister
-      ? [{ key: 'register', label: 'Register Customer', desc: 'Walk-in or phone request, accepted by you', color: '#15a05a', icon: 'add' as IconName }]
+      ? [{ key: 'register', label: 'Register Customer', desc: 'Walk-in or phone request, accepted by you', tone: 'info' as Tone, icon: 'add' as IconName, group: 'Work' }]
       : []),
     ...(canAssignTickets
-      ? [{ key: 'assign', label: 'Assign Requests', desc: 'Hand incoming service requests to technicians', color: '#6366f1', icon: 'tasks' as IconName }]
+      ? [{ key: 'assign', label: 'Assign Requests', desc: 'Hand incoming service requests to technicians', tone: 'vio' as Tone, icon: 'swap' as IconName, group: 'Work' }]
       : []),
   ];
 
@@ -114,26 +122,66 @@ export default function JobToolsScreen({
   };
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
+  const q = query.trim().toLowerCase();
+  const visible = q ? tools.filter((t) => t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q)) : tools;
 
   return (
     <View style={styles.root}>
       <MeshBackground />
       <AppHeaderBar title="Job Tools" subtitle="Tasks, estimator, devices & reports" onLayout={setHeaderHeight} />
-      <ScrollView contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}>
-        {tools.map((tool) => (
-          <Pressable key={tool.key} onPress={() => openTool(tool.key)} style={({ pressed }) => [pressed && styles.pressed]}>
-            <Panel style={styles.toolRow}>
-              <View style={[styles.toolIcon, { backgroundColor: tool.color + '24' }]}>
-                <Icon name={tool.icon} size={22} color={tool.color} />
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
+      >
+        <View style={[styles.search, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+          <Icon name="search" size={18} color={theme.text3} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Find a tool"
+            placeholderTextColor={theme.text3}
+            style={[styles.searchInput, { color: theme.text }]}
+          />
+        </View>
+
+        {GROUPS.map((group) => {
+          const items = visible.filter((t) => t.group === group);
+          if (items.length === 0) return null;
+          return (
+            <View key={group} style={styles.group}>
+              <Text style={[styles.overline, { color: theme.text3 }]}>{group}</Text>
+              <View style={[styles.panel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+                {items.map((tool, i) => {
+                  const color = theme[tool.tone];
+                  const tint = theme[`${tool.tone}S` as 'okS'];
+                  return (
+                    <Pressable
+                      key={tool.key}
+                      onPress={() => openTool(tool.key)}
+                      accessibilityRole="button"
+                      style={({ pressed }) => [styles.row, i < items.length - 1 && { borderBottomColor: theme.line, borderBottomWidth: 1 }, pressed && styles.pressed]}
+                    >
+                      <View style={[styles.toolIcon, { backgroundColor: tint }]}>
+                        <Icon name={tool.icon} size={20} color={color} />
+                      </View>
+                      <View style={styles.toolInfo}>
+                        <Text style={[styles.toolLabel, { color: theme.text }]}>{tool.label}</Text>
+                        <Text style={[styles.toolDesc, { color: theme.text2 }]} numberOfLines={2}>{tool.desc}</Text>
+                      </View>
+                      <Icon name="chevron-right" size={18} color={theme.text3} />
+                    </Pressable>
+                  );
+                })}
               </View>
-              <View style={styles.toolInfo}>
-                <Text style={[styles.toolLabel, { color: theme.text }]}>{tool.label}</Text>
-                <Text style={[styles.caption, { color: theme.text3 }]}>{tool.desc}</Text>
-              </View>
-              <Icon name="chevron-right" size={18} color={theme.text3} />
-            </Panel>
-          </Pressable>
-        ))}
+            </View>
+          );
+        })}
+
+        {visible.length === 0 ? (
+          <Text style={[styles.footnote, { color: theme.text3 }]}>No tool matches "{query.trim()}".</Text>
+        ) : (
+          <Text style={[styles.footnote, { color: theme.text3 }]}>Need another tool? Ask the office to enable it for your account.</Text>
+        )}
       </ScrollView>
 
       <GlassTabBar
@@ -152,11 +200,17 @@ export default function JobToolsScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  title: { ...typography.title },
-  caption: { ...typography.caption },
+  content: { paddingBottom: spacing(30), paddingHorizontal: spacing(4), gap: spacing(5) },
+  search: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), height: 48, borderRadius: radius.md, borderWidth: 1, paddingHorizontal: spacing(3) },
+  searchInput: { flex: 1, fontSize: 15, fontFamily: 'Manrope_500Medium' },
+  group: { gap: spacing(2) },
+  overline: { ...typography.overline, paddingLeft: spacing(1) },
+  panel: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), minHeight: 64, paddingHorizontal: spacing(3.5), paddingVertical: spacing(3) },
   pressed: { opacity: 0.7 },
-  toolRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
-  toolIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  toolIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   toolInfo: { flex: 1, minWidth: 0 },
-  toolLabel: { fontFamily: 'Manrope_700Bold', fontSize: 15, marginBottom: spacing(0.5) },
+  toolLabel: { ...typography.rowTitle },
+  toolDesc: { ...typography.supporting, fontSize: 12, lineHeight: 16 },
+  footnote: { ...typography.supporting, textAlign: 'center', paddingHorizontal: spacing(4) },
 });

@@ -3,8 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme';
 
 interface Props {
   label: string;
@@ -35,33 +34,32 @@ export default function ClaimPhotoField({ label, hint, uri, onChange }: Props) {
 
   return (
     <View style={{ marginBottom: spacing(3) }}>
+      <Text style={[styles.fieldLabel, { color: theme.text2 }]}>{label}</Text>
       <Pressable
         onPress={capture}
-        style={[styles.wrapper, { borderColor: uri ? brand.primary : theme.line, backgroundColor: theme.panel2 }]}
+        accessibilityRole="button"
+        style={[
+          styles.wrapper,
+          uri
+            ? { borderColor: theme.accent, borderStyle: 'solid', backgroundColor: theme.panel2 }
+            : { borderColor: theme.border, borderStyle: 'dashed', backgroundColor: 'transparent' },
+        ]}
       >
-        {uri ? (
-          <Image source={{ uri }} style={styles.thumb} />
-        ) : (
-          <View style={[styles.placeholder, { backgroundColor: theme.panel2 }]}>
-            <Icon name="box" size={18} color={theme.text3} />
-          </View>
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
-          <Text style={[styles.hint, { color: theme.text3 }]}>{uri ? 'Tap to retake' : hint}</Text>
-        </View>
-        <Icon name="edit" size={16} color={theme.text3} />
+        {uri ? <Image source={{ uri }} style={styles.thumb} /> : <Icon name="camera" size={20} color={theme.text2} />}
+        <Text style={[styles.hintText, { color: uri ? theme.text : theme.text2 }]} numberOfLines={1}>
+          {uri ? 'Tap to retake' : hint}
+        </Text>
       </Pressable>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
     </View>
   );
 }
 
+// Design attachment control: 52 dp, r14, dashed 1.5 dp until a file is attached.
 const styles = StyleSheet.create({
-  wrapper: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderWidth: 1.5, borderRadius: radius.md, padding: spacing(2.5) },
-  thumb: { width: 44, height: 44, borderRadius: radius.sm },
-  placeholder: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  label: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  hint: { fontSize: 11, marginTop: 2 },
-  error: { fontSize: 11, color: semantic.danger, marginTop: spacing(1) },
+  fieldLabel: { ...typography.caption, marginBottom: spacing(1.5) },
+  wrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), minHeight: 52, borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing(3) },
+  thumb: { width: 36, height: 36, borderRadius: radius.sm },
+  hintText: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
+  error: { ...typography.supporting, fontSize: 12, marginTop: spacing(1.5) },
 });

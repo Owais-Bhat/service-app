@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp, useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import GlassTabBar from '../components/GlassTabBar';
-import GlowButton from '../components/GlowButton';
+import FilterChips from '../components/admin/FilterChips';
+import StatusBadge from '../components/admin/StatusBadge';
 import AppHeaderBar from '../components/AppHeaderBar';
-import AnimatedStatCard from '../components/AnimatedStatCard';
-import PressScale from '../components/PressScale';
 import Icon from '../components/Icon';
 import { IconName } from '../theme/icons';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
@@ -18,7 +16,7 @@ import { useAttendanceStatus } from '../context/AttendanceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { springs } from '../theme/motion';
-import { brand, semantic } from '../theme/tokens';
+import { semantic } from '../theme/tokens';
 import { AttendanceRow, LeaveRequest, fetchAttendanceHistory, fetchLeaveRequests } from '../api/attendance';
 
 interface Props {
@@ -33,10 +31,10 @@ type Period = 'week' | 'month' | 'all';
 
 const PERIOD_LABEL: Record<Period, string> = { week: 'This Week', month: 'This Month', all: 'All Time' };
 
-const LEAVE_STATUS_STYLE: Record<string, { color: string; bg: string; label: string; icon: IconName }> = {
-  pending: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)', label: 'Pending', icon: 'clock' },
-  approved: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)', label: 'Approved', icon: 'check-circle' },
-  rejected: { color: '#f0556d', bg: 'rgba(240,85,109,0.14)', label: 'Rejected', icon: 'alert' },
+const LEAVE_STATUS: Record<string, { tone: 'warn' | 'ok' | 'err'; label: string; icon: IconName }> = {
+  pending: { tone: 'warn', label: 'Pending', icon: 'hourglass' },
+  approved: { tone: 'ok', label: 'Approved', icon: 'check-circle' },
+  rejected: { tone: 'err', label: 'Rejected', icon: 'close' },
 };
 
 function hoursBetween(start: string | null, end: string | null): number {
@@ -119,157 +117,151 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
 
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 100;
 
+  const kpis = [
+    { v: `${periodHours.toFixed(1)}h`, l: PERIOD_LABEL[period], c: theme.text },
+    { v: String(periodPresentDays), l: 'Present days', c: theme.ok },
+    { v: String(pendingLeaves), l: 'Leave pending', c: pendingLeaves > 0 ? theme.warn : theme.text2 },
+  ];
+  const periodChips = (['week', 'month', 'all'] as Period[]).map((p) => ({ key: p, label: PERIOD_LABEL[p] }));
+
   return (
     <View style={styles.root}>
       <MeshBackground />
       <AppHeaderBar title="Attendance" subtitle="Clock in, hours & leave" onLayout={setHeaderHeight} />
       <ScrollView
-        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsRow}>
-          <AnimatedStatCard label={PERIOD_LABEL[period]} value={`${periodHours.toFixed(1)}h`} accentColor={brand.primary} icon="clock" delayMs={0} />
-          <AnimatedStatCard label="Present Days" value={periodPresentDays} accentColor="#2e9bff" icon="check-circle" delayMs={80} />
-          <AnimatedStatCard label="Leave Requests" value={pendingLeaves} accentColor={semantic.warning} icon="calendar" delayMs={160} />
-        </ScrollView>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodScroll} contentContainerStyle={styles.periodRow}>
-          {(['week', 'month', 'all'] as Period[]).map((p) => {
-            const active = period === p;
-            return (
-              <PressScale key={p} onPress={() => setPeriod(p)}>
-                <View style={[styles.periodPill, active && styles.periodPillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
-                  <Text style={[styles.periodPillText, { color: active ? '#fff' : theme.text2 }]}>{PERIOD_LABEL[p]}</Text>
-                </View>
-              </PressScale>
-            );
-          })}
-        </ScrollView>
-
-        <View style={[styles.segmentRow, { backgroundColor: theme.panel2 }]}>
-          <PressScale onPress={() => setSegment('attendance')} style={{ flex: 1 }}>
-            <View style={[styles.segment, segment === 'attendance' && styles.segmentActive, segment === 'attendance' && styles.segmentActiveShadow]}>
-              <Icon name="clock" size={14} color={segment === 'attendance' ? '#ffffff' : theme.text2} />
-              <Text style={[styles.segmentText, { color: segment === 'attendance' ? '#ffffff' : theme.text2 }]}>Attendance</Text>
+        <View style={styles.kpiRow}>
+          {kpis.map((k) => (
+            <View key={k.l} style={[styles.kpi, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+              <Text style={[styles.kpiValue, { color: k.c }]}>{k.v}</Text>
+              <Text style={[styles.kpiLabel, { color: theme.text2 }]} numberOfLines={1}>{k.l}</Text>
             </View>
-          </PressScale>
-          <PressScale onPress={() => setSegment('leave')} style={{ flex: 1 }}>
-            <View style={[styles.segment, segment === 'leave' && styles.segmentActive, segment === 'leave' && styles.segmentActiveShadow]}>
-              <Icon name="calendar" size={14} color={segment === 'leave' ? '#ffffff' : theme.text2} />
-              <Text style={[styles.segmentText, { color: segment === 'leave' ? '#ffffff' : theme.text2 }]}>Leave</Text>
-            </View>
-          </PressScale>
+          ))}
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Pressable
+          onPress={onOpenLeaveForm}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.actionBtn, { borderColor: theme.border, backgroundColor: theme.panel }, pressed && styles.pressed]}
+        >
+          <Icon name="calendar" size={18} color={theme.text} />
+          <Text style={[styles.actionBtnText, { color: theme.text }]}>Request leave</Text>
+        </Pressable>
+
+        <View style={[styles.segmentRow, { backgroundColor: theme.panel2 }]}>
+          {([
+            { key: 'attendance', label: 'Attendance' },
+            { key: 'leave', label: 'Leave' },
+          ] as const).map((seg) => {
+            const active = segment === seg.key;
+            return (
+              <Pressable
+                key={seg.key}
+                onPress={() => setSegment(seg.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[styles.segment, active && { backgroundColor: theme.panel, borderColor: theme.border, borderWidth: 1 }]}
+              >
+                {active ? <Icon name="check" size={14} color={theme.text} /> : null}
+                <Text style={[styles.segmentText, { color: active ? theme.text : theme.text2, fontFamily: active ? 'Manrope_700Bold' : 'Manrope_600SemiBold' }]}>
+                  {seg.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {error ? <Text style={[styles.caption, { color: theme.err }]}>{error}</Text> : null}
 
         {segment === 'attendance' ? (
           <>
-            <Animated.View entering={FadeInUp.duration(450).springify().damping(15)}>
-              <Panel style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Icon name="chart" size={13} color={theme.text3} />
-                  <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Hours ({PERIOD_LABEL[period]})</Text>
-                </View>
-                {periodHistory.length === 0 ? (
-                  <Text style={[styles.caption, { color: theme.text3 }]}>No attendance in this period.</Text>
-                ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.barsRow}>
-                      {periodHistory.map((r, i) => {
-                        const h = hoursBetween(r.clock_in, r.clock_out);
-                        return (
-                          <View key={r.id} style={styles.barCol}>
-                            <Text style={[styles.barValue, { color: theme.text3 }]}>{h > 0 ? h.toFixed(1) : ''}</Text>
-                            <View style={styles.barTrack}>
-                              <HoursBar heightTarget={Math.max(6, (h / maxHours) * 64)} delayMs={Math.min(i, 20) * 30} color={brand.primary} />
-                            </View>
-                            <Text style={[styles.barLabel, { color: theme.text3 }]}>
-                              {new Date(r.date).toLocaleDateString('en-US', period === 'week' ? { weekday: 'narrow' } : { day: 'numeric' })}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </ScrollView>
-                )}
-              </Panel>
-            </Animated.View>
+            <FilterChips items={periodChips} activeKey={period} onSelect={(k) => setPeriod(k as Period)} />
 
-            <View style={[styles.sectionHeaderRow, { marginTop: spacing(5) }]}>
-              <Icon name="report" size={13} color={theme.text3} />
-              <Text style={[styles.sectionLabel, { color: theme.text3 }]}>History ({PERIOD_LABEL[period]})</Text>
-            </View>
-            {periodHistory.length === 0 ? (
-              <Text style={[styles.caption, { color: theme.text3 }]}>No attendance history in this period.</Text>
-            ) : (
-              [...periodHistory].reverse().slice(0, 30).map((r, idx) => {
-                const complete = !!r.clock_out;
-                const accent = complete ? brand.primary : semantic.warning;
-                return (
-                  <Animated.View key={r.id} entering={FadeInUp.delay(Math.min(idx, 8) * 50).duration(400).springify().damping(15)}>
-                    <View style={[styles.rowOuter, { shadowColor: accent }]}>
-                      <View style={[styles.rowAccent, { backgroundColor: accent }]} />
-                      <GlassCard style={styles.historyCard}>
-                        <View style={styles.historyRow}>
-                          <View style={[styles.rowIconChip, { backgroundColor: `${accent}24` }]}>
-                            <Icon name="calendar" size={15} color={accent} />
+            <Panel>
+              <Text style={[styles.overline, { color: theme.text3, marginBottom: spacing(2.5) }]}>Hours · {PERIOD_LABEL[period]}</Text>
+              {periodHistory.length === 0 ? (
+                <Text style={[styles.caption, { color: theme.text3 }]}>No attendance in this period.</Text>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.barsRow}>
+                    {periodHistory.map((r, i) => {
+                      const h = hoursBetween(r.clock_in, r.clock_out);
+                      return (
+                        <View key={r.id} style={styles.barCol}>
+                          <Text style={[styles.barValue, { color: theme.text3 }]}>{h > 0 ? h.toFixed(1) : ''}</Text>
+                          <View style={styles.barTrack}>
+                            <HoursBar heightTarget={Math.max(6, (h / maxHours) * 64)} delayMs={Math.min(i, 20) * 30} color={theme.accent} />
                           </View>
-                          <View style={styles.historyInfo}>
-                            <Text style={[styles.historyDate, { color: theme.text }]}>{r.date}</Text>
-                            {r.location ? (
-                              <View style={styles.miniLocationRow}>
-                                <Icon name="pin" size={10} color={theme.text3} />
-                                <Text style={[styles.caption, { color: theme.text3 }]} numberOfLines={1}>{r.location}</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                          <View style={styles.historyTimes}>
-                            <Text style={[styles.historyTime, { color: theme.text }]}>
-                              {r.clock_in ? new Date(r.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                              {' – '}
-                              {r.clock_out ? new Date(r.clock_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Active'}
-                            </Text>
-                            <Text style={[styles.historyHours, { color: brand.primary }]}>{hoursBetween(r.clock_in, r.clock_out).toFixed(1)}h</Text>
-                          </View>
+                          <Text style={[styles.barLabel, { color: theme.text3 }]}>
+                            {new Date(r.date).toLocaleDateString('en-US', period === 'week' ? { weekday: 'narrow' } : { day: 'numeric' })}
+                          </Text>
                         </View>
-                      </GlassCard>
-                    </View>
-                  </Animated.View>
-                );
-              })
-            )}
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              )}
+            </Panel>
+
+            <View style={styles.section}>
+              <Text style={[styles.heading, { color: theme.text }]}>History</Text>
+              {periodHistory.length === 0 ? (
+                <Text style={[styles.caption, { color: theme.text3 }]}>No attendance history in this period.</Text>
+              ) : (
+                <View style={[styles.listPanel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+                  {[...periodHistory].reverse().slice(0, 30).map((r, idx, arr) => {
+                    const complete = !!r.clock_out;
+                    const d = new Date(r.date);
+                    const hrs = hoursBetween(r.clock_in, r.clock_out);
+                    return (
+                      <View key={r.id} style={[styles.histRow, idx < arr.length - 1 && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                        <View style={styles.histDate}>
+                          <Text style={[styles.histDay, { color: theme.text }]}>{String(d.getDate()).padStart(2, '0')}</Text>
+                          <Text style={[styles.histWeekday, { color: theme.text3 }]}>{d.toLocaleDateString('en-US', { weekday: 'short' })}</Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.histTimes, { color: theme.text }]}>
+                            {r.clock_in ? new Date(r.clock_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—'}
+                            {' → '}
+                            {r.clock_out ? new Date(r.clock_out).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—'}
+                          </Text>
+                          <Text style={[styles.supporting, { color: theme.text3, fontSize: 12 }]} numberOfLines={1}>
+                            {complete ? `${Math.floor(hrs)}h ${String(Math.round((hrs % 1) * 60)).padStart(2, '0')}m` : 'In progress'}
+                            {r.location ? ` · ${r.location}` : ''}
+                          </Text>
+                        </View>
+                        <StatusBadge label={complete ? 'Present' : 'Working'} color={complete ? theme.ok : theme.warn} />
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           </>
         ) : (
-          <>
-            <GlowButton label="New Leave Request" onPress={onOpenLeaveForm} icon="edit" />
+          <View style={styles.section}>
+            <Text style={[styles.heading, { color: theme.text }]}>Leave requests</Text>
             {leaves.length === 0 ? (
               <Text style={[styles.caption, { color: theme.text3 }]}>No leave requests yet.</Text>
             ) : (
-              leaves.map((l, idx) => {
-                const s = LEAVE_STATUS_STYLE[l.status] || LEAVE_STATUS_STYLE.pending;
-                return (
-                  <Animated.View key={l.id} entering={FadeInUp.delay(Math.min(idx, 8) * 60).duration(400).springify().damping(15)}>
-                    <View style={[styles.rowOuter, { shadowColor: s.color }]}>
-                      <View style={[styles.rowAccent, { backgroundColor: s.color }]} />
-                      <GlassCard style={styles.leaveCard}>
-                        <View style={styles.leaveHeader}>
-                          <View style={[styles.rowIconChip, { backgroundColor: s.bg }]}>
-                            <Icon name={s.icon} size={14} color={s.color} />
-                          </View>
-                          <Text style={[styles.leaveDates, { color: theme.text }]}>{l.start_date} – {l.end_date}</Text>
-                          <View style={[styles.leaveBadge, { backgroundColor: s.bg }]}>
-                            <Text style={[styles.leaveBadgeText, { color: s.color }]}>{s.label}</Text>
-                          </View>
-                        </View>
-                        <Text style={[styles.caption, { color: theme.text2 }]}>{l.reason}</Text>
-                      </GlassCard>
+              <View style={[styles.listPanel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+                {leaves.map((l, idx) => {
+                  const s = LEAVE_STATUS[l.status] || LEAVE_STATUS.pending;
+                  return (
+                    <View key={l.id} style={[styles.leaveRow, idx < leaves.length - 1 && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.rowTitle, { color: theme.text, fontSize: 14 }]}>{l.start_date} – {l.end_date}</Text>
+                        <Text style={[styles.supporting, { color: theme.text3, fontSize: 12 }]}>{l.reason}</Text>
+                      </View>
+                      <StatusBadge label={s.label} color={theme[s.tone]} icon={s.icon} />
                     </View>
-                  </Animated.View>
-                );
-              })
+                  );
+                })}
+              </View>
             )}
-          </>
+          </View>
         )}
       </ScrollView>
 
@@ -289,43 +281,34 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  content: { paddingBottom: spacing(30), paddingHorizontal: spacing(4), gap: spacing(5) },
+  heading: { ...typography.heading },
   caption: { ...typography.caption },
-  statsScroll: { marginBottom: spacing(4) },
-  statsRow: { flexDirection: 'row', gap: spacing(2.5) },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(2.5) },
-  sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase' },
-  section: { marginTop: spacing(5) },
-  segmentRow: { flexDirection: 'row', borderRadius: 14, padding: 4, marginBottom: spacing(4), gap: spacing(1) },
-  segment: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), paddingVertical: spacing(2.5), borderRadius: 11 },
-  segmentActive: { backgroundColor: brand.fill },
-  segmentActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
-  segmentText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  periodScroll: { marginBottom: spacing(4) },
-  periodRow: { flexDirection: 'row', gap: spacing(2) },
-  periodPill: { paddingHorizontal: spacing(3.5), paddingVertical: spacing(1.75), borderRadius: radius.full, borderWidth: 1 },
-  periodPillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
-  periodPillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(3) },
+  supporting: { ...typography.supporting },
+  rowTitle: { ...typography.rowTitle },
+  overline: { ...typography.overline },
+  pressed: { opacity: 0.7 },
+  kpiRow: { flexDirection: 'row', gap: spacing(2) },
+  kpi: { flex: 1, borderRadius: 16, borderWidth: 1, padding: spacing(2.5) },
+  kpiValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 20 },
+  kpiLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 48, borderRadius: radius.md, borderWidth: 1 },
+  actionBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
+  segmentRow: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 16 },
+  segment: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1), height: 44, borderRadius: radius.sm },
+  segmentText: { fontSize: 13 },
+  section: { gap: spacing(2.5) },
+  listPanel: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(3.5), paddingVertical: spacing(3) },
+  histDate: { width: 44 },
+  histDay: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 16 },
+  histWeekday: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  histTimes: { fontFamily: 'JetBrainsMono_500Medium', fontSize: 13 },
+  leaveRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(3.5), paddingVertical: spacing(3) },
   barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing(2), height: 110 },
   barCol: { width: 34, alignItems: 'center', justifyContent: 'flex-end', gap: spacing(1) },
   barValue: { fontFamily: 'Manrope_700Bold', fontSize: 9, height: 12 },
   barTrack: { width: '100%', height: 64, justifyContent: 'flex-end', alignItems: 'center' },
   bar: { width: '100%', maxWidth: 20, borderRadius: 6 },
   barLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, marginTop: spacing(0.5) },
-  rowOuter: { flexDirection: 'row', marginBottom: spacing(3), shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.24, shadowRadius: 12, elevation: 3 },
-  rowAccent: { width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
-  historyCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
-  rowIconChip: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  historyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
-  historyInfo: { flex: 1, minWidth: 0 },
-  historyDate: { fontFamily: 'Manrope_700Bold', fontSize: 13, marginBottom: spacing(0.5) },
-  miniLocationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1) },
-  historyTimes: { alignItems: 'flex-end' },
-  historyTime: { fontFamily: 'JetBrainsMono_500Medium', fontSize: 12 },
-  historyHours: { fontFamily: 'Manrope_700Bold', fontSize: 12, marginTop: spacing(0.5) },
-  leaveCard: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
-  leaveHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginBottom: spacing(1.5) },
-  leaveDates: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  leaveBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), borderRadius: 8 },
-  leaveBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
 });

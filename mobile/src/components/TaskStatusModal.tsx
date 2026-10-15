@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pingAssignmentSeen } from '../api/tasks';
 import CustomerEquipment from './CustomerEquipment';
 import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import * as Location from 'expo-location';
-import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import PressScale from './PressScale';
 import ServicePickerModal, { PickedService } from './ServicePickerModal';
@@ -14,7 +12,7 @@ import { IconName } from '../theme/icons';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 import {
   updateTaskStatus,
   saveDeviceInfo,
@@ -36,18 +34,6 @@ import { ApiError } from '../api/client';
 const BUSINESS_NAME = 'Networking Experts';
 
 const DEVICE_TYPE_CHIPS = ['CCTV DVR', 'CCTV Camera', 'NVR', 'Router', 'Video Door Phone', 'Biometric'];
-
-// Distinct accent per status option (+ the Device Service tile) so the
-// option list reads as a set of colored 3D chips rather than one flat list.
-const OPTION_ACCENT: Record<StatusOption | 'device', string> = {
-  in_progress: '#e08a14',
-  resolved: brand.primary,
-  reschedule: '#2e9bff',
-  issue_not_resolved: semantic.danger,
-  case_closed: brand.grey,
-  foc: brand.primary,
-  device: '#7c5cfc',
-};
 
 interface Props {
   item: TaskItem;
@@ -73,6 +59,16 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         { key: 'issue_not_resolved', label: 'Issue Not Resolved', icon: 'alert' },
         { key: 'case_closed', label: 'Case Closed (final)', icon: 'close' },
       ];
+  // Tone per status option (design e_status): icon tile tint + selected ring.
+  const tone = {
+    in_progress: { c: theme.warn, bg: theme.warnS },
+    resolved: { c: theme.ok, bg: theme.okS },
+    reschedule: { c: theme.info, bg: theme.infoS },
+    issue_not_resolved: { c: theme.err, bg: theme.errS },
+    case_closed: { c: theme.grey, bg: theme.greyS },
+    foc: { c: theme.vio, bg: theme.vioS },
+    device: { c: theme.teal, bg: theme.tealS },
+  } as const;
   const [mode, setMode] = useState<'status' | 'device'>('status');
   // Whether this ticket is marked as one whose device goes to the service centre.
   const [deviceOn, setDeviceOn] = useState<boolean | null>(null);
@@ -460,26 +456,26 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
+    <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <Animated.View entering={ZoomIn.duration(360).springify().damping(15).mass(0.85)} style={styles.modalCardWrap}>
-          <GlassSurface style={styles.modalCard} borderRadius={radius.lg}>
-            <View style={[styles.modalHeaderRow, { borderBottomColor: theme.line }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Dismiss" />
+        <View style={styles.modalCardWrap}>
+          <View style={[styles.modalCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+            <View style={styles.modalHeaderRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>Update Status</Text>
-                <Text style={[styles.modalSub, { color: theme.text3 }]}>{item.fullName} · {item.ticketNo || 'No ticket'}</Text>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Update status</Text>
+                <Text style={[styles.modalSub, { color: theme.text2 }]}>{item.ticketNo || 'No ticket'} · {item.fullName}</Text>
               </View>
-              <PressScale onPress={onDismiss}>
-                <View style={[styles.closeBtn, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-                  <Icon name="close" size={13} color={theme.text3} />
-                </View>
-              </PressScale>
+              <Pressable onPress={onDismiss} hitSlop={8} accessibilityLabel="Close" style={[styles.closeBtn, { backgroundColor: theme.panel2 }]}>
+                <Icon name="close" size={16} color={theme.text2} />
+              </Pressable>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {item.reopened ? (
-                <View style={styles.reopenedBanner}>
-                  <Icon name="alert" size={14} color={semantic.warning} />
-                  <Text style={styles.reopenedBannerText}>Reopened — complete as free rework (FOC), no new bill.</Text>
+                <View style={[styles.reopenedBanner, { backgroundColor: theme.warnS }]}>
+                  <Icon name="alert" size={14} color={theme.warn} />
+                  <Text style={[styles.reopenedBannerText, { color: theme.warn }]}>Reopened — complete as free rework (FOC), no new bill.</Text>
                 </View>
               ) : null}
 
@@ -487,65 +483,62 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
 
               <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: spacing(3) }]}>New Status</Text>
               <View style={styles.optionList}>
-                {options.map((opt, idx) => {
+                {options.map((opt) => {
                   const active = mode === 'status' && status === opt.key;
-                  const accent = OPTION_ACCENT[opt.key];
+                  const t = tone[opt.key];
                   return (
-                    <Animated.View key={opt.key} entering={FadeInUp.delay(idx * 55).duration(360).springify().damping(15)}>
-                      <PressScale onPress={() => { setMode('status'); setStatus(opt.key); }}>
-                        <View
-                          style={[
-                            styles.optionRow,
-                            active && styles.optionRowActiveShadow,
-                            { borderColor: active ? accent : theme.line, backgroundColor: active ? `${accent}1a` : theme.panel2, shadowColor: accent },
-                          ]}
-                        >
-                          <View style={[styles.optionIconChip, { backgroundColor: active ? accent : `${theme.text3}1f` }]}>
-                            <Icon name={opt.icon} size={15} color={active ? '#fff' : theme.text3} />
-                          </View>
-                          <Text style={[styles.optionText, { color: active ? accent : theme.text }]}>{opt.label}</Text>
-                          {active ? (
-                            <View style={[styles.optionCheckBadge, { backgroundColor: accent }]}>
-                              <Icon name="check" size={11} color="#fff" />
-                            </View>
-                          ) : null}
-                        </View>
-                      </PressScale>
-                    </Animated.View>
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => { setMode('status'); setStatus(opt.key); }}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active }}
+                      style={[
+                        styles.optionRow,
+                        { borderColor: active ? theme.accent : theme.border, borderWidth: active ? 2 : 1, backgroundColor: active ? theme.okS : 'transparent' },
+                      ]}
+                    >
+                      <View style={[styles.optionIconChip, { backgroundColor: t.bg }]}>
+                        <Icon name={opt.icon} size={20} color={t.c} />
+                      </View>
+                      <Text style={[styles.optionText, { color: theme.text }]}>{opt.label}</Text>
+                      {active ? (
+                        <Icon name="check-circle" size={22} color={theme.accent} filled />
+                      ) : (
+                        <View style={[styles.radioOff, { borderColor: theme.text3 }]} />
+                      )}
+                    </Pressable>
                   );
                 })}
                 {item.inquiryId ? (
-                  <Animated.View entering={FadeInUp.delay(options.length * 55).duration(360).springify().damping(15)}>
-                    <PressScale onPress={() => setMode('device')}>
-                      <View
-                        style={[
-                          styles.optionRow,
-                          mode === 'device' && styles.optionRowActiveShadow,
-                          { borderColor: mode === 'device' ? OPTION_ACCENT.device : theme.line, backgroundColor: mode === 'device' ? `${OPTION_ACCENT.device}1a` : theme.panel2, shadowColor: OPTION_ACCENT.device },
-                        ]}
-                      >
-                        <View style={[styles.optionIconChip, { backgroundColor: mode === 'device' ? OPTION_ACCENT.device : `${theme.text3}1f` }]}>
-                          <Icon name="device" size={15} color={mode === 'device' ? '#fff' : theme.text3} />
-                        </View>
-                        <Text style={[styles.optionText, { color: mode === 'device' ? OPTION_ACCENT.device : theme.text }]}>Device Service</Text>
-                        {mode === 'device' ? (
-                          <View style={[styles.optionCheckBadge, { backgroundColor: OPTION_ACCENT.device }]}>
-                            <Icon name="check" size={11} color="#fff" />
-                          </View>
-                        ) : null}
-                      </View>
-                    </PressScale>
-                  </Animated.View>
+                  <Pressable
+                    onPress={() => setMode('device')}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: mode === 'device' }}
+                    style={[
+                      styles.optionRow,
+                      { borderColor: mode === 'device' ? theme.accent : theme.border, borderWidth: mode === 'device' ? 2 : 1, backgroundColor: mode === 'device' ? theme.okS : 'transparent' },
+                    ]}
+                  >
+                    <View style={[styles.optionIconChip, { backgroundColor: tone.device.bg }]}>
+                      <Icon name="device" size={20} color={tone.device.c} />
+                    </View>
+                    <Text style={[styles.optionText, { color: theme.text }]}>Device service</Text>
+                    {mode === 'device' ? (
+                      <Icon name="check-circle" size={22} color={theme.accent} filled />
+                    ) : (
+                      <View style={[styles.radioOff, { borderColor: theme.text3 }]} />
+                    )}
+                  </Pressable>
                 ) : null}
               </View>
 
             {mode === 'device' && item.inquiryId && deviceOn !== null ? (
-              <View style={[styles.reopenedBanner, { justifyContent: 'space-between' }]}>
-                <Text style={[styles.reopenedBannerText, { flex: 1 }]}>This ticket involves a device for the service centre</Text>
+              <View style={[styles.reopenedBanner, { backgroundColor: theme.warnS, justifyContent: 'space-between' }]}>
+                <Text style={[styles.reopenedBannerText, { color: theme.warn, flex: 1 }]}>This ticket involves a device for the service centre</Text>
                 <Switch
                   value={deviceOn}
                   disabled={deviceSwitching || (alreadyTaken && deviceOn)}
-                  trackColor={{ true: brand.primary }}
+                  trackColor={{ true: theme.accent }}
                   onValueChange={async (v) => {
                     if (!v && alreadyTaken) return;
                     setDeviceSwitching(true);
@@ -563,9 +556,9 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
             ) : null}
             {mode === 'device' ? (
               alreadyTaken ? (
-                <View style={styles.reopenedBanner}>
-                  <Icon name="device" size={14} color={semantic.warning} />
-                  <Text style={styles.reopenedBannerText}>
+                <View style={[styles.reopenedBanner, { backgroundColor: theme.warnS }]}>
+                  <Icon name="device" size={14} color={theme.warn} />
+                  <Text style={[styles.reopenedBannerText, { color: theme.warn }]}>
                     Device already marked as taken. Manage follow-up / return from Job Tools → Device Follow-up.
                   </Text>
                 </View>
@@ -586,10 +579,10 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                         <Pressable
                           key={c}
                           onPress={() => setDeviceType(active ? '' : c)}
-                          style={[styles.chip, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}1a` : theme.panel2 }]}
+                          style={[styles.chip, { borderColor: active ? theme.accent : theme.line, backgroundColor: active ? `${theme.accent}1a` : theme.panel2 }]}
                         >
-                          <Text style={[styles.chipText, { color: active ? brand.primary : theme.text2 }]}>{c}</Text>
-                          {active ? <Icon name="close" size={11} color={brand.primary} /> : null}
+                          <Text style={[styles.chipText, { color: active ? theme.accent : theme.text2 }]}>{c}</Text>
+                          {active ? <Icon name="close" size={11} color={theme.accent} /> : null}
                         </Pressable>
                       );
                     })}
@@ -618,7 +611,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                     <PhotoPicker label="Device Photo (when taken)" value={devicePhoto} onChange={setDevicePhoto} />
                   </View>
 
-                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
                   <View style={styles.modalActions}>
                     <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
@@ -636,7 +629,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               <>
                 <Text style={[styles.fieldLabel, { color: theme.text3 }]}>New visit date &amp; time</Text>
                 <Pressable onPress={() => setShowCalendar(true)} style={[styles.input, styles.scheduleInput, { borderColor: theme.line }]}>
-                  <Icon name="calendar" size={15} color={brand.primary} />
+                  <Icon name="calendar" size={15} color={theme.accent} />
                   <Text style={[styles.scheduleInputText, { color: scheduledAt ? theme.text : theme.text3 }]}>
                     {scheduledAt || 'Tap to pick a date & time'}
                   </Text>
@@ -684,7 +677,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 {services.map((s) => (
                   <View key={s.id} style={[styles.serviceRow, { borderColor: theme.line }]}>
                     <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={2}>{s.label}</Text>
-                    <Text style={[styles.serviceCost, { color: semantic.success }]}>{inr(s.cost)}</Text>
+                    <Text style={[styles.serviceCost, { color: theme.ok }]}>{inr(s.cost)}</Text>
                     <Pressable onPress={() => removeService(s.id)} hitSlop={8}>
                       <Icon name="close" size={14} color={theme.text3} />
                     </Pressable>
@@ -718,7 +711,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   </View>
                 ))}
                 <PressScale onPress={() => setShowItemPicker(true)}>
-                  <View style={[styles.addServiceBtn, { backgroundColor: brand.primaryDim || brand.primary }]}>
+                  <View style={[styles.addServiceBtn, { backgroundColor: brand.fill }]}>
                     <View style={styles.addServiceBadge}>
                       <Text style={styles.addServiceBadgeText}>+</Text>
                     </View>
@@ -728,7 +721,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                 </PressScale>
 
                 <Pressable onPress={() => setGstOn((v) => !v)} style={styles.gstRow}>
-                  <View style={[styles.gstBox, { borderColor: gstOn ? brand.primary : theme.line, backgroundColor: gstOn ? brand.primary : 'transparent' }]}>
+                  <View style={[styles.gstBox, { borderColor: gstOn ? theme.accent : theme.line, backgroundColor: gstOn ? theme.accent : 'transparent' }]}>
                     {gstOn ? <Icon name="check" size={12} color="#fff" /> : null}
                   </View>
                   <Text style={[styles.gstLabel, { color: theme.text2 }]}>Charge GST (18%) on this bill</Text>
@@ -751,11 +744,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                       <Text style={[styles.fieldLabel, { color: theme.text3, marginTop: 0 }]}>Transport (km)</Text>
                       <Pressable onPress={handleAutoKm} disabled={locatingKm} style={styles.autoKmBtn}>
                         {locatingKm ? (
-                          <ActivityIndicator size="small" color={brand.primary} />
+                          <ActivityIndicator size="small" color={theme.accent} />
                         ) : (
                           <>
-                            <Icon name="crosshair" size={11} color={brand.primary} />
-                            <Text style={[styles.autoKmText, { color: brand.primary }]}>Auto</Text>
+                            <Icon name="crosshair" size={11} color={theme.accent} />
+                            <Text style={[styles.autoKmText, { color: theme.accent }]}>Auto</Text>
                           </>
                         )}
                       </Pressable>
@@ -794,7 +787,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   <Pressable
                     onPress={couponApplied ? handleRemoveCoupon : handleApplyCoupon}
                     disabled={couponChecking}
-                    style={[styles.couponBtn, { backgroundColor: couponApplied ? semantic.danger : brand.primary, opacity: couponChecking ? 0.7 : 1 }]}
+                    style={[styles.couponBtn, { backgroundColor: couponApplied ? theme.err : theme.accent, opacity: couponChecking ? 0.7 : 1 }]}
                   >
                     {couponChecking ? <ActivityIndicator size="small" color="#fff" /> : (
                       <Text style={styles.couponBtnText}>{couponApplied ? 'Remove' : 'Apply'}</Text>
@@ -802,7 +795,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   </Pressable>
                 </View>
                 {couponMsg ? (
-                  <Text style={[styles.couponMsg, { color: couponMsg.ok ? semantic.success : semantic.danger }]}>{couponMsg.text}</Text>
+                  <Text style={[styles.couponMsg, { color: couponMsg.ok ? theme.ok : theme.err }]}>{couponMsg.text}</Text>
                 ) : null}
 
                 <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Employee Discount</Text>
@@ -832,10 +825,10 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                       <Pressable
                         key={m}
                         onPress={() => setPaymentMethod(m)}
-                        style={[styles.paymentPill, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}1a` : theme.panel2 }]}
+                        style={[styles.paymentPill, { borderColor: active ? theme.accent : theme.line, backgroundColor: active ? `${theme.accent}1a` : theme.panel2 }]}
                       >
-                        <Icon name={m === 'cash' ? 'wallet' : 'receipt'} size={14} color={active ? brand.primary : theme.text3} />
-                        <Text style={[styles.paymentPillText, { color: active ? brand.primary : theme.text }]}>{m === 'cash' ? 'Cash' : 'Online'}</Text>
+                        <Icon name={m === 'cash' ? 'wallet' : 'receipt'} size={14} color={active ? theme.accent : theme.text3} />
+                        <Text style={[styles.paymentPillText, { color: active ? theme.accent : theme.text }]}>{m === 'cash' ? 'Cash' : 'Online'}</Text>
                       </Pressable>
                     );
                   })}
@@ -852,13 +845,13 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   <View style={[styles.onlineBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
                     {paymentConfirmed ? (
                       <View style={styles.paidRow}>
-                        <Icon name="check" size={16} color={semantic.success} />
-                        <Text style={[styles.paidText, { color: semantic.success }]}>Payment received — saving will resolve this ticket.</Text>
+                        <Icon name="check" size={16} color={theme.ok} />
+                        <Text style={[styles.paidText, { color: theme.ok }]}>Payment received — saving will resolve this ticket.</Text>
                       </View>
                     ) : paymentLink ? (
                       <>
                         <Text style={[styles.linkLabel, { color: theme.text3 }]}>Payment Link</Text>
-                        <Text style={[styles.linkValue, { color: brand.primary }]} numberOfLines={1}>{paymentLink}</Text>
+                        <Text style={[styles.linkValue, { color: theme.accent }]} numberOfLines={1}>{paymentLink}</Text>
                         <Image
                           source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(paymentLink)}` }}
                           style={styles.qr}
@@ -871,8 +864,8 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                           <Text style={styles.waBtnText}>Share via WhatsApp</Text>
                         </Pressable>
                         <View style={styles.waitingRow}>
-                          {checkingPayment ? <ActivityIndicator size="small" color={semantic.warning} /> : <Icon name="clock" size={13} color={semantic.warning} />}
-                          <Text style={[styles.waitingText, { color: semantic.warning }]}>Waiting for payment · auto-checking every 3s</Text>
+                          {checkingPayment ? <ActivityIndicator size="small" color={theme.warn} /> : <Icon name="clock" size={13} color={theme.warn} />}
+                          <Text style={[styles.waitingText, { color: theme.warn }]}>Waiting for payment · auto-checking every 3s</Text>
                           <Pressable onPress={() => handleCheckPayment(false)} hitSlop={8}>
                             <Icon name="refresh" size={14} color={theme.text3} />
                           </Pressable>
@@ -914,13 +907,13 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   </View>
                   {bill.discount > 0 ? (
                     <View style={styles.receiptRow}>
-                      <Text style={[styles.receiptLabel, { color: semantic.danger }]}>Discount</Text>
-                      <Text style={[styles.receiptValue, { color: semantic.danger }]}>-{inr(bill.discount)}</Text>
+                      <Text style={[styles.receiptLabel, { color: theme.err }]}>Discount</Text>
+                      <Text style={[styles.receiptValue, { color: theme.err }]}>-{inr(bill.discount)}</Text>
                     </View>
                   ) : null}
                   <View style={[styles.receiptRow, styles.receiptTotalRow, { borderColor: theme.line }]}>
                     <Text style={[styles.receiptTotalLabel, { color: theme.text }]}>Total</Text>
-                    <Text style={[styles.receiptTotalValue, { color: brand.primary }]}>{inr(bill.total)}</Text>
+                    <Text style={[styles.receiptTotalValue, { color: theme.accent }]}>{inr(bill.total)}</Text>
                   </View>
                 </View>
 
@@ -941,9 +934,9 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   </View>
                 ) : (
                   <PressScale onPress={handleGenerateBillPdf} disabled={generatingPdf} style={{ marginTop: spacing(3) }}>
-                    <View style={[styles.pdfGenerateBtn, { borderColor: brand.primary, opacity: generatingPdf ? 0.7 : 1 }]}>
-                      {generatingPdf ? <ActivityIndicator size="small" color={brand.primary} /> : <Icon name="receipt" size={15} color={brand.primary} />}
-                      <Text style={[styles.pdfGenerateBtnText, { color: brand.primary }]}>
+                    <View style={[styles.pdfGenerateBtn, { borderColor: theme.accent, opacity: generatingPdf ? 0.7 : 1 }]}>
+                      {generatingPdf ? <ActivityIndicator size="small" color={theme.accent} /> : <Icon name="receipt" size={15} color={theme.accent} />}
+                      <Text style={[styles.pdfGenerateBtnText, { color: theme.accent }]}>
                         {generatingPdf ? 'Generating…' : 'Generate Bill PDF'}
                       </Text>
                     </View>
@@ -956,7 +949,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               const awaitingPayment = status === 'resolved' && paymentMethod === 'online' && !paymentConfirmed;
               return (
                 <>
-                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
                   <View style={styles.modalActions}>
                     <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
@@ -974,8 +967,8 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
               );
             })()}
           </ScrollView>
-          </GlassSurface>
-        </Animated.View>
+          </View>
+        </View>
       </View>
 
       {showPicker && (
@@ -991,7 +984,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
       {showItemPicker && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setShowItemPicker(false)}>
           <View style={styles.pickerBackdrop}>
-            <GlassSurface style={styles.pickerCard} borderRadius={radius.lg}>
+            <View style={[styles.pickerCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
               <View style={[styles.pickerHead, { borderBottomColor: theme.line }]}>
                 <Text style={[styles.pickerTitle, { color: theme.text }]}>Add Item</Text>
                 <Pressable onPress={() => setShowItemPicker(false)} hitSlop={10}>
@@ -1009,11 +1002,11 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                         {Number(inv.quantity)} {inv.unit || 'pcs'} in stock
                       </Text>
                     </View>
-                    <Text style={[styles.pickerRate, { color: brand.primary }]}>₹{Number(inv.selling_rate)}</Text>
+                    <Text style={[styles.pickerRate, { color: theme.accent }]}>₹{Number(inv.selling_rate)}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
-            </GlassSurface>
+            </View>
           </View>
         </Modal>
       )}
@@ -1038,8 +1031,8 @@ const styles = StyleSheet.create({
   gstRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginTop: spacing(3) },
   gstBox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   gstLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 12.5 },
-  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
-  pickerCard: { width: '100%', maxWidth: 420, overflow: 'hidden' },
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
+  pickerCard: { width: '100%', maxWidth: 420, overflow: 'hidden', borderRadius: radius.xl, borderWidth: 1 },
   pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing(4), borderBottomWidth: 1 },
   pickerTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5), borderBottomWidth: 1 },
@@ -1047,30 +1040,30 @@ const styles = StyleSheet.create({
   pickerMeta: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, marginTop: 2 },
   pickerRate: { fontFamily: 'Manrope_800ExtraBold', fontSize: 13.5 },
   pickerEmpty: { padding: spacing(6), textAlign: 'center', fontSize: 13 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
-  modalCardWrap: { width: '100%', maxWidth: 440, maxHeight: '86%' },
-  modalCard: { width: '100%', maxHeight: '100%', padding: spacing(5) },
-  modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), paddingBottom: spacing(3), marginBottom: spacing(1), borderBottomWidth: 1 },
-  closeBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  modalTitle: { ...typography.heading, fontSize: 18 },
-  modalSub: { ...typography.caption, marginTop: spacing(0.5) },
-  reopenedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), backgroundColor: 'rgba(224,138,20,0.14)', borderRadius: radius.md, padding: spacing(2.5), marginTop: spacing(3) },
-  reopenedBannerText: { flex: 1, fontSize: 12, color: semantic.warning, lineHeight: 17 },
-  fieldLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(3), marginBottom: spacing(1) },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalCardWrap: { width: '100%', maxHeight: '90%' },
+  modalCard: { width: '100%', maxHeight: '100%', borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, borderTopWidth: 1, paddingHorizontal: spacing(5), paddingTop: spacing(2.5), paddingBottom: spacing(6) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(4) },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), marginBottom: spacing(3) },
+  closeBtn: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  modalTitle: { ...typography.heading, fontSize: 20, lineHeight: 26 },
+  modalSub: { ...typography.supporting, marginTop: spacing(0.5) },
+  reopenedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), borderRadius: radius.md, padding: spacing(2.5), marginTop: spacing(3) },
+  reopenedBannerText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  fieldLabel: { ...typography.overline, marginTop: spacing(3.5), marginBottom: spacing(1.5) },
   optionList: { gap: spacing(2) },
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5) },
-  optionRowActiveShadow: { shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.32, shadowRadius: 10, elevation: 5 },
-  optionIconChip: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  optionCheckBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  optionText: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5), fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), minHeight: 56, borderRadius: 16, padding: spacing(3) },
+  optionIconChip: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  radioOff: { width: 22, height: 22, borderRadius: 11, borderWidth: 2 },
+  optionText: { flex: 1, ...typography.rowTitle },
+  input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3.5), paddingVertical: spacing(2.5), minHeight: 52, fontSize: 15, fontFamily: 'Manrope_500Medium' },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
-  error: { fontSize: 12, color: semantic.danger, marginTop: spacing(2.5) },
+  error: { fontSize: 12, marginTop: spacing(2.5) },
   modalActions: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(4) },
-  cancelBtn: { paddingHorizontal: spacing(4), height: 46, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  saveBtn: { height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  saveBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
+  cancelBtn: { paddingHorizontal: spacing(5), height: 52, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  cancelBtnText: { ...typography.button },
+  saveBtn: { height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  saveBtnText: { ...typography.button, color: '#fff' },
   billBlock: { borderTopWidth: 1, marginTop: spacing(4), paddingTop: spacing(2) },
   serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(2.5), paddingVertical: spacing(2), marginBottom: spacing(1.5) },
   serviceLabel: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
@@ -1081,26 +1074,21 @@ const styles = StyleSheet.create({
     gap: spacing(2.5),
     backgroundColor: brand.fill,
     borderRadius: radius.md,
-    paddingVertical: spacing(2.5),
+    height: 48,
     paddingHorizontal: spacing(3),
     marginTop: spacing(1),
-    shadowColor: brand.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 6,
   },
   addServiceBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
   addServiceBadgeText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16, color: '#fff', marginTop: -2 },
   addServiceText: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
   twoCol: { flexDirection: 'row', gap: spacing(3) },
-  receipt: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginTop: spacing(4) },
+  receipt: { borderWidth: 0, borderRadius: radius.lg, padding: spacing(3.5), marginTop: spacing(4) },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing(1) },
-  receiptLabel: { fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
-  receiptValue: { fontSize: 12, fontFamily: 'Manrope_700Bold' },
+  receiptLabel: { fontSize: 13, fontFamily: 'Manrope_500Medium' },
+  receiptValue: { fontSize: 13, fontFamily: 'JetBrainsMono_500Medium' },
   receiptTotalRow: { borderTopWidth: 1, marginTop: spacing(1), paddingTop: spacing(2) },
-  receiptTotalLabel: { fontFamily: 'Manrope_800ExtraBold', fontSize: 14 },
-  receiptTotalValue: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
+  receiptTotalLabel: { fontFamily: 'Manrope_700Bold', fontSize: 16 },
+  receiptTotalValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 18 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1.5), marginTop: spacing(1.5) },
   chip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
   chipText: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
@@ -1108,8 +1096,8 @@ const styles = StyleSheet.create({
   autoKmBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minWidth: 40, justifyContent: 'flex-end' },
   autoKmText: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase' },
   paymentRow: { flexDirection: 'row', gap: spacing(2) },
-  paymentPill: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(2.5) },
-  paymentPillText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  paymentPill: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), borderWidth: 2, borderRadius: radius.md, height: 56 },
+  paymentPillText: { fontFamily: 'Manrope_700Bold', fontSize: 15 },
   paymentHint: { fontSize: 11, marginTop: spacing(2), lineHeight: 15 },
   scheduleInput: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   scheduleInputText: { fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
@@ -1123,16 +1111,16 @@ const styles = StyleSheet.create({
   paidText: { flex: 1, fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
   linkLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, alignSelf: 'flex-start' },
   linkValue: { fontSize: 12, fontFamily: 'Manrope_600SemiBold', alignSelf: 'stretch', marginTop: spacing(1), marginBottom: spacing(3) },
-  qr: { width: 140, height: 140, borderRadius: radius.sm, marginBottom: spacing(3) },
-  waBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), alignSelf: 'stretch', height: 42, borderRadius: radius.sm, marginBottom: spacing(3) },
-  waBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: '#fff' },
+  qr: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: '#ffffff', marginBottom: spacing(3) },
+  waBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), alignSelf: 'stretch', height: 52, borderRadius: radius.md, marginBottom: spacing(3) },
+  waBtnText: { ...typography.button, color: '#fff' },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
   waitingText: { fontSize: 11, fontFamily: 'Manrope_600SemiBold' },
-  genLinkBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), alignSelf: 'stretch', height: 46, borderRadius: radius.md },
-  genLinkBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
-  pdfGenerateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(3) },
-  pdfGenerateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  genLinkBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), alignSelf: 'stretch', height: 52, borderRadius: radius.md },
+  genLinkBtnText: { ...typography.button, color: '#fff' },
+  pdfGenerateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, height: 52 },
+  pdfGenerateBtnText: { ...typography.button },
   pdfRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(3) },
-  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.sm, borderWidth: 1 },
-  pdfBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 52, borderRadius: radius.md, borderWidth: 1 },
+  pdfBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
 });

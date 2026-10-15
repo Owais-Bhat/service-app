@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
-import BackLink from '../components/BackLink';
+import ToolHeader from '../components/ToolHeader';
+import Field from '../components/admin/Field';
+import FilterChips from '../components/admin/FilterChips';
+import StatusBadge from '../components/admin/StatusBadge';
+import Icon from '../components/Icon';
 import GlowButton from '../components/GlowButton';
 import PhotoPicker from '../components/PhotoPicker';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
+import { spacing, typography } from '../theme';
 import { ApiError } from '../api/client';
 import { fetchDeviceStatus, markDeviceTaken, logFollowUp, markDeviceReturned, DeviceStatusDetail } from '../api/deviceTracking';
 
@@ -76,6 +79,7 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
     return (
       <View style={styles.root}>
         <MeshBackground />
+        <ToolHeader title="Device service" onBack={onBack} />
         <View style={styles.centered}>
           <Text style={[styles.caption, { color: theme.text3 }]}>Loading…</Text>
         </View>
@@ -85,132 +89,118 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
 
   const taken = detail?.device_taken_logs;
   const returned = detail?.device_return_logs;
+  const followChips = FOLLOWUP_OPTIONS.map((o) => ({ key: o.key, label: o.label }));
 
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <BackLink onPress={onBack} />
-        <Text style={[styles.title, { color: theme.text }]}>Device Detail</Text>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+      <ToolHeader title="Device service" subtitle="Custody, follow-up and return" onBack={onBack} />
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+        {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
         {!taken ? (
-          <GlassCard style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Mark Device Taken</Text>
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Device description (optional)"
-              placeholderTextColor={theme.text3}
-              value={takenNote}
-              onChangeText={setTakenNote}
-            />
-            <View style={{ marginBottom: spacing(3) }}>
-              <PhotoPicker label="Device Photo" value={takenPhoto} onChange={setTakenPhoto} />
+          <GlassCard>
+            <Text style={[styles.overline, { color: theme.text3 }]}>Custody receipt</Text>
+            <View style={styles.formGap}>
+              <Field label="Device description" value={takenNote} onChangeText={setTakenNote} placeholder="Make, model, condition (optional)" />
+              <PhotoPicker label="Device photo" value={takenPhoto} onChange={setTakenPhoto} />
+              <GlowButton
+                label="Mark device taken"
+                icon="device"
+                onPress={() => runAction(() => markDeviceTaken(inquiryId, takenNote.trim(), takenPhoto))}
+                loading={submitting}
+              />
             </View>
-            <GlowButton
-              label="Mark Device Taken"
-              onPress={() => runAction(() => markDeviceTaken(inquiryId, takenNote.trim(), takenPhoto))}
-              loading={submitting}
-            />
           </GlassCard>
         ) : (
           <>
-            <Panel style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Device Taken</Text>
-              <Text style={[styles.body, { color: theme.text }]}>By {taken.profiles?.full_name || 'you'}</Text>
-              <Text style={[styles.caption, { color: theme.text3 }]}>{new Date(taken.taken_at).toLocaleString('en-IN')}</Text>
+            <GlassCard>
+              <View style={styles.custodyHead}>
+                <Text style={[styles.overline, { color: theme.text3 }]}>Custody receipt</Text>
+                <StatusBadge label={returned ? 'Returned' : 'With technician'} color={returned ? theme.ok : theme.warn} icon={returned ? 'check-circle' : 'person-circle'} />
+              </View>
+              <Text style={[styles.rowTitle, { color: theme.text, marginTop: spacing(2) }]}>Taken by {taken.profiles?.full_name || 'you'}</Text>
               {taken.device_description ? (
-                <Text style={[styles.body, { color: theme.text2, marginTop: spacing(2) }]}>{taken.device_description}</Text>
+                <Text style={[styles.supporting, { color: theme.text2, marginTop: spacing(1) }]}>{taken.device_description}</Text>
               ) : null}
-            </Panel>
+              <View style={styles.takenAt}>
+                <Icon name="clock" size={14} color={theme.text3} />
+                <Text style={[styles.caption, { color: theme.text3 }]}>Taken {new Date(taken.taken_at).toLocaleString('en-IN')}</Text>
+              </View>
+            </GlassCard>
 
             {!returned ? (
-              <GlassCard style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Log Follow-up Update</Text>
-                <View style={styles.chipsRow}>
-                  {FOLLOWUP_OPTIONS.map((opt) => {
-                    const active = followupStatus === opt.key;
-                    return (
-                      <Pressable
-                        key={opt.key}
-                        onPress={() => setFollowupStatus(opt.key)}
-                        style={[styles.chip, { borderColor: theme.line, backgroundColor: active ? brand.primary : theme.panel2 }]}
-                      >
-                        <Text style={[styles.chipText, { color: active ? '#ffffff' : theme.text2 }]}>{opt.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <TextInput
-                  style={[styles.input, { color: theme.text, marginTop: spacing(3) }]}
-                  placeholder="Notes (optional)"
-                  placeholderTextColor={theme.text3}
-                  value={followupNote}
-                  onChangeText={setFollowupNote}
-                />
+              <View style={styles.section}>
+                <Text style={[styles.heading, { color: theme.text }]}>Follow-up</Text>
+                <FilterChips items={followChips} activeKey={followupStatus} onSelect={setFollowupStatus} />
+                <Field label="Notes" value={followupNote} onChangeText={setFollowupNote} placeholder="Add a note (optional)" />
                 <GlowButton
-                  label="Log Update"
+                  label="Log update"
+                  variant="secondary"
                   onPress={() => runAction(() => logFollowUp(inquiryId, followupStatus, followupNote.trim()))}
                   loading={submitting}
                 />
-              </GlassCard>
+              </View>
             ) : null}
 
             {detail && detail.device_follow_up_logs.length > 0 ? (
               <View style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Follow-up History</Text>
-                {detail.device_follow_up_logs.map((f) => (
-                  <Panel key={f.id} style={styles.historyRow}>
-                    <Text style={[styles.historyStatus, { color: brand.primary }]}>{f.status.replace(/_/g, ' ').toUpperCase()}</Text>
-                    {f.notes ? <Text style={[styles.body, { color: theme.text2 }]}>{f.notes}</Text> : null}
-                    <Text style={[styles.caption, { color: theme.text3 }]}>
-                      {f.profiles?.full_name || 'Someone'} · {new Date(f.created_at).toLocaleString('en-IN')}
-                    </Text>
-                  </Panel>
-                ))}
+                <Text style={[styles.heading, { color: theme.text }]}>History</Text>
+                <View>
+                  {detail.device_follow_up_logs.map((f, i, arr) => (
+                    <View key={f.id} style={styles.timelineRow}>
+                      <View style={styles.timelineRail}>
+                        <Icon name="construct" size={16} color={theme.accent} />
+                        {i < arr.length - 1 ? <View style={[styles.timelineLine, { backgroundColor: theme.line }]} /> : null}
+                      </View>
+                      <View style={styles.timelineBody}>
+                        <Text style={[styles.timelineTitle, { color: theme.text }]}>
+                          {f.status.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
+                          {f.notes ? ` — ${f.notes}` : ''}
+                        </Text>
+                        <Text style={[styles.caption, { color: theme.text3, fontSize: 12 }]}>
+                          {new Date(f.created_at).toLocaleString('en-IN')} · {f.profiles?.full_name || 'Someone'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
               </View>
             ) : null}
 
             {!returned ? (
-              <GlassCard style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Mark Returned</Text>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Condition (e.g. good)"
-                  placeholderTextColor={theme.text3}
-                  value={returnCondition}
-                  onChangeText={setReturnCondition}
-                />
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Notes (optional)"
-                  placeholderTextColor={theme.text3}
-                  value={returnNote}
-                  onChangeText={setReturnNote}
-                />
-                <View style={{ marginBottom: spacing(3) }}>
-                  <PhotoPicker label="Return Photo" value={returnPhoto} onChange={setReturnPhoto} />
-                </View>
-                <GlowButton
-                  label="Mark Returned"
-                  onPress={() => runAction(() => markDeviceReturned(inquiryId, returnCondition.trim() || 'good', returnNote.trim(), returnPhoto))}
-                  loading={submitting}
-                />
-              </GlassCard>
+              <View style={styles.section}>
+                <Text style={[styles.heading, { color: theme.text }]}>Return</Text>
+                <Field label="Condition" value={returnCondition} onChangeText={setReturnCondition} placeholder="e.g. good" />
+                <Field label="Notes" value={returnNote} onChangeText={setReturnNote} placeholder="Add a note (optional)" />
+                <PhotoPicker label="Return photo" value={returnPhoto} onChange={setReturnPhoto} />
+              </View>
             ) : (
-              <Panel style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text3 }]}>Returned</Text>
-                <Text style={[styles.body, { color: theme.text }]}>Condition: {returned.device_condition}</Text>
+              <Panel>
+                <Text style={[styles.overline, { color: theme.text3 }]}>Returned</Text>
+                <Text style={[styles.rowTitle, { color: theme.text, marginTop: spacing(1) }]}>Condition: {returned.device_condition}</Text>
                 <Text style={[styles.caption, { color: theme.text3 }]}>{new Date(returned.returned_at).toLocaleString('en-IN')}</Text>
                 {returned.return_notes ? (
-                  <Text style={[styles.body, { color: theme.text2, marginTop: spacing(2) }]}>{returned.return_notes}</Text>
+                  <Text style={[styles.supporting, { color: theme.text2, marginTop: spacing(2) }]}>{returned.return_notes}</Text>
                 ) : null}
               </Panel>
             )}
           </>
         )}
       </ScrollView>
+
+      {taken && !returned ? (
+        <View style={[styles.sticky, { backgroundColor: theme.surfaceStrong, borderTopColor: theme.line, paddingBottom: insets.bottom + 22 }]}>
+          <View style={{ flex: 1 }}>
+            <GlowButton
+              label="Mark returned"
+              icon="arrow-right"
+              onPress={() => runAction(() => markDeviceReturned(inquiryId, returnCondition.trim() || 'good', returnNote.trim(), returnPhoto))}
+              loading={submitting}
+            />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -218,16 +208,21 @@ export default function DeviceDetailScreen({ inquiryId, onBack }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { ...typography.title, marginBottom: spacing(4) },
-  body: { ...typography.body },
+  content: { padding: spacing(4), paddingBottom: spacing(8), gap: spacing(5) },
   caption: { ...typography.caption },
-  error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
-  section: { marginBottom: spacing(4) },
-  sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
-  input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { paddingHorizontal: spacing(3), paddingVertical: spacing(2), borderRadius: 10, borderWidth: 1 },
-  chipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  historyRow: { marginBottom: spacing(2) },
-  historyStatus: { fontFamily: 'Manrope_700Bold', fontSize: 12, marginBottom: spacing(0.5) },
+  supporting: { ...typography.supporting },
+  rowTitle: { ...typography.rowTitle },
+  heading: { ...typography.heading, fontSize: 16, lineHeight: 22 },
+  overline: { ...typography.overline },
+  error: { ...typography.caption },
+  formGap: { gap: spacing(3.5), marginTop: spacing(3) },
+  custodyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(2) },
+  takenAt: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginTop: spacing(3) },
+  section: { gap: spacing(3) },
+  timelineRow: { flexDirection: 'row', gap: spacing(3) },
+  timelineRail: { width: 20, alignItems: 'center' },
+  timelineLine: { flex: 1, width: 2, marginVertical: 2, minHeight: 12 },
+  timelineBody: { flex: 1, paddingBottom: spacing(2.5) },
+  timelineTitle: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  sticky: { flexDirection: 'row', alignItems: 'center', paddingTop: spacing(1), paddingHorizontal: spacing(4), borderTopWidth: 1 },
 });

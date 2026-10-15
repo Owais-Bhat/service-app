@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
-import GlassSurface from '../components/GlassSurface';
+import Panel from '../components/Panel';
+import StatusBadge from '../components/admin/StatusBadge';
 import GlassTabBar, { TabItem } from '../components/GlassTabBar';
 import AppHeaderBar from '../components/AppHeaderBar';
 import PulseDot from '../components/PulseDot';
+import GlowButton from '../components/GlowButton';
 import Icon from '../components/Icon';
 import PendingAssignments from '../components/PendingAssignments';
 import ClockOutConfirmModal from '../components/ClockOutConfirmModal';
@@ -54,39 +55,38 @@ export const EMPLOYEE_TABS: TabItem[] = [
   { key: 'profile', label: 'Profile', icon: 'user' },
 ];
 
-const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
-  normal: { color: brand.primary, label: 'Notice' },
-  high: { color: semantic.warning, label: 'Important' },
-  urgent: { color: semantic.danger, label: 'Urgent' },
+type NoticeTone = 'accent' | 'warn' | 'err';
+
+const PRIORITY_STYLE: Record<string, { tone: NoticeTone; label: string }> = {
+  normal: { tone: 'accent', label: 'Notice' },
+  high: { tone: 'warn', label: 'Important' },
+  urgent: { tone: 'err', label: 'Urgent' },
 };
 
-// Same tap-to-open modal pattern as NotificationsScreen's NotificationDetail —
-// notices open the same way notifications do, not just look the same in the list.
+function elapsed(fromIso: string, now: number): string {
+  const mins = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 60000));
+  return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+// A notice opens as a bottom sheet (design: 28 dp top radius, grabber) — same
+// tap-to-open pattern as NotificationsScreen's detail.
 function NoticeDetail({ notice, onDismiss }: { notice: Notice; onDismiss: () => void }) {
   const { theme } = useTheme();
   const p = PRIORITY_STYLE[notice.priority] || PRIORITY_STYLE.normal;
+  const color = theme[p.tone === 'accent' ? 'accent' : p.tone];
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
+    <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <GlassSurface style={styles.detailCard} borderRadius={radius.lg}>
-          <View style={[styles.detailIconWrap, { backgroundColor: `${p.color}24` }]}>
-            <Icon name="notification" size={22} color={p.color} />
-          </View>
-          <Text style={[styles.detailTag, { color: p.color }]}>{p.label}</Text>
-          <Text style={[styles.detailTitle, { color: theme.text }]}>{notice.title}</Text>
-          {notice.body ? <Text style={[styles.detailBody, { color: theme.text2 }]}>{notice.body}</Text> : null}
-          <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>
-            {new Date(notice.created_at).toLocaleString('en-IN')}
-          </Text>
-
-          <Pressable
-            onPress={onDismiss}
-            style={({ pressed }) => [styles.dismissBtn, { backgroundColor: brand.fill }, pressed && styles.pressed]}
-          >
-            <Text style={styles.dismissBtnText}>Dismiss</Text>
-          </Pressable>
-        </GlassSurface>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
+        <View style={[styles.sheet, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+          <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+          <Text style={[styles.overline, { color }]}>{p.label}</Text>
+          <Text style={[styles.sheetTitle, { color: theme.text }]}>{notice.title}</Text>
+          {notice.body ? <Text style={[styles.sheetBody, { color: theme.text2 }]}>{notice.body}</Text> : null}
+          <Text style={[styles.sheetMeta, { color: theme.text3 }]}>{new Date(notice.created_at).toLocaleString('en-IN')}</Text>
+          <GlowButton label="Dismiss" onPress={onDismiss} />
+        </View>
       </View>
     </Modal>
   );
@@ -206,7 +206,22 @@ export default function EmployeeDashboardScreen({
     else handleClock();
   };
 
+  // Drives the hero timer while the shift is running.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!clockedIn) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, [clockedIn]);
+
   const topInset = headerHeight > 0 ? headerHeight : insets.top + 110;
+  const clockedOut = !!attendance?.clock_in && !!attendance?.clock_out;
+  const stateLabel = clockedIn ? (isGigWorker ? 'Online' : 'Clocked in') : 'Not clocked in';
+  const chipBg = clockedIn ? theme.okS : theme.greyS;
+  const chipFg = clockedIn ? theme.ok : theme.grey;
+  const sinceLine = clockedIn && attendance?.clock_in
+    ? `Since ${new Date(attendance.clock_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+    : clockedOut ? 'Shift ended for today' : 'Not started today';
 
   return (
     <View style={styles.root}>
@@ -224,77 +239,100 @@ export default function EmployeeDashboardScreen({
       />
 
       <ScrollView
-        contentContainerStyle={{ paddingTop: topInset + spacing(4), paddingBottom: spacing(24), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
-        {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
+        {error ? <Text style={[styles.caption, { color: theme.err }]}>{error}</Text> : null}
 
-        <Animated.View entering={FadeInUp.delay(80).duration(550)}>
-          <GlassCard style={styles.clockHero}>
-            <View style={styles.clockTopRow}>
-              <Text style={[styles.clockDate, { color: theme.text2 }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </Text>
-              {missedEodCount > 0 && (
-                <View style={styles.eodWarning}>
-                  <Icon name="notification" size={12} color={semantic.warning} />
-                  <Text style={styles.eodWarningText}>EOD Warning</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.clockChip, { backgroundColor: clockedIn ? 'rgba(21,160,90,0.14)' : theme.panel2 }]}>
-              {clockedIn ? (
-                <PulseDot color={brand.primary} size={7} />
-              ) : (
-                <View style={[styles.clockDotStatic, { backgroundColor: theme.text3 }]} />
-              )}
-              <Text style={[styles.clockChipText, { color: clockedIn ? brand.primary : theme.text3 }]}>
-                {clockedIn ? 'Clocked in' : 'Clocked out'}
+        {missedEodCount > 0 ? (
+          <View accessibilityRole="alert" style={[styles.alertBanner, { backgroundColor: theme.warnS, borderColor: theme.warn }]}>
+            <Icon name="alert" size={20} color={theme.warn} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowTitle, { color: theme.text }]}>EOD report missing</Text>
+              <Text style={[styles.supporting, { color: theme.text2, marginTop: 2 }]}>
+                {missedEodCount === 1
+                  ? 'A day you clocked out was left without an EOD report.'
+                  : `${missedEodCount} days you clocked out were left without an EOD report.`}
               </Text>
             </View>
+          </View>
+        ) : null}
 
-            {clockedIn && attendance?.clock_in && (
-              <Text style={[styles.clockSince, { color: theme.text3 }]}>
-                Since {new Date(attendance.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </Text>
-            )}
-
-            {attendance?.location && (
-              <View style={styles.clockLocationRow}>
+        <GlassCard>
+          <View style={styles.heroTop}>
+            <Text style={[styles.heroDate, { color: theme.text2 }]}>
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </Text>
+            {attendance?.location ? (
+              <View style={styles.heroGeo}>
                 <Icon name="pin" size={13} color={theme.text3} />
-                <Text style={[styles.caption, { color: theme.text3 }]} numberOfLines={1}>{attendance.location}</Text>
+                <Text style={[styles.heroGeoText, { color: theme.text3 }]} numberOfLines={1}>{attendance.location}</Text>
               </View>
-            )}
+            ) : null}
+          </View>
 
-            <Pressable
-              onPress={onClockPress}
-              disabled={clocking}
-              style={({ pressed }) => [
-                styles.clockButton,
-                { backgroundColor: clockedIn ? semantic.danger : brand.primary },
-                pressed && styles.pressed,
-                clocking && styles.disabled,
-              ]}
-            >
-              <Text style={styles.clockButtonText}>{clocking ? 'Please wait…' : clockedIn ? 'Clock Out' : 'Clock In'}</Text>
-            </Pressable>
-          </GlassCard>
-        </Animated.View>
-
-        <View style={{ marginTop: spacing(6) }}>
-          <PendingAssignments pending={pending} onChanged={load} />
-        </View>
-
-        {routeTickets.length > 0 && (
-          <Animated.View entering={FadeInUp.delay(120).duration(550)}>
-            <View style={styles.routeHeadingRow}>
-              <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6) }]}>Today's Route</Text>
-              <View style={[styles.stopsPill, { backgroundColor: theme.panel2, marginTop: spacing(6) }]}>
-                <Text style={[styles.caption, { color: theme.text2 }]}>{routeTickets.length} stops</Text>
+          <View style={styles.heroMid}>
+            <View style={{ flex: 1 }}>
+              <View style={[styles.stateChip, { backgroundColor: chipBg }]}>
+                {clockedIn ? <PulseDot color={chipFg} size={7} /> : <View style={[styles.stateDot, { backgroundColor: chipFg }]} />}
+                <Text style={[styles.stateChipText, { color: chipFg }]}>{stateLabel}</Text>
               </View>
+              <Text style={[styles.supporting, { color: theme.text2, marginTop: spacing(2) }]}>{sinceLine}</Text>
             </View>
-            <GlassCard style={{ marginTop: spacing(3) }}>
+            <Text style={[styles.timer, { color: clockedIn ? theme.text : theme.text3 }]}>
+              {clockedIn && attendance?.clock_in ? elapsed(attendance.clock_in, now) : '—'}
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={onClockPress}
+            disabled={clocking}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.heroButton,
+              clockedIn
+                ? { backgroundColor: theme.panel, borderColor: theme.border, borderWidth: 1 }
+                : { backgroundColor: pressed ? brand.pressed : brand.fill },
+              clocking && styles.disabled,
+            ]}
+          >
+            <Icon name={clockedIn ? 'logout' : 'clock'} size={20} color={clockedIn ? theme.text : '#ffffff'} />
+            <Text style={[styles.heroButtonText, { color: clockedIn ? theme.text : '#ffffff' }]}>
+              {clocking ? 'Please wait…' : clockedIn ? 'Clock Out' : 'Clock In'}
+            </Text>
+          </Pressable>
+          {!clockedIn && !clockedOut ? (
+            <Text style={[styles.hint, { color: theme.text3 }]}>Your location is checked when you clock in</Text>
+          ) : null}
+        </GlassCard>
+
+        {isGigWorker ? (
+          <Pressable
+            onPress={onOpenGigPool}
+            style={({ pressed }) => [styles.gigCard, { backgroundColor: theme.panel, borderColor: theme.border }, pressed && styles.pressed]}
+          >
+            <View style={[styles.gigIcon, { backgroundColor: theme.vioS }]}>
+              <Icon name="briefcase" size={22} color={theme.vio} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionRowTitle, { color: theme.text }]}>Public Jobs</Text>
+              <Text style={[styles.supporting, { color: theme.text2 }]}>See unclaimed jobs open to gig workers</Text>
+            </View>
+            <Icon name="chevron-right" size={18} color={theme.text3} />
+          </Pressable>
+        ) : null}
+
+        <PendingAssignments pending={pending} onChanged={load} />
+
+        {routeTickets.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text style={[styles.heading, { color: theme.text }]}>Today's jobs</Text>
+              <Pressable onPress={onGoJobTools} hitSlop={8} style={styles.linkBtn}>
+                <Text style={[styles.linkText, { color: theme.accent }]}>All tasks</Text>
+              </Pressable>
+            </View>
+            <View style={[styles.listPanel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
               {routeTickets.map((t, i) => {
                 const statusStyle = statusColors[t.status] || DEFAULT_STATUS_STYLE;
                 const isLast = i === routeTickets.length - 1;
@@ -302,82 +340,52 @@ export default function EmployeeDashboardScreen({
                 const ticketNo = inq?.ticket_no || `#${t.id.slice(0, 8).toUpperCase()}`;
                 const customerName = inq?.full_name || t.title;
                 const service = inq?.service_item || t.category;
-                const when = new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+                const created = new Date(t.created_at);
+                const [clock, ampm] = created.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).split(' ');
                 return (
-                  <Animated.View key={t.id} entering={FadeInUp.delay(180 + i * 90).duration(450)} style={styles.routeRow}>
-                    <View style={styles.routeTimeline}>
-                      {t.status === 'in_progress' ? (
-                        <PulseDot color={statusStyle.color} size={12} />
-                      ) : (
-                        <View style={[styles.routeDot, { borderColor: statusStyle.color, backgroundColor: 'transparent' }]} />
-                      )}
-                      {!isLast && <View style={[styles.routeLine, { backgroundColor: theme.line }]} />}
+                  <Pressable
+                    key={t.id}
+                    onPress={() => onOpenTask(t.id)}
+                    style={({ pressed }) => [styles.jobRow, !isLast && { borderBottomColor: theme.line, borderBottomWidth: 1 }, pressed && styles.pressed]}
+                  >
+                    <View style={styles.jobTime}>
+                      <Text style={[styles.jobClock, { color: theme.text }]}>{clock}</Text>
+                      <Text style={[styles.jobAmPm, { color: theme.text3 }]}>{ampm}</Text>
                     </View>
-                    <View style={[styles.routeInfo, isLast && { marginBottom: 0 }]}>
-                      <Text style={[styles.taskTitle, { color: theme.text }]} numberOfLines={1}>{customerName}</Text>
-                      <Text style={[styles.caption, { color: theme.text3 }]} numberOfLines={1}>
-                        <Text style={styles.routeTicketNo}>{ticketNo}</Text> · {service}
-                      </Text>
-                      <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(2) }]}>{when}</Text>
-                      <View style={styles.routeActionRow}>
-                        <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
-                          <View style={[styles.statusPillDot, { backgroundColor: statusStyle.color }]} />
-                          <Text style={[styles.statusPillText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-                        </View>
-                        <Pressable
-                          onPress={() => onOpenTask(t.id)}
-                          style={({ pressed }) => [styles.openBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }, pressed && styles.pressed]}
-                        >
-                          <Icon name="edit" size={13} color={theme.text} />
-                          <Text style={[styles.openBtnText, { color: theme.text }]}>Open</Text>
-                        </Pressable>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>{customerName}</Text>
+                      <Text style={[styles.metaLine, { color: theme.text2 }]} numberOfLines={1}>{ticketNo} · {service}</Text>
+                      <View style={styles.badgeRow}>
+                        <StatusBadge label={statusStyle.label} color={statusStyle.color} />
+                        <Text style={[styles.jobDate, { color: theme.text3 }]}>
+                          {created.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                        </Text>
                       </View>
                     </View>
-                  </Animated.View>
+                    <Icon name="chevron-right" size={18} color={theme.text3} />
+                  </Pressable>
                 );
               })}
-            </GlassCard>
-          </Animated.View>
-        )}
+            </View>
+          </View>
+        ) : null}
 
-        {notices.length > 0 && (
-          <Animated.View entering={FadeInUp.delay(150).duration(550)}>
-            <Text style={[styles.heading, { color: theme.text, marginTop: spacing(6), marginBottom: spacing(2) }]}>Notice Board</Text>
-            {notices.map((n) => {
-              const p = PRIORITY_STYLE[n.priority] || PRIORITY_STYLE.normal;
-              return (
-                <Pressable key={n.id} onPress={() => setSelectedNotice(n)} style={({ pressed }) => [pressed && styles.pressed]}>
-                  <GlassCard style={styles.noticeCard}>
-                    <View style={styles.noticeHeader}>
-                      <View style={[styles.noticeDot, { backgroundColor: p.color }]} />
-                      <Text style={[styles.noticeTag, { color: p.color }]}>{p.label}</Text>
-                    </View>
-                    <Text style={[styles.noticeTitle, { color: theme.text }]}>{n.title}</Text>
-                    <Text style={[styles.body, { color: theme.text2 }]} numberOfLines={2}>{n.body}</Text>
-                  </GlassCard>
-                </Pressable>
-              );
-            })}
-          </Animated.View>
-        )}
-
-        {isGigWorker && (
-          <Animated.View entering={FadeInUp.delay(200).duration(550)}>
-            <Pressable onPress={onOpenGigPool} style={({ pressed }) => [pressed && styles.pressed]}>
-              <GlassCard style={styles.gigTeaser}>
-                <View style={[styles.gigIcon, { backgroundColor: 'rgba(124,92,252,0.18)' }]}>
-                  <Icon name="star" size={18} color="#7c5cfc" />
+        {notices.map((n) => {
+          const p = PRIORITY_STYLE[n.priority] || PRIORITY_STYLE.normal;
+          const color = theme[p.tone === 'accent' ? 'accent' : p.tone];
+          return (
+            <Pressable key={n.id} onPress={() => setSelectedNotice(n)} style={({ pressed }) => [pressed && styles.pressed]}>
+              <Panel style={styles.noticeCard}>
+                <View style={styles.noticeOverline}>
+                  <Icon name="megaphone" size={14} color={color} />
+                  <Text style={[styles.overline, { color }]}>{p.label}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.noticeTitle, { color: theme.text }]}>Public Jobs</Text>
-                  <Text style={[styles.caption, { color: theme.text3 }]}>See unclaimed jobs open to gig workers</Text>
-                </View>
-                <Icon name="chevron-right" size={18} color={theme.text3} />
-              </GlassCard>
+                <Text style={[styles.rowTitle, { color: theme.text }]}>{n.title}</Text>
+                <Text style={[styles.supporting, { color: theme.text2 }]} numberOfLines={2}>{n.body}</Text>
+              </Panel>
             </Pressable>
-          </Animated.View>
-        )}
-
+          );
+        })}
       </ScrollView>
 
       <GlassTabBar
@@ -395,6 +403,7 @@ export default function EmployeeDashboardScreen({
 
       {showClockOutConfirm && (
         <ClockOutConfirmModal
+          since={attendance?.clock_in ?? null}
           onCancel={() => setShowClockOutConfirm(false)}
           onConfirm={() => {
             setShowClockOutConfirm(false);
@@ -408,67 +417,48 @@ export default function EmployeeDashboardScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerFixed: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing(4),
-    paddingBottom: spacing(3),
-    borderBottomWidth: 1,
-  },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5) },
-  title: { ...typography.title },
+  content: { paddingBottom: spacing(30), paddingHorizontal: spacing(4), gap: spacing(5) },
   heading: { ...typography.heading },
   caption: { ...typography.caption },
-  body: { ...typography.body, fontSize: 13 },
+  supporting: { ...typography.supporting },
+  rowTitle: { ...typography.rowTitle },
+  overline: { ...typography.overline },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.6 },
-  iconBtn: { width: 36, height: 36, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  clockHero: { marginTop: spacing(5) },
-  clockTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(3) },
-  clockDate: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  eodWarning: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full, backgroundColor: 'rgba(224,138,20,0.16)' },
-  eodWarningText: { fontFamily: 'Manrope_700Bold', fontSize: 10, color: semantic.warning },
-  clockChip: { flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3.5), paddingVertical: spacing(1.75), borderRadius: radius.full, marginBottom: spacing(3) },
-  clockDotStatic: { width: 7, height: 7, borderRadius: 4 },
-  clockChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  clockSince: { ...typography.caption, marginBottom: spacing(2) },
-  clockLocationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(4) },
-  clockButton: { paddingVertical: spacing(3.5), borderRadius: radius.md, alignItems: 'center' },
-  clockButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
-  routeRow: { flexDirection: 'row', gap: spacing(3) },
-  routeTimeline: { alignItems: 'center', width: 16 },
-  routeDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
-  routeLine: { width: 2, flex: 1, marginTop: spacing(1) },
-  routeInfo: { flex: 1, minWidth: 0, marginBottom: spacing(4) },
-  taskTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
-  routeHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stopsPill: { paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
-  routeTicketNo: { fontFamily: 'JetBrainsMono_700Bold', color: brand.primary },
-  routeActionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing(1) },
-  statusPill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full },
-  statusPillDot: { width: 5, height: 5, borderRadius: 3 },
-  statusPillText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
-  openBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(1.5), borderRadius: radius.sm, borderWidth: 1 },
-  openBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  noticeCard: { marginBottom: spacing(2.5) },
-  noticeHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(1.5) },
-  noticeDot: { width: 6, height: 6, borderRadius: 3 },
-  noticeTag: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
-  noticeTitle: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(1) },
-  gigTeaser: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginTop: spacing(5) },
-  gigIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(6) },
-  detailCard: { width: '100%', maxWidth: 400, padding: spacing(5) },
-  detailIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
-  detailTag: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing(1) },
-  detailTitle: { ...typography.heading, fontSize: 17, marginBottom: spacing(1.5) },
-  detailBody: { ...typography.body, marginBottom: spacing(2) },
-  dismissBtn: { paddingVertical: spacing(3.5), borderRadius: radius.md, alignItems: 'center' },
-  dismissBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#ffffff' },
+  alertBanner: { flexDirection: 'row', gap: spacing(2.5), padding: spacing(4), borderRadius: 20, borderWidth: 1.5 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(2) },
+  heroDate: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  heroGeo: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), flexShrink: 1 },
+  heroGeoText: { fontFamily: 'Manrope_600SemiBold', fontSize: 12, flexShrink: 1 },
+  heroMid: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing(3), marginTop: spacing(3.5), marginBottom: spacing(1) },
+  stateChip: { flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', gap: spacing(1.5), height: 26, paddingHorizontal: spacing(2.5), borderRadius: radius.full },
+  stateDot: { width: 7, height: 7, borderRadius: 4 },
+  stateChipText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  timer: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 32, lineHeight: 36, letterSpacing: -1 },
+  heroButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 56, borderRadius: 16, marginTop: spacing(3.5) },
+  heroButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 16 },
+  hint: { ...typography.supporting, fontSize: 12, lineHeight: 16, textAlign: 'center', marginTop: spacing(2) },
+  gigCard: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(4), borderRadius: 20, borderWidth: 1 },
+  gigIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  sectionRowTitle: { fontFamily: 'Manrope_700Bold', fontSize: 16 },
+  section: { gap: spacing(2.5) },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  linkBtn: { minHeight: 36, justifyContent: 'center' },
+  linkText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  listPanel: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  jobRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5) },
+  jobTime: { width: 40, alignItems: 'center' },
+  jobClock: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13 },
+  jobAmPm: { fontFamily: 'Manrope_600SemiBold', fontSize: 10 },
+  metaLine: { fontFamily: 'Manrope_500Medium', fontSize: 12, marginTop: 2 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginTop: spacing(2) },
+  jobDate: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  noticeCard: { gap: spacing(1.5), borderRadius: 20 },
+  noticeOverline: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, borderTopWidth: 1, paddingHorizontal: spacing(5), paddingTop: spacing(2.5), paddingBottom: spacing(9) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(4.5) },
+  sheetTitle: { ...typography.heading, fontSize: 20, lineHeight: 26, marginTop: spacing(1) },
+  sheetBody: { ...typography.body, fontSize: 14, lineHeight: 20, marginTop: spacing(2) },
+  sheetMeta: { ...typography.supporting, fontSize: 12, marginTop: spacing(3), marginBottom: spacing(3) },
 });

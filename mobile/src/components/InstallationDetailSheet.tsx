@@ -10,13 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { ZoomIn } from 'react-native-reanimated';
-import GlassSurface from './GlassSurface';
 import PressScale from './PressScale';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 import { ApiError } from '../api/client';
 import {
   fetchInstallation,
@@ -135,7 +133,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
 
   const step = (label: string, at?: string | null, detail?: string | null) => (
     <View key={label} style={styles.stepRow}>
-      <View style={[styles.stepDot, { backgroundColor: at ? brand.primary : theme.panel2, borderColor: at ? brand.primary : theme.line }]}>
+      <View style={[styles.stepDot, { backgroundColor: at ? brand.fill : theme.panel2, borderColor: at ? brand.fill : theme.border }]}>
         {at ? <Icon name="check" size={9} color="#fff" /> : null}
       </View>
       <View style={{ flex: 1 }}>
@@ -219,8 +217,8 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
                 disabled={!!busy}
                 style={{ flex: 1 }}
               >
-                <View style={[styles.ghostBtn, { borderColor: semantic.danger }]}>
-                  <Text style={[styles.ghostBtnText, { color: semantic.danger }]}>Decline</Text>
+                <View style={[styles.ghostBtn, { borderColor: theme.err }]}>
+                  <Text style={[styles.ghostBtnText, { color: theme.err }]}>Decline</Text>
                 </View>
               </PressScale>
             </View>
@@ -288,7 +286,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
           ))}
 
           <PressScale onPress={() => setShowPicker(true)}>
-            <View style={[styles.addBtn, { backgroundColor: brand.primaryDim }]}>
+            <View style={[styles.addBtn, { backgroundColor: brand.fill }]}>
               <Text style={styles.addBtnText}>+  Add Item</Text>
               <Icon name="chevron-right" size={15} color="#ffffff" />
             </View>
@@ -305,7 +303,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
           />
 
           <Pressable onPress={() => setGstOn((v) => !v)} style={styles.gstRow}>
-            <View style={[styles.gstBox, { borderColor: gstOn ? brand.primary : theme.line, backgroundColor: gstOn ? brand.primary : 'transparent' }]}>
+            <View style={[styles.gstBox, { borderColor: gstOn ? theme.accent : theme.border, backgroundColor: gstOn ? brand.fill : 'transparent' }]}>
               {gstOn ? <Icon name="check" size={11} color="#fff" /> : null}
             </View>
             <Text style={[styles.gstLabel, { color: theme.text2 }]}>Charge GST (18%) on this bill</Text>
@@ -313,7 +311,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
 
           <View style={[styles.totalRow, { borderTopColor: theme.line }]}>
             <Text style={[styles.totalLabel, { color: theme.text3 }]}>Items ₹{Math.round(totals.items)} · Labour ₹{Math.round(Number(labour) || 0)}{gstOn ? ` · GST ₹${totals.gst}` : ''}</Text>
-            <Text style={[styles.totalValue, { color: brand.primary }]}>₹{Math.round(totals.total)}</Text>
+            <Text style={[styles.totalValue, { color: theme.accent }]}>₹{Math.round(totals.total)}</Text>
           </View>
 
           <PressScale onPress={saveBill} disabled={!!busy}>
@@ -330,15 +328,15 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
         {billed ? (
           <View style={[styles.block, { borderTopColor: theme.line, borderTopWidth: 1 }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Payment</Text>
-            <Text style={[styles.meta, { color: paid ? semantic.success : semantic.warning }]}>
+            <Text style={[styles.meta, { color: paid ? theme.ok : theme.warn }]}>
               {paid
                 ? `Paid ₹${Math.round(num(job.bill_total))}${job.payment_method ? ` · ${job.payment_method}` : ''}`
                 : `₹${Math.round(num(job.bill_total))} unpaid`}
             </Text>
             {!paid ? (
               <PressScale onPress={() => run('cash', () => setInstallationPayment(id, { paid: true, method: 'cash' }))} disabled={!!busy}>
-                <View style={[styles.ghostBtn, { borderColor: brand.primary }]}>
-                  <Text style={[styles.ghostBtnText, { color: brand.primary }]}>
+                <View style={[styles.ghostBtn, { borderColor: theme.accent }]}>
+                  <Text style={[styles.ghostBtnText, { color: theme.accent }]}>
                     {busy === 'cash' ? 'Saving…' : isAdmin ? 'Mark Paid (cash)' : 'Cash received on site'}
                   </Text>
                 </View>
@@ -353,16 +351,18 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
           </View>
         ) : null}
 
-        {error ? <Text style={[styles.error, { color: semantic.danger }]}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
       </>
     );
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <Animated.View entering={ZoomIn.duration(320).springify().damping(15).mass(0.85)} style={styles.cardWrap}>
-          <GlassSurface style={styles.card} borderRadius={radius.lg}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Dismiss" />
+        <View style={styles.cardWrap}>
+          <View style={[styles.card, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            <View style={[styles.grabber, { backgroundColor: theme.border }]} />
             <View style={[styles.headRow, { borderBottomColor: theme.line }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.title, { color: theme.text }]}>{job?.ticket_no || 'Installation'}</Text>
@@ -375,14 +375,14 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
               </PressScale>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{body()}</ScrollView>
-          </GlassSurface>
-        </Animated.View>
+          </View>
+        </View>
       </View>
 
       {showPicker ? (
         <Modal visible transparent animationType="fade" onRequestClose={() => setShowPicker(false)}>
           <View style={styles.pickerBackdrop}>
-            <GlassSurface style={styles.pickerCard} borderRadius={radius.lg}>
+            <View style={[styles.pickerCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
               <View style={[styles.pickerHead, { borderBottomColor: theme.line }]}>
                 <Text style={[styles.pickerTitle, { color: theme.text }]}>Add Item</Text>
                 <PressScale onPress={() => setShowPicker(false)}>
@@ -403,12 +403,12 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
                           {Number(inv.quantity)} {inv.unit || 'pcs'} in stock
                         </Text>
                       </View>
-                      <Text style={[styles.pickerRate, { color: brand.primary }]}>₹{Number(inv.selling_rate)}</Text>
+                      <Text style={[styles.pickerRate, { color: theme.accent }]}>₹{Number(inv.selling_rate)}</Text>
                     </Pressable>
                   ))
                 )}
               </ScrollView>
-            </GlassSurface>
+            </View>
           </View>
         </Modal>
       ) : null}
@@ -416,7 +416,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
       {showAssign ? (
         <Modal visible transparent animationType="fade" onRequestClose={() => setShowAssign(false)}>
           <View style={styles.pickerBackdrop}>
-            <GlassSurface style={styles.pickerCard} borderRadius={radius.lg}>
+            <View style={[styles.pickerCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
               <View style={[styles.pickerHead, { borderBottomColor: theme.line }]}>
                 <Text style={[styles.pickerTitle, { color: theme.text }]}>Assign Technician</Text>
                 <PressScale onPress={() => setShowAssign(false)}>
@@ -436,11 +436,11 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
                     style={[styles.pickerRow, { borderBottomColor: theme.line }]}
                   >
                     <Text style={[styles.itemName, { color: theme.text, flex: 1 }]}>{emp.full_name}</Text>
-                    {job?.assigned_employee_id === emp.id ? <Icon name="check" size={14} color={brand.primary} /> : null}
+                    {job?.assigned_employee_id === emp.id ? <Icon name="check" size={14} color={theme.accent} /> : null}
                   </Pressable>
                 ))}
               </ScrollView>
-            </GlassSurface>
+            </View>
           </View>
         </Modal>
       ) : null}
@@ -449,43 +449,44 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(4) },
-  cardWrap: { width: '100%', maxWidth: 460, maxHeight: '92%' },
-  card: { overflow: 'hidden' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  cardWrap: { width: '100%', maxHeight: '92%' },
+  card: { overflow: 'hidden', borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, borderTopWidth: 1, paddingTop: spacing(2.5) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(2) },
   headRow: { flexDirection: 'row', alignItems: 'center', padding: spacing(4), borderBottomWidth: 1 },
-  title: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 14 },
+  title: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 15 },
   sub: { ...typography.caption, marginTop: 2, textTransform: 'capitalize' },
-  closeBtn: { width: 30, height: 30, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { width: 36, height: 36, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
   block: { padding: spacing(4) },
   custName: { ...typography.heading, fontSize: 16 },
   meta: { ...typography.caption, marginTop: 3 },
   iconRow: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(3) },
-  iconAction: { width: 38, height: 38, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  iconAction: { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
   stepRow: { flexDirection: 'row', gap: spacing(3), marginBottom: spacing(2.5) },
   stepDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   stepLabel: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
   stepWhen: { ...typography.caption, marginTop: 1 },
 
-  sectionTitle: { ...typography.heading, fontSize: 14, marginBottom: spacing(3) },
+  sectionTitle: { ...typography.heading, fontSize: 16, lineHeight: 22, marginBottom: spacing(3) },
   fieldLabel: { ...typography.caption, marginTop: spacing(3), marginBottom: spacing(1.5) },
-  input: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5), fontFamily: 'Manrope_600SemiBold', fontSize: 13.5 },
+  input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3.5), paddingVertical: spacing(2.5), minHeight: 52, fontFamily: 'Manrope_500Medium', fontSize: 15 },
   textArea: { minHeight: 72, textAlignVertical: 'top' },
 
   btnRow: { flexDirection: 'row', gap: spacing(2.5), marginBottom: spacing(2) },
-  primaryBtn: { borderRadius: radius.sm, paddingVertical: spacing(3), alignItems: 'center', marginTop: spacing(2) },
-  primaryBtnText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 13.5, color: '#ffffff' },
-  ghostBtn: { borderRadius: radius.sm, borderWidth: 1, paddingVertical: spacing(3), alignItems: 'center', marginTop: spacing(2) },
-  ghostBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  primaryBtn: { borderRadius: radius.md, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: spacing(2) },
+  primaryBtnText: { ...typography.button, color: '#ffffff' },
+  ghostBtn: { borderRadius: radius.md, borderWidth: 1, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: spacing(2) },
+  ghostBtnText: { ...typography.button },
 
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.sm, padding: spacing(3), marginBottom: spacing(2) },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginBottom: spacing(2) },
   itemName: { fontFamily: 'Manrope_700Bold', fontSize: 13.5 },
   itemMeta: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, marginTop: 2 },
-  qtyBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  qtyBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   qtyBtnText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 17 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderRadius: radius.sm, paddingVertical: spacing(3), paddingHorizontal: spacing(4) },
-  addBtnText: { flex: 1, fontFamily: 'Manrope_800ExtraBold', fontSize: 13, color: '#ffffff' },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderRadius: radius.md, height: 48, paddingHorizontal: spacing(4) },
+  addBtnText: { flex: 1, ...typography.button, fontSize: 14, color: '#ffffff' },
 
   gstRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), marginTop: spacing(3) },
   gstBox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
@@ -493,14 +494,14 @@ const styles = StyleSheet.create({
 
   totalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), borderTopWidth: 1, marginTop: spacing(3), paddingTop: spacing(3) },
   totalLabel: { flex: 1, fontFamily: 'Manrope_600SemiBold', fontSize: 11.5 },
-  totalValue: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
+  totalValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 18 },
   hint: { ...typography.caption, marginTop: spacing(2), lineHeight: 16 },
 
   empty: { padding: spacing(8), textAlign: 'center', fontSize: 13 },
   error: { ...typography.caption, paddingHorizontal: spacing(4), paddingBottom: spacing(4) },
 
-  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
-  pickerCard: { width: '100%', maxWidth: 420, overflow: 'hidden' },
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
+  pickerCard: { width: '100%', maxWidth: 420, overflow: 'hidden', borderRadius: radius.xl, borderWidth: 1 },
   pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing(4), borderBottomWidth: 1 },
   pickerTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), padding: spacing(3.5), borderBottomWidth: 1 },

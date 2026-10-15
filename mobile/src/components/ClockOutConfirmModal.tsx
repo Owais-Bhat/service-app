@@ -1,66 +1,83 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
-import Animated, { ZoomIn } from 'react-native-reanimated';
-import GlassSurface from './GlassSurface';
-import Icon from './Icon';
-import PressScale from './PressScale';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 
 interface Props {
   onCancel: () => void;
   onConfirm: () => void;
+  /** ISO time the shift started — shown in the summary when given. */
+  since?: string | null;
 }
 
-// Guards against an accidental tap on the header's clock toggle — same
-// animated glass-card language as LogoutConfirmModal.
-export default function ClockOutConfirmModal({ onCancel, onConfirm }: Props) {
+function fmt(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+// Guards against an accidental tap on the clock toggle. Design (e_clockout):
+// a bottom sheet with a summary block, Cancel (flex 1) and Clock out (flex 1.4).
+export default function ClockOutConfirmModal({ onCancel, onConfirm, since }: Props) {
   const { theme } = useTheme();
+  const now = new Date().toISOString();
+  const mins = since ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60000)) : 0;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
-        <Animated.View entering={ZoomIn.duration(320).springify().damping(15).mass(0.85)} style={styles.cardWrap}>
-          <GlassSurface style={styles.card} borderRadius={radius.lg}>
-            <View style={[styles.iconChip, { backgroundColor: `${semantic.warning}24` }]}>
-              <Icon name="clock" size={24} color={semantic.warning} filled />
-            </View>
-            <Text style={[styles.title, { color: theme.text }]}>Clock Out?</Text>
-            <Text style={[styles.body, { color: theme.text3 }]}>
-              This ends your shift for today. Make sure you're really done before confirming.
-            </Text>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="Dismiss" />
+        <View style={[styles.sheet, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+          <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+          <Text style={[styles.title, { color: theme.text }]}>Clock out at {fmt(now)}?</Text>
+          <Text style={[styles.body, { color: theme.text2 }]}>
+            This ends today's shift. You can't clock in again until tomorrow.
+          </Text>
 
-            <View style={styles.actions}>
-              <PressScale onPress={onCancel} style={{ flex: 1 }}>
-                <View style={[styles.cancelBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                  <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
-                </View>
-              </PressScale>
-              <PressScale onPress={onConfirm} style={{ flex: 1 }}>
-                <View style={[styles.confirmBtn, { backgroundColor: semantic.warning, shadowColor: semantic.warning }]}>
-                  <Icon name="clock" size={15} color="#fff" filled />
-                  <Text style={styles.confirmBtnText}>Clock Out</Text>
-                </View>
-              </PressScale>
+          {since ? (
+            <View style={[styles.summary, { backgroundColor: theme.panel2 }]}>
+              <View style={styles.summaryRow}>
+                <Text style={[styles.summaryLabel, { color: theme.text2 }]}>Shift</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>
+                  {fmt(since)} – {fmt(now)} · {Math.floor(mins / 60)}h {String(mins % 60).padStart(2, '0')}m
+                </Text>
+              </View>
             </View>
-          </GlassSurface>
-        </Animated.View>
+          ) : null}
+
+          <View style={styles.actions}>
+            <Pressable
+              onPress={onCancel}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.btn, { flex: 1, borderColor: theme.border, borderWidth: 1 }, pressed && styles.pressed]}
+            >
+              <Text style={[styles.btnText, { color: theme.text }]}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={onConfirm}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.btn, { flex: 1.4, backgroundColor: pressed ? brand.pressed : brand.fill }]}
+            >
+              <Text style={[styles.btnText, { color: '#ffffff' }]}>Clock out</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
-  cardWrap: { width: '100%', maxWidth: 380 },
-  card: { width: '100%', padding: spacing(6), alignItems: 'center' },
-  iconChip: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
-  title: { ...typography.heading, fontSize: 18, marginBottom: spacing(1.5), textAlign: 'center' },
-  body: { fontSize: 13, textAlign: 'center', lineHeight: 19, marginBottom: spacing(5) },
-  actions: { flexDirection: 'row', gap: spacing(2.5), width: '100%' },
-  cancelBtn: { height: 48, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
-  confirmBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 48, borderRadius: radius.md, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 },
-  confirmBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, borderTopWidth: 1, paddingHorizontal: spacing(5), paddingTop: spacing(2.5), paddingBottom: spacing(9) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(4.5) },
+  title: { ...typography.heading, fontSize: 20, lineHeight: 26 },
+  body: { ...typography.body, fontSize: 14, lineHeight: 20, marginTop: spacing(1.5), marginBottom: spacing(4) },
+  summary: { borderRadius: 16, paddingHorizontal: spacing(3.5), paddingVertical: spacing(3), marginBottom: spacing(4.5) },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing(3) },
+  summaryLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 14 },
+  summaryValue: { fontFamily: 'JetBrainsMono_500Medium', fontSize: 13, flexShrink: 1, textAlign: 'right' },
+  actions: { flexDirection: 'row', gap: spacing(3) },
+  btn: { height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  btnText: { ...typography.button },
+  pressed: { opacity: 0.8 },
 });

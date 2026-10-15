@@ -3,13 +3,13 @@ import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleS
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import AppHeaderBar from '../components/AppHeaderBar';
-import GlassCard from '../components/GlassCard';
-import AnimatedStatCard from '../components/AnimatedStatCard';
-import PressScale from '../components/PressScale';
+import FilterChips from '../components/admin/FilterChips';
+import StatusBadge from '../components/admin/StatusBadge';
+import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { brand, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { dataGet, dataPatch } from '../api/client';
 import { fetchEmployees, EmployeePickRow } from '../api/admin';
 
@@ -117,105 +117,116 @@ export default function TeamLeadDashboardScreen() {
     return true;
   });
 
+  const kpis = [
+    { v: total, l: 'Total', c: theme.text },
+    { v: unassigned, l: 'Unassigned', c: theme.err },
+    { v: assigned, l: 'Assigned', c: theme.ok },
+  ];
+  const chips = (Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => ({
+    key,
+    label: FILTER_LABELS[key],
+    count: key === 'all' ? total : key === 'unassigned' ? unassigned : assigned,
+  }));
+
   return (
     <View style={styles.root}>
       <MeshBackground />
       <AppHeaderBar title="Team Lead" subtitle={user?.full_name} />
 
       <ScrollView
-        contentContainerStyle={{ paddingTop: spacing(4), paddingBottom: spacing(16), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={brand.primary} />}
       >
-        <View style={styles.statRow}>
-          <AnimatedStatCard label="Total" value={total} accentColor={brand.primary} delayMs={0} />
-          <AnimatedStatCard label="Unassigned" value={unassigned} accentColor={semantic.danger} delayMs={80} />
-          <AnimatedStatCard label="Assigned" value={assigned} accentColor={semantic.success} delayMs={160} />
+        <View style={styles.kpiRow}>
+          {kpis.map((k) => (
+            <View key={k.l} style={[styles.kpi, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+              <Text style={[styles.kpiValue, { color: k.c }]}>{k.v}</Text>
+              <Text style={[styles.kpiLabel, { color: theme.text2 }]}>{k.l}</Text>
+            </View>
+          ))}
         </View>
 
-        <View style={styles.pillRow}>
-          {(Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => {
-            const active = filter === key;
-            return (
-              <PressScale key={key} onPress={() => setFilter(key)}>
-                <View style={[styles.pill, {
-                  borderColor: active ? brand.primary : theme.line,
-                  backgroundColor: active ? `${brand.primary}20` : theme.panel2,
-                }]}>
-                  <Text style={[styles.pillText, { color: active ? brand.primary : theme.text2 }]}>{FILTER_LABELS[key]}</Text>
-                </View>
-              </PressScale>
-            );
-          })}
-        </View>
+        <FilterChips items={chips} activeKey={filter} onSelect={(key) => setFilter(key as FilterKey)} />
+
+        <Text style={[styles.heading, { color: theme.text }]}>Tickets</Text>
 
         {loading ? (
-          <ActivityIndicator color={brand.primary} style={{ marginTop: spacing(10) }} />
+          <ActivityIndicator color={brand.primary} style={{ marginTop: spacing(6) }} />
         ) : error ? (
-          <Text style={[styles.dim, { color: semantic.danger }]}>{error}</Text>
+          <Text style={[styles.dim, { color: theme.err }]}>{error}</Text>
         ) : filtered.length === 0 ? (
-          <Text style={[styles.dim, { color: theme.text3 }]}>No tickets found</Text>
+          <View style={[styles.empty, { borderColor: theme.border }]}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No tickets found</Text>
+            <Text style={[styles.supporting, { color: theme.text2 }]}>Nothing matches this filter right now.</Text>
+          </View>
         ) : (
-          filtered.map((item) => {
-            const statusStyle = statusColors[normalizeStatus(item.status)] || DEFAULT_STATUS_STYLE;
-            const isUnassigned = !item.assigned_employee_id || item.assignment_status === 'none';
-            return (
-              <GlassCard key={item.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={[styles.ticket, { color: brand.primary }]}>#{item.ticket_no || '—'}</Text>
-                  <View style={[styles.badge, { backgroundColor: statusStyle.bg }]}>
-                    <Text style={[styles.badgeText, { color: statusStyle.color }]}>{statusLabel(item.status)}</Text>
+          <View style={[styles.listPanel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            {filtered.map((item, idx) => {
+              const statusStyle = statusColors[normalizeStatus(item.status)] || DEFAULT_STATUS_STYLE;
+              const isUnassigned = !item.assigned_employee_id || item.assignment_status === 'none';
+              return (
+                <View key={item.id} style={[styles.ticket, idx < filtered.length - 1 && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                  <View style={styles.ticketTop}>
+                    <Text style={[styles.ticketNo, { color: theme.accent }]}>{item.ticket_no || '—'}</Text>
+                    <StatusBadge label={statusLabel(item.status)} color={statusStyle.color} />
                   </View>
-                </View>
-                <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{item.full_name || '—'}</Text>
-                {item.service_item ? <Text style={[styles.sub, { color: theme.text3 }]} numberOfLines={1}>{item.service_item}</Text> : null}
-                <View style={styles.footer}>
-                  <Text style={[styles.sub, { color: isUnassigned ? semantic.danger : semantic.success }]}>
-                    {isUnassigned ? 'Unassigned' : 'Assigned'}
-                  </Text>
-                  <PressScale onPress={() => openAssign(item)}>
-                    <View style={[styles.assignBtn, { backgroundColor: `${brand.primary}20`, borderColor: brand.primary }]}>
-                      <Text style={[styles.assignBtnText, { color: brand.primary }]}>
-                        {isUnassigned ? 'Assign' : 'Reassign'}
+                  <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>{item.full_name || '—'}</Text>
+                  {item.service_item ? <Text style={[styles.supporting, { color: theme.text2 }]} numberOfLines={1}>{item.service_item}</Text> : null}
+                  <View style={styles.footer}>
+                    <View style={styles.assignState}>
+                      <Icon name={isUnassigned ? 'alert' : 'check-done'} size={14} color={isUnassigned ? theme.err : theme.ok} />
+                      <Text style={[styles.assignText, { color: isUnassigned ? theme.err : theme.ok }]}>
+                        {isUnassigned ? 'Unassigned' : 'Assigned'}
                       </Text>
                     </View>
-                  </PressScale>
+                    <Pressable
+                      onPress={() => openAssign(item)}
+                      accessibilityRole="button"
+                      style={({ pressed }) => [styles.assignBtn, { borderColor: theme.border, backgroundColor: theme.panel }, pressed && styles.pressed]}
+                    >
+                      <Text style={[styles.assignBtnText, { color: theme.text }]}>{isUnassigned ? 'Assign' : 'Reassign'}</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </GlassCard>
-            );
-          })
+              );
+            })}
+          </View>
         )}
 
-        <PressScale onPress={logout} style={{ marginTop: spacing(6) }}>
-          <View style={[styles.signOutBtn, { borderColor: semantic.danger }]}>
-            <Text style={[styles.signOutText, { color: semantic.danger }]}>Sign Out</Text>
-          </View>
-        </PressScale>
+        <Pressable
+          onPress={logout}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.signOut, { borderColor: theme.err, backgroundColor: theme.errS }, pressed && styles.pressed]}
+        >
+          <Icon name="logout" size={18} color={theme.err} />
+          <Text style={[styles.signOutText, { color: theme.err }]}>Sign out</Text>
+        </Pressable>
       </ScrollView>
 
       <Modal visible={!!assignTarget} transparent animationType="slide" onRequestClose={() => setAssignTarget(null)}>
         <View style={styles.scrim}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAssignTarget(null)} />
-          <View style={[styles.sheet, { backgroundColor: theme.surfaceStrong, paddingBottom: insets.bottom + spacing(4) }]}>
-            <View style={[styles.grabber, { backgroundColor: theme.line }]} />
-            <Text style={[styles.sheetTitle, { color: theme.text }]}>Assign to Employee</Text>
+          <View style={[styles.sheet, { backgroundColor: theme.panel, borderColor: theme.border, paddingBottom: insets.bottom + spacing(9) }]}>
+            <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+            <Text style={[styles.sheetTitle, { color: theme.text }]}>Assign to employee</Text>
             <ScrollView style={{ maxHeight: 380 }}>
               {empLoading || assigning ? (
                 <ActivityIndicator color={brand.primary} style={{ marginTop: spacing(6) }} />
               ) : employees.length === 0 ? (
-                <Text style={[styles.dim, { color: theme.text3, textAlign: 'center', marginTop: spacing(6) }]}>No employees found</Text>
+                <Text style={[styles.dim, { color: theme.text3, marginTop: spacing(6) }]}>No employees found</Text>
               ) : (
                 employees.map((emp) => (
                   <Pressable
                     key={emp.id}
                     onPress={() => doAssign(emp)}
-                    style={({ pressed }) => [styles.empRow, { borderBottomColor: theme.line, opacity: pressed ? 0.6 : 1 }]}
+                    style={({ pressed }) => [styles.empRow, { borderBottomColor: theme.line }, pressed && styles.pressed]}
                   >
-                    <View style={[styles.avatar, { backgroundColor: `${brand.primary}20` }]}>
-                      <Text style={[styles.avatarText, { color: brand.primary }]}>
-                        {(emp.full_name || '?').trim().charAt(0).toUpperCase()}
+                    <View style={[styles.avatar, { backgroundColor: theme.panel2 }]}>
+                      <Text style={[styles.avatarText, { color: theme.text }]}>
+                        {(emp.full_name || '?').trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
                       </Text>
                     </View>
-                    <Text style={[styles.empName, { color: theme.text }]}>{emp.full_name}</Text>
+                    <Text style={[styles.rowTitle, { color: theme.text, flex: 1 }]}>{emp.full_name}</Text>
                   </Pressable>
                 ))
               )}
@@ -229,29 +240,34 @@ export default function TeamLeadDashboardScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  statRow: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(4) },
-  pillRow: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(3), flexWrap: 'wrap' },
-  pill: { paddingHorizontal: spacing(3), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
-  pillText: { ...typography.caption, fontWeight: '600' },
-  dim: { ...typography.body, textAlign: 'center', marginTop: spacing(8) },
-  card: { marginBottom: spacing(3) },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(1) },
-  ticket: { ...typography.caption, fontWeight: '700' },
-  badge: { borderRadius: radius.sm, paddingHorizontal: spacing(2), paddingVertical: 3 },
-  badgeText: { ...typography.caption, fontSize: 11, fontWeight: '600' },
-  name: { ...typography.body, fontWeight: '700' as const, marginBottom: 2 },
-  sub: { ...typography.caption },
+  content: { paddingTop: spacing(4), paddingBottom: spacing(16), paddingHorizontal: spacing(4), gap: spacing(5) },
+  kpiRow: { flexDirection: 'row', gap: spacing(2) },
+  kpi: { flex: 1, borderRadius: 16, borderWidth: 1, padding: spacing(2.5) },
+  kpiValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 22 },
+  kpiLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, lineHeight: 14 },
+  heading: { ...typography.heading },
+  supporting: { ...typography.supporting },
+  rowTitle: { ...typography.rowTitle },
+  pressed: { opacity: 0.7 },
+  dim: { ...typography.body, textAlign: 'center', marginTop: spacing(6) },
+  empty: { borderRadius: 20, borderWidth: 1, borderStyle: 'dashed', padding: spacing(6), alignItems: 'center', gap: spacing(1) },
+  emptyTitle: { ...typography.rowTitle, fontSize: 16 },
+  listPanel: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  ticket: { padding: spacing(3.5), gap: spacing(1) },
+  ticketTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(1) },
+  ticketNo: { ...typography.monoId },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing(2) },
-  assignBtn: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(3), paddingVertical: spacing(1.5) },
-  assignBtnText: { ...typography.caption, fontWeight: '700' },
-  signOutBtn: { borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(3), alignItems: 'center' },
-  signOutText: { ...typography.body, fontWeight: '700' as const },
-  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingHorizontal: spacing(5), paddingTop: spacing(4) },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginBottom: spacing(3) },
-  sheetTitle: { ...typography.heading, marginBottom: spacing(3) },
-  empRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(3), borderBottomWidth: 1 },
-  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 15, fontWeight: '700' },
-  empName: { ...typography.body },
+  assignState: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
+  assignText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
+  assignBtn: { height: 40, paddingHorizontal: spacing(3), borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  assignBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  signOut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 52, borderRadius: radius.md, borderWidth: 1 },
+  signOutText: { ...typography.button },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, borderTopWidth: 1, paddingHorizontal: spacing(5), paddingTop: spacing(2.5) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(4.5) },
+  sheetTitle: { ...typography.heading, fontSize: 20, lineHeight: 26, marginBottom: spacing(3) },
+  empRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingVertical: spacing(2.5), minHeight: 56, borderBottomWidth: 1 },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
 });

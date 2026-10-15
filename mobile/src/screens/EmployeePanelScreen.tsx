@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
-import AppHeaderBar from '../components/AppHeaderBar';
-import AnimatedStatCard from '../components/AnimatedStatCard';
-import PressScale from '../components/PressScale';
+import ToolHeader from '../components/ToolHeader';
+import FilterChips from '../components/admin/FilterChips';
+import StatusBadge from '../components/admin/StatusBadge';
+import Icon from '../components/Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { brand, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { dataGet } from '../api/client';
 import { patchUser } from '../api/admin';
 
@@ -66,7 +64,6 @@ function statusLabel(status: string | null): string {
 }
 
 export default function EmployeePanelScreen({ employeeId, employeeName, employeeRole, onBack }: Props) {
-  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [inquiries, setInquiries] = useState<RawInquiry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,93 +122,88 @@ export default function EmployeePanelScreen({ employeeId, employeeName, employee
     return true;
   });
 
+  const kpis = [
+    { v: total, l: 'Total', c: theme.text },
+    { v: inProgressCount, l: 'In progress', c: theme.warn },
+    { v: resolvedCount, l: 'Resolved', c: theme.ok },
+  ];
+  const chips = (Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => ({
+    key,
+    label: FILTER_LABELS[key],
+    count: key === 'all' ? total : key === 'in_progress' ? inProgressCount : resolvedCount,
+  }));
+  const isLead = currentRole === 'team_lead';
+
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <AppHeaderBar title={employeeName} subtitle="Employee Panel" onBack={onBack} />
+      <ToolHeader title={employeeName} subtitle="Employee panel" onBack={onBack} />
 
       <ScrollView
-        contentContainerStyle={{ paddingTop: spacing(4), paddingBottom: spacing(16), paddingHorizontal: spacing(4) }}
+        contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand.primary} />}
       >
-        {/* Role toggle */}
-        <PressScale onPress={toggleRole} style={{ marginBottom: spacing(4) }}>
-          <View style={[styles.roleBtn, {
-            backgroundColor: currentRole === 'team_lead' ? `${semantic.warning}22` : `${brand.primary}18`,
-            borderColor: currentRole === 'team_lead' ? semantic.warning : brand.primary,
-          }]}>
-            <Text style={[styles.roleBtnText, { color: currentRole === 'team_lead' ? semantic.warning : brand.primary }]}>
-              {roleUpdating ? 'Updating…' : currentRole === 'team_lead' ? '★ Team Lead — Tap to revert to Employee' : 'Promote to Team Lead'}
-            </Text>
-          </View>
-        </PressScale>
+        <Pressable
+          onPress={toggleRole}
+          disabled={roleUpdating}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.roleBtn,
+            isLead
+              ? { backgroundColor: theme.warnS, borderColor: theme.warn }
+              : { backgroundColor: theme.panel, borderColor: theme.border },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name={isLead ? 'star' : 'people'} size={18} color={isLead ? theme.warn : theme.text} filled={isLead} />
+          <Text style={[styles.roleBtnText, { color: isLead ? theme.warn : theme.text }]}>
+            {roleUpdating ? 'Updating…' : isLead ? 'Team Lead — tap to revert to Employee' : 'Promote to Team Lead'}
+          </Text>
+        </Pressable>
 
-        {/* Stat tiles */}
-        <View style={styles.statRow}>
-          <AnimatedStatCard label="Total" value={total} accentColor={brand.primary} delayMs={0} />
-          <AnimatedStatCard label="In Progress" value={inProgressCount} accentColor={semantic.warning} delayMs={80} />
-          <AnimatedStatCard label="Resolved" value={resolvedCount} accentColor={semantic.success} delayMs={160} />
+        <View style={styles.kpiRow}>
+          {kpis.map((k) => (
+            <View key={k.l} style={[styles.kpi, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+              <Text style={[styles.kpiValue, { color: k.c }]}>{k.v}</Text>
+              <Text style={[styles.kpiLabel, { color: theme.text2 }]}>{k.l}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Filter pills */}
-        <View style={styles.pillRow}>
-          {(Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => {
-            const active = filter === key;
-            return (
-              <PressScale key={key} onPress={() => setFilter(key)}>
-                <View style={[styles.pill, { borderColor: active ? brand.primary : theme.line, backgroundColor: active ? `${brand.primary}20` : theme.panel2 }]}>
-                  <Text style={[styles.pillText, { color: active ? brand.primary : theme.text2 }]}>{FILTER_LABELS[key]}</Text>
-                </View>
-              </PressScale>
-            );
-          })}
-        </View>
+        <FilterChips items={chips} activeKey={filter} onSelect={(k) => setFilter(k as FilterKey)} />
 
         {loading ? (
-          <ActivityIndicator color={brand.primary} style={{ marginTop: spacing(10) }} />
+          <ActivityIndicator color={brand.primary} style={{ marginTop: spacing(6) }} />
         ) : error ? (
-          <Text style={[styles.errorText, { color: semantic.danger }]}>{error}</Text>
+          <Text style={[styles.note, { color: theme.err }]}>{error}</Text>
         ) : filtered.length === 0 ? (
-          <Text style={[styles.emptyText, { color: theme.text3 }]}>No requests found.</Text>
+          <View style={[styles.empty, { borderColor: theme.border }]}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No requests found.</Text>
+          </View>
         ) : (
           <>
-            <Text style={[styles.resultCount, { color: theme.text3 }]}>{filtered.length} of {total} requests</Text>
-            {filtered.map((item, idx) => {
-              const statusStyle = statusColors[normalizeStatus(item.status)] || DEFAULT_STATUS_STYLE;
-              const initial = (item.full_name || '?').trim().charAt(0).toUpperCase();
-              return (
-                <Animated.View key={item.id} entering={FadeInUp.delay(Math.min(idx, 8) * 70).duration(450).springify().damping(14)}>
-                  <View style={[styles.cardOuter, { shadowColor: statusStyle.color }]}>
-                    <View style={[styles.accentBar, { backgroundColor: statusStyle.color }]} />
-                    <GlassCard shadow style={styles.taskCard}>
-                      <View style={styles.rowHeader}>
-                        <View style={[styles.avatar, { backgroundColor: `${statusStyle.color}26`, borderColor: `${statusStyle.color}40` }]}>
-                          <Text style={[styles.avatarText, { color: statusStyle.color }]}>{initial}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.name, { color: theme.text }]}>{item.full_name || '—'}</Text>
-                          {item.service_item ? (
-                            <Text style={[styles.caption, { color: theme.text3 }]} numberOfLines={1}>{item.service_item}</Text>
-                          ) : null}
-                        </View>
-                        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                          <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusLabel(item.status)}</Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.chipRow}>
-                        <View style={[styles.metaChip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                          <Text style={[styles.metaChipText, { color: theme.text2 }]}>{item.ticket_no || 'No ticket'}</Text>
-                        </View>
-                        <View style={[styles.metaChip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                          <Text style={[styles.metaChipText, { color: theme.text2 }]}>{formatDate(item.created_at)}</Text>
-                        </View>
-                      </View>
-                    </GlassCard>
+            <Text style={[styles.note, { color: theme.text3, textAlign: 'left' }]}>{filtered.length} of {total} requests</Text>
+            <View style={[styles.listPanel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+              {filtered.map((item, idx) => {
+                const statusStyle = statusColors[normalizeStatus(item.status)] || DEFAULT_STATUS_STYLE;
+                return (
+                  <View key={item.id} style={[styles.row, idx < filtered.length - 1 && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                    <View style={styles.rowTop}>
+                      <Text style={[styles.ticketNo, { color: theme.accent }]}>{item.ticket_no || 'No ticket'}</Text>
+                      <StatusBadge label={statusLabel(item.status)} color={statusStyle.color} />
+                    </View>
+                    <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{item.full_name || '—'}</Text>
+                    {item.service_item ? (
+                      <Text style={[styles.supporting, { color: theme.text2 }]} numberOfLines={1}>{item.service_item}</Text>
+                    ) : null}
+                    <View style={styles.metaItem}>
+                      <Icon name="calendar" size={14} color={theme.text3} />
+                      <Text style={[styles.metaText, { color: theme.text3 }]}>{formatDate(item.created_at)}</Text>
+                    </View>
                   </View>
-                </Animated.View>
-              );
-            })}
+                );
+              })}
+            </View>
           </>
         )}
       </ScrollView>
@@ -221,38 +213,23 @@ export default function EmployeePanelScreen({ employeeId, employeeName, employee
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  roleBtn: { borderWidth: 1.5, borderRadius: radius.md, paddingVertical: spacing(3), paddingHorizontal: spacing(4), alignItems: 'center' },
-  roleBtnText: { ...typography.body, fontWeight: '700' as const },
-  statRow: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(4) },
-  pillRow: { flexDirection: 'row', gap: spacing(2), marginBottom: spacing(3), flexWrap: 'wrap' },
-  pill: { paddingHorizontal: spacing(3), paddingVertical: spacing(1.5), borderRadius: radius.full, borderWidth: 1 },
-  pillText: { ...typography.caption, fontWeight: '600' },
-  resultCount: { ...typography.caption, marginBottom: spacing(2) },
-  errorText: { ...typography.caption, marginTop: spacing(6), textAlign: 'center' },
-  emptyText: { ...typography.caption, marginTop: spacing(6), textAlign: 'center' },
-  cardOuter: {
-    marginBottom: spacing(3),
-    borderRadius: radius.lg,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 4,
-    flexDirection: 'row',
-  },
-  accentBar: { width: 4, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
-  taskCard: { flex: 1, padding: spacing(4), borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
-  rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(3) },
-  avatar: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5,
-  },
-  avatarText: { fontSize: 16, fontWeight: '700' },
-  name: { ...typography.body, fontWeight: '700' as const },
-  caption: { ...typography.caption },
-  statusBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.sm },
-  statusBadgeText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
-  chipRow: { flexDirection: 'row', gap: spacing(2), flexWrap: 'wrap' },
-  metaChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: radius.sm, borderWidth: 1 },
-  metaChipText: { ...typography.caption, fontSize: 11 },
+  content: { padding: spacing(4), paddingBottom: spacing(16), gap: spacing(4) },
+  pressed: { opacity: 0.7 },
+  roleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 52, borderRadius: radius.md, borderWidth: 1 },
+  roleBtnText: { ...typography.button },
+  kpiRow: { flexDirection: 'row', gap: spacing(2) },
+  kpi: { flex: 1, borderRadius: 16, borderWidth: 1, padding: spacing(2.5) },
+  kpiValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 22 },
+  kpiLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 11 },
+  note: { ...typography.caption, textAlign: 'center' },
+  empty: { borderRadius: 20, borderWidth: 1, borderStyle: 'dashed', padding: spacing(6), alignItems: 'center' },
+  emptyTitle: { ...typography.rowTitle },
+  listPanel: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  row: { padding: spacing(3.5), gap: spacing(1) },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ticketNo: { ...typography.monoId },
+  name: { ...typography.rowTitle, fontSize: 16 },
+  supporting: { ...typography.supporting },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginTop: spacing(1) },
+  metaText: { fontFamily: 'Manrope_600SemiBold', fontSize: 12 },
 });

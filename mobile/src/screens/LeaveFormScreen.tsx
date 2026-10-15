@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
+import ToolHeader from '../components/ToolHeader';
+import Field from '../components/admin/Field';
 import GlowButton from '../components/GlowButton';
-import BackLink from '../components/BackLink';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
+import { spacing, typography } from '../theme';
 import { submitLeaveRequest } from '../api/attendance';
 import { ApiError } from '../api/client';
 
 interface Props {
   onBack: () => void;
+}
+
+// "2 days · Thu – Fri" under the date fields, once both parse and are in order.
+function spanLabel(start: string, end: string): string | null {
+  const a = new Date(`${start.trim()}T00:00:00`);
+  const b = new Date(`${end.trim()}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return null;
+  const days = Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
+  const day = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' });
+  return `${days} day${days === 1 ? '' : 's'} · ${days === 1 ? day(a) : `${day(a)} – ${day(b)}`}`;
 }
 
 export default function LeaveFormScreen({ onBack }: Props) {
@@ -44,43 +53,32 @@ export default function LeaveFormScreen({ onBack }: Props) {
     }
   };
 
+  const span = spanLabel(startDate, endDate);
+
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <View style={styles.flex}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-          <BackLink onPress={onBack} />
-          <Text style={[styles.title, { color: theme.text }]}>New Leave Request</Text>
+      <ToolHeader title="Request leave" subtitle="Your manager is notified when you send" onBack={onBack} />
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+        <View style={styles.dates}>
+          <View style={styles.dateCell}>
+            <Field label="From" value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" required />
+          </View>
+          <View style={styles.dateCell}>
+            <Field label="To" value={endDate} onChangeText={setEndDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" required />
+          </View>
+        </View>
+        {span ? <Text style={[styles.span, { color: theme.text2 }]}>{span}</Text> : null}
 
-          <GlassCard style={styles.formCard}>
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Start date (YYYY-MM-DD)"
-              placeholderTextColor={theme.text3}
-              value={startDate}
-              onChangeText={setStartDate}
-            />
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="End date (YYYY-MM-DD)"
-              placeholderTextColor={theme.text3}
-              value={endDate}
-              onChangeText={setEndDate}
-            />
-            <TextInput
-              style={[styles.input, styles.textArea, { color: theme.text, marginBottom: 0 }]}
-              placeholder="Reason"
-              placeholderTextColor={theme.text3}
-              value={reason}
-              onChangeText={setReason}
-              multiline
-            />
-          </GlassCard>
+        <Field label="Reason" value={reason} onChangeText={setReason} placeholder="Why do you need leave?" multiline required />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
+      </ScrollView>
 
-          <GlowButton label="Submit Request" onPress={handleSubmit} loading={loading} />
-        </ScrollView>
+      <View style={[styles.sticky, { backgroundColor: theme.surfaceStrong, borderTopColor: theme.line, paddingBottom: insets.bottom + 22 }]}>
+        <View style={{ flex: 1 }}>
+          <GlowButton label="Send request" onPress={handleSubmit} loading={loading} icon="arrow-right" />
+        </View>
       </View>
     </View>
   );
@@ -88,10 +86,10 @@ export default function LeaveFormScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  flex: { flex: 1 },
-  formCard: { marginTop: spacing(4) },
-  title: { ...typography.title },
-  input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
-  textArea: { minHeight: 90, textAlignVertical: 'top' },
-  error: { ...typography.caption, color: brand.danger, marginTop: spacing(3) },
+  content: { padding: spacing(4), paddingBottom: spacing(6), gap: spacing(5) },
+  dates: { flexDirection: 'row', gap: spacing(2.5) },
+  dateCell: { flex: 1 },
+  span: { ...typography.caption, marginTop: -spacing(2.5) },
+  error: { ...typography.caption },
+  sticky: { flexDirection: 'row', alignItems: 'center', paddingTop: spacing(1), paddingHorizontal: spacing(4), borderTopWidth: 1 },
 });

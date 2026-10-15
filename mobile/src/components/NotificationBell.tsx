@@ -2,7 +2,6 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { radius } from '../theme';
-import { semantic } from '../theme/tokens';
 import Icon from './Icon';
 
 interface Props {
@@ -23,9 +22,9 @@ export default function NotificationBell({ unread, onPress }: Props) {
       hitSlop={8}
       accessibilityLabel={unread > 0 ? `${unread} unread notifications` : 'Notifications'}
     >
-      <Icon name="notification" size={17} color={theme.text2} />
+      <Icon name="notification" size={22} color={theme.text} />
       {unread > 0 && (
-        <View style={[styles.badge, { backgroundColor: semantic.danger, borderColor: theme.bg }]}>
+        <View style={[styles.badge, { backgroundColor: theme.err, borderColor: theme.panel }]}>
           <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
         </View>
       )}
@@ -34,19 +33,19 @@ export default function NotificationBell({ unread, onPress }: Props) {
 }
 
 const styles = StyleSheet.create({
-  btn: { width: 36, height: 36, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  btn: { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.7 },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
     paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: '#ffffff', fontSize: 9, fontFamily: 'Manrope_700Bold' },
+  badgeText: { color: '#ffffff', fontSize: 10, lineHeight: 14, fontFamily: 'Manrope_700Bold' },
 });
