@@ -105,7 +105,7 @@ export default function NoticesAdminScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New notice">
+        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New notice">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }
@@ -128,7 +128,7 @@ export default function NoticesAdminScreen({ onBack }: Props) {
             title={n.title}
             subtitle={n.body}
             meta={`Posted ${shortDate(n.created_at)}${n.expires_at ? ` · expires ${shortDate(n.expires_at)}` : ''}`}
-            badge={{ label: live ? humanize(n.priority) : expired(n) ? 'Expired' : 'Hidden', color: live ? PRIORITY_COLOR[n.priority] ?? semantic.info : '#6d8278' }}
+            badge={{ label: live ? humanize(n.priority) : expired(n) ? 'Expired' : 'Hidden', color: live ? PRIORITY_COLOR[n.priority] ?? semantic.info : brand.grey }}
             onPress={() => open(n)}
             footer={
               <>

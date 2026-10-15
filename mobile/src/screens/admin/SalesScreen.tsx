@@ -42,7 +42,7 @@ type SalesView = 'invoice' | 'estimate' | 'credit_note' | 'receipts' | 'owed';
 type DocKind = 'invoice' | 'estimate' | 'credit_note';
 
 const STATUS_COLOR: Record<string, string> = {
-  draft: '#6d8278',
+  draft: brand.grey,
   issued: semantic.info,
   paid: semantic.success,
   accepted: semantic.success,
@@ -212,7 +212,7 @@ export default function SalesScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => setChooser(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New document">
+        <Pressable onPress={() => setChooser(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New document">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3), marginBottom: spacing(2) },
   segmentRow: { flexDirection: 'row', borderRadius: 14, padding: 4, marginTop: spacing(4), marginBottom: spacing(4) },
   segment: { flex: 1, paddingVertical: spacing(2.5), borderRadius: 11, alignItems: 'center' },
-  segmentActive: { backgroundColor: brand.primary },
+  segmentActive: { backgroundColor: brand.fill },
   segmentText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
   heroCard: { alignItems: 'center', paddingVertical: spacing(6), marginBottom: spacing(4) },
   heroLabel: { ...typography.caption, marginBottom: spacing(1.5) },

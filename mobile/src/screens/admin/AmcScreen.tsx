@@ -44,9 +44,9 @@ type Filter = 'active' | 'lapsing' | 'expired' | 'renewals' | 'all';
 const STATE_COLOR: Record<string, string> = {
   active: semantic.success,
   upcoming: semantic.info,
-  renewed: '#6d8278',
+  renewed: brand.grey,
   expired: semantic.danger,
-  cancelled: '#6d8278',
+  cancelled: brand.grey,
 };
 
 const oneYearOn = (start: string) => {
@@ -223,7 +223,7 @@ export default function AmcScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New contract">
+        <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New contract">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

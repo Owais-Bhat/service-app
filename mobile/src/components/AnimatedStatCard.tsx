@@ -55,6 +55,6 @@ const styles = StyleSheet.create({
   card: { flex: 1, borderRadius: radius.lg, borderWidth: 1, padding: spacing(4), minWidth: 140, overflow: 'hidden' },
   iconChip: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(2) },
   iconDot: { width: 15, height: 15, borderRadius: 8, borderWidth: 2 },
-  value: { ...typography.title, fontSize: 26 },
-  label: { ...typography.caption },
+  value: { ...typography.kpi },
+  label: { ...typography.caption, fontSize: 12 },
 });

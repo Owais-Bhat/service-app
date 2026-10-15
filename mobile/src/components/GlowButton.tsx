@@ -1,17 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Canvas, RoundedRect, LinearGradient, vec } from '@shopify/react-native-skia';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import React from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
 import Icon from './Icon';
 import { IconName } from '../theme/icons';
+
+type Variant = 'primary' | 'secondary' | 'tertiary' | 'danger';
 
 interface Props {
   label: string;
@@ -19,51 +14,40 @@ interface Props {
   disabled?: boolean;
   loading?: boolean;
   icon?: IconName;
+  variant?: Variant;
 }
 
 const HEIGHT = 52;
+const DANGER_FILL = '#c42c47';
 
-// Skia-rendered gradient background with a Reanimated-driven pulsing glow —
-// the two animation systems doing what each is best at: Skia for the GPU
-// shader-drawn gradient, Reanimated for the UI-thread opacity/scale pulse.
-export default function GlowButton({ label, onPress, disabled, loading, icon }: Props) {
-  const pulse = useSharedValue(0.6);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    pulse.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [pulse]);
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: disabled ? 0.5 : pulse.value,
-    transform: [{ scale: 0.98 + pulse.value * 0.02 }],
-  }));
-
-  const handleLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
-
+// The design's button: 52 dp, r14, Manrope 700 15. Primary is filled with
+// Primary 600 (#0F8A4C) so white text clears AA-large, Primary 700 when
+// pressed; there is no glow or gradient.
+export default function GlowButton({ label, onPress, disabled, loading, icon, variant = 'primary' }: Props) {
+  const { theme } = useTheme();
+  const inactive = !!disabled && !loading;
+  const fg = inactive ? theme.text3 : variant === 'secondary' ? theme.text : variant === 'tertiary' ? theme.accent : '#ffffff';
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
-      onLayout={handleLayout}
-      style={({ pressed }) => [styles.wrapper, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      style={({ pressed }) => {
+        let backgroundColor: string = brand.fill;
+        let borderColor = 'transparent';
+        if (variant === 'primary') backgroundColor = pressed ? brand.pressed : brand.fill;
+        if (variant === 'danger') backgroundColor = DANGER_FILL;
+        if (variant === 'secondary') { backgroundColor = theme.panel; borderColor = theme.border; }
+        if (variant === 'tertiary') backgroundColor = 'transparent';
+        if (inactive) { backgroundColor = theme.panel2; borderColor = 'transparent'; }
+        return [styles.wrapper, { backgroundColor, borderColor }, pressed && !inactive && styles.pressed];
+      }}
     >
-      {width > 0 && (
-        <Animated.View style={[styles.canvasWrap, glowStyle]}>
-          <Canvas style={StyleSheet.absoluteFill}>
-            <RoundedRect x={0} y={0} width={width} height={HEIGHT} r={radius.md}>
-              <LinearGradient
-                start={vec(0, 0)}
-                end={vec(width, HEIGHT)}
-                colors={[brand.primary, brand.primaryGradientEnd]}
-              />
-            </RoundedRect>
-          </Canvas>
-        </Animated.View>
-      )}
       <View style={styles.content}>
-        {icon && !loading && <Icon name={icon} size={17} color="#ffffff" />}
-        <Text style={[typography.heading, styles.label]}>{loading ? 'Please wait…' : label}</Text>
+        {loading ? <ActivityIndicator size="small" color="#ffffff" /> : null}
+        {icon && !loading ? <Icon name={icon} size={18} color={fg} /> : null}
+        <Text style={[typography.button, { color: fg }]}>{loading ? 'Please wait…' : label}</Text>
       </View>
     </Pressable>
   );
@@ -73,19 +57,12 @@ const styles = StyleSheet.create({
   wrapper: {
     height: HEIGHT,
     borderRadius: radius.md,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: spacing(2),
+    paddingHorizontal: spacing(4),
   },
-  pressed: { transform: [{ scale: 0.97 }] },
-  canvasWrap: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-  content: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
-  label: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
+  pressed: { transform: [{ scale: 0.98 }] },
+  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2) },
 });

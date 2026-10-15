@@ -19,7 +19,7 @@ const DEVICE_STATUS_STYLE: Record<string, { color: string; bg: string; label: st
   taken: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)', label: 'Taken' },
   returned: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)', label: 'Returned' },
 };
-const PENDING_STATUS_STYLE = { color: '#6d8278', bg: 'rgba(109,130,120,0.16)', label: 'Pending' };
+const PENDING_STATUS_STYLE = { color: brand.grey, bg: 'rgba(109,130,120,0.16)', label: 'Pending' };
 
 // Filters to inquiries actually relevant to device tracking (design spec
 // §2) — the underlying endpoint returns every inquiry assigned to this

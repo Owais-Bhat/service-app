@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   section: { marginTop: spacing(5) },
   segmentRow: { flexDirection: 'row', borderRadius: 14, padding: 4, marginBottom: spacing(4), gap: spacing(1) },
   segment: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), paddingVertical: spacing(2.5), borderRadius: 11 },
-  segmentActive: { backgroundColor: brand.primary },
+  segmentActive: { backgroundColor: brand.fill },
   segmentActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
   segmentText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
   periodScroll: { marginBottom: spacing(4) },

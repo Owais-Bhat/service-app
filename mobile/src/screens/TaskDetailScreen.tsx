@@ -191,7 +191,7 @@ export default function TaskDetailScreen({ ticketId, onBack }: Props) {
                 </>
               ) : null}
               {item.location ? (
-                <Pressable onPress={() => setShowMap(true)} style={[styles.iconAction, { backgroundColor: brand.primary }]}>
+                <Pressable onPress={() => setShowMap(true)} style={[styles.iconAction, { backgroundColor: brand.fill }]}>
                   <Icon name="pin" size={16} color="#fff" />
                 </Pressable>
               ) : null}
@@ -280,13 +280,13 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: brand.danger, marginTop: spacing(3), textAlign: 'center' },
   doneBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5) },
   doneBannerText: { ...typography.body, fontSize: 13 },
-  updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.primary, height: 52, borderRadius: radius.md },
+  updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), backgroundColor: brand.fill, height: 52, borderRadius: radius.md },
   updateBtnDisabled: { opacity: 0.45 },
   clockHint: { ...typography.caption, textAlign: 'center', marginTop: spacing(2) },
   updateBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
   heading: { fontFamily: 'Manrope_700Bold', fontSize: 20 },
   label: { fontFamily: 'Manrope_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  acceptBtn: { width: '100%', backgroundColor: brand.primary, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  acceptBtn: { width: '100%', backgroundColor: brand.fill, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   acceptBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14, color: '#fff' },
   declineBtn: { width: '100%', height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(128,128,128,0.3)' },
 });

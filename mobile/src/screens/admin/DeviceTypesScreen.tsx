@@ -98,7 +98,7 @@ export default function DeviceTypesScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add">
+        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

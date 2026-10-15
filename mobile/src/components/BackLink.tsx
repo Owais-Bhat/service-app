@@ -1,25 +1,23 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import Icon from './Icon';
-import { spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
+import { spacing } from '../theme';
 
 interface Props {
   onPress: () => void;
 }
 
-// Replaces the `← Back` text link duplicated across every drill-down
-// screen (design spec §3, item 2) with one shared component.
+// Design back control: a 44 x 44 chevron button, left-aligned, no text.
 export default function BackLink({ onPress }: Props) {
+  const { theme } = useTheme();
   return (
-    <Pressable onPress={onPress} style={styles.row} hitSlop={8}>
-      <Icon name="chevron-left" size={16} color={brand.primary} />
-      <Text style={styles.label}>Back</Text>
+    <Pressable onPress={onPress} style={styles.btn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={4}>
+      <Icon name="chevron-left" size={24} color={theme.text} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: spacing(3), alignSelf: 'flex-start' },
-  label: { ...typography.caption, color: brand.primary },
+  btn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -spacing(2.5), marginBottom: spacing(1), alignSelf: 'flex-start' },
 });

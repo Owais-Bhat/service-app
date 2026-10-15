@@ -101,7 +101,7 @@ export default function TrainingAdminScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => setCreating(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New course">
+        <Pressable onPress={() => setCreating(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New course">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }
@@ -121,11 +121,11 @@ export default function TrainingAdminScreen({ onBack }: Props) {
           <ListRow
             key={c.id}
             icon="training"
-            iconColor={Number(c.active) === 1 ? undefined : '#6d8278'}
+            iconColor={Number(c.active) === 1 ? undefined : brand.grey}
             title={c.title}
             subtitle={`${c.category || 'General'} · ${c.lesson_count} lessons · ${c.quiz_count} questions`}
             meta={`${comp?.completed ?? 0} completed · ${c.assign_count} assignments`}
-            badge={Number(c.active) === 1 ? undefined : { label: 'Hidden', color: '#6d8278' }}
+            badge={Number(c.active) === 1 ? undefined : { label: 'Hidden', color: brand.grey }}
             onPress={() => open(c.id)}
             footer={
               <>
@@ -150,7 +150,7 @@ export default function TrainingAdminScreen({ onBack }: Props) {
         {progress?.employees.map((e) => {
           const total = progress.lessons.length;
           const done = e.completion ? 'Completed' : e.done_count > 0 ? 'In progress' : 'Not started';
-          const color = e.completion ? semantic.success : e.done_count > 0 ? semantic.warning : '#6d8278';
+          const color = e.completion ? semantic.success : e.done_count > 0 ? semantic.warning : brand.grey;
           const overdue = !e.completion && !!e.due_date && new Date(e.due_date).getTime() < Date.now();
           return (
             <View key={e.employee_id} style={[styles.person, { borderBottomColor: theme.line }]}>

@@ -184,7 +184,7 @@ export default function AdsAdminScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add ad">
+        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add ad">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }
@@ -207,11 +207,11 @@ export default function AdsAdminScreen({ onBack }: Props) {
           {a.kind === 'image' ? <Image source={{ uri: resolveUploadUrl(a.url) }} style={styles.thumb} resizeMode="cover" /> : null}
           <ListRow
             icon="megaphone"
-            iconColor={live(a) ? semantic.success : '#6d8278'}
+            iconColor={live(a) ? semantic.success : brand.grey}
             title={a.caption || (a.kind === 'video' ? 'Video ad' : 'Image ad')}
             subtitle={`${PLACEMENT_LABEL[a.placement || 'landing'] || humanize(a.placement)} · ${humanize(a.device_target || 'both')} · ${Math.round((a.duration_ms || 6000) / 1000)}s`}
             meta={`Position ${a.position ?? 0}${a.expires_at ? ` · expires ${shortDate(a.expires_at)}` : ''}`}
-            badge={{ label: live(a) ? 'Live' : Number(a.active) === 1 ? 'Expired' : 'Hidden', color: live(a) ? semantic.success : '#6d8278' }}
+            badge={{ label: live(a) ? 'Live' : Number(a.active) === 1 ? 'Expired' : 'Hidden', color: live(a) ? semantic.success : brand.grey }}
             footer={
               <>
                 <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(a)} />

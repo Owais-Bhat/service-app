@@ -318,7 +318,7 @@ export default function LiveLocationsScreen({ onBack }: Props) {
           {trail ? (
             <View style={{ marginTop: spacing(3) }}>
               <View style={[styles.scrubTrack, { backgroundColor: theme.line }]}>
-                <View style={[styles.scrubFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: brand.primary }]} />
+                <View style={[styles.scrubFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: brand.fill }]} />
               </View>
               <Text style={[styles.caption, { color: theme.text3, marginVertical: spacing(1) }]}>
                 {new Date(trail[0].t + frac * (trail[trail.length - 1].t - trail[0].t)).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}

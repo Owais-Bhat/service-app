@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: 'rgba(21,160,90,0.14)',
   },
-  taglineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: brand.primary },
+  taglineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: brand.fill },
   tagline: { ...typography.caption, color: brand.primary, fontSize: 12 },
   cardWrap: { width: '100%' },
   fieldWrap: {

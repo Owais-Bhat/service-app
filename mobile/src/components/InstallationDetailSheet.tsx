@@ -210,7 +210,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
           {pendingAccept ? (
             <View style={styles.btnRow}>
               <PressScale onPress={() => run('accept', () => installationAction(id, 'accept'))} disabled={!!busy} style={{ flex: 1 }}>
-                <View style={[styles.primaryBtn, { backgroundColor: brand.primary }]}>
+                <View style={[styles.primaryBtn, { backgroundColor: brand.fill }]}>
                   <Text style={styles.primaryBtnText}>{busy === 'accept' ? 'Saving…' : 'Accept'}</Text>
                 </View>
               </PressScale>
@@ -228,7 +228,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
 
           {(accepted || isAdmin) && !started && !completed ? (
             <PressScale onPress={() => run('start', () => installationAction(id, 'start', note.trim() || undefined))} disabled={!!busy}>
-              <View style={[styles.primaryBtn, { backgroundColor: brand.primary }]}>
+              <View style={[styles.primaryBtn, { backgroundColor: brand.fill }]}>
                 <Text style={styles.primaryBtnText}>{busy === 'start' ? 'Saving…' : 'Start Installation'}</Text>
               </View>
             </PressScale>
@@ -236,7 +236,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
 
           {started && !completed ? (
             <PressScale onPress={() => run('complete', () => installationAction(id, 'complete', note.trim() || undefined))} disabled={!!busy}>
-              <View style={[styles.primaryBtn, { backgroundColor: brand.primary }]}>
+              <View style={[styles.primaryBtn, { backgroundColor: brand.fill }]}>
                 <Text style={styles.primaryBtnText}>{busy === 'complete' ? 'Saving…' : 'Mark Completed'}</Text>
               </View>
             </PressScale>
@@ -317,7 +317,7 @@ export default function InstallationDetailSheet({ id, isAdmin, employees = [], o
           </View>
 
           <PressScale onPress={saveBill} disabled={!!busy}>
-            <View style={[styles.primaryBtn, { backgroundColor: brand.primary }]}>
+            <View style={[styles.primaryBtn, { backgroundColor: brand.fill }]}>
               <Text style={styles.primaryBtnText}>{busy === 'bill' ? 'Saving…' : billed ? 'Update Bill' : 'Generate Bill'}</Text>
             </View>
           </PressScale>

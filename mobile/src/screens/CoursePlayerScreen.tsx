@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: semantic.danger, marginTop: spacing(3) },
   sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
   headerCard: {
-    backgroundColor: brand.primary,
+    backgroundColor: brand.fill,
     borderRadius: 20,
     padding: spacing(4),
     shadowColor: brand.primary,

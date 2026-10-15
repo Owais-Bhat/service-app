@@ -161,7 +161,7 @@ const AVAILABLE = new Set<string>([...Object.keys(ADMIN_SCREENS), 'Employees', '
 function HomeRoute({ navigation }: any) {
   return (
     <AdminHomeScreen
-      onTab={(tab) => navigation.navigate(tab === 'menu' ? 'Menu' : 'Home')}
+      onTab={(tab) => navigation.navigate(tab === 'menu' ? 'Menu' : tab === 'notifications' ? 'Notifications' : 'Home')}
       onOpen={(route) => navigation.navigate(route)}
       onOpenNotifications={() => navigation.navigate('Notifications')}
     />
@@ -173,7 +173,7 @@ function MenuRoute({ navigation }: any) {
     <AdminMenuScreen
       available={AVAILABLE}
       onOpen={(route) => navigation.navigate(route)}
-      onTab={(tab) => navigation.navigate(tab === 'menu' ? 'Menu' : 'Home')}
+      onTab={(tab) => navigation.navigate(tab === 'menu' ? 'Menu' : tab === 'notifications' ? 'Notifications' : 'Home')}
     />
   );
 }

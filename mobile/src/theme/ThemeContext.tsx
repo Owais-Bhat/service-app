@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DARK_TOKENS, LIGHT_TOKENS, ThemeTokens } from './tokens';
-
-type ThemeMode = 'dark' | 'light';
+import { applyPalette, DARK_TOKENS, LIGHT_TOKENS, ThemeMode, ThemeTokens } from './tokens';
 
 interface ThemeState {
   mode: ThemeMode;
@@ -37,14 +35,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const value = useMemo<ThemeState>(
-    () => ({
-      mode,
-      theme: mode === 'dark' ? DARK_TOKENS : LIGHT_TOKENS,
-      toggleTheme,
-    }),
-    [mode],
-  );
+  const value = useMemo<ThemeState>(() => {
+    // Point brand/semantic/status colours at this mode before any child renders.
+    applyPalette(mode);
+    return { mode, theme: mode === 'dark' ? DARK_TOKENS : LIGHT_TOKENS, toggleTheme };
+  }, [mode]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

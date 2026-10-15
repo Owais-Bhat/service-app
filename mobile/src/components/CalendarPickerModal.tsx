@@ -104,7 +104,7 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
                   key={d}
                   disabled={disabled}
                   onPress={() => setSelectedDay(new Date(year, month, d))}
-                  style={[styles.dayCell, styles.dayTouchable, selected && { backgroundColor: brand.primary }]}
+                  style={[styles.dayCell, styles.dayTouchable, selected && { backgroundColor: brand.fill }]}
                 >
                   <Text style={[styles.dayText, { color: disabled ? theme.text3 : selected ? '#fff' : theme.text }, disabled && { opacity: 0.35 }]}>{d}</Text>
                 </Pressable>
@@ -132,7 +132,7 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
               <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
             </Pressable>
             <PressScale onPress={confirm} style={{ flex: 1 }}>
-              <View style={[styles.confirmBtn, { backgroundColor: brand.primary }]}>
+              <View style={[styles.confirmBtn, { backgroundColor: brand.fill }]}>
                 <Text style={styles.confirmBtnText}>Use This Time</Text>
               </View>
             </PressScale>

@@ -24,7 +24,7 @@ export default function GlassCard({ children, style, shadow = false }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden' },
+  wrapper: { borderRadius: radius.xl, borderWidth: 1, overflow: 'hidden' },
   shadow: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 14 },

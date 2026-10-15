@@ -128,7 +128,7 @@ export default function ProfileScreen({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { alignItems: 'center', marginBottom: spacing(6) },
-  avatar: { width: 68, height: 68, borderRadius: 20, backgroundColor: brand.primary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
+  avatar: { width: 68, height: 68, borderRadius: 20, backgroundColor: brand.fill, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(3) },
   avatarText: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 22, color: '#ffffff' },
   name: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 17 },
   caption: { ...typography.caption, marginTop: spacing(0.5) },

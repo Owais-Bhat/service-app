@@ -5,7 +5,6 @@ import StatusBadge from './StatusBadge';
 import { IconName } from '../../theme/icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand } from '../../theme/tokens';
 
 interface Props {
   title: string;
@@ -27,13 +26,13 @@ interface Props {
 // a value + badge column on the right, and an optional action footer.
 export default function ListRow({ title, subtitle, meta, value, valueColor, badge, icon, iconColor, onPress, footer }: Props) {
   const { theme } = useTheme();
-  const tint = iconColor || brand.primary;
+  const tint = iconColor || theme.ok;
   const body = (
     <>
       <View style={styles.top}>
         {icon ? (
           <View style={[styles.iconChip, { backgroundColor: tint + '22' }]}>
-            <Icon name={icon} size={18} color={tint} />
+            <Icon name={icon} size={20} color={tint} />
           </View>
         ) : null}
         <View style={styles.text}>
@@ -52,7 +51,7 @@ export default function ListRow({ title, subtitle, meta, value, valueColor, badg
     </>
   );
 
-  const cardStyle = [styles.card, { backgroundColor: theme.panel2, borderColor: theme.line }];
+  const cardStyle = [styles.card, { backgroundColor: theme.panel, borderColor: theme.border }];
   if (!onPress) return <View style={cardStyle}>{body}</View>;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [...cardStyle, pressed && styles.pressed]}>
@@ -62,15 +61,15 @@ export default function ListRow({ title, subtitle, meta, value, valueColor, badg
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginBottom: spacing(2.5) },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing(3.5), marginBottom: spacing(2.5) },
   pressed: { opacity: 0.75 },
   top: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
-  iconChip: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  iconChip: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1, minWidth: 0 },
-  title: { ...typography.body, fontFamily: 'Manrope_700Bold' },
-  subtitle: { ...typography.caption, marginTop: 2 },
+  title: { ...typography.rowTitle },
+  subtitle: { ...typography.supporting, marginTop: 2 },
   meta: { ...typography.caption, fontSize: 11, marginTop: 2 },
   right: { alignItems: 'flex-end', gap: spacing(1.5), maxWidth: '40%' },
-  value: { ...typography.body, fontFamily: 'Manrope_700Bold' },
+  value: { ...typography.monoId, fontSize: 15 },
   footer: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(3) },
 });

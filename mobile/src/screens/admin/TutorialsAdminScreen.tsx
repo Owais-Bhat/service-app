@@ -178,7 +178,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => open(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Upload tutorial">
+        <Pressable onPress={() => open(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Upload tutorial">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }
@@ -202,7 +202,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
                 {i.kind === 'image' ? <Image source={{ uri: resolveUploadUrl(i.url) }} style={styles.thumb} resizeMode="cover" /> : null}
                 <ListRow
                   icon="tutorial"
-                  iconColor={Number(i.active) === 1 ? semantic.success : '#6d8278'}
+                  iconColor={Number(i.active) === 1 ? semantic.success : brand.grey}
                   title={i.title}
                   subtitle={`${i.category || 'General'} · ${i.kind === 'video' ? 'Video' : 'Image'} · ${Number(i.required) !== 0 ? 'Required' : 'Optional'}`}
                   meta={
@@ -212,7 +212,7 @@ export default function TutorialsAdminScreen({ onBack }: Props) {
                   }
                   value={`${pct(i)}%`}
                   valueColor={pct(i) === 100 ? semantic.success : undefined}
-                  badge={Number(i.active) === 1 ? undefined : { label: 'Hidden', color: '#6d8278' }}
+                  badge={Number(i.active) === 1 ? undefined : { label: 'Hidden', color: brand.grey }}
                   footer={
                     <>
                       <ActionButton label={i.kind === 'video' ? 'Watch' : 'View'} tone="neutral" onPress={() => Linking.openURL(resolveUploadUrl(i.url))} />

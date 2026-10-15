@@ -59,7 +59,7 @@ export default function ClockInGateModal() {
           </Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <PressScale onPress={handleClockIn} disabled={clocking} style={{ width: '100%' }}>
-            <View style={[styles.clockBtn, { backgroundColor: brand.primary, opacity: clocking ? 0.7 : 1 }]}>
+            <View style={[styles.clockBtn, { backgroundColor: brand.fill, opacity: clocking ? 0.7 : 1 }]}>
               {clocking ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (

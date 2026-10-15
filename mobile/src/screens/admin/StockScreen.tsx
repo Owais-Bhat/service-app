@@ -41,7 +41,7 @@ interface Props {
 type Tab = 'onhand' | 'locations' | 'serials' | 'count';
 type Mode = 'give' | 'takeback' | 'transfer';
 
-const SERIAL_COLOR: Record<string, string> = { in_stock: semantic.success, with_technician: semantic.warning, installed: '#6d8278' };
+const SERIAL_COLOR: Record<string, string> = { in_stock: semantic.success, with_technician: semantic.warning, installed: brand.grey };
 
 function Choice<T extends string>({ items, value, onChange }: { items: { key: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   const { theme } = useTheme();

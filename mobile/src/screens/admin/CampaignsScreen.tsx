@@ -50,22 +50,22 @@ type Filter = 'all' | 'running' | 'scheduled' | 'done' | 'draft';
 type View_ = 'campaigns' | 'optouts';
 
 const COLOR: Record<string, string> = {
-  draft: '#6d8278',
+  draft: brand.grey,
   scheduled: semantic.info,
   sending: semantic.warning,
   running: semantic.warning,
   paused: semantic.danger,
   completed: semantic.success,
   done: semantic.success,
-  cancelled: '#6d8278',
+  cancelled: brand.grey,
   standing: semantic.success,
 };
 const VAR_LABEL: Record<string, string> = { name: "Customer's name", business: 'Business name', text: 'Fixed text' };
 const RECIPIENT: Record<string, [string, string]> = {
   sent: [semantic.success, 'Accepted'],
   failed: [semantic.danger, 'Failed'],
-  queued: ['#6d8278', 'Waiting'],
-  skipped: ['#6d8278', 'Skipped'],
+  queued: [brand.grey, 'Waiting'],
+  skipped: [brand.grey, 'Skipped'],
 };
 const DATETIME_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -427,7 +427,7 @@ export default function CampaignsScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New campaign">
+        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New campaign">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }
@@ -562,7 +562,7 @@ export default function CampaignsScreen({ onBack }: Props) {
             {d.scheduled_at ? <ListRow title="Starts" subtitle={dateTime(d.scheduled_at)} meta={d.finished_at ? `Finished ${dateTime(d.finished_at)}` : undefined} /> : null}
             {(d.recipients || []).length ? <SectionLabel>Recipients</SectionLabel> : null}
             {(d.recipients || []).slice(0, 100).map((r, i) => {
-              const [color, label] = RECIPIENT[r.status] || ['#6d8278', r.status];
+              const [color, label] = RECIPIENT[r.status] || [brand.grey, r.status];
               return (
                 <ListRow
                   key={`${r.phone}-${i}`}

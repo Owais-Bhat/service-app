@@ -214,7 +214,7 @@ export default function TutorialsScreen({ onBack }: Props) {
                           <Text style={styles.typeBadgeText}>{isVideo ? 'Video' : 'Image'}</Text>
                         </View>
                         {done ? (
-                          <View style={[styles.doneTick, { backgroundColor: brand.primary }]}>
+                          <View style={[styles.doneTick, { backgroundColor: brand.fill }]}>
                             <Icon name="check" size={13} color="#fff" />
                           </View>
                         ) : null}
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing(4),
-    backgroundColor: brand.primary,
+    backgroundColor: brand.fill,
     borderRadius: 20,
     padding: spacing(4),
     marginBottom: spacing(4),
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10, color: '#fff' },
   doneTick: { position: 'absolute', top: spacing(2.5), right: spacing(2.5), width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   watchTrack: { height: 3, backgroundColor: 'rgba(21,160,90,0.18)' },
-  watchFill: { height: 3, backgroundColor: brand.primary },
+  watchFill: { height: 3, backgroundColor: brand.fill },
   cardBody: { padding: spacing(4) },
   cardTitle: { fontFamily: 'Manrope_700Bold', fontSize: 15, marginBottom: spacing(1) },
   actionRow: { flexDirection: 'row', gap: spacing(2), marginTop: spacing(3) },

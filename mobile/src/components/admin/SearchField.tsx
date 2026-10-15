@@ -13,8 +13,8 @@ interface Props {
 export default function SearchField({ value, onChangeText, placeholder = 'Search' }: Props) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.wrap, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-      <Icon name="search" size={16} color={theme.text3} />
+    <View style={[styles.wrap, { borderColor: theme.border, backgroundColor: theme.panel }]}>
+      <Icon name="search" size={18} color={theme.text2} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -35,6 +35,6 @@ export default function SearchField({ value, onChangeText, placeholder = 'Search
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 44 },
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 48 },
   input: { ...typography.body, flex: 1, paddingVertical: 0 },
 });

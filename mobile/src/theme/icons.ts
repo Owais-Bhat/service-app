@@ -75,6 +75,13 @@ export const ICONS = {
   add: { outline: 'add-outline', filled: 'add' },
   storefront: { outline: 'storefront-outline', filled: 'storefront' },
   sparkles: { outline: 'sparkles-outline', filled: 'sparkles' },
+  // Status badge glyphs (design Components · Status badges).
+  dot: { outline: 'ellipse', filled: 'ellipse' },
+  'person-circle': { outline: 'person-circle-outline', filled: 'person-circle' },
+  hourglass: { outline: 'hourglass-outline', filled: 'hourglass' },
+  'check-done': { outline: 'checkmark-done', filled: 'checkmark-done' },
+  timer: { outline: 'timer-outline', filled: 'timer' },
+  'remove-circle': { outline: 'remove-circle-outline', filled: 'remove-circle' },
 } as const;
 
 export type IconName = keyof typeof ICONS;

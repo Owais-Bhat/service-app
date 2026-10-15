@@ -14,7 +14,7 @@ interface Props {
 // role-sheet/sidebar-drawer look. Only MoreSheet uses this now — the tab
 // bar switched to an opaque neumorphic chrome (see GlassTabBar), matching
 // NEST's own distinction between the two.
-export default function GlassSurface({ children, style, borderRadius = radius.lg }: Props) {
+export default function GlassSurface({ children, style, borderRadius = radius.xl }: Props) {
   const { theme, mode } = useTheme();
   return (
     <View style={[styles.wrapper, { borderRadius, borderColor: theme.border }, style]}>

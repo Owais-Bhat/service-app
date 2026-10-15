@@ -124,7 +124,7 @@ export default function PartiesScreen({ onBack }: Props) {
       loading={data.loading && !data.data}
       error={!data.data ? data.error : null}
       headerRight={
-        <Pressable onPress={() => setEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New party">
+        <Pressable onPress={() => setEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New party">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

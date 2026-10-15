@@ -130,7 +130,7 @@ export default function UsersScreen({ onBack }: Props) {
       loading={users.loading}
       error={users.error}
       headerRight={
-        <Pressable onPress={() => setEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New user">
+        <Pressable onPress={() => setEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New user">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

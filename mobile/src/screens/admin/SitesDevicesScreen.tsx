@@ -245,7 +245,7 @@ export default function SitesDevicesScreen({ onBack }: Props) {
       loading={data.loading}
       error={data.error}
       headerRight={
-        <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add device">
+        <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add device">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }
@@ -287,7 +287,7 @@ export default function SitesDevicesScreen({ onBack }: Props) {
             title={x.party_name || 'Customer'}
             subtitle={`${x.category_label}${x.quantity > 1 ? ` ×${x.quantity}` : ''} · ${[x.brand, x.model].filter(Boolean).join(' ') || 'No model'}`}
             meta={`${x.site_name ? `${x.site_name} · ` : ''}${x.serial_no ? `S/N ${x.serial_no} · ` : ''}${x.warranty_until ? `warranty till ${shortDate(x.warranty_until)}` : 'no warranty date'}`}
-            badge={x.status === 'faulty' ? { label: 'Faulty', color: semantic.danger } : w ?? { label: humanize(x.warranty_state), color: '#6d8278' }}
+            badge={x.status === 'faulty' ? { label: 'Faulty', color: semantic.danger } : w ?? { label: humanize(x.warranty_state), color: brand.grey }}
             onPress={() => open(x.id)}
           />
         );

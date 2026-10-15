@@ -1,8 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import PressScale from '../PressScale';
+import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme';
-import { brand, semantic } from '../../theme/tokens';
+import { brand } from '../../theme/tokens';
 
 type Tone = 'primary' | 'success' | 'danger' | 'neutral';
 
@@ -16,26 +17,35 @@ interface Props {
   grow?: boolean;
 }
 
-const TONE: Record<Tone, string> = {
-  primary: brand.primary,
-  success: semantic.success,
-  danger: semantic.danger,
-  neutral: '#6d8278',
-};
-
-// Compact outlined action used in list-row footers (Approve / Reject / Mark paid).
+// List-row and form action. Design buttons: primary/success are filled
+// Primary 600, danger is filled red, neutral is the bordered secondary.
+// 48 dp touch height, r14, Manrope 700.
 export default function ActionButton({ label, onPress, tone = 'primary', busy, disabled, grow = true }: Props) {
-  const color = TONE[tone];
+  const { theme } = useTheme();
+  const filled = tone !== 'neutral';
+  const bg = tone === 'danger' ? '#c42c47' : tone === 'neutral' ? theme.panel : brand.fill;
+  const fg = filled ? '#ffffff' : theme.text;
+  const off = !!disabled && !busy;
   return (
     <PressScale onPress={onPress} disabled={busy || disabled} style={grow ? styles.grow : undefined}>
-      <Text style={[styles.btn, { color, borderColor: color, backgroundColor: color + '1f' }]}>
-        {busy ? '…' : label}
-      </Text>
+      <View
+        style={[
+          styles.btn,
+          { backgroundColor: off ? theme.panel2 : bg, borderColor: filled ? 'transparent' : theme.border },
+        ]}
+      >
+        {busy ? (
+          <ActivityIndicator size="small" color={fg} />
+        ) : (
+          <Text style={[styles.label, { color: off ? theme.text3 : fg }]} numberOfLines={1}>{label}</Text>
+        )}
+      </View>
     </PressScale>
   );
 }
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
-  btn: { ...typography.caption, fontFamily: 'Manrope_700Bold', textAlign: 'center', borderWidth: 1, borderRadius: radius.md, paddingVertical: spacing(2.5), overflow: 'hidden' },
+  btn: { minHeight: 48, borderWidth: 1, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing(3) },
+  label: { ...typography.button, fontSize: 14, textAlign: 'center' },
 });

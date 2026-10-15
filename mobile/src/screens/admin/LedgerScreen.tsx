@@ -183,7 +183,7 @@ export default function LedgerScreen({ onBack }: Props) {
               setEntering(true);
             }}
             hitSlop={8}
-            style={[styles.add, { backgroundColor: brand.primary }]}
+            style={[styles.add, { backgroundColor: brand.fill }]}
             accessibilityLabel="Add"
           >
             <Icon name="add" size={20} color="#fff" />
@@ -262,7 +262,7 @@ export default function LedgerScreen({ onBack }: Props) {
               title={`${a.code} · ${a.name}`}
               subtitle={`${humanize(a.type)}${a.subtype ? ` · ${humanize(a.subtype)}` : ''}`}
               meta={Number(a.opening_balance_paise) ? `Opening ${inr(rupees(a.opening_balance_paise))}` : undefined}
-              badge={Number(a.is_system) === 1 ? { label: 'System', color: '#6d8278' } : Number(a.active) !== 1 ? { label: 'Inactive', color: semantic.danger } : undefined}
+              badge={Number(a.is_system) === 1 ? { label: 'System', color: brand.grey } : Number(a.active) !== 1 ? { label: 'Inactive', color: semantic.danger } : undefined}
               onPress={() => openAccount(a)}
             />
           ))}

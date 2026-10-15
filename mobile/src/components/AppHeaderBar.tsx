@@ -50,13 +50,12 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
   return (
     <View
       onLayout={(e) => onLayout?.(e.nativeEvent.layout.height)}
-      style={[styles.wrap, { paddingTop: insets.top + spacing(3), borderColor: theme.line, backgroundColor: theme.bg }]}
+      style={[styles.wrap, { paddingTop: insets.top + (onBack ? 0 : spacing(2)), borderColor: theme.line, backgroundColor: theme.surfaceStrong }]}
     >
-      {onBack ? <BackLink onPress={onBack} /> : null}
-
       <View style={styles.topRow}>
+        {onBack ? <BackLink onPress={onBack} /> : null}
         <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+          <Text style={[onBack ? typography.heading : typography.title, { color: theme.text }]}>{title}</Text>
           {subtitle ? <Text style={[styles.caption, { color: theme.text3 }]}>{subtitle}</Text> : null}
         </View>
         <View style={styles.actions}>
@@ -110,10 +109,9 @@ export default function AppHeaderBar({ title, subtitle, onBack, onRefresh, refre
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, borderBottomWidth: 1, paddingHorizontal: spacing(4), paddingBottom: spacing(3) },
-  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2) },
-  title: { ...typography.title, fontSize: 22 },
-  caption: { ...typography.caption },
+  wrap: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, borderBottomWidth: 1, paddingHorizontal: spacing(4), paddingBottom: spacing(2.5) },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), minHeight: 44 },
+  caption: { ...typography.supporting, fontSize: 12, lineHeight: 16 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginTop: spacing(2.5), flexWrap: 'wrap' },
   statusItem: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.25) },

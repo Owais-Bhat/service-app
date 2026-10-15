@@ -22,7 +22,7 @@ const STATUS_COLOR: Record<string, string> = {
   assigned: '#7c5cfc',
   in_progress: semantic.info,
   completed: semantic.success,
-  cancelled: '#6d8278',
+  cancelled: brand.grey,
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -97,7 +97,7 @@ export default function CalendarScreen({ onBack }: Props) {
                 <View
                   style={[
                     styles.day,
-                    on && { backgroundColor: brand.primary },
+                    on && { backgroundColor: brand.fill },
                     !on && k === today && { borderColor: brand.primary, borderWidth: 1 },
                   ]}
                 >

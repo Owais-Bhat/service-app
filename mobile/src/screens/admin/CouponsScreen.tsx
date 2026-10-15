@@ -22,7 +22,7 @@ const valueText = (c: Coupon) =>
   c.type === 'percent' ? `${Number(c.value)}% off${c.max_discount ? ` (max ${inr(c.max_discount)})` : ''}` : `${inr(c.value)} off`;
 
 function stateOf(c: Coupon): { label: string; color: string } {
-  if (Number(c.active) !== 1) return { label: 'Hidden', color: '#6d8278' };
+  if (Number(c.active) !== 1) return { label: 'Hidden', color: brand.grey };
   if (c.expires_at && new Date(c.expires_at).getTime() < Date.now()) return { label: 'Expired', color: semantic.danger };
   if (c.usage_limit != null && Number(c.used_count) >= Number(c.usage_limit)) return { label: 'Used up', color: semantic.warning };
   return { label: 'Active', color: semantic.success };
@@ -128,7 +128,7 @@ export default function CouponsScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add coupon">
+        <Pressable onPress={() => open('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add coupon">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

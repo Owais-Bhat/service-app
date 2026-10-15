@@ -233,7 +233,7 @@ export default function ItemsScreen({ onBack }: Props) {
           >
             <Icon name="check-circle" size={18} color={selecting ? brand.primary : theme.text2} />
           </Pressable>
-          <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New item">
+          <Pressable onPress={() => openEditor('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New item">
             <Icon name="add" size={20} color="#fff" />
           </Pressable>
         </>
@@ -300,7 +300,7 @@ export default function ItemsScreen({ onBack }: Props) {
                 value={inr(i.selling_rate)}
                 badge={{
                   label: Number(i.active) !== 1 ? 'Hidden' : `${Number(i.quantity) || 0} ${i.unit || 'pcs'}${low ? ' · low' : ''}`,
-                  color: Number(i.active) !== 1 ? '#6d8278' : low ? semantic.danger : semantic.success,
+                  color: Number(i.active) !== 1 ? brand.grey : low ? semantic.danger : semantic.success,
                 }}
                 onPress={() => (selecting ? toggle(i.id) : openEditor(i))}
                 footer={

@@ -47,9 +47,9 @@ interface Props {
 // see docs/superpowers/specs/2026-08-19-nest-profile.md §3. "More" is
 // gone: Profile is a real tab now, not a placeholder holding area.
 export const EMPLOYEE_TABS: TabItem[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { key: 'jobtools', label: 'Job Tools', icon: 'wrench' },
+  { key: 'dashboard', label: 'Home', icon: 'home' },
   { key: 'attendance', label: 'Attendance', icon: 'clock' },
+  { key: 'jobtools', label: 'Job Tools', icon: 'wrench' },
   { key: 'earnings', label: 'Earnings', icon: 'wallet' },
   { key: 'profile', label: 'Profile', icon: 'user' },
 ];
@@ -82,7 +82,7 @@ function NoticeDetail({ notice, onDismiss }: { notice: Notice; onDismiss: () => 
 
           <Pressable
             onPress={onDismiss}
-            style={({ pressed }) => [styles.dismissBtn, { backgroundColor: brand.primary }, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.dismissBtn, { backgroundColor: brand.fill }, pressed && styles.pressed]}
           >
             <Text style={styles.dismissBtnText}>Dismiss</Text>
           </Pressable>

@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(21,160,90,0.14)',
     marginBottom: spacing(4),
   },
-  badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: brand.primary },
+  badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: brand.fill },
   badgeText: { ...typography.caption, color: brand.primary, fontSize: 12 },
   headline: { ...typography.title, marginBottom: spacing(3) },
   gradientHeadline: { color: brand.primary },

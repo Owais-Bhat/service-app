@@ -76,7 +76,7 @@ export default function ServiceLogScreen({ onBack }: Props) {
       loading={logs.loading}
       error={logs.error}
       headerRight={
-        <Pressable onPress={() => setEditing('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="New entry">
+        <Pressable onPress={() => setEditing('new')} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="New entry">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

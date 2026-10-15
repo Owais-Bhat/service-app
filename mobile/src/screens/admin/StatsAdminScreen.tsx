@@ -170,7 +170,7 @@ export default function StatsAdminScreen({ onBack }: Props) {
             <View key={c.key} style={styles.catRow}>
               <Text style={[styles.catName, { color: theme.text }]}>{c.key}</Text>
               <View style={[styles.catTrack, { backgroundColor: theme.line }]}>
-                <View style={[styles.catFill, { width: `${c.pct}%`, backgroundColor: brand.primary }]} />
+                <View style={[styles.catFill, { width: `${c.pct}%`, backgroundColor: brand.fill }]} />
               </View>
               <Text style={[styles.catN, { color: theme.text2 }]}>{c.n} · {c.pct}%</Text>
             </View>

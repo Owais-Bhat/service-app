@@ -4,7 +4,7 @@ import ActionButton from './admin/ActionButton';
 import { api } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { semantic } from '../theme/tokens';
+import { semantic, brand } from '../theme/tokens';
 import { shortDate } from '../utils/format';
 
 interface Device {
@@ -39,7 +39,7 @@ const WARRANTY: Record<string, [string, string]> = {
   in_warranty: [semantic.success, 'In warranty'],
   ending: [semantic.warning, 'Ending soon'],
   expired: [semantic.danger, 'Expired'],
-  none: ['#6d8278', 'Not recorded'],
+  none: [brand.grey, 'Not recorded'],
 };
 
 const warrantyText = (d: Device) => {

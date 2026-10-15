@@ -6,7 +6,7 @@ import ListRow from '../../components/admin/ListRow';
 import ActionButton from '../../components/admin/ActionButton';
 import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchTracker, resendAssignment } from '../../api/adminManage';
-import { semantic } from '../../theme/tokens';
+import { semantic, brand } from '../../theme/tokens';
 import { dateTime } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -17,7 +17,7 @@ interface Props {
 type Filter = 'not_seen' | 'not_accepted' | 'all';
 
 const WA: Record<string, { label: string; color: string }> = {
-  not_sent: { label: 'Not sent', color: '#6d8278' },
+  not_sent: { label: 'Not sent', color: brand.grey },
   sent: { label: 'Sent', color: semantic.warning },
   delivered: { label: 'Delivered', color: semantic.warning },
   read: { label: 'Read', color: semantic.success },
@@ -78,7 +78,7 @@ export default function AssignmentTrackerScreen({ onBack }: Props) {
     >
       {rows.length === 0 ? <EmptyNote text={filter === 'not_seen' ? 'Everyone has seen the jobs they were given' : 'Nothing here'} icon="check-circle" /> : null}
       {rows.map((r) => {
-        const wa = WA[r.whatsapp.state] ?? { label: r.whatsapp.state, color: '#6d8278' };
+        const wa = WA[r.whatsapp.state] ?? { label: r.whatsapp.state, color: brand.grey };
         return (
           <ListRow
             key={r.id}

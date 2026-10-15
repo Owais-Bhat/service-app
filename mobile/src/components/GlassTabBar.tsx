@@ -2,16 +2,14 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
+import { spacing } from '../theme';
 import Icon from './Icon';
 import { IconName } from '../theme/icons';
 
 export interface TabItem {
   key: string;
   label: string;
-  // Optional so screens outside this phase's scope (e.g. AdminDashboardScreen)
-  // keep their current generic-dot look unchanged.
+  // Optional so screens outside this phase's scope keep a generic-dot look.
   icon?: IconName;
 }
 
@@ -19,54 +17,59 @@ interface Props {
   items: TabItem[];
   activeKey: string;
   onSelect: (key: string) => void;
+  /** Admin portal uses the tighter 3-tab bar (r20); employees the 5-tab (r26). */
+  variant?: 'employee' | 'admin';
 }
 
-// NEST's tab bar is opaque (background: var(--bg), no border, no blur) with
-// a neumorphic drop shadow — a different material from the glass surfaces.
-// RN can't do the dual light+dark shadow or a true inset shadow on one
-// View, so this approximates: one outer drop shadow, and a solid two-tone
-// fill instead of an inset shadow for the active icon (design spec §5.3).
-export default function GlassTabBar({ items, activeKey, onSelect }: Props) {
+// Design navigation: a floating bar on --sfs with a hairline border and the
+// one allowed shadow. Each tab is 56 dp; the selected one gets the soft green
+// pill, the filled icon and a bold label. Unselected tabs use outline icons
+// and --t2.
+export default function GlassTabBar({ items, activeKey, onSelect, variant = 'employee' }: Props) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const admin = variant === 'admin';
   return (
     <View
       style={[
         styles.wrapper,
         {
-          bottom: spacing(3.5) + insets.bottom,
-          backgroundColor: theme.bg,
-          shadowColor: theme.neuDark,
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 1,
-          shadowRadius: 24,
-          elevation: 10,
+          bottom: spacing(3) + insets.bottom,
+          backgroundColor: theme.surfaceStrong,
+          borderColor: theme.border,
+          borderRadius: admin ? 20 : 26,
+          shadowColor: '#000',
+          gap: admin ? 6 : 0,
         },
       ]}
     >
-      <View style={styles.row}>
-        {items.map((item) => {
-          const active = item.key === activeKey;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => onSelect(item.key)}
-              style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
-              hitSlop={8}
-            >
-              <View style={[styles.iconWrap, active && { backgroundColor: theme.neuDark }]}>
-                {item.icon ? (
-                  <Icon name={item.icon} size={20} color={active ? brand.primary : theme.text3} />
-                ) : (
-                  <View style={[styles.dot, { borderColor: active ? brand.primary : theme.text3 }]} />
-                )}
-              </View>
-              <Text style={[styles.label, { color: active ? brand.primary : theme.text3 }]}>{item.label}</Text>
-              <View style={[styles.indicator, active && { backgroundColor: brand.primary }]} />
-            </Pressable>
-          );
-        })}
-      </View>
+      {items.map((item) => {
+        const active = item.key === activeKey;
+        const color = active ? theme.accent : theme.text2;
+        return (
+          <Pressable
+            key={item.key}
+            onPress={() => onSelect(item.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={item.label}
+            style={({ pressed }) => [
+              styles.tab,
+              { borderRadius: admin ? 18 : 20, backgroundColor: active ? theme.okS : 'transparent' },
+              pressed && styles.tabPressed,
+            ]}
+          >
+            {item.icon ? (
+              <Icon name={item.icon} size={24} color={color} filled={active} />
+            ) : (
+              <View style={[styles.dot, { borderColor: color }]} />
+            )}
+            <Text style={[styles.label, { color, fontFamily: active ? 'Manrope_700Bold' : 'Manrope_600SemiBold' }]} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -74,21 +77,18 @@ export default function GlassTabBar({ items, activeKey, onSelect }: Props) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    left: spacing(3),
-    right: spacing(3),
-    borderRadius: radius.xl,
-  },
-  row: {
+    left: spacing(4),
+    right: spacing(4),
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: spacing(3),
-    paddingHorizontal: spacing(1.5),
+    padding: 6,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 8,
   },
-  tab: { alignItems: 'center', gap: 6, flex: 1 },
+  tab: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', gap: 2 },
   tabPressed: { opacity: 0.7 },
-  iconWrap: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
-  label: { ...typography.caption, fontSize: 11 },
-  indicator: { width: 16, height: 3, borderRadius: 2, marginTop: 2, backgroundColor: 'transparent' },
+  dot: { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
+  label: { fontSize: 11, lineHeight: 14 },
 });

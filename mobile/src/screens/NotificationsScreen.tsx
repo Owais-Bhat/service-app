@@ -104,7 +104,7 @@ function NotificationDetail({ item, onDismiss }: { item: NotificationItem; onDis
 
           <Pressable
             onPress={onDismiss}
-            style={({ pressed }) => [styles.dismissBtn, { backgroundColor: brand.primary }, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.dismissBtn, { backgroundColor: brand.fill }, pressed && styles.pressed]}
           >
             <Text style={styles.dismissBtnText}>Dismiss</Text>
           </Pressable>
@@ -204,7 +204,7 @@ export default function NotificationsScreen({ onBack }: Props) {
           {FILTERS.map((f) => {
             const active = filter === f.key;
             return (
-              <Pressable key={f.key} onPress={() => setFilter(f.key)} style={[styles.filterPill, active && { backgroundColor: brand.primary }]}>
+              <Pressable key={f.key} onPress={() => setFilter(f.key)} style={[styles.filterPill, active && { backgroundColor: brand.fill }]}>
                 <Text style={[styles.filterPillText, { color: active ? '#ffffff' : theme.text2 }]}>{f.label}</Text>
                 {filterCounts[f.key] > 0 && (
                   <View style={[styles.filterBadge, { backgroundColor: active ? 'rgba(255,255,255,0.28)' : theme.surfaceStrong }]}>
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   rowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(1.5) },
   rowDot: { width: 6, height: 6, borderRadius: 3 },
   rowTag: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
-  unreadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: brand.primary },
+  unreadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: brand.fill },
   name: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(6) },
   detailCard: { width: '100%', maxWidth: 400, padding: spacing(5) },

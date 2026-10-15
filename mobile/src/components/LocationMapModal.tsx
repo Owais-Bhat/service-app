@@ -83,7 +83,7 @@ L.marker([${lat}, ${lng}]).addTo(map);
             )}
 
             <PressScale onPress={openGoogleMaps}>
-              <View style={[styles.gmapsBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
+              <View style={[styles.gmapsBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
                 <Icon name="pin" size={16} color="#fff" />
                 <Text style={styles.gmapsBtnText}>Open in Google Maps</Text>
               </View>

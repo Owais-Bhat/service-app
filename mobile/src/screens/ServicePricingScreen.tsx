@@ -208,7 +208,7 @@ export default function ServicePricingScreen({ onBack }: Props) {
       error={data.error}
       headerRight={
         canManage ? (
-          <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add service">
+          <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add service">
             <Icon name="add" size={20} color="#fff" />
           </Pressable>
         ) : undefined

@@ -8,14 +8,14 @@ interface Props {
   style?: ViewStyle;
 }
 
-// Maps to NEST's `--panel2` material: flat, unblurred — used for list rows
-// and secondary info blocks. GlassCard (blurred, `--surface`) is the other
-// tier; NEST consistently uses both, unlike the single-tier Aurora system.
+// The design's solid panel (--pn): flat, unblurred, r18 — for dense lists,
+// forms and secondary info blocks. Glass (GlassCard) is limited to headers,
+// sheets, tab bars and hero cards, and never sits on glass.
 export default function Panel({ children, style }: Props) {
   const { theme } = useTheme();
-  return <View style={[styles.wrapper, { backgroundColor: theme.panel2, borderColor: theme.line }, style]}>{children}</View>;
+  return <View style={[styles.wrapper, { backgroundColor: theme.panel, borderColor: theme.border }, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
-  wrapper: { borderRadius: radius.md, borderWidth: 1, padding: spacing(4) },
+  wrapper: { borderRadius: radius.lg, borderWidth: 1, padding: spacing(3.5) },
 });

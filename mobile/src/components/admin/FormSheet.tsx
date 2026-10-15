@@ -26,8 +26,8 @@ export default function FormSheet({ visible, title, subtitle, onClose, children,
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { backgroundColor: theme.surfaceStrong, borderColor: theme.border, paddingBottom: insets.bottom + spacing(3) }]}>
-          <View style={[styles.grabber, { backgroundColor: theme.line }]} />
+        <View style={[styles.sheet, { backgroundColor: theme.panel, borderColor: theme.border, paddingBottom: insets.bottom + spacing(3) }]}>
+          <View style={[styles.grabber, { backgroundColor: theme.border }]} />
           <View style={styles.head}>
             <View style={styles.headText}>
               <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>{title}</Text>
@@ -55,8 +55,8 @@ export default function FormSheet({ visible, title, subtitle, onClose, children,
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { maxHeight: '88%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, borderWidth: 1, paddingTop: spacing(2), paddingHorizontal: spacing(4) },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginBottom: spacing(3) },
+  sheet: { maxHeight: '88%', borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, borderWidth: 1, paddingTop: spacing(2.5), paddingHorizontal: spacing(5) },
+  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, marginBottom: spacing(3.5) },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(3) },
   headText: { flex: 1, minWidth: 0 },
   title: { ...typography.heading },

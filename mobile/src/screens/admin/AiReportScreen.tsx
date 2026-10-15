@@ -8,7 +8,7 @@ import EmptyNote from '../../components/admin/EmptyNote';
 import { fetchAiReport } from '../../api/ai';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme';
-import { semantic } from '../../theme/tokens';
+import { semantic, brand } from '../../theme/tokens';
 import { inr } from '../../utils/format';
 import { useLoader } from '../../utils/useLoader';
 
@@ -69,7 +69,7 @@ export default function AiReportScreen({ onBack }: Props) {
               title={e.name}
               subtitle={`${e.gig ? 'Gig' : 'Fixed'} · ${e.assigned} assigned · ${e.resolved} resolved`}
               meta={e.issues ? `${e.issues} issue${e.issues === 1 ? '' : 's'} not resolved` : undefined}
-              badge={e.online ? { label: 'Online', color: semantic.success } : { label: 'Offline', color: '#6d8278' }}
+              badge={e.online ? { label: 'Online', color: semantic.success } : { label: 'Offline', color: brand.grey }}
             />
           ))}
         </>

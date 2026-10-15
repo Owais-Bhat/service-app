@@ -357,7 +357,7 @@ export default function EstimatorScreen({ onBack }: Props) {
             )}
 
             <PressScale onPress={() => setShowPicker(true)} style={{ marginTop: spacing(1) }}>
-              <View style={[styles.addServiceBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
+              <View style={[styles.addServiceBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
                 <Icon name="edit" size={14} color="#fff" />
                 <Text style={styles.addServiceBtnText}>Add Service</Text>
               </View>

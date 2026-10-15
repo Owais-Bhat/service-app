@@ -116,7 +116,7 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
 
                   {!result.passed ? (
                     <PressScale onPress={retake} style={{ marginTop: spacing(4) }}>
-                      <View style={[styles.submitBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
+                      <View style={[styles.submitBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
                         <Icon name="refresh" size={15} color="#fff" />
                         <Text style={styles.submitBtnText}>Retake Quiz</Text>
                       </View>

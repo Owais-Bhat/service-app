@@ -122,7 +122,7 @@ export default function AdminServiceRequestsScreen({ onBack, onRegister }: Props
 
         {onRegister ? (
           <PressScale onPress={onRegister} style={{ marginBottom: spacing(3) }}>
-            <View style={[styles.registerBtn, { backgroundColor: brand.primary }]}>
+            <View style={[styles.registerBtn, { backgroundColor: brand.fill }]}>
               <Icon name="add" size={18} color="#fff" />
               <Text style={styles.registerText}>Register request for a customer</Text>
             </View>

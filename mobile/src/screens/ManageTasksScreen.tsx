@@ -298,7 +298,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
                             onPress={() => (clockedIn ? setStatusItem(item) : !attendance?.clock_in && showGate())}
                             style={{ flex: 1, minWidth: 130 }}
                           >
-                            <View style={[styles.actionBtn, { backgroundColor: brand.primary, shadowColor: brand.primary }, !clockedIn && styles.actionBtnDisabled]}>
+                            <View style={[styles.actionBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }, !clockedIn && styles.actionBtnDisabled]}>
                               <Icon name={clockedIn ? 'edit' : 'lock'} size={15} color="#fff" />
                               <Text style={styles.actionBtnTextFilled}>Update Status</Text>
                             </View>
@@ -320,7 +320,7 @@ export default function ManageTasksScreen({ onBack }: Props) {
                         ) : null}
                         {item.location ? (
                           <PressScale onPress={() => setMapItem(item)}>
-                            <View style={[styles.iconAction, styles.iconActionShadow, { backgroundColor: brand.primary, shadowColor: brand.primary }]}>
+                            <View style={[styles.iconAction, styles.iconActionShadow, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
                               <Icon name="pin" size={16} color="#fff" />
                             </View>
                           </PressScale>

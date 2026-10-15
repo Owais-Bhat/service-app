@@ -2,7 +2,6 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
 import Icon from './Icon';
 import { IconName } from '../theme/icons';
 
@@ -25,7 +24,7 @@ interface Props {
 export default function SegmentedTabs({ items, activeKey, onSelect }: Props) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.row, { borderColor: theme.border, backgroundColor: theme.panel2 }]}>
+    <View style={[styles.row, { backgroundColor: theme.panel2 }]}>
       {items.map((item) => {
         const active = item.key === activeKey;
         return (
@@ -34,13 +33,13 @@ export default function SegmentedTabs({ items, activeKey, onSelect }: Props) {
             onPress={() => onSelect(item.key)}
             style={({ pressed }) => [
               styles.tab,
-              active && { backgroundColor: theme.surfaceStrong },
+              active && { backgroundColor: theme.panel, borderColor: theme.border },
               pressed && styles.pressed,
             ]}
             hitSlop={4}
           >
-            <Icon name={item.icon} size={15} color={active ? brand.primary : theme.text3} />
-            <Text style={[styles.label, { color: active ? brand.primary : theme.text3 }]} numberOfLines={1}>
+            <Icon name={item.icon} size={16} color={active ? theme.accent : theme.text2} filled={active} />
+            <Text style={[styles.label, { color: active ? theme.text : theme.text2, fontFamily: active ? 'Manrope_700Bold' : 'Manrope_600SemiBold' }]} numberOfLines={1}>
               {item.label}
             </Text>
           </Pressable>
@@ -54,10 +53,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: spacing(1),
-    gap: spacing(1),
+    borderRadius: 16,
+    padding: 4,
+    gap: 4,
   },
   tab: {
     flexBasis: '47%',
@@ -66,9 +64,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing(1.5),
-    paddingVertical: spacing(2.5),
+    minHeight: 36,
+    paddingVertical: spacing(1.5),
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   pressed: { opacity: 0.7 },
-  label: { ...typography.caption, fontSize: 11 },
+  label: { ...typography.caption, fontSize: 13 },
 });

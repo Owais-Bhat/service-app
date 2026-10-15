@@ -192,7 +192,7 @@ export default function AdminInstallationsScreen({ onBack }: Props) {
       loading={loading}
       error={error}
       headerRight={
-        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add installation">
+        <Pressable onPress={() => openEditor(null)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add installation">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

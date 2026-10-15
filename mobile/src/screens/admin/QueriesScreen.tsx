@@ -94,7 +94,7 @@ export default function QueriesScreen({ onBack }: Props) {
       loading={list.loading}
       error={list.error}
       headerRight={
-        <Pressable onPress={() => setAdding(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.primary }]} accessibilityLabel="Add query">
+        <Pressable onPress={() => setAdding(true)} hitSlop={8} style={[styles.add, { backgroundColor: brand.fill }]} accessibilityLabel="Add query">
           <Icon name="add" size={20} color="#fff" />
         </Pressable>
       }

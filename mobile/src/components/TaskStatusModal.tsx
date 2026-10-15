@@ -44,7 +44,7 @@ const OPTION_ACCENT: Record<StatusOption | 'device', string> = {
   resolved: brand.primary,
   reschedule: '#2e9bff',
   issue_not_resolved: semantic.danger,
-  case_closed: '#6d8278',
+  case_closed: brand.grey,
   foc: brand.primary,
   device: '#7c5cfc',
 };
@@ -625,7 +625,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                       <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
                     </Pressable>
                     <PressScale onPress={handleMarkDeviceTaken} disabled={saving} style={{ flex: 1 }}>
-                      <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving ? 0.7 : 1 }]}>
+                      <View style={[styles.saveBtn, { backgroundColor: brand.fill, opacity: saving ? 0.7 : 1 }]}>
                         <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Mark Device Taken'}</Text>
                       </View>
                     </PressScale>
@@ -880,7 +880,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                       </>
                     ) : (
                       <PressScale onPress={handleGenerateLink} disabled={generatingLink}>
-                        <View style={[styles.genLinkBtn, { backgroundColor: brand.primary, opacity: generatingLink ? 0.7 : 1 }]}>
+                        <View style={[styles.genLinkBtn, { backgroundColor: brand.fill, opacity: generatingLink ? 0.7 : 1 }]}>
                           <Icon name="receipt" size={15} color="#fff" />
                           <Text style={styles.genLinkBtnText}>{generatingLink ? 'Generating…' : 'Generate Payment Link'}</Text>
                         </View>
@@ -963,7 +963,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                       <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
                     </Pressable>
                     <PressScale onPress={handleSave} disabled={saving || awaitingPayment} style={{ flex: 1 }}>
-                      <View style={[styles.saveBtn, { backgroundColor: brand.primary, opacity: saving || awaitingPayment ? 0.6 : 1 }]}>
+                      <View style={[styles.saveBtn, { backgroundColor: brand.fill, opacity: saving || awaitingPayment ? 0.6 : 1 }]}>
                         <Text style={styles.saveBtnText}>
                           {saving ? 'Saving…' : awaitingPayment ? 'Awaiting Payment…' : 'Save Changes'}
                         </Text>
@@ -1079,7 +1079,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing(2.5),
-    backgroundColor: brand.primary,
+    backgroundColor: brand.fill,
     borderRadius: radius.md,
     paddingVertical: spacing(2.5),
     paddingHorizontal: spacing(3),
