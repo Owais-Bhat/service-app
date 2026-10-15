@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
+import BackLink from '../components/BackLink';
 import GlowButton from '../components/GlowButton';
+import { CardHeader, FieldError, GuestCard, GuestInput } from '../components/GuestFields';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
 import { submitInquiry, Inquiry } from '../api/inquiries';
 
 interface Props {
@@ -52,19 +53,30 @@ export default function ClientSubmitTicketScreen({ onBack }: Props) {
     return (
       <View style={styles.root}>
         <MeshBackground />
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
-          <GlassCard style={styles.resultCard}>
-            <Text style={[styles.title, { color: theme.text }]}>Request Submitted</Text>
-            <Text style={[styles.body, { color: theme.text, marginTop: spacing(3), textAlign: 'center' }]}>
-              Your ticket number is
-            </Text>
-            <Text style={styles.ticketNo}>{result.ticket_no}</Text>
-            <Text style={[styles.caption, { color: theme.text3, textAlign: 'center', marginTop: spacing(2) }]}>
-              Save this number — you can track your request status with it any time.
-            </Text>
-          </GlassCard>
-          <Text style={styles.link} onPress={onBack}>← Back</Text>
-        </View>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingTop: insets.top + spacing(12), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(6) }}
+        >
+          <View style={[styles.successIcon, { backgroundColor: theme.okS }]}>
+            <Ionicons name="checkmark-circle-outline" size={40} color={theme.ok} />
+          </View>
+          <Text style={[typography.largeTitle, { color: theme.text }]}>Request received</Text>
+          <Text style={[typography.body, { color: theme.text2, marginTop: spacing(2) }]}>
+            We&apos;ll assign a technician shortly and send you an SMS when they&apos;re on the way.
+          </Text>
+          <View style={{ marginTop: spacing(6) }}>
+            <GuestCard>
+              <Text style={[typography.overline, { color: theme.text3 }]}>Your ticket number</Text>
+              <Text style={[styles.ticketNo, { color: theme.accent }]} selectable>{result.ticket_no}</Text>
+              <Text style={[typography.supporting, { color: theme.text2, fontSize: 12, lineHeight: 16 }]}>
+                Save this number — you can track your request status with it any time.
+              </Text>
+            </GuestCard>
+          </View>
+          <View style={{ marginTop: spacing(6) }}>
+            <GlowButton label="Back" onPress={onBack} />
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -72,47 +84,44 @@ export default function ClientSubmitTicketScreen({ onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <View style={styles.flex}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-          <Text style={styles.link} onPress={onBack}>← Back</Text>
-          <Text style={[styles.title, { color: theme.text }]}>Submit a Service Request</Text>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingTop: insets.top + spacing(2), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+      >
+        <BackLink onPress={onBack} />
+        <Text style={[typography.title, { color: theme.text }]}>Submit a Service Request</Text>
 
-          <GlassCard style={styles.formCard}>
-            <TextInput style={[styles.input, { color: theme.text }]} placeholder="Your name" placeholderTextColor={theme.text3} value={name} onChangeText={setName} />
-            <TextInput style={[styles.input, { color: theme.text }]} placeholder="Phone number" placeholderTextColor={theme.text3} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-            <TextInput style={[styles.input, { color: theme.text }]} placeholder="Location / address" placeholderTextColor={theme.text3} value={location} onChangeText={setLocation} />
-            <TextInput style={[styles.input, { color: theme.text }]} placeholder="What's the issue?" placeholderTextColor={theme.text3} value={issue} onChangeText={setIssue} />
-            <TextInput
-              style={[styles.input, styles.textArea, { color: theme.text, marginBottom: 0 }]}
-              placeholder="Additional details (optional)"
-              placeholderTextColor={theme.text3}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-          </GlassCard>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <GlowButton label="Submit Request" onPress={handleSubmit} loading={loading} />
-        </ScrollView>
-      </View>
+        <View style={{ marginTop: spacing(4) }}>
+          <GuestCard>
+            <CardHeader title="Your details" body="We'll use them to send a technician and keep you updated." />
+            <View style={styles.fields}>
+              <GuestInput label="Your name" required placeholder="Full name" value={name} onChangeText={setName} />
+              <GuestInput label="Phone number" required mono placeholder="98765 43210" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+              <GuestInput label="Location" required placeholder="Location / address" value={location} onChangeText={setLocation} />
+              <GuestInput label="What's the issue?" required placeholder="e.g. CCTV not recording" value={issue} onChangeText={setIssue} />
+              <GuestInput
+                label="Additional details"
+                optional
+                multiline
+                placeholder="Anything our technician should know…"
+                value={description}
+                onChangeText={setDescription}
+              />
+            </View>
+            {error ? <FieldError text={error} /> : null}
+            <View style={{ marginTop: spacing(3) }}>
+              <GlowButton label="Submit request" onPress={handleSubmit} loading={loading} />
+            </View>
+          </GuestCard>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  flex: { flex: 1 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing(6) },
-  formCard: { marginTop: spacing(4) },
-  resultCard: { alignItems: 'center', paddingVertical: spacing(6) },
-  title: { ...typography.title },
-  body: { ...typography.body },
-  caption: { ...typography.caption },
-  input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
-  textArea: { minHeight: 90, textAlignVertical: 'top' },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
-  ticketNo: { ...typography.title, fontFamily: 'JetBrainsMono_700Bold', color: brand.primary, marginTop: spacing(2), letterSpacing: 1 },
-  error: { ...typography.caption, color: brand.danger, marginTop: spacing(3) },
+  fields: { gap: 14, marginTop: spacing(4) },
+  successIcon: { width: 72, height: 72, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', marginBottom: spacing(5) },
+  ticketNo: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 28, letterSpacing: 0.5, marginTop: spacing(1.5), marginBottom: spacing(3) },
 });

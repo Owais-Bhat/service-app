@@ -2,7 +2,7 @@ import React from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { resolveUploadUrl } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing } from '../theme';
+import { radius, spacing, typography } from '../theme';
 
 // `photo_urls` is stored as a JSON array of /uploads paths (or null).
 export function parsePhotoUrls(raw: unknown): string[] {
@@ -23,11 +23,11 @@ export default function RequestPhotos({ raw }: { raw: unknown }) {
   if (!urls.length) return null;
   return (
     <View>
-      <Text style={[styles.label, { color: theme.text3 }]}>Customer photos</Text>
+      <Text style={[styles.label, { color: theme.text2 }]}>Customer photos</Text>
       <View style={styles.row}>
         {urls.map((u) => (
           <Pressable key={u} onPress={() => Linking.openURL(u)}>
-            <Image source={{ uri: u }} style={[styles.thumb, { borderColor: theme.line }]} />
+            <Image source={{ uri: u }} style={[styles.thumb, { borderColor: theme.border }]} />
           </Pressable>
         ))}
       </View>
@@ -36,7 +36,7 @@ export default function RequestPhotos({ raw }: { raw: unknown }) {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 11, marginBottom: spacing(1.5), marginTop: spacing(3) },
+  label: { ...typography.caption, marginBottom: spacing(1.5), marginTop: spacing(3) },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  thumb: { width: 76, height: 76, borderRadius: radius.sm, borderWidth: 1 },
+  thumb: { width: 72, height: 72, borderRadius: radius.md, borderWidth: 1 },
 });

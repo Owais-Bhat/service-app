@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing } from '../theme';
-import { brand } from '../theme/tokens';
 import { LandingAd } from '../api/landing';
 
 interface Props {
@@ -56,12 +55,12 @@ export default function AdCarousel({ ads, autoRotateMs = 5000 }: Props) {
   if (!ad) return null;
 
   return (
-    <View style={[styles.wrap, { borderColor: theme.border, backgroundColor: theme.panel2, aspectRatio }]}>
+    <View style={[styles.wrap, { borderColor: theme.border, backgroundColor: theme.panel, aspectRatio }]}>
       <Image source={{ uri: ad.url }} style={styles.image} resizeMode="contain" />
       {ads.length > 1 && (
         <View style={styles.dots}>
           {ads.map((a, i) => (
-            <View key={a.id} style={[styles.dot, { backgroundColor: i === index ? brand.primary : theme.line }]} />
+            <View key={a.id} style={[styles.dot, { backgroundColor: i === index ? theme.accent : theme.border }]} />
           ))}
         </View>
       )}
@@ -70,8 +69,8 @@ export default function AdCarousel({ ads, autoRotateMs = 5000 }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', width: '100%' },
+  wrap: { borderRadius: radius.xl, borderWidth: 1, overflow: 'hidden', width: '100%' },
   image: { width: '100%', height: '100%' },
   dots: { position: 'absolute', bottom: spacing(2.5), alignSelf: 'center', flexDirection: 'row', gap: spacing(1.5) },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
 });

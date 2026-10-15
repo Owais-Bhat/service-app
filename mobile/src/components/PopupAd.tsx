@@ -36,15 +36,15 @@ export default function PopupAd({ ad, onDismiss }: Props) {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <View style={[styles.card, { backgroundColor: theme.surfaceStrong, borderColor: theme.border }]}>
+        <View style={[styles.card, { backgroundColor: theme.panel, borderColor: theme.border }]}>
           <Image source={{ uri: ad.url }} style={[styles.image, { aspectRatio }]} resizeMode="contain" />
           <Pressable
             onPress={onDismiss}
-            style={[styles.close, { backgroundColor: theme.panel2 }]}
-            hitSlop={8}
+            style={[styles.close, { backgroundColor: theme.surfaceStrong, borderColor: theme.border }]}
+            hitSlop={6}
             accessibilityLabel="Dismiss"
           >
-            <Icon name="close" size={16} color={theme.text} />
+            <Icon name="close" size={20} color={theme.text} />
           </Pressable>
         </View>
       </View>
@@ -54,16 +54,17 @@ export default function PopupAd({ ad, onDismiss }: Props) {
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(6) },
-  card: { width: '100%', maxWidth: 360, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden' },
+  card: { width: '100%', maxWidth: 360, borderRadius: radius.xl, borderWidth: 1, overflow: 'hidden' },
   image: { width: '100%' },
   close: {
     position: 'absolute',
     top: spacing(2.5),
     right: spacing(2.5),
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
 });

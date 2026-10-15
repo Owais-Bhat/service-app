@@ -1,26 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View, ScrollView } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import BackLink from '../components/BackLink';
-import Icon from '../components/Icon';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
-import NetworkScene3D from '../components/NetworkScene3D';
 import GlowButton from '../components/GlowButton';
+import { GuestInput } from '../components/GuestFields';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
+import { spacing, typography } from '../theme';
 import { ApiError } from '../api/client';
 
 interface Props {
   onBack: () => void;
 }
 
-const CARD_MAX_WIDTH = 420;
+const FORM_MAX_WIDTH = 520;
 
 // No longer the guest stack's root — Landing is (design spec §5), reached
 // via its "Staff Login" button. The old "Not staff? Submit a request /
@@ -72,107 +69,83 @@ export default function LoginScreen({ onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <View style={styles.sceneWrap}>
-        <NetworkScene3D />
-      </View>
-
-      <View style={[styles.backButtonWrap, { top: insets.top + spacing(2) }]}>
-        <BackLink onPress={onBack} />
-      </View>
-
-      <View
-        style={styles.root}
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing(2), paddingBottom: insets.bottom + spacing(6) }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          contentContainerStyle={[styles.formWrap, { paddingBottom: insets.bottom + spacing(6) }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.centerCol}>
-            <Animated.View entering={FadeInUp.duration(550)} style={styles.brandBlock}>
-              <Image source={require('../../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
-              <View style={styles.taglineBadge}>
-                <View style={styles.taglineDot} />
-                <Text style={styles.tagline}>Staff sign-in</Text>
-              </View>
-            </Animated.View>
+        <View style={styles.column}>
+          <Animated.View entering={FadeInUp.duration(550)}>
+            <Pressable
+              onPress={onBack}
+              accessibilityRole="button"
+              accessibilityLabel="Back to customer service"
+              style={styles.backBtn}
+            >
+              <Ionicons name="chevron-back" size={20} color={theme.text2} />
+              <Text style={[styles.backText, { color: theme.text2 }]}>Customer service</Text>
+            </Pressable>
+            <Image source={require('../../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+            <Text style={[typography.title, { color: theme.text }]}>Staff sign-in</Text>
+            <Text style={[typography.body, styles.subcopy, { color: theme.text2 }]}>
+              For Networking Experts technicians, team leads and office staff.
+            </Text>
+          </Animated.View>
 
-            <Animated.View entering={FadeInUp.delay(100).duration(550)} style={styles.cardWrap}>
-              <GlassCard shadow>
-                <View style={[styles.fieldWrap, { borderColor: theme.line }]}>
-                  <Icon name="mail" size={16} color={theme.text3} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text }]}
-                    placeholder="Email"
-                    placeholderTextColor={theme.text3}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                  />
-                </View>
-                <View style={[styles.fieldWrap, styles.fieldWrapLast]}>
-                  <Icon name="lock" size={16} color={theme.text3} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text }]}
-                    placeholder="Password"
-                    placeholderTextColor={theme.text3}
-                    secureTextEntry={!showPassword}
-                    value={password}
-                    onChangeText={setPassword}
-                  />
-                  <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
-                    <Icon name={showPassword ? 'eye-off' : 'eye'} size={18} color={theme.text3} />
-                  </Pressable>
-                </View>
-              </GlassCard>
+          <Animated.View entering={FadeInUp.delay(100).duration(550)} style={styles.fields}>
+            <GuestInput
+              label="Email"
+              leadingIcon="person-outline"
+              placeholder="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <GuestInput
+              label="Password"
+              leadingIcon="lock-closed-outline"
+              placeholder="Password"
+              secure={!showPassword}
+              autoCapitalize="none"
+              value={password}
+              onChangeText={setPassword}
+              error={error ?? undefined}
+              trailing={
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  style={styles.eyeBtn}
+                >
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.text2} />
+                </Pressable>
+              }
+            />
+          </Animated.View>
 
-              {error ? (
-                <View style={styles.errorPill}>
-                  <Text style={styles.error}>{error}</Text>
-                </View>
-              ) : null}
+          <View style={styles.spacer} />
 
-              <GlowButton label="Sign In" onPress={handleLogin} loading={loading} icon="arrow-right" />
-            </Animated.View>
-          </View>
-        </ScrollView>
-      </View>
+          <GlowButton label="Sign in" onPress={handleLogin} loading={loading} />
+          <Text style={[styles.footnote, { color: theme.text3 }]}>
+            Customers don&apos;t need an account. Staff accounts are created by the office.
+          </Text>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  sceneWrap: { ...StyleSheet.absoluteFill },
-  backButtonWrap: { position: 'absolute', left: spacing(6), zIndex: 10 },
-  formWrap: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing(6) },
-  centerCol: { width: '100%', maxWidth: CARD_MAX_WIDTH, alignItems: 'center' },
-  brandBlock: { alignItems: 'center', marginBottom: spacing(7) },
-  logo: { width: 168, height: 80, marginBottom: spacing(3) },
-  taglineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing(1.5),
-    paddingHorizontal: spacing(3.5),
-    paddingVertical: spacing(1.75),
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(21,160,90,0.14)',
-  },
-  taglineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: brand.fill },
-  tagline: { ...typography.caption, color: brand.primary, fontSize: 12 },
-  cardWrap: { width: '100%' },
-  fieldWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing(3),
-    borderBottomWidth: 1,
-    borderColor: 'transparent',
-    paddingBottom: spacing(3),
-    marginBottom: spacing(3),
-  },
-  fieldWrapLast: { borderBottomWidth: 0, paddingBottom: 0, marginBottom: 0 },
-  input: { ...typography.body, flex: 1, paddingVertical: spacing(1) },
-  errorPill: { alignSelf: 'center', marginTop: spacing(3) },
-  error: { ...typography.caption, color: brand.danger, textAlign: 'center' },
+  content: { flexGrow: 1, alignItems: 'center', paddingHorizontal: spacing(6) },
+  column: { flexGrow: 1, width: '100%', maxWidth: FORM_MAX_WIDTH },
+  backBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing(1), height: 44, paddingRight: spacing(2.5), marginLeft: -6 },
+  backText: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
+  logo: { width: 117, height: 56, marginTop: spacing(7), marginBottom: spacing(2), marginLeft: -10 },
+  subcopy: { marginTop: 6, marginBottom: spacing(6) },
+  fields: { gap: 14 },
+  eyeBtn: { width: 44, height: 44, marginRight: -spacing(2), alignItems: 'center', justifyContent: 'center' },
+  spacer: { flex: 1, minHeight: spacing(6) },
+  footnote: { ...typography.supporting, fontSize: 12, lineHeight: 16, textAlign: 'center', marginTop: spacing(3.5) },
 });

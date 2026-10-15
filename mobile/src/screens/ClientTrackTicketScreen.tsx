@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
+import BackLink from '../components/BackLink';
 import GlowButton from '../components/GlowButton';
+import StatusBadge from '../components/admin/StatusBadge';
+import { CardHeader, FieldError, GuestCard, GuestInput } from '../components/GuestFields';
 import { useTheme } from '../theme/ThemeContext';
-import { radius, spacing, typography } from '../theme';
-import { brand, statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
+import { spacing, typography } from '../theme';
+import { statusColors, DEFAULT_STATUS_STYLE } from '../theme/tokens';
 import { trackInquiry, Inquiry } from '../api/inquiries';
 
 interface Props {
@@ -45,43 +47,51 @@ export default function ClientTrackTicketScreen({ onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}>
-        <Text style={styles.link} onPress={onBack}>← Back</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Track Your Request</Text>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingTop: insets.top + spacing(2), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
+      >
+        <BackLink onPress={onBack} />
+        <Text style={[typography.title, { color: theme.text }]}>Track Your Request</Text>
 
-        <GlassCard style={styles.formCard}>
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="Ticket number (e.g. NE-260812-1234)"
-            placeholderTextColor={theme.text3}
-            autoCapitalize="characters"
-            value={ticketNo}
-            onChangeText={setTicketNo}
-          />
-          <TextInput
-            style={[styles.input, { color: theme.text, marginBottom: 0 }]}
-            placeholder="Phone number"
-            placeholderTextColor={theme.text3}
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
-        </GlassCard>
+        <View style={{ marginTop: spacing(4) }}>
+          <GuestCard>
+            <CardHeader title="Track a request" body="Enter both the ticket number and the phone number used to book." />
+            <View style={styles.fields}>
+              <GuestInput
+                label="Ticket number"
+                mono
+                autoCapitalize="characters"
+                placeholder="NE-260812-1234"
+                value={ticketNo}
+                onChangeText={setTicketNo}
+              />
+              <GuestInput label="Phone number" mono keyboardType="phone-pad" placeholder="98765 43210" value={phone} onChangeText={setPhone} />
+            </View>
+            {error ? <FieldError text={error} /> : null}
+            <View style={{ marginTop: spacing(2) }}>
+              <GlowButton label="Find my request" onPress={handleTrack} loading={loading} icon="search" />
+            </View>
+          </GuestCard>
+        </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <GlowButton label="Check Status" onPress={handleTrack} loading={loading} />
-
-        {results?.map((r) => (
-          <GlassCard key={r.id} style={styles.resultCard}>
-            <Text style={[styles.heading, { color: theme.text }]}>{r.ticket_no}</Text>
-            <Text style={[styles.body, { color: theme.text, marginTop: spacing(1) }]}>{r.service_item}</Text>
-            <Text style={[styles.caption, { color: theme.text3, marginTop: spacing(2) }]}>Status</Text>
-            <Text style={[styles.statusValue, { color: (statusColors[r.status] || DEFAULT_STATUS_STYLE).color }]}>
-              {(statusColors[r.status] || DEFAULT_STATUS_STYLE).label}
-            </Text>
-          </GlassCard>
-        ))}
+        {results?.map((r) => {
+          const s = statusColors[r.status] || DEFAULT_STATUS_STYLE;
+          return (
+            <View key={r.id} style={{ marginTop: spacing(4) }}>
+              <GuestCard padding={18}>
+                <View style={styles.headRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.overline, { color: theme.text3 }]}>Ticket</Text>
+                    <Text style={[styles.ticketNo, { color: theme.accent }]} selectable>{r.ticket_no}</Text>
+                  </View>
+                  <StatusBadge label={s.label} color={s.color} />
+                </View>
+                <Text style={[typography.rowTitle, { color: theme.text, marginTop: spacing(2.5) }]}>{r.service_item}</Text>
+              </GuestCard>
+            </View>
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -89,14 +99,7 @@ export default function ClientTrackTicketScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  formCard: { marginTop: spacing(4) },
-  title: { ...typography.title },
-  heading: { ...typography.heading },
-  body: { ...typography.body },
-  caption: { ...typography.caption },
-  input: { ...typography.body, borderRadius: radius.md, paddingHorizontal: spacing(4), paddingVertical: spacing(3), marginBottom: spacing(3) },
-  link: { ...typography.caption, color: brand.primary, marginBottom: spacing(3) },
-  resultCard: { marginTop: spacing(5) },
-  statusValue: { fontFamily: 'Manrope_700Bold', fontSize: 16 },
-  error: { ...typography.caption, color: brand.danger, marginTop: spacing(3) },
+  fields: { gap: 14, marginTop: spacing(4) },
+  headRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  ticketNo: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 18 },
 });
