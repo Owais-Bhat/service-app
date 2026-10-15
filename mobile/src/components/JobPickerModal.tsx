@@ -4,7 +4,6 @@ import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
 import { fetchResolvedJobsForReview, ResolvedJob } from '../api/reviews';
 
 interface Props {
@@ -39,7 +38,7 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <GlassSurface style={styles.card} borderRadius={radius.lg}>
+        <GlassSurface style={styles.card} borderRadius={radius.sheet}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.text }]}>Completed Job</Text>
             <Pressable onPress={onDismiss} style={styles.closeBtn} hitSlop={10}>
@@ -47,8 +46,8 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
             </Pressable>
           </View>
 
-          <View style={[styles.searchBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-            <Icon name="search" size={15} color={theme.text3} />
+          <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.panel }]}>
+            <Icon name="search" size={18} color={theme.text2} />
             <TextInput
               style={[styles.searchInput, { color: theme.text }]}
               placeholder="Search ticket or customer…"
@@ -59,7 +58,7 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
           </View>
 
           {loading ? (
-            <ActivityIndicator color={brand.primary} style={{ marginVertical: spacing(6) }} />
+            <ActivityIndicator color={theme.accent} style={{ marginVertical: spacing(6) }} />
           ) : error ? (
             <Text style={[styles.empty, { color: theme.text3 }]}>{error}</Text>
           ) : (
@@ -73,8 +72,8 @@ export default function JobPickerModal({ onDismiss, onSelect }: Props) {
                     onPress={() => onSelect(j)}
                     style={({ pressed }) => [styles.row, { borderColor: theme.line }, pressed && styles.rowPressed]}
                   >
-                    <View style={[styles.rowIconChip, { backgroundColor: `${brand.primary}1c` }]}>
-                      <Icon name="receipt" size={13} color={brand.primary} />
+                    <View style={[styles.rowIconChip, { backgroundColor: theme.okS }]}>
+                      <Icon name="receipt" size={18} color={theme.accent} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={[styles.rowTicket, { color: theme.text }]} numberOfLines={1}>{j.ticket_no || j.id.slice(0, 8)}</Text>
@@ -95,15 +94,15 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
   card: { width: '100%', maxWidth: 440, maxHeight: '80%', padding: spacing(5) },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(3) },
-  title: { ...typography.heading, fontSize: 17 },
-  closeBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 42, marginBottom: spacing(3) },
-  searchInput: { flex: 1, fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
+  title: { ...typography.heading },
+  closeBtn: { width: 44, height: 44, marginRight: -spacing(2), alignItems: 'center', justifyContent: 'center' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 48, marginBottom: spacing(3) },
+  searchInput: { flex: 1, ...typography.body, fontFamily: 'Manrope_500Medium' },
   list: { maxHeight: 380 },
   empty: { fontSize: 13, textAlign: 'center', marginVertical: spacing(6) },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), paddingVertical: spacing(2.5), borderBottomWidth: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), minHeight: 56, paddingVertical: spacing(2), borderBottomWidth: 1 },
   rowPressed: { opacity: 0.6 },
-  rowIconChip: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  rowTicket: { fontFamily: 'Manrope_700Bold', fontSize: 13, marginBottom: spacing(0.25) },
+  rowIconChip: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  rowTicket: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13, marginBottom: spacing(0.25) },
   rowName: { fontSize: 12, fontFamily: 'Manrope_600SemiBold' },
 });

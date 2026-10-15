@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Image, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import GlassSurface from './GlassSurface';
-import GlassCard from './GlassCard';
+import Panel from './Panel';
+import GlowButton from './GlowButton';
 import Icon from './Icon';
 import PressScale from './PressScale';
 import ProgressRing from './ProgressRing';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 import { decodeQuestion, questionLabel, submitQuiz, QuizQuestion, QuizSubmitResult } from '../api/training';
 import { ApiError, resolveUploadUrl } from '../api/client';
 
@@ -52,7 +53,7 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <Animated.View entering={ZoomIn.duration(340).springify().damping(15).mass(0.85)} style={styles.cardWrap}>
-          <GlassSurface style={styles.card} borderRadius={radius.lg}>
+          <GlassSurface style={styles.card} borderRadius={radius.sheet}>
             <View style={[styles.headerRow, { borderBottomColor: theme.line }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.title, { color: theme.text }]}>Course Quiz</Text>
@@ -67,20 +68,26 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
               </PressScale>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+            {!result ? (
+              <View style={[styles.progressTrack, { backgroundColor: theme.panel2 }]}>
+                <View style={[styles.progressFill, { width: `${questions.length ? (answeredCount / questions.length) * 100 : 0}%`, backgroundColor: theme.accent }]} />
+              </View>
+            ) : null}
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: 480 }}>
               {result ? (
                 <View style={styles.resultWrap}>
                   <ProgressRing
                     percent={result.score}
                     size={100}
                     strokeWidth={9}
-                    color={result.passed ? brand.primary : semantic.danger}
+                    color={result.passed ? theme.accent : theme.err}
                     trackColor={theme.line}
                     labelColor={theme.text}
                   />
-                  <View style={[styles.passBanner, { backgroundColor: result.passed ? 'rgba(21,160,90,0.14)' : 'rgba(240,85,109,0.14)' }]}>
-                    <Icon name={result.passed ? 'check-circle' : 'alert'} size={16} color={result.passed ? brand.primary : semantic.danger} filled />
-                    <Text style={[styles.passBannerText, { color: result.passed ? brand.primary : semantic.danger }]}>
+                  <View style={[styles.passBanner, { backgroundColor: result.passed ? theme.okS : theme.errS }]}>
+                    <Icon name={result.passed ? 'check-circle' : 'alert'} size={16} color={result.passed ? theme.ok : theme.err} filled />
+                    <Text style={[styles.passBannerText, { color: result.passed ? theme.ok : theme.err }]}>
                       {result.passed ? 'Course passed' : 'Quiz not passed yet'}
                     </Text>
                   </View>
@@ -92,35 +99,32 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                     const correctText = r ? q.options[r.correct_index] : null;
                     return (
                       <Animated.View key={q.id} entering={FadeInUp.delay(idx * 60).duration(350).springify().damping(15)} style={{ width: '100%' }}>
-                        <GlassCard style={{ ...styles.resultCard, borderColor: ok ? 'rgba(21,160,90,0.35)' : 'rgba(240,85,109,0.35)', borderWidth: 1 }}>
+                        <Panel style={{ ...styles.resultCard, borderColor: ok ? theme.ok : theme.err }}>
                           <View style={styles.resultRow}>
-                            <View style={[styles.resultIconChip, { backgroundColor: ok ? 'rgba(21,160,90,0.16)' : 'rgba(240,85,109,0.16)' }]}>
-                              <Icon name={ok ? 'check' : 'close'} size={12} color={ok ? brand.primary : semantic.danger} />
+                            <View style={[styles.resultIconChip, { backgroundColor: ok ? theme.okS : theme.errS }]}>
+                              <Icon name={ok ? 'check' : 'close'} size={12} color={ok ? theme.ok : theme.err} />
                             </View>
                             <Text style={[styles.resultQuestion, { color: theme.text }]}>{questionLabel(decodeQuestion(q.question))}</Text>
                           </View>
                           {!ok ? (
                             <View style={styles.resultAnswers}>
-                              <Text style={[styles.resultAnswerLine, { color: semantic.danger }]}>
+                              <Text style={[styles.resultAnswerLine, { color: theme.err }]}>
                                 Your answer: {chosenText || 'No answer'}
                               </Text>
-                              <Text style={[styles.resultAnswerLine, { color: brand.primary }]}>
+                              <Text style={[styles.resultAnswerLine, { color: theme.ok }]}>
                                 Correct answer: {correctText}
                               </Text>
                             </View>
                           ) : null}
-                        </GlassCard>
+                        </Panel>
                       </Animated.View>
                     );
                   })}
 
                   {!result.passed ? (
-                    <PressScale onPress={retake} style={{ marginTop: spacing(4) }}>
-                      <View style={[styles.submitBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
-                        <Icon name="refresh" size={15} color="#fff" />
-                        <Text style={styles.submitBtnText}>Retake Quiz</Text>
-                      </View>
-                    </PressScale>
+                    <View style={{ width: '100%', marginTop: spacing(2) }}>
+                      <GlowButton label="Retake Quiz" onPress={retake} icon="refresh" />
+                    </View>
                   ) : null}
                 </View>
               ) : (
@@ -134,11 +138,11 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                       {startsGroup && dq.groupTitle ? (
                         <Text style={[styles.groupTitle, { color: theme.text2 }]}>Match the following: {dq.groupTitle}</Text>
                       ) : null}
-                      <GlassCard style={styles.questionCard}>
+                      <Panel style={styles.questionCard}>
                         {dq.img ? <Image source={{ uri: resolveUploadUrl(dq.img) }} style={styles.questionImage} resizeMode="contain" /> : null}
                         <View style={styles.questionHeader}>
-                          <View style={[styles.questionIndex, { backgroundColor: `${brand.primary}22` }]}>
-                            <Text style={[styles.questionIndexText, { color: brand.primary }]}>{idx + 1}</Text>
+                          <View style={[styles.questionIndex, { backgroundColor: theme.okS }]}>
+                            <Text style={[styles.questionIndexText, { color: theme.accent }]}>{idx + 1}</Text>
                           </View>
                           <Text style={[styles.questionText, { color: theme.text }]}>{questionLabel(dq)}</Text>
                         </View>
@@ -149,33 +153,31 @@ export default function QuizModal({ courseId, questions, onDismiss, onPassed }: 
                               <View
                                 style={[
                                   styles.optionRow,
-                                  selected && styles.optionRowActiveShadow,
-                                  { borderColor: selected ? brand.primary : theme.line, backgroundColor: selected ? `${brand.primary}16` : theme.panel2 },
+                                  { borderColor: selected ? theme.accent : theme.border, borderWidth: selected ? 2 : 1, backgroundColor: selected ? theme.okS : theme.panel },
                                 ]}
                               >
-                                <View style={[styles.optionDot, { borderColor: selected ? brand.primary : theme.text3, backgroundColor: selected ? brand.primary : 'transparent' }]}>
-                                  {selected ? <Icon name="check" size={10} color="#fff" /> : null}
+                                <View style={[styles.optionDot, { borderColor: selected ? theme.accent : theme.text3, backgroundColor: selected ? brand.fill : 'transparent' }]}>
+                                  {selected ? <Icon name="check" size={12} color="#fff" /> : null}
                                 </View>
-                                <Text style={[styles.optionText, { color: selected ? brand.primary : theme.text2 }]}>{opt}</Text>
+                                <Text style={[styles.optionText, { color: theme.text }]}>{opt}</Text>
                               </View>
                             </PressScale>
                           );
                         })}
-                      </GlassCard>
+                      </Panel>
                     </Animated.View>
                     );
                   })}
 
-                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
-                  <PressScale onPress={handleSubmit} disabled={!allAnswered || submitting} style={{ marginTop: spacing(2), marginBottom: spacing(2) }}>
-                    <View style={[styles.submitBtn, { backgroundColor: allAnswered ? brand.primary : theme.panel2, shadowColor: brand.primary, opacity: submitting ? 0.7 : 1 }]}>
-                      <Icon name="check-circle" size={16} color={allAnswered ? '#fff' : theme.text3} filled={allAnswered} />
-                      <Text style={[styles.submitBtnText, { color: allAnswered ? '#fff' : theme.text3 }]}>
-                        {submitting ? 'Submitting…' : allAnswered ? 'Submit Quiz' : `Answer all ${questions.length} questions`}
-                      </Text>
-                    </View>
-                  </PressScale>
+                  <GlowButton
+                    label={allAnswered ? 'Submit Quiz' : `Answer all ${questions.length} questions`}
+                    onPress={handleSubmit}
+                    disabled={!allAnswered}
+                    loading={submitting}
+                    icon="check-circle"
+                  />
                 </>
               )}
             </ScrollView>
@@ -194,20 +196,19 @@ const styles = StyleSheet.create({
   closeBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.heading, fontSize: 17 },
   subtitle: { fontSize: 12, marginTop: spacing(0.5) },
-  error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(2), textAlign: 'center' },
-  questionCard: { marginBottom: spacing(3) },
+  error: { ...typography.caption, marginBottom: spacing(2), textAlign: 'center' },
+  progressTrack: { height: 6, borderRadius: 3, marginBottom: spacing(3), overflow: 'hidden' },
+  progressFill: { height: 6, borderRadius: 3 },
+  questionCard: { marginBottom: spacing(3), borderRadius: radius.lg },
   questionImage: { width: '100%', height: 160, borderRadius: radius.md, marginBottom: spacing(3) },
   groupTitle: { fontFamily: 'Manrope_700Bold', fontSize: 12, marginBottom: spacing(2), marginTop: spacing(1) },
   questionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2.5), marginBottom: spacing(3) },
   questionIndex: { width: 26, height: 26, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   questionIndexText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
-  questionText: { flex: 1, fontFamily: 'Manrope_700Bold', fontSize: 14, lineHeight: 20 },
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5), marginBottom: spacing(2) },
-  optionRowActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 3 },
-  optionDot: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  optionText: { flex: 1, fontFamily: 'Manrope_600SemiBold', fontSize: 13 },
-  submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 50, borderRadius: radius.md, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 },
-  submitBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
+  questionText: { flex: 1, fontFamily: 'SpaceGrotesk_700Bold', fontSize: 16, lineHeight: 22 },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), minHeight: 56, borderRadius: radius.md, paddingHorizontal: spacing(3), paddingVertical: spacing(2.5), marginBottom: spacing(2) },
+  optionDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  optionText: { flex: 1, fontFamily: 'Manrope_600SemiBold', fontSize: 14, lineHeight: 19 },
   resultWrap: { alignItems: 'center', paddingBottom: spacing(2) },
   passBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), paddingHorizontal: spacing(3.5), paddingVertical: spacing(2), borderRadius: radius.full, marginTop: spacing(3), marginBottom: spacing(4) },
   passBannerText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },

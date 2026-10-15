@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
-import PressScale from './PressScale';
+import GlowButton from './GlowButton';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
 import { brand } from '../theme/tokens';
@@ -14,7 +14,7 @@ interface Props {
   onDismiss: () => void;
 }
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function pad(n: number): string {
@@ -48,7 +48,7 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
 
   const year = viewMonth.getFullYear();
   const month = viewMonth.getMonth();
-  const firstWeekday = new Date(year, month, 1).getDay();
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-first grid
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
@@ -75,15 +75,15 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <GlassSurface style={styles.card} borderRadius={radius.lg}>
+        <GlassSurface style={styles.card} borderRadius={radius.sheet}>
           <Text style={[styles.title, { color: theme.text }]}>New Visit Date &amp; Time</Text>
 
           <View style={styles.monthRow}>
-            <Pressable onPress={() => setViewMonth(new Date(year, month - 1, 1))} hitSlop={10} style={styles.navBtn}>
+            <Pressable onPress={() => setViewMonth(new Date(year, month - 1, 1))} hitSlop={10} style={[styles.navBtn, { borderColor: theme.border, backgroundColor: theme.panel }]} accessibilityLabel="Previous month">
               <Icon name="chevron-left" size={16} color={theme.text} />
             </Pressable>
             <Text style={[styles.monthLabel, { color: theme.text }]}>{MONTH_NAMES[month]} {year}</Text>
-            <Pressable onPress={() => setViewMonth(new Date(year, month + 1, 1))} hitSlop={10} style={styles.navBtn}>
+            <Pressable onPress={() => setViewMonth(new Date(year, month + 1, 1))} hitSlop={10} style={[styles.navBtn, { borderColor: theme.border, backgroundColor: theme.panel }]} accessibilityLabel="Next month">
               <Icon name="chevron-right" size={16} color={theme.text} />
             </Pressable>
           </View>
@@ -106,7 +106,7 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
                   onPress={() => setSelectedDay(new Date(year, month, d))}
                   style={[styles.dayCell, styles.dayTouchable, selected && { backgroundColor: brand.fill }]}
                 >
-                  <Text style={[styles.dayText, { color: disabled ? theme.text3 : selected ? '#fff' : theme.text }, disabled && { opacity: 0.35 }]}>{d}</Text>
+                  <Text style={[styles.dayText, { color: disabled ? theme.text3 : selected ? '#fff' : theme.text, fontFamily: selected ? 'JetBrainsMono_700Bold' : 'JetBrainsMono_500Medium' }, disabled && { opacity: 0.35 }]}>{d}</Text>
                 </Pressable>
               );
             })}
@@ -115,27 +115,25 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
           <Text style={[styles.timeLabel, { color: theme.text3 }]}>Time</Text>
           <View style={styles.timeRow}>
             <View style={styles.stepperCol}>
-              <Pressable onPress={() => adjustHour(1)} style={[styles.stepperBtn, { borderColor: theme.line }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>+</Text></Pressable>
+              <Pressable onPress={() => adjustHour(1)} style={[styles.stepperBtn, { borderColor: theme.border }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>+</Text></Pressable>
               <Text style={[styles.stepperValue, { color: theme.text }]}>{pad(hour)}</Text>
-              <Pressable onPress={() => adjustHour(-1)} style={[styles.stepperBtn, { borderColor: theme.line }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>−</Text></Pressable>
+              <Pressable onPress={() => adjustHour(-1)} style={[styles.stepperBtn, { borderColor: theme.border }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>−</Text></Pressable>
             </View>
             <Text style={[styles.colon, { color: theme.text }]}>:</Text>
             <View style={styles.stepperCol}>
-              <Pressable onPress={() => adjustMinute(15)} style={[styles.stepperBtn, { borderColor: theme.line }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>+</Text></Pressable>
+              <Pressable onPress={() => adjustMinute(15)} style={[styles.stepperBtn, { borderColor: theme.border }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>+</Text></Pressable>
               <Text style={[styles.stepperValue, { color: theme.text }]}>{pad(minute)}</Text>
-              <Pressable onPress={() => adjustMinute(-15)} style={[styles.stepperBtn, { borderColor: theme.line }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>−</Text></Pressable>
+              <Pressable onPress={() => adjustMinute(-15)} style={[styles.stepperBtn, { borderColor: theme.border }]}><Text style={[styles.stepperArrow, { color: theme.text }]}>−</Text></Pressable>
             </View>
           </View>
 
           <View style={styles.actions}>
-            <Pressable onPress={onDismiss} style={[styles.cancelBtn, { borderColor: theme.line }]}>
-              <Text style={[styles.cancelBtnText, { color: theme.text }]}>Cancel</Text>
-            </Pressable>
-            <PressScale onPress={confirm} style={{ flex: 1 }}>
-              <View style={[styles.confirmBtn, { backgroundColor: brand.fill }]}>
-                <Text style={styles.confirmBtnText}>Use This Time</Text>
-              </View>
-            </PressScale>
+            <View style={{ flex: 1 }}>
+              <GlowButton label="Cancel" onPress={onDismiss} variant="secondary" />
+            </View>
+            <View style={{ flex: 1.6 }}>
+              <GlowButton label="Use This Time" onPress={confirm} />
+            </View>
           </View>
         </GlassSurface>
       </View>
@@ -146,26 +144,22 @@ export default function CalendarPickerModal({ value, onConfirm, onDismiss }: Pro
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
   card: { width: '100%', maxWidth: 400, padding: spacing(5) },
-  title: { ...typography.heading, fontSize: 16, marginBottom: spacing(3) },
+  title: { ...typography.heading, marginBottom: spacing(3) },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(3) },
-  navBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  navBtn: { width: 44, height: 44, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   monthLabel: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
   weekdayRow: { flexDirection: 'row' },
-  weekdayText: { flex: 1, textAlign: 'center', fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase' },
+  weekdayText: { flex: 1, textAlign: 'center', fontFamily: 'Manrope_700Bold', fontSize: 11, paddingBottom: spacing(2) },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
   dayTouchable: { borderRadius: 999 },
-  dayText: { fontFamily: 'Manrope_600SemiBold', fontSize: 13 },
+  dayText: { fontSize: 14 },
   timeLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing(4), marginBottom: spacing(2), textAlign: 'center' },
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2) },
   stepperCol: { alignItems: 'center', gap: spacing(1) },
-  stepperBtn: { width: 36, height: 28, borderWidth: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  stepperBtn: { width: 44, height: 36, borderWidth: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   stepperArrow: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
   stepperValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 22, minWidth: 44, textAlign: 'center' },
   colon: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 22, marginTop: spacing(4) },
-  actions: { flexDirection: 'row', gap: spacing(2.5), marginTop: spacing(5) },
-  cancelBtn: { paddingHorizontal: spacing(4), height: 46, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
-  confirmBtn: { height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  confirmBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
+  actions: { flexDirection: 'row', gap: spacing(3), marginTop: spacing(3) },
 });

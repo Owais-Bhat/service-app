@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../components/admin/AdminScreen';
-import ListRow from '../components/admin/ListRow';
-import ActionButton from '../components/admin/ActionButton';
 import EmptyNote from '../components/admin/EmptyNote';
+import StatusBadge from '../components/admin/StatusBadge';
+import Panel from '../components/Panel';
 import Icon from '../components/Icon';
 import { CalendarJob, fetchCalendarJobs } from '../api/employeeExtra';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 import { humanize } from '../utils/format';
 import { dayOf, useLoader } from '../utils/useLoader';
 
@@ -16,14 +16,8 @@ interface Props {
   onBack: () => void;
 }
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const STATUS_COLOR: Record<string, string> = {
-  pending: semantic.warning,
-  assigned: '#7c5cfc',
-  in_progress: semantic.info,
-  completed: semantic.success,
-  cancelled: brand.grey,
-};
+// Monday-first, as in the design's month grid.
+const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const keyOf = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
@@ -37,6 +31,17 @@ export default function CalendarScreen({ onBack }: Props) {
   const [cursor, setCursor] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [picked, setPicked] = useState(keyOf(now.getFullYear(), now.getMonth(), now.getDate()));
 
+  const statusColor = (status?: string | null): string => {
+    switch ((status || '').toLowerCase()) {
+      case 'pending': return theme.warn;
+      case 'assigned': return theme.vio;
+      case 'in_progress': return theme.info;
+      case 'completed': return theme.ok;
+      case 'cancelled': return theme.grey;
+      default: return theme.info;
+    }
+  };
+
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarJob[]>();
     (jobs.data ?? []).forEach((j) => {
@@ -47,7 +52,7 @@ export default function CalendarScreen({ onBack }: Props) {
     return map;
   }, [jobs.data]);
 
-  const first = new Date(cursor.y, cursor.m, 1).getDay();
+  const first = (new Date(cursor.y, cursor.m, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const today = keyOf(now.getFullYear(), now.getMonth(), now.getDate());
@@ -60,6 +65,11 @@ export default function CalendarScreen({ onBack }: Props) {
       return { y: d.getFullYear(), m: d.getMonth() };
     });
 
+  const goToday = () => {
+    setCursor({ y: now.getFullYear(), m: now.getMonth() });
+    setPicked(today);
+  };
+
   const dayJobs = byDay.get(picked) ?? [];
 
   return (
@@ -70,17 +80,24 @@ export default function CalendarScreen({ onBack }: Props) {
       onRefresh={jobs.reload}
       loading={jobs.loading}
       error={jobs.error}
+      headerRight={
+        <Pressable onPress={goToday} hitSlop={8} style={styles.todayBtn} accessibilityRole="button" accessibilityLabel="Today">
+          <Icon name="calendar" size={20} color={theme.accent} />
+          <Text style={[styles.todayText, { color: theme.accent }]}>Today</Text>
+        </Pressable>
+      }
     >
-      <View style={[styles.card, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-        <View style={styles.monthRow}>
-          <Pressable onPress={() => shift(-1)} hitSlop={10} accessibilityLabel="Previous month">
-            <Icon name="chevron-left" size={22} color={theme.text2} />
-          </Pressable>
-          <Text style={[styles.month, { color: theme.text }]}>{monthLabel}</Text>
-          <Pressable onPress={() => shift(1)} hitSlop={10} accessibilityLabel="Next month">
-            <Icon name="chevron-right" size={22} color={theme.text2} />
-          </Pressable>
-        </View>
+      <View style={styles.monthRow}>
+        <Text style={[styles.month, { color: theme.text }]}>{monthLabel}</Text>
+        <Pressable onPress={() => shift(-1)} style={[styles.navBtn, { borderColor: theme.border, backgroundColor: theme.panel }]} accessibilityLabel="Previous month">
+          <Icon name="chevron-left" size={18} color={theme.text} />
+        </Pressable>
+        <Pressable onPress={() => shift(1)} style={[styles.navBtn, { borderColor: theme.border, backgroundColor: theme.panel }]} accessibilityLabel="Next month">
+          <Icon name="chevron-right" size={18} color={theme.text} />
+        </Pressable>
+      </View>
+
+      <Panel style={styles.card}>
         <View style={styles.week}>
           {WEEKDAYS.map((d, i) => (
             <Text key={i} style={[styles.weekday, { color: theme.text3 }]}>{d}</Text>
@@ -92,62 +109,92 @@ export default function CalendarScreen({ onBack }: Props) {
             const k = keyOf(cursor.y, cursor.m, d);
             const n = byDay.get(k)?.length ?? 0;
             const on = k === picked;
+            const isToday = k === today;
             return (
-              <Pressable key={k} onPress={() => setPicked(k)} style={styles.cell} accessibilityLabel={`${d}, ${n} jobs`}>
-                <View
+              <View key={k} style={styles.cell}>
+                <Pressable
+                  onPress={() => setPicked(k)}
+                  accessibilityLabel={`${d}, ${n} jobs`}
                   style={[
                     styles.day,
+                    { borderColor: !on && isToday ? theme.accent : 'transparent' },
                     on && { backgroundColor: brand.fill },
-                    !on && k === today && { borderColor: brand.primary, borderWidth: 1 },
                   ]}
                 >
-                  <Text style={[styles.dayText, { color: on ? '#fff' : theme.text }]}>{d}</Text>
-                </View>
-                <View style={[styles.dot, { backgroundColor: n ? (on ? brand.primary : semantic.warning) : 'transparent' }]} />
-              </Pressable>
+                  <Text style={[styles.dayText, { color: on ? '#fff' : theme.text, fontFamily: on || isToday ? 'JetBrainsMono_700Bold' : 'JetBrainsMono_500Medium' }]}>{d}</Text>
+                  <View style={[styles.dot, { backgroundColor: n ? (on ? '#fff' : theme.accent) : 'transparent' }]} />
+                </Pressable>
+              </View>
             );
           })}
         </View>
-      </View>
+      </Panel>
 
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
-        {new Date(`${picked}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+        {new Date(`${picked}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
       </Text>
       {dayJobs.length === 0 ? <EmptyNote text="Nothing scheduled this day" icon="calendar" /> : null}
-      {dayJobs.map((j) => (
-        <ListRow
-          key={j.id}
-          icon="construct"
-          iconColor={STATUS_COLOR[(j.status || '').toLowerCase()]}
-          title={j.full_name}
-          subtitle={[j.installation_type, j.address].filter(Boolean).join(' · ') || undefined}
-          meta={`${j.ticket_no || ''}${j.preferred_time ? ` · ${j.preferred_time}` : ''}`}
-          badge={{ label: humanize(j.status) || 'Pending', color: STATUS_COLOR[(j.status || '').toLowerCase()] ?? semantic.info }}
-          footer={
-            j.address ? (
-              <ActionButton
-                label="Directions"
-                tone="neutral"
-                onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.address as string)}`)}
-              />
-            ) : undefined
-          }
-        />
-      ))}
+      {dayJobs.length > 0 ? (
+        <Panel style={styles.list}>
+          {dayJobs.map((j, idx) => {
+            const color = statusColor(j.status);
+            const last = idx === dayJobs.length - 1;
+            const sub = [j.installation_type, j.address].filter(Boolean).join(' · ');
+            return (
+              <View key={j.id} style={[styles.jobRow, !last && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                <Text style={[styles.time, { color: theme.text }]} numberOfLines={1}>{j.preferred_time || '—'}</Text>
+                <View style={styles.jobText}>
+                  <Text style={[styles.jobName, { color: theme.text }]} numberOfLines={1}>{j.full_name}</Text>
+                  {sub ? <Text style={[styles.jobMeta, { color: theme.text3 }]} numberOfLines={2}>{sub}</Text> : null}
+                  {j.ticket_no ? <Text style={[styles.jobTicket, { color: theme.text3 }]}>{j.ticket_no}</Text> : null}
+                  <View style={styles.badgeRow}>
+                    <StatusBadge label={humanize(j.status) || 'Pending'} color={color} />
+                  </View>
+                </View>
+                {j.address ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.address as string)}`)}
+                    hitSlop={6}
+                    style={styles.dirBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Directions"
+                  >
+                    <Icon name="map" size={18} color={theme.accent} />
+                    <Text style={[styles.dirText, { color: theme.accent }]}>Directions</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })}
+        </Panel>
+      ) : null}
     </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3), marginBottom: spacing(4) },
-  monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(3) },
-  month: { ...typography.heading, fontSize: 17 },
-  week: { flexDirection: 'row' },
-  weekday: { ...typography.caption, fontSize: 11, flex: 1, textAlign: 'center' },
+  todayBtn: { height: 44, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  todayText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  monthRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginBottom: spacing(4) },
+  month: { ...typography.heading, flex: 1 },
+  navBtn: { width: 44, height: 44, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  card: { padding: 10, borderRadius: radius.xl - 4, marginBottom: spacing(4.5) },
+  week: { flexDirection: 'row', paddingTop: 4, paddingBottom: 8 },
+  weekday: { fontFamily: 'Manrope_700Bold', fontSize: 11, flex: 1, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: `${100 / 7}%`, alignItems: 'center', paddingVertical: spacing(1) },
-  day: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  dayText: { ...typography.body, fontSize: 14 },
-  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 2 },
-  sectionTitle: { ...typography.heading, fontSize: 16, marginBottom: spacing(2) },
+  cell: { width: `${100 / 7}%`, padding: 1 },
+  day: { height: 44, borderRadius: radius.sm, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  dayText: { fontSize: 14 },
+  dot: { width: 5, height: 5, borderRadius: 3 },
+  sectionTitle: { ...typography.heading, fontSize: 16, lineHeight: 22, marginBottom: spacing(2.5) },
+  list: { padding: 0, overflow: 'hidden', borderRadius: radius.xl - 4 },
+  jobRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
+  time: { width: 56, fontFamily: 'JetBrainsMono_700Bold', fontSize: 13, paddingTop: 2 },
+  jobText: { flex: 1, minWidth: 0 },
+  jobName: { ...typography.rowTitle, fontSize: 14, lineHeight: 19 },
+  jobMeta: { ...typography.supporting, fontSize: 12, lineHeight: 16 },
+  jobTicket: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 11, marginTop: 2 },
+  badgeRow: { marginTop: spacing(1.5) },
+  dirBtn: { height: 40, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dirText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
 });

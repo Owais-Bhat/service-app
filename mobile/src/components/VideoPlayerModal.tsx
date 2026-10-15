@@ -184,9 +184,9 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   topOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: spacing(6) },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), paddingHorizontal: spacing(4) },
-  title: { ...typography.heading, fontSize: 15, color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  watchedText: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: spacing(0.5), fontFamily: 'Manrope_600SemiBold' },
-  closeBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  title: { ...typography.heading, color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  watchedText: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: spacing(0.5), fontFamily: 'JetBrainsMono_700Bold' },
+  closeBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   fullscreenBtn: { position: 'absolute', right: 16 },
-  fullscreenBtnInner: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  fullscreenBtnInner: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 });

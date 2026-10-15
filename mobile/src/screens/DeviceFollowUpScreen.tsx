@@ -3,23 +3,18 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
-import BackLink from '../components/BackLink';
+import Icon from '../components/Icon';
+import ToolHeader from '../components/ToolHeader';
+import StatusBadge from '../components/admin/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme';
 import { fetchEmployeeDevices, EmployeeDevice } from '../api/deviceTracking';
 
 interface Props {
   onBack: () => void;
   onOpenDevice: (inquiryId: string) => void;
 }
-
-const DEVICE_STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {
-  taken: { color: '#e08a14', bg: 'rgba(224,138,20,0.16)', label: 'Taken' },
-  returned: { color: '#15a05a', bg: 'rgba(21,160,90,0.14)', label: 'Returned' },
-};
-const PENDING_STATUS_STYLE = { color: brand.grey, bg: 'rgba(109,130,120,0.16)', label: 'Pending' };
 
 // Filters to inquiries actually relevant to device tracking (design spec
 // §2) — the underlying endpoint returns every inquiry assigned to this
@@ -53,33 +48,45 @@ export default function DeviceFollowUpScreen({ onBack, onOpenDevice }: Props) {
     setRefreshing(false);
   };
 
+  const statusOf = (status: string | null): { label: string; color: string } => {
+    if (status === 'taken') return { label: 'Taken', color: theme.warn };
+    if (status === 'returned') return { label: 'Returned', color: theme.ok };
+    return { label: 'Pending', color: theme.grey };
+  };
+
   return (
     <View style={styles.root}>
       <MeshBackground />
+      <ToolHeader
+        title="Device Follow-up"
+        subtitle={`${devices.length} ${devices.length === 1 ? 'device' : 'devices'} in your custody`}
+        onBack={onBack}
+      />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing(10) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ok} />}
       >
-        <BackLink onPress={onBack} />
-        <Text style={[styles.title, { color: theme.text }]}>Device Follow-up</Text>
-        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(4) }]}>Devices under service</Text>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
         {devices.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3 }]}>No devices under service right now.</Text>
+          <Text style={[styles.empty, { color: theme.text3 }]}>No devices under service right now.</Text>
         ) : (
           devices.map((d) => {
-            const s = (d.device_status && DEVICE_STATUS_STYLE[d.device_status]) || PENDING_STATUS_STYLE;
+            const s = statusOf(d.device_status);
             return (
               <Pressable key={d.id} onPress={() => onOpenDevice(d.id)} style={({ pressed }) => [pressed && styles.pressed]}>
                 <Panel style={styles.deviceRow}>
-                  <View style={styles.deviceInfo}>
-                    <Text style={[styles.deviceService, { color: theme.text }]} numberOfLines={1}>{d.service_item}</Text>
-                    <Text style={[styles.caption, { color: theme.text3 }]}>{d.full_name} · {d.ticket_no}</Text>
+                  <View style={[styles.tile, { backgroundColor: theme.tealS }]}>
+                    <Icon name="device" size={22} color={theme.teal} />
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: s.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: s.color }]}>{s.label}</Text>
+                  <View style={styles.deviceInfo}>
+                    <View style={styles.titleRow}>
+                      <Text style={[styles.deviceService, { color: theme.text }]} numberOfLines={1}>{d.service_item}</Text>
+                      <StatusBadge label={s.label} color={s.color} />
+                    </View>
+                    <Text style={[styles.customer, { color: theme.text2 }]} numberOfLines={1}>
+                      {d.full_name} · <Text style={styles.ticket}>{d.ticket_no}</Text>
+                    </Text>
                   </View>
                 </Panel>
               </Pressable>
@@ -93,13 +100,15 @@ export default function DeviceFollowUpScreen({ onBack, onOpenDevice }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  title: { ...typography.title },
-  caption: { ...typography.caption },
-  error: { ...typography.caption, color: brand.danger, marginBottom: spacing(3) },
+  content: { padding: spacing(4), gap: spacing(3) },
+  error: { ...typography.caption },
+  empty: { ...typography.supporting },
   pressed: { opacity: 0.7 },
-  deviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginBottom: spacing(2.5) },
-  deviceInfo: { flex: 1, minWidth: 0 },
-  deviceService: { fontFamily: 'Manrope_700Bold', fontSize: 14, marginBottom: spacing(0.5) },
-  statusBadge: { paddingHorizontal: spacing(2), paddingVertical: spacing(1), borderRadius: 8 },
-  statusBadgeText: { fontFamily: 'Manrope_700Bold', fontSize: 10 },
+  deviceRow: { flexDirection: 'row', gap: spacing(3), borderRadius: radius.xl - 4, padding: spacing(3.5) },
+  tile: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  deviceInfo: { flex: 1, minWidth: 0, gap: 3 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(2) },
+  deviceService: { ...typography.rowTitle, flex: 1 },
+  customer: { ...typography.supporting },
+  ticket: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
 });

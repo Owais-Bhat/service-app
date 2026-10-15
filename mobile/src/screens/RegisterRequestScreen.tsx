@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import AdminScreen from '../components/admin/AdminScreen';
-import ActionButton from '../components/admin/ActionButton';
+import FilterChips from '../components/admin/FilterChips';
+import GlowButton from '../components/GlowButton';
+import Icon from '../components/Icon';
 import Field from '../components/admin/Field';
 import SectionLabel from '../components/admin/SectionLabel';
 import { useAuth } from '../context/AuthContext';
@@ -10,30 +12,9 @@ import { fetchServicePricing } from '../api/servicePricing';
 import { registerWalkInRequest } from '../api/employeeExtra';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
 
 interface Props {
   onBack: () => void;
-}
-
-function Choice({ items, value, onChange }: { items: string[]; value: string; onChange: (v: string) => void }) {
-  const { theme } = useTheme();
-  return (
-    <View style={styles.chips}>
-      {items.map((c) => {
-        const on = c === value;
-        return (
-          <Pressable
-            key={c}
-            onPress={() => onChange(c)}
-            style={[styles.chip, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-          >
-            <Text style={[styles.chipText, { color: on ? brand.primary : theme.text2 }]} numberOfLines={1}>{c}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
 }
 
 // A customer who walked in or phoned in: register it and take the job in one
@@ -119,32 +100,36 @@ export default function RegisterRequestScreen({ onBack }: Props) {
   };
 
   return (
-    <AdminScreen title="Register Customer" subtitle="Walk-in or phone request, accepted by you" onBack={onBack}>
+    <AdminScreen title="Register Customer" subtitle="Walk-in request" onBack={onBack}>
       <View style={styles.form}>
-        <Field label="Customer name" value={name} onChangeText={setName} autoCapitalize="words" />
-        <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="10 digits" />
+        <View style={[styles.infoBanner, { backgroundColor: theme.infoS }]}>
+          <Icon name="alert" size={18} color={theme.info} />
+          <Text style={[styles.infoText, { color: theme.text }]}>For walk-in customers. The request is created and accepted by you right away.</Text>
+        </View>
+
+        <Field label="Customer name" required value={name} onChangeText={setName} autoCapitalize="words" />
+        <Field label="Mobile number" required value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="10 digits" />
 
         <SectionLabel>Issue</SectionLabel>
-        <Choice items={issueChoices} value={issue} onChange={setIssue} />
-        {issue === 'Other' ? <Field label="Describe the issue" value={customIssue} onChangeText={setCustomIssue} /> : null}
+        <FilterChips items={issueChoices.map((c) => ({ key: c, label: c }))} activeKey={issue} onSelect={setIssue} />
+        {issue === 'Other' ? <Field label="Describe the issue" required value={customIssue} onChangeText={setCustomIssue} /> : null}
 
         <SectionLabel>Where</SectionLabel>
-        <Field label="Address" value={location} onChangeText={setLocation} multiline hint={coords ? `GPS ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : undefined} />
-        <ActionButton label={locating ? 'Finding…' : 'Use my current location'} tone="neutral" busy={locating} onPress={useMyLocation} />
+        <Field label="Address" required value={location} onChangeText={setLocation} multiline hint={coords ? `GPS ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : undefined} />
+        <GlowButton label={locating ? 'Finding…' : 'Use my current location'} onPress={useMyLocation} loading={locating} variant="secondary" icon="crosshair" />
 
         <Field label="Notes (optional)" value={description} onChangeText={setDescription} multiline />
 
         <Text style={[styles.note, { color: theme.text3 }]}>The request is created already assigned to you and accepted.</Text>
-        <ActionButton label="Register & accept" tone="success" busy={busy} onPress={submit} />
+        <GlowButton label="Register & accept" onPress={submit} loading={busy} icon="add" />
       </View>
     </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  form: { gap: spacing(3) },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  chip: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3), paddingVertical: spacing(2), maxWidth: '100%' },
-  chipText: { ...typography.caption, fontSize: 12 },
-  note: { ...typography.caption, fontSize: 12 },
+  form: { gap: spacing(3.5) },
+  infoBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.md },
+  infoText: { ...typography.caption, fontSize: 12, lineHeight: 16, flex: 1 },
+  note: { ...typography.supporting, fontSize: 12 },
 });

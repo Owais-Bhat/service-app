@@ -6,9 +6,9 @@ import Animated, { ZoomIn } from 'react-native-reanimated';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import PressScale from './PressScale';
+import GlowButton from './GlowButton';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand } from '../theme/tokens';
 
 interface Props {
   location: string | null;
@@ -54,7 +54,7 @@ L.marker([${lat}, ${lng}]).addTo(map);
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <Animated.View entering={ZoomIn.duration(320).springify().damping(15).mass(0.85)} style={styles.cardWrap}>
-          <GlassSurface style={styles.card} borderRadius={radius.lg}>
+          <GlassSurface style={styles.card} borderRadius={radius.sheet}>
             <View style={[styles.headerRow, { borderBottomColor: theme.line }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.title, { color: theme.text }]}>Job Location</Text>
@@ -63,18 +63,18 @@ L.marker([${lat}, ${lng}]).addTo(map);
                 ) : null}
               </View>
               <PressScale onPress={onDismiss}>
-                <View style={[styles.closeBtn, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-                  <Icon name="close" size={13} color={theme.text3} />
+                <View style={[styles.closeBtn, { backgroundColor: theme.panel2, borderColor: theme.border }]}>
+                  <Icon name="close" size={18} color={theme.text2} />
                 </View>
               </PressScale>
             </View>
 
             {hasCoords ? (
-              <View style={[styles.mapWrap, { borderColor: theme.line }]}>
+              <View style={[styles.mapWrap, { borderColor: theme.border }]}>
                 <WebView style={StyleSheet.absoluteFill} originWhitelist={['*']} source={{ html: mapHtml, baseUrl: SITE_BASE_URL }} scrollEnabled={false} />
               </View>
             ) : (
-              <View style={[styles.noCoordsBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
+              <View style={[styles.noCoordsBox, { borderColor: theme.border, backgroundColor: theme.panel2 }]}>
                 <Icon name="pin" size={20} color={theme.text3} />
                 <Text style={[styles.noCoordsText, { color: theme.text3 }]}>
                   No exact coordinates on file for this job — use Google Maps to search the address instead.
@@ -82,12 +82,7 @@ L.marker([${lat}, ${lng}]).addTo(map);
               </View>
             )}
 
-            <PressScale onPress={openGoogleMaps}>
-              <View style={[styles.gmapsBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
-                <Icon name="pin" size={16} color="#fff" />
-                <Text style={styles.gmapsBtnText}>Open in Google Maps</Text>
-              </View>
-            </PressScale>
+            <GlowButton label="Open in Google Maps" onPress={openGoogleMaps} icon="pin" />
           </GlassSurface>
         </Animated.View>
       </View>
@@ -100,12 +95,10 @@ const styles = StyleSheet.create({
   cardWrap: { width: '100%', maxWidth: 440 },
   card: { width: '100%', padding: spacing(5) },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), paddingBottom: spacing(3), marginBottom: spacing(3), borderBottomWidth: 1 },
-  closeBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { ...typography.heading, fontSize: 17 },
+  closeBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  title: { ...typography.heading },
   subtitle: { fontSize: 12, marginTop: spacing(0.5), lineHeight: 17 },
-  mapWrap: { height: 240, borderRadius: radius.md, borderWidth: 1, overflow: 'hidden', marginBottom: spacing(3) },
+  mapWrap: { height: 240, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: spacing(3) },
   noCoordsBox: { alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, padding: spacing(4), marginBottom: spacing(3) },
   noCoordsText: { fontSize: 12, textAlign: 'center', lineHeight: 17 },
-  gmapsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(2), height: 46, borderRadius: radius.md, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 },
-  gmapsBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
 });

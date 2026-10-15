@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
-import BackLink from '../components/BackLink';
-import PressScale from '../components/PressScale';
+import Panel from '../components/Panel';
+import GlowButton from '../components/GlowButton';
+import ToolHeader from '../components/ToolHeader';
 import Icon from '../components/Icon';
+import Field from '../components/admin/Field';
+import FilterChips from '../components/admin/FilterChips';
+import SectionLabel from '../components/admin/SectionLabel';
 import ServicePickerModal, { PickedService } from '../components/ServicePickerModal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
 import { fetchCompanies, Company } from '../api/companies';
 import { fetchDiscountPresets, DiscountPreset } from '../api/discountPresets';
 import { generateBillPdf, BillPdfData } from '../api/bills';
@@ -44,6 +45,8 @@ const INSTALLATION_TYPES = [
 ];
 
 const BUSINESS_NAME = 'Networking Experts';
+const OTHER_KEY = '__other__';
+const NO_PRESET_KEY = '__none__';
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 // Matches web's renderEmployeeEstimatorTab exactly: build a client-facing
@@ -231,308 +234,166 @@ export default function EstimatorScreen({ onBack }: Props) {
     }
   };
 
+  const companyItems = [
+    ...[BUSINESS_NAME, ...companies.map((c) => c.name)].map((name) => ({ key: name, label: name })),
+    { key: OTHER_KEY, label: 'Other' },
+  ];
+
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(12) }}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <BackLink onPress={onBack} />
-            <Text style={[styles.title, { color: theme.text }]}>Estimator</Text>
-            <Text style={[styles.caption, { color: theme.text3 }]}>Prepare a cost estimate and send it to the client on WhatsApp.</Text>
-          </View>
-          <PressScale onPress={reset}>
-            <View style={[styles.resetBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-              <Icon name="refresh" size={15} color={theme.text2} />
-            </View>
-          </PressScale>
+      <ToolHeader
+        title="Estimator"
+        subtitle="Quote without a ticket"
+        onBack={onBack}
+        actions={[{ icon: 'refresh', label: 'Reset', text: 'Reset', onPress: reset }]}
+      />
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 110 }]}
+      >
+        <View style={[styles.infoBanner, { backgroundColor: theme.infoS }]}>
+          <Icon name="alert" size={18} color={theme.info} />
+          <Text style={[styles.infoText, { color: theme.text }]}>Estimate only — not a tax invoice. Not linked to any ticket.</Text>
         </View>
 
-        <Animated.View entering={FadeInUp.duration(400).springify().damping(15)}>
-          <GlassCard shadow style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Icon name="user" size={13} color={brand.primary} />
-              <Text style={[styles.sectionLabel, { color: theme.text }]}>Client Details</Text>
-            </View>
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Job Type</Text>
-            <View style={[styles.jobTypeRow, { marginBottom: spacing(3) }]}>
-              <PressScale onPress={() => setJobType('service')} style={{ flex: 1 }}>
-                <View style={[styles.jobTypePill, jobType === 'service' && styles.pillActiveShadow, { backgroundColor: jobType === 'service' ? brand.primary : theme.panel2, borderColor: jobType === 'service' ? brand.primary : theme.line }]}>
-                  <Icon name="wrench" size={13} color={jobType === 'service' ? '#fff' : theme.text2} />
-                  <Text style={[styles.jobTypeText, { color: jobType === 'service' ? '#fff' : theme.text2 }]}>Service</Text>
-                </View>
-              </PressScale>
-              <PressScale onPress={() => setJobType('installation')} style={{ flex: 1 }}>
-                <View style={[styles.jobTypePill, jobType === 'installation' && styles.pillActiveShadow, { backgroundColor: jobType === 'installation' ? brand.primary : theme.panel2, borderColor: jobType === 'installation' ? brand.primary : theme.line }]}>
-                  <Icon name="box" size={13} color={jobType === 'installation' ? '#fff' : theme.text2} />
-                  <Text style={[styles.jobTypeText, { color: jobType === 'installation' ? '#fff' : theme.text2 }]}>Installation</Text>
-                </View>
-              </PressScale>
-            </View>
+        <FilterChips
+          items={[{ key: 'service', label: 'Service' }, { key: 'installation', label: 'Installation' }]}
+          activeKey={jobType}
+          onSelect={(k) => setJobType(k as JobType)}
+        />
 
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Client Name</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="Client name" placeholderTextColor={theme.text3} value={clientName} onChangeText={setClientName} />
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>WhatsApp Number</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="10 digit mobile number" placeholderTextColor={theme.text3} value={clientPhone} onChangeText={setClientPhone} keyboardType="phone-pad" />
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Service / Project</Text>
-            {jobType === 'installation' ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing(2) }}>
-                <View style={styles.pillRow}>
-                  {INSTALLATION_TYPES.map((t) => {
-                    const active = serviceTitle === t.label;
-                    return (
-                      <PressScale key={t.label} onPress={() => setServiceTitle(t.label)}>
-                        <View style={[styles.pill, active && styles.pillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
-                          <Text style={styles.installEmoji}>{t.icon}</Text>
-                          <Text style={[styles.pillText, { color: active ? '#fff' : theme.text2 }]}>{t.label}</Text>
-                        </View>
-                      </PressScale>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            ) : null}
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder={jobType === 'installation' ? 'e.g. CCTV Camera Installation' : 'e.g. CCTV service visit'} placeholderTextColor={theme.text3} value={serviceTitle} onChangeText={setServiceTitle} />
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Location</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="Client location" placeholderTextColor={theme.text3} value={location} onChangeText={setLocation} />
+        <Field label="Customer name" value={clientName} onChangeText={setClientName} placeholder="Client name" autoCapitalize="words" />
+        <Field label="WhatsApp number" value={clientPhone} onChangeText={setClientPhone} placeholder="10 digit mobile number" keyboardType="phone-pad" />
+        {jobType === 'installation' ? (
+          <View>
+            <Text style={[styles.fieldLabel, { color: theme.text2 }]}>Installation type</Text>
+            <FilterChips
+              items={INSTALLATION_TYPES.map((t) => ({ key: t.label, label: `${t.icon} ${t.label}` }))}
+              activeKey={serviceTitle}
+              onSelect={setServiceTitle}
+            />
+          </View>
+        ) : null}
+        <Field
+          label="Service / project"
+          value={serviceTitle}
+          onChangeText={setServiceTitle}
+          placeholder={jobType === 'installation' ? 'e.g. CCTV Camera Installation' : 'e.g. CCTV service visit'}
+        />
+        <Field label="Location" value={location} onChangeText={setLocation} placeholder="Client location" />
+        <View>
+          <Text style={[styles.fieldLabel, { color: theme.text2 }]}>Company</Text>
+          <FilterChips
+            items={companyItems}
+            activeKey={isOtherCompany ? OTHER_KEY : companyName}
+            onSelect={(k) => (k === OTHER_KEY ? setIsOtherCompany(true) : selectCompany(k))}
+          />
+        </View>
+        {isOtherCompany ? <Field label="Company name" value={customCompany} onChangeText={setCustomCompany} placeholder="Company name" autoCapitalize="words" /> : null}
 
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Company</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing(1) }}>
-              <View style={styles.pillRow}>
-                {[BUSINESS_NAME, ...companies.map((c) => c.name)].map((name) => {
-                  const active = !isOtherCompany && companyName === name;
-                  return (
-                    <PressScale key={name} onPress={() => selectCompany(name)}>
-                      <View style={[styles.pill, active && styles.pillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
-                        <Text style={[styles.pillText, { color: active ? '#fff' : theme.text2 }]}>{name}</Text>
-                      </View>
-                    </PressScale>
-                  );
-                })}
-                <PressScale onPress={() => setIsOtherCompany(true)}>
-                  <View style={[styles.pill, isOtherCompany && styles.pillActiveShadow, { backgroundColor: isOtherCompany ? brand.primary : theme.panel2, borderColor: isOtherCompany ? brand.primary : theme.line }]}>
-                    <Text style={[styles.pillText, { color: isOtherCompany ? '#fff' : theme.text2 }]}>Other</Text>
-                  </View>
-                </PressScale>
-              </View>
-            </ScrollView>
-            {isOtherCompany ? (
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line, marginTop: spacing(2) }]} placeholder="Company name" placeholderTextColor={theme.text3} value={customCompany} onChangeText={setCustomCompany} />
-            ) : null}
-          </GlassCard>
-        </Animated.View>
-
-        <Animated.View entering={FadeInUp.delay(60).duration(400).springify().damping(15)}>
-          <GlassCard shadow style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Icon name="wrench" size={13} color={brand.primary} />
-              <Text style={[styles.sectionLabel, { color: theme.text }]}>Services</Text>
-            </View>
-
+        <View>
+          <SectionLabel>Services</SectionLabel>
+          <Panel style={styles.list}>
             {services.length === 0 ? (
-              <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(2) }]}>No services added yet.</Text>
+              <Text style={[styles.emptyRow, { color: theme.text3 }]}>No services added yet.</Text>
             ) : (
               services.map((s) => (
-                <View key={s.id} style={[styles.serviceRow, { borderColor: theme.line }]}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={2}>{s.label}</Text>
-                    <Text style={[styles.caption, { color: theme.text3 }]}>{inr(s.cost)} each</Text>
+                <View key={s.id} style={[styles.itemRow, { borderBottomColor: theme.line }]}>
+                  <View style={styles.itemText}>
+                    <Text style={[styles.itemName, { color: theme.text }]} numberOfLines={2}>{s.label}</Text>
+                    <Text style={[styles.itemMeta, { color: theme.text3 }]}>{s.qty} × {inr(s.cost)}</Text>
                   </View>
-                  <View style={[styles.qtyStepper, { borderColor: theme.line }]}>
-                    <PressScale onPress={() => changeQty(s.id, -1)}>
-                      <View style={styles.qtyBtn}>
-                        <Text style={[styles.qtyBtnText, { color: theme.text2 }]}>−</Text>
-                      </View>
-                    </PressScale>
+                  <View style={[styles.qtyStepper, { borderColor: theme.border }]}>
+                    <Pressable onPress={() => changeQty(s.id, -1)} style={styles.qtyBtn} accessibilityLabel={`Less ${s.label}`} hitSlop={4}>
+                      <Text style={[styles.qtyBtnText, { color: theme.text }]}>−</Text>
+                    </Pressable>
                     <Text style={[styles.qtyValue, { color: theme.text }]}>{s.qty}</Text>
-                    <PressScale onPress={() => changeQty(s.id, 1)}>
-                      <View style={styles.qtyBtn}>
-                        <Text style={[styles.qtyBtnText, { color: theme.text2 }]}>+</Text>
-                      </View>
-                    </PressScale>
+                    <Pressable onPress={() => changeQty(s.id, 1)} style={styles.qtyBtn} accessibilityLabel={`More ${s.label}`} hitSlop={4}>
+                      <Text style={[styles.qtyBtnText, { color: theme.text }]}>+</Text>
+                    </Pressable>
                   </View>
-                  <Text style={[styles.serviceCost, { color: brand.primary }]}>{inr(s.cost * s.qty)}</Text>
+                  <Text style={[styles.itemAmount, { color: theme.text }]}>{inr(s.cost * s.qty)}</Text>
                 </View>
               ))
             )}
+            <Pressable onPress={() => setShowPicker(true)} style={({ pressed }) => [styles.addRow, pressed && styles.pressed]} accessibilityRole="button">
+              <Icon name="add" size={18} color={theme.accent} />
+              <Text style={[styles.addText, { color: theme.accent }]}>Add service or item</Text>
+            </Pressable>
+          </Panel>
+        </View>
 
-            <PressScale onPress={() => setShowPicker(true)} style={{ marginTop: spacing(1) }}>
-              <View style={[styles.addServiceBtn, { backgroundColor: brand.fill, shadowColor: brand.primary }]}>
-                <Icon name="edit" size={14} color="#fff" />
-                <Text style={styles.addServiceBtnText}>Add Service</Text>
-              </View>
-            </PressScale>
-          </GlassCard>
-        </Animated.View>
-
-        <Animated.View entering={FadeInUp.delay(120).duration(400).springify().damping(15)}>
-          <GlassCard shadow style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Icon name="receipt" size={13} color={brand.primary} />
-              <Text style={[styles.sectionLabel, { color: theme.text }]}>Fees & Discount</Text>
-            </View>
-
-            <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Extra Charge</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="0" placeholderTextColor={theme.text3} value={extra} onChangeText={setExtra} keyboardType="numeric" />
-            {Number(extra) > 0 ? (
-              <>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Extra Reason</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="Material, labour, etc." placeholderTextColor={theme.text3} value={extraReason} onChangeText={setExtraReason} />
-              </>
-            ) : null}
-
+        <View>
+          <SectionLabel>Fees &amp; discount</SectionLabel>
+          <View style={styles.fields}>
+            <Field label="Extra charge" value={extra} onChangeText={setExtra} placeholder="0" keyboardType="numeric" />
+            {Number(extra) > 0 ? <Field label="Extra reason" value={extraReason} onChangeText={setExtraReason} placeholder="Material, labour, etc." /> : null}
             <View style={styles.fieldRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Platform Fee</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} value={platform} onChangeText={setPlatform} keyboardType="numeric" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>GST %</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} value={gstRate} onChangeText={setGstRate} keyboardType="numeric" />
-              </View>
+              <View style={styles.half}><Field label="Platform fee" value={platform} onChangeText={setPlatform} keyboardType="numeric" /></View>
+              <View style={styles.half}><Field label="GST %" value={gstRate} onChangeText={setGstRate} keyboardType="numeric" /></View>
             </View>
             <View style={styles.fieldRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Travel (km)</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="0" placeholderTextColor={theme.text3} value={km} onChangeText={setKm} keyboardType="numeric" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Rate / km</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} value={kmRate} onChangeText={setKmRate} keyboardType="numeric" />
-              </View>
+              <View style={styles.half}><Field label="Travel (km)" value={km} onChangeText={setKm} placeholder="0" keyboardType="numeric" /></View>
+              <View style={styles.half}><Field label="Rate / km" value={kmRate} onChangeText={setKmRate} keyboardType="numeric" /></View>
             </View>
-
             {presets.length > 0 ? (
-              <>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Admin Discount</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing(2) }}>
-                  <View style={styles.pillRow}>
-                    <PressScale onPress={() => setPresetId(null)}>
-                      <View style={[styles.pill, !presetId && styles.pillActiveShadow, { backgroundColor: !presetId ? brand.primary : theme.panel2, borderColor: !presetId ? brand.primary : theme.line }]}>
-                        <Text style={[styles.pillText, { color: !presetId ? '#fff' : theme.text2 }]}>None</Text>
-                      </View>
-                    </PressScale>
-                    {presets.map((p) => {
-                      const active = presetId === p.id;
-                      return (
-                        <PressScale key={p.id} onPress={() => setPresetId(p.id)}>
-                          <View style={[styles.pill, active && styles.pillActiveShadow, { backgroundColor: active ? brand.primary : theme.panel2, borderColor: active ? brand.primary : theme.line }]}>
-                            <Text style={[styles.pillText, { color: active ? '#fff' : theme.text2 }]}>{p.name} - {inr(Number(p.amount))}</Text>
-                          </View>
-                        </PressScale>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              </>
+              <View>
+                <Text style={[styles.fieldLabel, { color: theme.text2 }]}>Admin discount</Text>
+                <FilterChips
+                  items={[{ key: NO_PRESET_KEY, label: 'None' }, ...presets.map((p) => ({ key: p.id, label: `${p.name} - ${inr(Number(p.amount))}` }))]}
+                  activeKey={presetId ?? NO_PRESET_KEY}
+                  onSelect={(k) => setPresetId(k === NO_PRESET_KEY ? null : k)}
+                />
+              </View>
             ) : null}
-
             <View style={styles.fieldRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Manual Discount</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="0" placeholderTextColor={theme.text3} value={manualDiscount} onChangeText={setManualDiscount} keyboardType="numeric" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Discount Reason</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.line }]} placeholder="Required" placeholderTextColor={theme.text3} value={discountReason} onChangeText={setDiscountReason} />
-              </View>
+              <View style={styles.half}><Field label="Manual discount" value={manualDiscount} onChangeText={setManualDiscount} placeholder="0" keyboardType="numeric" /></View>
+              <View style={styles.half}><Field label="Discount reason" value={discountReason} onChangeText={setDiscountReason} placeholder="Required" /></View>
             </View>
-          </GlassCard>
-        </Animated.View>
+          </View>
+        </View>
 
-        <Animated.View entering={FadeInUp.delay(180).duration(400).springify().damping(15)}>
-          <GlassCard shadow style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Icon name="receipt" size={13} color={brand.primary} />
-              <Text style={[styles.sectionLabel, { color: theme.text }]}>Estimate Preview</Text>
-            </View>
+        <View style={[styles.totals, { backgroundColor: theme.panel2 }]}>
+          <Text style={[styles.slipClient, { color: theme.text }]}>{clientName.trim() || 'Client'}</Text>
+          <Text style={[styles.slipMeta, { color: theme.text3 }]}>
+            {(serviceTitle.trim() || 'Service estimate')}{location.trim() ? ` — ${location.trim()}` : ''} · {new Date().toLocaleDateString('en-IN')}
+          </Text>
+          <TotalRow label="Services" value={inr(bill.servicesSubtotal)} />
+          {bill.extra > 0 ? <TotalRow label={`Extra charges${extraReason.trim() ? ` (${extraReason.trim()})` : ''}`} value={inr(bill.extra)} /> : null}
+          <TotalRow label="Platform fee" value={inr(bill.platform)} />
+          <TotalRow label={`Transport · ${bill.km} km × ${inr(bill.kmRate)}`} value={inr(bill.transport)} />
+          {bill.discount > 0 ? <TotalRow label={bill.discountLabel || 'Discount'} value={`-${inr(bill.discount)}`} color={theme.err} /> : null}
+          <TotalRow label="Taxable amount" value={inr(bill.taxable)} />
+          <TotalRow label={`GST ${bill.gstRate}%`} value={inr(bill.gst)} />
+          <View style={[styles.totalRow, { borderTopColor: theme.line }]}>
+            <Text style={[styles.totalLabel, { color: theme.text }]}>Estimated total</Text>
+            <Text style={[styles.totalValue, { color: theme.text }]}>{inr(bill.total)}</Text>
+          </View>
+        </View>
 
-            <View style={[styles.slip, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-              <View style={styles.slipHeadRow}>
-                <View>
-                  <Text style={[styles.slipBusiness, { color: theme.text }]}>{BUSINESS_NAME}</Text>
-                  <Text style={[styles.caption, { color: theme.text3 }]}>Cost Estimate</Text>
-                </View>
-                <Text style={[styles.caption, { color: theme.text3 }]}>{new Date().toLocaleDateString('en-IN')}</Text>
-              </View>
-              <Text style={[styles.slipClient, { color: theme.text }]}>{clientName.trim() || 'Client'}</Text>
-              <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(3) }]}>
-                {(serviceTitle.trim() || 'Service estimate')}{location.trim() ? ` — ${location.trim()}` : ''}
-              </Text>
+        {error ? (
+          <View accessibilityRole="alert" style={[styles.infoBanner, { backgroundColor: theme.errS }]}>
+            <Icon name="alert" size={18} color={theme.err} />
+            <Text style={[styles.infoText, { color: theme.text }]}>{error}</Text>
+          </View>
+        ) : null}
 
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Services</Text>
-                <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.servicesSubtotal)}</Text>
-              </View>
-              {bill.extra > 0 ? (
-                <View style={styles.receiptRow}>
-                  <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Extra charges{extraReason.trim() ? ` (${extraReason.trim()})` : ''}</Text>
-                  <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.extra)}</Text>
-                </View>
-              ) : null}
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Platform fee</Text>
-                <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.platform)}</Text>
-              </View>
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Travel ({bill.km} km × {inr(bill.kmRate)})</Text>
-                <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.transport)}</Text>
-              </View>
-              {bill.discount > 0 ? (
-                <View style={styles.receiptRow}>
-                  <Text style={[styles.receiptLabel, { color: semantic.danger }]}>{bill.discountLabel || 'Discount'}</Text>
-                  <Text style={[styles.receiptValue, { color: semantic.danger }]}>-{inr(bill.discount)}</Text>
-                </View>
-              ) : null}
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.text3 }]}>Taxable amount</Text>
-                <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.taxable)}</Text>
-              </View>
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.text3 }]}>GST ({bill.gstRate}%)</Text>
-                <Text style={[styles.receiptValue, { color: theme.text }]}>{inr(bill.gst)}</Text>
-              </View>
-              <View style={[styles.receiptRow, styles.receiptTotalRow, { borderColor: theme.line }]}>
-                <Text style={[styles.receiptTotalLabel, { color: theme.text }]}>Estimated Total</Text>
-                <Text style={[styles.receiptTotalValue, { color: brand.primary }]}>{inr(bill.total)}</Text>
-              </View>
-            </View>
-
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <View style={styles.actionRow}>
-              <PressScale onPress={handleCopy} style={{ flex: 1 }}>
-                <View style={[styles.copyBtn, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-                  <Icon name={copied ? 'check' : 'receipt'} size={14} color={theme.text} />
-                  <Text style={[styles.copyBtnText, { color: theme.text }]}>{copied ? 'Copied!' : 'Copy Text'}</Text>
-                </View>
-              </PressScale>
-              <PressScale onPress={handleWhatsApp} style={{ flex: 1 }}>
-                <View style={[styles.waBtn, { backgroundColor: '#25D366', shadowColor: '#25D366' }]}>
-                  <Icon name="whatsapp" size={14} color="#fff" filled />
-                  <Text style={styles.waBtnText}>Send WhatsApp</Text>
-                </View>
-              </PressScale>
-            </View>
-
-            {pdfUrl ? (
-              <PressScale onPress={() => Linking.openURL(pdfUrl)} style={{ marginTop: spacing(2.5) }}>
-                <View style={[styles.pdfBtn, { borderColor: brand.primary }]}>
-                  <Icon name="receipt" size={14} color={brand.primary} />
-                  <Text style={[styles.pdfBtnText, { color: brand.primary }]}>View PDF</Text>
-                </View>
-              </PressScale>
-            ) : (
-              <PressScale onPress={handleGeneratePdf} disabled={generatingPdf} style={{ marginTop: spacing(2.5) }}>
-                <View style={[styles.pdfBtn, { borderColor: theme.line, opacity: generatingPdf ? 0.7 : 1 }]}>
-                  {generatingPdf ? <ActivityIndicator size="small" color={theme.text} /> : <Icon name="receipt" size={14} color={theme.text} />}
-                  <Text style={[styles.pdfBtnText, { color: theme.text }]}>{generatingPdf ? 'Generating…' : 'Generate PDF'}</Text>
-                </View>
-              </PressScale>
-            )}
-          </GlassCard>
-        </Animated.View>
+        {pdfUrl ? (
+          <GlowButton label="View PDF" onPress={() => Linking.openURL(pdfUrl)} variant="secondary" icon="receipt" />
+        ) : (
+          <GlowButton label="Generate PDF" onPress={handleGeneratePdf} variant="secondary" icon="receipt" loading={generatingPdf} />
+        )}
       </ScrollView>
+
+      <View style={[styles.sticky, { paddingBottom: insets.bottom + 12, backgroundColor: theme.surfaceStrong, borderTopColor: theme.line }]}>
+        <View style={styles.stickySec}>
+          <GlowButton label={copied ? 'Copied!' : 'Copy text'} onPress={handleCopy} variant="secondary" icon={copied ? 'check' : undefined} />
+        </View>
+        <View style={styles.stickyPri}>
+          <GlowButton label="Share on WhatsApp" onPress={handleWhatsApp} icon="whatsapp" />
+        </View>
+      </View>
 
       {showPicker && (
         <ServicePickerModal
@@ -547,51 +408,49 @@ export default function EstimatorScreen({ onBack }: Props) {
   );
 }
 
+function TotalRow({ label, value, color }: { label: string; value: string; color?: string }) {
+  const { theme } = useTheme();
+  return (
+    <View style={styles.receiptRow}>
+      <Text style={[styles.receiptLabel, { color: color ?? theme.text2 }]}>{label}</Text>
+      <Text style={[styles.receiptValue, { color: color ?? theme.text }]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2), marginBottom: spacing(4) },
-  title: { ...typography.title, marginTop: spacing(1) },
-  caption: { ...typography.caption },
-  resetBtn: { width: 36, height: 36, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: spacing(1) },
-  section: { marginBottom: spacing(4) },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), marginBottom: spacing(3) },
-  sectionLabel: { fontFamily: 'Manrope_800ExtraBold', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 },
-  fieldLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing(1) },
+  content: { padding: spacing(4), gap: 18 },
+  infoBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.md },
+  infoText: { ...typography.caption, fontSize: 12, lineHeight: 16, flex: 1 },
+  fieldLabel: { ...typography.caption, marginBottom: spacing(1.5) },
+  fields: { gap: spacing(3.5) },
   fieldRow: { flexDirection: 'row', gap: spacing(3) },
-  input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 44, fontSize: 13, fontFamily: 'Manrope_600SemiBold', marginBottom: spacing(3) },
-  pillRow: { flexDirection: 'row', gap: spacing(2) },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), paddingHorizontal: spacing(3), paddingVertical: spacing(1.75), borderRadius: radius.full, borderWidth: 1 },
-  pillActiveShadow: { shadowColor: brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
-  pillText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-  installEmoji: { fontSize: 14 },
-  jobTypeRow: { flexDirection: 'row', gap: spacing(2) },
-  jobTypePill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.md, borderWidth: 1 },
-  jobTypeText: { fontFamily: 'Manrope_700Bold', fontSize: 12.5 },
-  serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), borderWidth: 1, borderRadius: radius.md, padding: spacing(2.5), marginBottom: spacing(2) },
-  serviceLabel: { fontFamily: 'Manrope_600SemiBold', fontSize: 12.5 },
-  serviceCost: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12.5, minWidth: 64, textAlign: 'right' },
-  qtyStepper: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing(1) },
-  qtyBtn: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
-  qtyValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12, minWidth: 16, textAlign: 'center' },
-  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 42, borderRadius: radius.md, borderWidth: 1.5 },
-  pdfBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12.5 },
-  addServiceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 44, borderRadius: radius.md, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  addServiceBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: '#fff' },
-  slip: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), marginBottom: spacing(3) },
-  slipHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing(3) },
-  slipBusiness: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 14 },
-  slipClient: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
-  receiptRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing(1) },
-  receiptLabel: { fontSize: 12, fontFamily: 'Manrope_600SemiBold', flex: 1, marginRight: spacing(2) },
-  receiptValue: { fontSize: 12, fontFamily: 'Manrope_700Bold' },
-  receiptTotalRow: { borderTopWidth: 1, marginTop: spacing(1), paddingTop: spacing(2) },
-  receiptTotalLabel: { fontFamily: 'Manrope_800ExtraBold', fontSize: 13 },
-  receiptTotalValue: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
-  error: { ...typography.caption, color: semantic.danger, marginBottom: spacing(2), textAlign: 'center' },
-  actionRow: { flexDirection: 'row', gap: spacing(2.5) },
-  copyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 46, borderRadius: radius.md, borderWidth: 1 },
-  copyBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12.5 },
-  waBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 46, borderRadius: radius.md, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 },
-  waBtnText: { fontFamily: 'Manrope_700Bold', fontSize: 12.5, color: '#fff' },
+  half: { flex: 1 },
+  list: { padding: 0, overflow: 'hidden' },
+  emptyRow: { ...typography.supporting, padding: spacing(3.5) },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1 },
+  itemText: { flex: 1, minWidth: 0 },
+  itemName: { ...typography.rowTitle, fontSize: 14, lineHeight: 19 },
+  itemMeta: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
+  itemAmount: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 14, minWidth: 64, textAlign: 'right' },
+  qtyStepper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: radius.sm },
+  qtyBtn: { width: 30, height: 34, alignItems: 'center', justifyContent: 'center' },
+  qtyBtnText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16 },
+  qtyValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13, minWidth: 18, textAlign: 'center' },
+  addRow: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  addText: { fontFamily: 'Manrope_700Bold', fontSize: 14 },
+  pressed: { opacity: 0.7 },
+  totals: { borderRadius: radius.lg, padding: spacing(3.5), gap: 6 },
+  slipClient: { ...typography.rowTitle },
+  slipMeta: { ...typography.supporting, fontSize: 12, marginBottom: spacing(1.5) },
+  receiptRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing(2) },
+  receiptLabel: { ...typography.supporting, flex: 1 },
+  receiptValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, paddingTop: 8, marginTop: 2 },
+  totalLabel: { ...typography.rowTitle, fontSize: 16 },
+  totalValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 18 },
+  sticky: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', gap: 12, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1 },
+  stickySec: { flex: 1 },
+  stickyPri: { flex: 1.6 },
 });

@@ -1,19 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
-import BackLink from '../components/BackLink';
-import PressScale from '../components/PressScale';
+import Panel from '../components/Panel';
+import GlowButton from '../components/GlowButton';
+import ToolHeader from '../components/ToolHeader';
 import Icon from '../components/Icon';
-import ProgressRing from '../components/ProgressRing';
+import SectionLabel from '../components/admin/SectionLabel';
+import StatusBadge from '../components/admin/StatusBadge';
 import VideoPlayerModal from '../components/VideoPlayerModal';
 import QuizModal from '../components/QuizModal';
 import { useTheme } from '../theme/ThemeContext';
 import { resolveUploadUrl } from '../api/client';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
 import { fetchCourseDetail, completeLesson, CourseDetail, Lesson } from '../api/training';
 
 interface Props {
@@ -73,8 +72,9 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
     return (
       <View style={styles.root}>
         <MeshBackground />
+        <ToolHeader title="Course" onBack={onBack} />
         <View style={styles.centered}>
-          <ActivityIndicator color={brand.primary} size="large" />
+          <ActivityIndicator color={theme.accent} size="large" />
         </View>
       </View>
     );
@@ -84,9 +84,9 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
     return (
       <View style={styles.root}>
         <MeshBackground />
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <ToolHeader title="Course" onBack={onBack} />
+        <View style={styles.centered}>
           <Text style={[styles.body, { color: theme.text }]}>{error || 'Course not found'}</Text>
-          <BackLink onPress={onBack} />
         </View>
       </View>
     );
@@ -98,140 +98,100 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing(4), padding: spacing(5), paddingBottom: spacing(12) }}>
-        <BackLink onPress={onBack} />
-
-        <Animated.View entering={FadeInUp.duration(450).springify().damping(15)}>
-          <View style={styles.headerCard}>
-            <View style={styles.headerRow}>
-              <ProgressRing percent={pct} color="#ffffff" trackColor="rgba(255,255,255,0.28)" labelColor="#ffffff" size={72} strokeWidth={7} />
-              <View style={styles.headerInfo}>
-                <Text style={styles.courseTitle}>{detail.course.title}</Text>
-                {detail.course.description ? (
-                  <Text style={styles.courseDesc} numberOfLines={3}>{detail.course.description}</Text>
-                ) : null}
-                <Text style={styles.progressLabel}>{doneCount} of {detail.lessons.length} lessons done</Text>
-              </View>
-            </View>
-            {detail.completion ? (
-              <View style={styles.passedChip}>
-                <Icon name="check-circle" size={13} color="#fff" filled />
-                <Text style={styles.passedChipText}>Course passed</Text>
-              </View>
-            ) : null}
+      <ToolHeader
+        title={detail.course.title}
+        subtitle={`${doneCount} of ${detail.lessons.length} lessons done`}
+        onBack={onBack}
+      />
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing(10) }]}>
+        <Panel style={styles.summary}>
+          {detail.course.description ? (
+            <Text style={[styles.courseDesc, { color: theme.text2 }]} numberOfLines={3}>{detail.course.description}</Text>
+          ) : null}
+          <View style={styles.summaryHead}>
+            <Text style={[styles.summaryLabel, { color: theme.text2 }]}>Course progress</Text>
+            <Text style={[styles.summaryValue, { color: theme.text }]}>{pct}%</Text>
           </View>
-        </Animated.View>
+          <View style={[styles.track, { backgroundColor: theme.panel2 }]}>
+            <View style={[styles.fill, { width: `${pct}%`, backgroundColor: theme.accent }]} />
+          </View>
+          {detail.completion ? (
+            <View style={styles.passedRow}>
+              <StatusBadge label="Course passed" color={theme.ok} icon="check-circle" />
+            </View>
+          ) : null}
+        </Panel>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: theme.err }]}>{error}</Text> : null}
 
-        <Text style={[styles.sectionLabel, { color: theme.text3, marginTop: spacing(3) }]}>Lessons</Text>
+        <View>
+          <SectionLabel>Lessons</SectionLabel>
+          <Panel style={styles.list}>
+            {detail.lessons.map((lesson, i) => {
+              const done = detail.doneLessonIds.includes(lesson.id);
+              const isVideo = lesson.type === 'video' && !!lesson.media_url;
+              const expanded = expandedId === lesson.id;
+              const last = i === detail.lessons.length - 1;
+              const tint = isVideo ? theme.info : theme.teal;
+              const tintBg = isVideo ? theme.infoS : theme.tealS;
+              return (
+                <View key={lesson.id} style={[styles.lesson, !last && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                  <Pressable onPress={() => openLesson(lesson)} style={({ pressed }) => [styles.lessonTop, pressed && styles.pressed]} accessibilityRole="button">
+                    <View style={[styles.tile, { backgroundColor: done ? theme.okS : tintBg }]}>
+                      {done ? <Icon name="check" size={20} color={theme.ok} /> : <Icon name={isVideo ? 'tutorial' : 'report'} size={20} color={tint} />}
+                    </View>
+                    <View style={styles.lessonText}>
+                      <Text style={[styles.lessonTitle, { color: theme.text }]} numberOfLines={2}>{i + 1}. {lesson.title}</Text>
+                      <Text style={[styles.lessonMeta, { color: done ? theme.ok : theme.text3 }]}>
+                        {isVideo ? 'Video · tap to watch' : 'Reading'}{done ? ' · Completed' : ''}
+                      </Text>
+                    </View>
+                    {!isVideo ? <Icon name={expanded ? 'chevron-left' : 'chevron-right'} size={16} color={theme.text3} /> : null}
+                  </Pressable>
 
-        {detail.lessons.map((lesson, i) => {
-          const done = detail.doneLessonIds.includes(lesson.id);
-          const isVideo = lesson.type === 'video' && !!lesson.media_url;
-          const expanded = expandedId === lesson.id;
-          const typeColor = isVideo ? '#2e9bff' : '#0ea5a5';
-          const accent = done ? brand.primary : typeColor;
-          const isLast = i === detail.lessons.length - 1 && detail.quiz.length === 0;
-          return (
-            <Animated.View key={lesson.id} entering={FadeInUp.delay(Math.min(i, 10) * 60).duration(420).springify().damping(15)}>
-              <View style={styles.timelineRow}>
-                <View style={styles.timelineCol}>
-                  <View style={[styles.timelineDot, { backgroundColor: done ? brand.primary : `${typeColor}22`, borderColor: done ? brand.primary : typeColor }]}>
-                    {done ? <Icon name="check" size={15} color="#fff" /> : <Text style={[styles.timelineDotText, { color: typeColor }]}>{i + 1}</Text>}
-                  </View>
-                  {!isLast ? <View style={[styles.timelineLine, { backgroundColor: done ? brand.primary : theme.line }]} /> : null}
+                  {expanded && lesson.content ? (
+                    <Text style={[styles.lessonContent, { color: theme.text2, borderTopColor: theme.line }]}>{lesson.content}</Text>
+                  ) : null}
+
+                  {!done ? (
+                    <Pressable
+                      onPress={() => handleComplete(lesson.id)}
+                      disabled={completingId === lesson.id}
+                      accessibilityRole="button"
+                      style={({ pressed }) => [styles.markBtn, { borderColor: theme.border, opacity: completingId === lesson.id ? 0.6 : 1 }, pressed && styles.pressed]}
+                    >
+                      <Icon name="check" size={14} color={theme.accent} />
+                      <Text style={[styles.markText, { color: theme.accent }]}>{completingId === lesson.id ? 'Saving…' : 'Mark done'}</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
+              );
+            })}
+          </Panel>
+        </View>
 
-                <View style={[styles.lessonOuter, { shadowColor: accent }]}>
-                  <PressScale onPress={() => openLesson(lesson)}>
-                    <GlassCard shadow style={styles.lessonCard}>
-                      {isVideo ? (
-                        <View style={[styles.videoThumb, { backgroundColor: `${typeColor}22` }]}>
-                          <View style={[styles.videoPlayChip, { backgroundColor: typeColor }]}>
-                            <Icon name="tutorial" size={20} color="#fff" filled />
-                          </View>
-                          <Text style={[styles.videoThumbLabel, { color: typeColor }]}>Tap to watch</Text>
-                        </View>
-                      ) : null}
-                      <View style={styles.lessonBody}>
-                        <View style={[styles.typePill, { backgroundColor: `${typeColor}1c` }]}>
-                          <Icon name={isVideo ? 'tutorial' : 'report'} size={10} color={typeColor} />
-                          <Text style={[styles.typePillText, { color: typeColor }]}>{isVideo ? 'Video' : 'Reading'}</Text>
-                        </View>
-                        <View style={styles.lessonTitleRow}>
-                          <Text style={[styles.lessonTitle, { color: theme.text, flex: 1 }]}>{lesson.title}</Text>
-                          {!isVideo ? <Icon name={expanded ? 'chevron-left' : 'chevron-right'} size={15} color={theme.text3} /> : null}
-                        </View>
-
-                        {expanded && lesson.content ? (
-                          <Animated.Text entering={FadeInUp.duration(250)} style={[styles.lessonContent, { color: theme.text2, borderTopColor: theme.line }]}>
-                            {lesson.content}
-                          </Animated.Text>
-                        ) : null}
-
-                        <PressScale onPress={() => !done && handleComplete(lesson.id)} disabled={done || completingId === lesson.id}>
-                          <View style={[styles.completeButton, { backgroundColor: done ? `${brand.primary}18` : brand.primary, opacity: completingId === lesson.id ? 0.7 : 1 }]}>
-                            <Icon name="check" size={13} color={done ? brand.primary : '#fff'} />
-                            <Text style={[styles.completeButtonText, { color: done ? brand.primary : '#fff' }]}>
-                              {completingId === lesson.id ? 'Saving…' : done ? 'Completed' : 'Mark Done'}
-                            </Text>
-                          </View>
-                        </PressScale>
-                      </View>
-                    </GlassCard>
-                  </PressScale>
-                </View>
+        {detail.quiz.length > 0 ? (
+          <Panel style={styles.quiz}>
+            <View style={styles.lessonTop}>
+              <View style={[styles.tile, { backgroundColor: theme.vioS }]}>
+                <Icon name="shield" size={20} color={theme.vio} />
               </View>
-            </Animated.View>
-          );
-        })}
-
-        {detail.quiz.length > 0 ? (() => {
-          const done = !!detail.completion;
-          const typeColor = '#7c5cfc';
-          const accent = done ? brand.primary : typeColor;
-          return (
-            <Animated.View entering={FadeInUp.delay(Math.min(detail.lessons.length, 10) * 60).duration(420).springify().damping(15)}>
-              <View style={styles.timelineRow}>
-                <View style={styles.timelineCol}>
-                  <View style={[styles.timelineDot, { backgroundColor: done ? brand.primary : `${typeColor}22`, borderColor: done ? brand.primary : typeColor }]}>
-                    {done ? <Icon name="check" size={15} color="#fff" /> : <Icon name="shield" size={14} color={typeColor} />}
-                  </View>
-                </View>
-
-                <View style={[styles.lessonOuter, { shadowColor: accent }]}>
-                  <PressScale onPress={() => setShowQuiz(true)}>
-                    <GlassCard shadow style={styles.lessonCard}>
-                      <View style={[styles.videoThumb, { backgroundColor: `${typeColor}22` }]}>
-                        <View style={[styles.videoPlayChip, { backgroundColor: typeColor }]}>
-                          <Icon name="shield" size={20} color="#fff" />
-                        </View>
-                        <Text style={[styles.videoThumbLabel, { color: typeColor }]}>{detail.quiz.length} question{detail.quiz.length > 1 ? 's' : ''} · 70% to pass</Text>
-                      </View>
-                      <View style={styles.lessonBody}>
-                        <View style={[styles.typePill, { backgroundColor: `${typeColor}1c` }]}>
-                          <Icon name="shield" size={10} color={typeColor} />
-                          <Text style={[styles.typePillText, { color: typeColor }]}>Quiz</Text>
-                        </View>
-                        <View style={styles.lessonTitleRow}>
-                          <Text style={[styles.lessonTitle, { color: theme.text, flex: 1 }]}>Course Quiz</Text>
-                        </View>
-
-                        <View style={[styles.completeButton, { backgroundColor: done ? `${brand.primary}18` : typeColor }]}>
-                          <Icon name={done ? 'check' : 'arrow-right'} size={13} color={done ? brand.primary : '#fff'} />
-                          <Text style={[styles.completeButtonText, { color: done ? brand.primary : '#fff' }]}>
-                            {done ? 'Passed — Retake' : 'Take Quiz'}
-                          </Text>
-                        </View>
-                      </View>
-                    </GlassCard>
-                  </PressScale>
-                </View>
+              <View style={styles.lessonText}>
+                <Text style={[styles.lessonTitle, { color: theme.text }]}>Course quiz</Text>
+                <Text style={[styles.lessonMeta, { color: theme.text3 }]}>
+                  {detail.quiz.length} question{detail.quiz.length > 1 ? 's' : ''} · 70% to pass
+                </Text>
               </View>
-            </Animated.View>
-          );
-        })() : null}
+              {detail.completion ? <StatusBadge label="Passed" color={theme.ok} /> : null}
+            </View>
+            <GlowButton
+              label={detail.completion ? 'Passed — Retake' : 'Take Quiz'}
+              onPress={() => setShowQuiz(true)}
+              variant={detail.completion ? 'secondary' : 'primary'}
+              icon={detail.completion ? 'check' : 'arrow-right'}
+            />
+          </Panel>
+        ) : null}
       </ScrollView>
 
       {playingLesson && (
@@ -259,44 +219,28 @@ export default function CoursePlayerScreen({ courseId, onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  content: { padding: spacing(4), gap: 18 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing(3) },
   body: { ...typography.body },
-  error: { ...typography.caption, color: semantic.danger, marginTop: spacing(3) },
-  sectionLabel: { ...typography.caption, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing(2.5) },
-  headerCard: {
-    backgroundColor: brand.fill,
-    borderRadius: 20,
-    padding: spacing(4),
-    shadowColor: brand.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 6,
-  },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(4) },
-  headerInfo: { flex: 1, minWidth: 0 },
-  courseTitle: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 17, color: '#fff', marginBottom: spacing(1) },
-  courseDesc: { fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 17, marginBottom: spacing(1.5) },
-  progressLabel: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: 'rgba(255,255,255,0.9)' },
-  passedChip: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5), alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: spacing(2.5), paddingVertical: spacing(1), borderRadius: radius.full, marginTop: spacing(3) },
-  passedChipText: { fontFamily: 'Manrope_700Bold', fontSize: 10.5, color: '#fff' },
-  lessonTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, lineHeight: 20 },
-  lessonContent: { fontSize: 13, lineHeight: 19, marginTop: spacing(3), paddingTop: spacing(3), borderTopWidth: 1 },
-  completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing(1.5), height: 38, borderRadius: 10, marginTop: spacing(3) },
-  completeButtonText: { fontFamily: 'Manrope_700Bold', fontSize: 12 },
-
-  timelineRow: { flexDirection: 'row', gap: spacing(3) },
-  timelineCol: { alignItems: 'center', width: 34 },
-  timelineDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  timelineDotText: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
-  timelineLine: { width: 2.5, flex: 1, minHeight: spacing(4), marginTop: spacing(1), borderRadius: 2 },
-  lessonOuter: { flex: 1, marginBottom: spacing(4), shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 3 },
-  lessonCard: { padding: 0, overflow: 'hidden' },
-  videoThumb: { height: 96, alignItems: 'center', justifyContent: 'center', gap: spacing(1.5) },
-  videoPlayChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  videoThumbLabel: { fontFamily: 'Manrope_700Bold', fontSize: 10.5 },
-  lessonBody: { padding: spacing(4) },
-  typePill: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), alignSelf: 'flex-start', paddingHorizontal: spacing(2), paddingVertical: spacing(0.75), borderRadius: radius.full, marginBottom: spacing(2) },
-  typePillText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 9.5, letterSpacing: 0.5, textTransform: 'uppercase' },
-  lessonTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
+  error: { ...typography.caption },
+  pressed: { opacity: 0.75 },
+  summary: { gap: spacing(2), borderRadius: radius.xl - 4, padding: spacing(4) },
+  courseDesc: { ...typography.supporting, marginBottom: spacing(1) },
+  summaryHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  summaryLabel: { ...typography.caption },
+  summaryValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 15 },
+  track: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  fill: { height: 8, borderRadius: 4 },
+  passedRow: { marginTop: spacing(1) },
+  list: { padding: 0, overflow: 'hidden', borderRadius: radius.xl - 4 },
+  lesson: { padding: 14, gap: spacing(2.5) },
+  lessonTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tile: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  lessonText: { flex: 1, minWidth: 0 },
+  lessonTitle: { ...typography.rowTitle, fontSize: 14, lineHeight: 19 },
+  lessonMeta: { ...typography.supporting, fontSize: 12, lineHeight: 16 },
+  lessonContent: { ...typography.supporting, lineHeight: 19, paddingTop: spacing(3), borderTopWidth: 1 },
+  markBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: radius.sm, borderWidth: 1 },
+  markText: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  quiz: { gap: spacing(2), borderRadius: radius.xl - 4, padding: spacing(3.5) },
 });

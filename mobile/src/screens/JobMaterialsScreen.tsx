@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../components/admin/AdminScreen';
 import ActionButton from '../components/admin/ActionButton';
+import FilterChips from '../components/admin/FilterChips';
+import Panel from '../components/Panel';
+import GlowButton from '../components/GlowButton';
 import Field from '../components/admin/Field';
 import SearchField from '../components/admin/SearchField';
 import SectionLabel from '../components/admin/SectionLabel';
@@ -20,7 +23,6 @@ import {
 } from '../api/employeeExtra';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
 
 interface Props {
   onBack: () => void;
@@ -137,20 +139,11 @@ export default function JobMaterialsScreen({ onBack }: Props) {
   return (
     <AdminScreen title="Materials Used" subtitle="Stock fitted on, or brought back from, a job" onBack={onBack}>
       <View style={styles.form}>
-        <View style={styles.chips}>
-          {(['used', 'returned'] as Kind[]).map((k) => {
-            const on = kind === k;
-            return (
-              <Pressable
-                key={k}
-                onPress={() => setKind(k)}
-                style={[styles.kind, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-              >
-                <Text style={[styles.kindText, { color: on ? brand.primary : theme.text2 }]}>{k === 'used' ? 'Used on the job' : 'Returned from job'}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <FilterChips
+          items={[{ key: 'used', label: 'Used on the job' }, { key: 'returned', label: 'Returned from job' }]}
+          activeKey={kind}
+          onSelect={(k) => setKind(k as Kind)}
+        />
 
         <SectionLabel>Job</SectionLabel>
         {job ? (
@@ -183,20 +176,7 @@ export default function JobMaterialsScreen({ onBack }: Props) {
         )}
 
         <SectionLabel>{kind === 'used' ? 'Taken from' : 'Goes back into'}</SectionLabel>
-        <View style={styles.chips}>
-          {places.map((p) => {
-            const on = p.id === placeId;
-            return (
-              <Pressable
-                key={p.id}
-                onPress={() => setPlaceId(p.id)}
-                style={[styles.kind, { borderColor: on ? brand.primary : theme.line, backgroundColor: on ? brand.primary + '22' : theme.panel2 }]}
-              >
-                <Text style={[styles.kindText, { color: on ? brand.primary : theme.text2 }]} numberOfLines={1}>{p.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <FilterChips items={places.map((p) => ({ key: p.id, label: p.name }))} activeKey={placeId} onSelect={setPlaceId} />
 
         <SectionLabel>Items</SectionLabel>
         <SearchField value={itemQuery} onChangeText={setItemQuery} placeholder="Search item name, brand or SKU" />
@@ -210,40 +190,56 @@ export default function JobMaterialsScreen({ onBack }: Props) {
             onPress={() => add(i)}
           />
         ))}
-        {lines.map((l) => {
-          const have = held.get(l.item.id);
-          const over = kind === 'used' && have !== undefined && Number(l.qty) > have;
-          return (
-            <View key={l.item.id} style={[styles.line, { backgroundColor: theme.panel2, borderColor: theme.line }]}>
-              <View style={styles.lineHead}>
-                <Text style={[styles.lineName, { color: theme.text }]} numberOfLines={1}>{l.item.name}</Text>
-                <Pressable onPress={() => setLines((p) => p.filter((x) => x.item.id !== l.item.id))} hitSlop={10} accessibilityLabel="Remove item">
-                  <Icon name="close" size={18} color={theme.text3} />
-                </Pressable>
-              </View>
-              <View style={styles.lineFields}>
-                <View style={styles.qty}>
-                  <Field label={`Qty${l.item.unit ? ` (${l.item.unit})` : ''}`} value={l.qty} onChangeText={(v) => patch(l.item.id, { qty: v })} keyboardType="numeric" />
-                </View>
-                {kind === 'used' ? (
-                  <View style={styles.qty}>
-                    <Field label="Rate ₹" value={l.rate} onChangeText={(v) => patch(l.item.id, { rate: v })} keyboardType="numeric" />
+        {lines.length > 0 ? (
+          <Panel style={styles.lines}>
+            {lines.map((l, idx) => {
+              const have = held.get(l.item.id);
+              const qtyNum = Number(l.qty) || 0;
+              const over = kind === 'used' && have !== undefined && qtyNum > have;
+              const last = idx === lines.length - 1;
+              return (
+                <View key={l.item.id} style={[styles.line, !last && { borderBottomColor: theme.line, borderBottomWidth: 1 }]}>
+                  <View style={styles.lineHead}>
+                    <Text style={[styles.lineName, { color: theme.text }]} numberOfLines={1}>{l.item.name}</Text>
+                    {have !== undefined ? <Text style={[styles.lineVan, { color: theme.text3 }]}>In van {have}</Text> : null}
+                    <Pressable onPress={() => setLines((p) => p.filter((x) => x.item.id !== l.item.id))} hitSlop={10} accessibilityLabel="Remove item">
+                      <Icon name="close" size={18} color={theme.text3} />
+                    </Pressable>
                   </View>
-                ) : null}
-              </View>
-              {over ? <Text style={[styles.warn, { color: semantic.danger }]}>Only {have} recorded here</Text> : null}
-            </View>
-          );
-        })}
+                  <View style={styles.lineFields}>
+                    <View style={[styles.stepper, { borderColor: theme.border }]}>
+                      <Text style={[styles.stepLabel, { color: theme.text2 }]}>Qty {kind === 'used' ? 'used' : 'returned'}{l.item.unit ? ` (${l.item.unit})` : ''}</Text>
+                      <View style={styles.stepControls}>
+                        <Pressable onPress={() => patch(l.item.id, { qty: String(Math.max(0, qtyNum - 1)) })} style={styles.stepBtn} hitSlop={4} accessibilityLabel="Less">
+                          <Text style={[styles.stepGlyph, { color: theme.text }]}>−</Text>
+                        </Pressable>
+                        <Text style={[styles.stepValue, { color: over ? theme.err : theme.text }]}>{qtyNum}</Text>
+                        <Pressable onPress={() => patch(l.item.id, { qty: String(qtyNum + 1) })} style={styles.stepBtn} hitSlop={4} accessibilityLabel="More">
+                          <Text style={[styles.stepGlyph, { color: theme.text }]}>+</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    {kind === 'used' ? (
+                      <View style={styles.rate}>
+                        <Field label="Rate ₹" value={l.rate} onChangeText={(v) => patch(l.item.id, { rate: v })} keyboardType="numeric" />
+                      </View>
+                    ) : null}
+                  </View>
+                  {over ? <Text style={[styles.warn, { color: theme.err }]}>Only {have} recorded here</Text> : null}
+                </View>
+              );
+            })}
+          </Panel>
+        ) : null}
 
         <Field label="Note (optional)" value={note} onChangeText={setNote} multiline />
         {kind === 'used' ? (
           <Pressable onPress={() => setExtra((v) => !v)} style={styles.check}>
-            <Icon name={extra ? 'check-circle' : 'tasks'} size={20} color={extra ? brand.primary : theme.text3} filled={extra} />
+            <Icon name={extra ? 'check-circle' : 'tasks'} size={20} color={extra ? theme.accent : theme.text3} filled={extra} />
             <Text style={[styles.checkText, { color: theme.text }]}>Customer approved this as extra work</Text>
           </Pressable>
         ) : null}
-        <ActionButton label="Send for approval" tone="success" busy={busy} onPress={save} />
+        <GlowButton label="Send for approval" onPress={save} loading={busy} icon="check" />
       </View>
     </AdminScreen>
   );
@@ -251,15 +247,20 @@ export default function JobMaterialsScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   form: { gap: spacing(3) },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2) },
-  kind: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing(3.5), paddingVertical: spacing(2.5), maxWidth: '100%' },
-  kindText: { ...typography.caption, fontSize: 12 },
-  line: { borderWidth: 1, borderRadius: radius.md, padding: spacing(3.5), gap: spacing(2) },
+  lines: { padding: 0, overflow: 'hidden' },
+  line: { padding: spacing(3.5), gap: spacing(2.5) },
   lineHead: { flexDirection: 'row', alignItems: 'center', gap: spacing(3) },
-  lineName: { ...typography.body, fontFamily: 'Manrope_700Bold', flex: 1 },
-  lineFields: { flexDirection: 'row', gap: spacing(3) },
-  qty: { flex: 1 },
-  warn: { ...typography.caption, fontSize: 11 },
+  lineName: { ...typography.rowTitle, fontSize: 14, lineHeight: 19, flex: 1 },
+  lineVan: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 12 },
+  lineFields: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing(3) },
+  stepper: { flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: radius.sm, paddingLeft: 10, paddingRight: 4 },
+  stepLabel: { ...typography.caption, fontSize: 12, flexShrink: 1 },
+  stepControls: { flexDirection: 'row', alignItems: 'center' },
+  stepBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  stepGlyph: { fontFamily: 'Manrope_700Bold', fontSize: 20, lineHeight: 24 },
+  stepValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 14, minWidth: 28, textAlign: 'center' },
+  rate: { flex: 1 },
+  warn: { ...typography.caption, fontSize: 12 },
   check: { flexDirection: 'row', alignItems: 'center', gap: spacing(2) },
   checkText: { ...typography.body, flex: 1, fontSize: 14 },
 });

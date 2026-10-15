@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import AdminScreen from '../components/admin/AdminScreen';
 import SearchField from '../components/admin/SearchField';
 import FilterChips from '../components/admin/FilterChips';
-import ListRow from '../components/admin/ListRow';
+import Panel from '../components/Panel';
 import ActionButton from '../components/admin/ActionButton';
 import EmptyNote from '../components/admin/EmptyNote';
 import FormSheet from '../components/admin/FormSheet';
@@ -14,7 +14,7 @@ import Icon from '../components/Icon';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { brand } from '../theme/tokens';
 import {
   createService,
   deleteService,
@@ -255,27 +255,35 @@ export default function ServicePricingScreen({ onBack }: Props) {
       {groups.map(([group, rows]) => (
         <View key={group}>
           <SectionLabel>{group}</SectionLabel>
-          {rows.map((i) => {
-            const on = picked.has(i.id);
-            return (
-              <ListRow
-                key={i.id}
-                icon={selecting ? (on ? 'check-circle' : 'receipt') : 'receipt'}
-                iconColor={on ? semantic.success : undefined}
-                title={i.sub_sub_category || i.name}
-                value={inr(i.cost)}
-                onPress={selecting ? () => toggle(i.id) : canManage ? () => openEditor(i) : undefined}
-                footer={
-                  canManage && !selecting ? (
+          <Panel style={styles.group}>
+            {rows.map((i, idx) => {
+              const on = picked.has(i.id);
+              const last = idx === rows.length - 1;
+              const open = selecting ? () => toggle(i.id) : canManage ? () => openEditor(i) : undefined;
+              return (
+                <Pressable
+                  key={i.id}
+                  disabled={!open}
+                  onPress={open}
+                  style={({ pressed }) => [styles.priceRow, !last && { borderBottomColor: theme.line, borderBottomWidth: 1 }, pressed && styles.pressed]}
+                >
+                  {selecting ? <Icon name={on ? 'check-circle' : 'dot'} size={22} color={on ? theme.ok : theme.text3} filled={on} /> : null}
+                  <Text style={[styles.priceName, { color: theme.text }]} numberOfLines={2}>{i.sub_sub_category || i.name}</Text>
+                  <Text style={[styles.priceValue, { color: theme.text }]}>{inr(i.cost)}</Text>
+                  {canManage && !selecting ? (
                     <View style={styles.rowActions}>
-                      <ActionButton label="Edit" tone="neutral" onPress={() => openEditor(i)} />
-                      <ActionButton label="Delete" tone="danger" onPress={() => removeOne(i)} />
+                      <Pressable onPress={() => openEditor(i)} hitSlop={4} style={styles.iconBtn} accessibilityLabel={`Edit ${i.sub_sub_category || i.name}`}>
+                        <Icon name="edit" size={18} color={theme.text2} />
+                      </Pressable>
+                      <Pressable onPress={() => removeOne(i)} hitSlop={4} style={styles.iconBtn} accessibilityLabel={`Delete ${i.sub_sub_category || i.name}`}>
+                        <Icon name="trash" size={18} color={theme.err} />
+                      </Pressable>
                     </View>
-                  ) : undefined
-                }
-              />
-            );
-          })}
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </Panel>
         </View>
       ))}
 
@@ -297,6 +305,12 @@ export default function ServicePricingScreen({ onBack }: Props) {
 const styles = StyleSheet.create({
   add: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   tools: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginBottom: spacing(2) },
-  rowActions: { flexDirection: 'row', gap: spacing(2) },
+  group: { padding: 0, overflow: 'hidden' },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(2.5), minHeight: 56, paddingVertical: 12, paddingLeft: 14, paddingRight: 6 },
+  priceName: { ...typography.rowTitle, fontSize: 14, lineHeight: 19, flex: 1 },
+  priceValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 14, marginRight: spacing(1.5) },
+  rowActions: { flexDirection: 'row' },
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.7 },
   hint: { ...typography.caption, marginBottom: spacing(2) },
 });

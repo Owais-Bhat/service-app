@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
+import Panel from '../components/Panel';
 import GlowButton from '../components/GlowButton';
-import BackLink from '../components/BackLink';
+import Icon from '../components/Icon';
+import ToolHeader from '../components/ToolHeader';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme';
 import { ApiError } from '../api/client';
 import { fetchPoolJobs, claimPoolJob, PoolJob } from '../api/gigPool';
 
@@ -72,42 +72,60 @@ export default function GigPoolScreen({ onBack }: Props) {
   return (
     <View style={styles.root}>
       <MeshBackground />
+      <ToolHeader
+        title="Public Jobs"
+        subtitle={`${jobs.length} open near you`}
+        onBack={onBack}
+      />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(4), paddingBottom: insets.bottom + spacing(10), paddingHorizontal: spacing(5) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing(10) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ok} />}
       >
-        <BackLink onPress={onBack} />
-        <Text style={[styles.title, { color: theme.text }]}>Public Jobs</Text>
-        <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(5) }]}>
+        <Text style={[styles.info, { color: theme.text2 }]}>
           Unclaimed jobs open to any gig worker — online payment only. First to claim gets it, and you can only hold one active job at a time.
         </Text>
 
-        {error ? <Text style={[styles.caption, { color: semantic.danger, marginBottom: spacing(3) }]}>{error}</Text> : null}
+        {error ? (
+          <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: theme.warnS, borderColor: theme.warn }]}>
+            <Icon name="alert" size={20} color={theme.warn} />
+            <Text style={[styles.bannerText, { color: theme.text }]}>{error}</Text>
+          </View>
+        ) : null}
         {claimedTicket ? (
-          <GlassCard style={styles.card}>
-            <Text style={[styles.service, { color: semantic.success }]}>Job claimed ✅</Text>
-            <Text style={[styles.body, { color: theme.text2 }]}>
-              <Text style={{ fontFamily: 'JetBrainsMono_700Bold', color: theme.text }}>{claimedTicket}</Text> is now yours.
-            </Text>
-          </GlassCard>
+          <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: theme.okS, borderColor: theme.ok }]}>
+            <Icon name="check-circle" size={20} color={theme.ok} />
+            <View style={styles.bannerBody}>
+              <Text style={[styles.bannerTitle, { color: theme.text }]}>Job claimed</Text>
+              <Text style={[styles.bannerText, { color: theme.text2 }]}>
+                <Text style={{ fontFamily: 'JetBrainsMono_700Bold', color: theme.text }}>{claimedTicket}</Text> is now yours.
+              </Text>
+            </View>
+          </View>
         ) : null}
 
         {jobs.length === 0 ? (
-          <Text style={[styles.caption, { color: theme.text3 }]}>No public jobs available right now.</Text>
+          <Text style={[styles.info, { color: theme.text3 }]}>No public jobs available right now.</Text>
         ) : (
           jobs.map((job) => (
-            <GlassCard key={job.id} style={styles.card}>
-              <Text style={[styles.ticketNo, { color: brand.primary }]}>{job.ticket_no}</Text>
-              <Text style={[styles.service, { color: theme.text }]}>{job.service_item}</Text>
-              <Text style={[styles.body, { color: theme.text2 }]}>{job.full_name}</Text>
-              <Text style={[styles.caption, { color: theme.text3, marginBottom: spacing(3) }]}>{job.location}</Text>
+            <Panel key={job.id} style={styles.card}>
+              <Text style={[styles.ticketNo, { color: theme.accent }]}>{job.ticket_no}</Text>
+              <View>
+                <Text style={[styles.service, { color: theme.text }]}>{job.service_item}</Text>
+                <Text style={[styles.customer, { color: theme.text2 }]}>{job.full_name}</Text>
+                {job.location ? (
+                  <View style={styles.locRow}>
+                    <Icon name="pin" size={14} color={theme.text3} />
+                    <Text style={[styles.location, { color: theme.text3 }]} numberOfLines={2}>{job.location}</Text>
+                  </View>
+                ) : null}
+              </View>
               <GlowButton
                 label="Claim Job"
                 onPress={() => handleClaim(job)}
                 loading={claimingId === job.id}
                 icon="arrow-right"
               />
-            </GlassCard>
+            </Panel>
           ))
         )}
       </ScrollView>
@@ -117,10 +135,16 @@ export default function GigPoolScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  title: { ...typography.title, marginTop: spacing(4) },
-  caption: { ...typography.caption },
-  body: { ...typography.body },
-  card: { marginBottom: spacing(4) },
-  ticketNo: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13, marginBottom: spacing(1) },
-  service: { ...typography.heading, fontSize: 15, marginBottom: spacing(1) },
+  content: { padding: spacing(4), gap: 18 },
+  info: { ...typography.supporting },
+  banner: { flexDirection: 'row', gap: spacing(2.5), padding: spacing(3), borderRadius: 16, borderWidth: 1, alignItems: 'flex-start' },
+  bannerBody: { flex: 1 },
+  bannerTitle: { ...typography.rowTitle, fontSize: 14 },
+  bannerText: { ...typography.supporting, flex: 1, fontSize: 12, lineHeight: 16 },
+  card: { gap: spacing(2.5), borderRadius: radius.xl - 4 },
+  ticketNo: { ...typography.monoId },
+  service: { ...typography.rowTitle, fontSize: 16, lineHeight: 22 },
+  customer: { ...typography.supporting, marginTop: 2 },
+  locRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  location: { ...typography.supporting, flex: 1 },
 });

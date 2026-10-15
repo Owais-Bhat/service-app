@@ -3,12 +3,10 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import AppHeaderBar from '../components/AppHeaderBar';
-import AnimatedStatCard from '../components/AnimatedStatCard';
-import GlassCard from '../components/GlassCard';
+import Panel from '../components/Panel';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme';
 import { fetchMyTasks, TaskItem } from '../api/tasks';
 import { fetchAttendanceHistory, fetchLeaveRequests, AttendanceRow, LeaveRequest } from '../api/attendance';
 import { fetchCashInquiries, cashAmount, CashInquiry } from '../api/earnings';
@@ -73,46 +71,60 @@ export default function MyStatsScreen({ onBack }: Props) {
     return ageDays > 3 && t.status !== 'resolved' && t.status !== 'case_closed' && t.status !== 'foc';
   }).length;
 
+  const otherTasks = Math.max(allTasks.length - resolved.length - inProgress.length, 0);
+  const segments = [
+    { label: 'Resolved', count: resolved.length, color: theme.ok },
+    { label: 'In progress', count: inProgress.length, color: theme.warn },
+    { label: 'Other', count: otherTasks, color: theme.info },
+  ];
+
   return (
     <View style={styles.root}>
       <MeshBackground />
-      <AppHeaderBar title="My Stats" onBack={onBack} />
+      <AppHeaderBar title="My Stats" subtitle={user?.full_name} onBack={onBack} />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + spacing(16), paddingBottom: spacing(8), paddingHorizontal: spacing(4) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={semantic.success} />}
+        contentContainerStyle={{ paddingTop: insets.top + spacing(16), paddingBottom: spacing(8), paddingHorizontal: spacing(4), gap: 18 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.ok} />}
       >
         {loading && <Text style={[styles.dim, { color: theme.text3 }]}>Loading…</Text>}
-        {error && <Text style={[styles.dim, { color: semantic.danger }]}>{error}</Text>}
+        {error && <Text style={[styles.dim, { color: theme.err }]}>{error}</Text>}
 
         {!loading && !error && (
           <>
-            <Text style={[styles.section, { color: theme.text3 }]}>Service Tasks</Text>
-            <View style={styles.row}>
-              <AnimatedStatCard label="Total" value={allTasks.length} accentColor={brand.primary} delayMs={0} />
-              <AnimatedStatCard label="In Progress" value={inProgress.length} accentColor={semantic.warning} delayMs={80} />
-            </View>
-            <View style={[styles.row, { marginTop: spacing(3) }]}>
-              <AnimatedStatCard label="Resolved" value={resolved.length} accentColor={semantic.success} delayMs={160} />
-              <AnimatedStatCard label="SLA Breach" value={slaBreached} accentColor={semantic.danger} delayMs={240} />
-            </View>
-
-            <Text style={[styles.section, { color: theme.text3 }]}>Attendance</Text>
-            <View style={styles.row}>
-              <AnimatedStatCard label="Present Days" value={presentDays} accentColor={semantic.success} delayMs={0} />
-              <AnimatedStatCard label="Approved Leave" value={approvedLeave} accentColor={brand.primary} delayMs={80} />
-            </View>
-            {pendingLeave > 0 && (
-              <View style={[styles.row, { marginTop: spacing(3) }]}>
-                <AnimatedStatCard label="Pending Leave" value={pendingLeave} accentColor={semantic.warning} delayMs={0} />
+            <Panel style={styles.panel}>
+              <View style={styles.panelHead}>
+                <Text style={[styles.panelTitle, { color: theme.text }]}>Service tasks</Text>
+                <Text style={[styles.panelValue, { color: theme.text }]}>{allTasks.length} jobs</Text>
               </View>
-            )}
+              <View style={[styles.bar, { backgroundColor: theme.panel2 }]}>
+                {segments.map((seg) => (seg.count > 0 ? <View key={seg.label} style={{ flex: seg.count, backgroundColor: seg.color }} /> : null))}
+              </View>
+              <View style={styles.legend}>
+                {segments.map((seg) => (
+                  <View key={seg.label} style={styles.legendRow}>
+                    <View style={[styles.swatch, { backgroundColor: seg.color }]} />
+                    <Text style={[styles.legendLabel, { color: theme.text }]}>{seg.label}</Text>
+                    <Text style={[styles.legendCount, { color: theme.text }]}>{seg.count}</Text>
+                  </View>
+                ))}
+              </View>
+            </Panel>
 
-            <Text style={[styles.section, { color: theme.text3 }]}>Collections</Text>
-            <GlassCard style={styles.cashCard}>
-              <Text style={[styles.cashLabel, { color: theme.text3 }]}>Total Cash Collected</Text>
-              <Text style={[styles.cashValue, { color: brand.primary }]}>{money(totalCash)}</Text>
-              <Text style={[styles.cashSub, { color: theme.text3 }]}>{cash.length} paid jobs</Text>
-            </GlassCard>
+            <View style={styles.tiles}>
+              <Tile label="SLA breach" value={slaBreached} hint={slaBreached > 0 ? 'Open more than 3 days' : 'None right now'} hintColor={slaBreached > 0 ? theme.err : theme.ok} />
+              <Tile label="Present days" value={presentDays} />
+            </View>
+            <View style={styles.tiles}>
+              <Tile label="Approved leave" value={approvedLeave} />
+              {pendingLeave > 0 ? <Tile label="Pending leave" value={pendingLeave} hintColor={theme.warn} /> : <View style={styles.tilePad} />}
+            </View>
+
+            <Panel style={styles.panel}>
+              <Text style={[styles.overline, { color: theme.text3 }]}>Collections</Text>
+              <Text style={[styles.cashLabel, { color: theme.text2 }]}>Total cash collected</Text>
+              <Text style={[styles.cashValue, { color: theme.accent }]}>{money(totalCash)}</Text>
+              <Text style={[styles.cashSub, { color: theme.text2 }]}>{cash.length} paid jobs</Text>
+            </Panel>
           </>
         )}
       </ScrollView>
@@ -120,13 +132,38 @@ export default function MyStatsScreen({ onBack }: Props) {
   );
 }
 
+function Tile({ label, value, hint, hintColor }: { label: string; value: number; hint?: string; hintColor?: string }) {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.tile, { backgroundColor: theme.panel2 }]}>
+      <Text style={[styles.tileLabel, { color: theme.text2 }]}>{label}</Text>
+      <Text style={[styles.tileValue, { color: theme.text }]}>{value}</Text>
+      {hint ? <Text style={[styles.tileHint, { color: hintColor ?? theme.text2 }]}>{hint}</Text> : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   dim: { ...typography.body, textAlign: 'center', marginTop: spacing(8) },
-  section: { ...typography.caption, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing(5), marginBottom: spacing(2) },
-  row: { flexDirection: 'row', gap: spacing(3) },
-  cashCard: { alignItems: 'center', paddingVertical: spacing(5) },
-  cashLabel: { ...typography.caption },
-  cashValue: { ...typography.title, fontSize: 36, fontWeight: '700', marginVertical: spacing(1) },
-  cashSub: { ...typography.caption },
+  panel: { padding: spacing(4), borderRadius: radius.xl - 4 },
+  panelHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  panelTitle: { ...typography.rowTitle },
+  panelValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 15 },
+  bar: { height: 10, borderRadius: 5, marginTop: spacing(2.5), marginBottom: spacing(3), flexDirection: 'row', overflow: 'hidden' },
+  legend: { gap: 6 },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  swatch: { width: 10, height: 10, borderRadius: 3 },
+  legendLabel: { ...typography.caption, flex: 1 },
+  legendCount: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 13 },
+  tiles: { flexDirection: 'row', gap: 10 },
+  tile: { flex: 1, borderRadius: radius.lg, padding: spacing(3.5) },
+  tilePad: { flex: 1 },
+  tileLabel: { ...typography.caption, fontSize: 12 },
+  tileValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 22, lineHeight: 30 },
+  tileHint: { ...typography.caption, fontSize: 12 },
+  overline: { ...typography.overline },
+  cashLabel: { ...typography.caption, marginTop: spacing(2) },
+  cashValue: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 28, lineHeight: 36 },
+  cashSub: { ...typography.supporting },
 });

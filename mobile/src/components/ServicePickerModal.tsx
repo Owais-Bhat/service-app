@@ -4,7 +4,6 @@ import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, spacing, typography } from '../theme';
-import { brand, semantic } from '../theme/tokens';
 import { fetchServicePricing, ServicePricingItem } from '../api/servicePricing';
 
 export interface PickedService {
@@ -55,7 +54,7 @@ export default function ServicePickerModal({ onDismiss, onSelect }: Props) {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <GlassSurface style={styles.card} borderRadius={radius.lg}>
+        <GlassSurface style={styles.card} borderRadius={radius.sheet}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.text }]}>Add Service</Text>
             <Pressable onPress={onDismiss} style={styles.closeBtn} hitSlop={10}>
@@ -63,8 +62,8 @@ export default function ServicePickerModal({ onDismiss, onSelect }: Props) {
             </Pressable>
           </View>
 
-          <View style={[styles.searchBox, { borderColor: theme.line, backgroundColor: theme.panel2 }]}>
-            <Icon name="search" size={15} color={theme.text3} />
+          <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.panel }]}>
+            <Icon name="search" size={18} color={theme.text2} />
             <TextInput
               style={[styles.searchInput, { color: theme.text }]}
               placeholder="Search services…"
@@ -75,7 +74,7 @@ export default function ServicePickerModal({ onDismiss, onSelect }: Props) {
           </View>
 
           {loading ? (
-            <ActivityIndicator color={brand.primary} style={{ marginVertical: spacing(6) }} />
+            <ActivityIndicator color={theme.accent} style={{ marginVertical: spacing(6) }} />
           ) : (
             <ScrollView keyboardShouldPersistTaps="handled" style={styles.list} showsVerticalScrollIndicator={false}>
               {grouped.length === 0 ? (
@@ -83,7 +82,7 @@ export default function ServicePickerModal({ onDismiss, onSelect }: Props) {
               ) : (
                 grouped.map(([category, group]) => (
                   <View key={category} style={{ marginBottom: spacing(3) }}>
-                    <Text style={[styles.groupLabel, { color: brand.primary }]}>{category}</Text>
+                    <Text style={[styles.groupLabel, { color: theme.text3 }]}>{category}</Text>
                     {group.map((item) => (
                       <Pressable
                         key={item.id}
@@ -93,7 +92,7 @@ export default function ServicePickerModal({ onDismiss, onSelect }: Props) {
                         <Text style={[styles.rowLabel, { color: theme.text }]} numberOfLines={2}>
                           {[item.sub_category, item.sub_sub_category || item.name].filter(Boolean).join(' > ')}
                         </Text>
-                        <Text style={[styles.rowCost, { color: semantic.success }]}>₹{item.cost.toLocaleString('en-IN')}</Text>
+                        <Text style={[styles.rowCost, { color: theme.text }]}>₹{item.cost.toLocaleString('en-IN')}</Text>
                       </Pressable>
                     ))}
                   </View>
@@ -111,15 +110,15 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing(5) },
   card: { width: '100%', maxWidth: 440, maxHeight: '80%', padding: spacing(5) },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing(3) },
-  title: { ...typography.heading, fontSize: 17 },
-  closeBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 42, marginBottom: spacing(3) },
-  searchInput: { flex: 1, fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
+  title: { ...typography.heading },
+  closeBtn: { width: 44, height: 44, marginRight: -spacing(2), alignItems: 'center', justifyContent: 'center' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing(3), height: 48, marginBottom: spacing(3) },
+  searchInput: { flex: 1, ...typography.body, fontFamily: 'Manrope_500Medium' },
   list: { maxHeight: 380 },
   empty: { fontSize: 13, textAlign: 'center', marginVertical: spacing(6) },
-  groupLabel: { fontFamily: 'Manrope_700Bold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing(1.5) },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing(2), paddingVertical: spacing(2.5), borderBottomWidth: 1 },
+  groupLabel: { ...typography.overline, marginBottom: spacing(1.5) },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing(2), minHeight: 56, paddingVertical: spacing(2), borderBottomWidth: 1 },
   rowPressed: { opacity: 0.6 },
-  rowLabel: { flex: 1, fontSize: 13, fontFamily: 'Manrope_600SemiBold' },
-  rowCost: { fontFamily: 'Manrope_700Bold', fontSize: 13 },
+  rowLabel: { flex: 1, fontSize: 14, lineHeight: 19, fontFamily: 'Manrope_700Bold' },
+  rowCost: { fontFamily: 'JetBrainsMono_700Bold', fontSize: 14 },
 });
