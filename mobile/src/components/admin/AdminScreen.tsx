@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from '../KeyboardAware';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../MeshBackground';
 import AdminHeader from './AdminHeader';
@@ -25,8 +26,9 @@ interface Props {
 // The one frame every admin screen sits in: mesh background, header, optional
 // pinned toolbar, then a scroll area with pull-to-refresh and the shared
 // loading / error states. There is deliberately no KeyboardAvoidingView — the
-// scroll area keeps taps working while the keyboard is up and Android resizes
-// the window itself.
+// scroll area keeps taps working while the keyboard is up, KeyboardInsetRoot
+// lifts the screen above the keyboard, and the scroll area brings the focused
+// input into view.
 export default function AdminScreen({ title, subtitle, onBack, onRefresh, loading, error, headerRight, toolbar, children }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();

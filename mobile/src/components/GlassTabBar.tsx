@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useKeyboardHeight } from './KeyboardAware';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme';
@@ -29,6 +30,9 @@ export default function GlassTabBar({ items, activeKey, onSelect, variant = 'emp
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const admin = variant === 'admin';
+  // A floating bar would ride up over the field being typed in, so it steps
+  // aside while the keyboard is open.
+  if (useKeyboardHeight() > 0) return null;
   return (
     <View
       style={[

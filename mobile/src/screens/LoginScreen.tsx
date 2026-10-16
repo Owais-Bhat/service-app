@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Image, Pressable, StyleSheet, Text, View, ScrollView } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from '../components/KeyboardAware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Animated, { FadeInUp } from 'react-native-reanimated';

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from '../components/KeyboardAware';
 import MeshBackground from '../components/MeshBackground';
 import ToolHeader from '../components/ToolHeader';
 import FilterChips from '../components/admin/FilterChips';

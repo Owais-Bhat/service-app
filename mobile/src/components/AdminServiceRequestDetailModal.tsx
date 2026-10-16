@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from './MeshBackground';
 import AdminHeader from './admin/AdminHeader';

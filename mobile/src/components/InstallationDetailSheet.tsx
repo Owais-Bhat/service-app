@@ -4,12 +4,12 @@ import {
   Linking,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import PressScale from './PressScale';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';

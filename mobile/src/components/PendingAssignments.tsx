@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, ScrollView as RNScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from './Icon';
 import { useTheme } from '../theme/ThemeContext';
@@ -101,7 +102,7 @@ export default function PendingAssignments({ pending, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<RNScrollView>(null);
 
   const pageWidth = width - spacing(10);
 

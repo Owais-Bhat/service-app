@@ -7,6 +7,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { useAppFonts } from './src/theme/fonts';
 import RootNavigator from './src/navigation/RootNavigator';
+import { KeyboardInsetRoot } from './src/components/KeyboardAware';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -36,7 +37,9 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <StatusBar style="light" />
-          <RootNavigator />
+          <KeyboardInsetRoot>
+            <RootNavigator />
+          </KeyboardInsetRoot>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
