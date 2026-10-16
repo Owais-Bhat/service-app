@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../../components/MeshBackground';
 import AdminHeader from '../../components/admin/AdminHeader';
 import AdminTabBar, { AdminTab } from '../../components/admin/AdminTabBar';
+import { tabBarSpace } from '../../components/GlassTabBar';
 import SearchField from '../../components/admin/SearchField';
 import SectionLabel from '../../components/admin/SectionLabel';
 import EmptyNote from '../../components/admin/EmptyNote';
@@ -60,7 +61,7 @@ export default function AdminMenuScreen({ available, onOpen, onTab }: Props) {
       <AdminHeader title="Menu" subtitle={`${built} of ${total} portal pages available on mobile`} />
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={{ padding: spacing(4), paddingBottom: insets.bottom + spacing(28) }}
+        contentContainerStyle={{ padding: spacing(4), paddingBottom: tabBarSpace(insets.bottom) }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}

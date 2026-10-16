@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Icon from '../components/Icon';
-import GlassTabBar from '../components/GlassTabBar';
+import GlassTabBar, { tabBarSpace } from '../components/GlassTabBar';
 import AppHeaderBar from '../components/AppHeaderBar';
 import { EMPLOYEE_TABS } from './EmployeeDashboardScreen';
 import { useAuth } from '../context/AuthContext';
@@ -127,7 +127,7 @@ export default function EarningsScreen({ onGoDashboard, onGoAttendance, onGoJobT
       <MeshBackground />
       <AppHeaderBar title="Earnings" subtitle="Cash, collections & salary" onLayout={setHeaderHeight} />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4), paddingBottom: tabBarSpace(insets.bottom) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <GlassCard>

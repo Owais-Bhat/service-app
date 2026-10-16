@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import AdminTabBar, { AdminTab } from '../../components/admin/AdminTabBar';
+import { tabBarSpace } from '../../components/GlassTabBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SectionLabel from '../../components/admin/SectionLabel';
 import StatusBadge from '../../components/admin/StatusBadge';
 import EmptyNote from '../../components/admin/EmptyNote';
@@ -38,6 +40,7 @@ function greeting(): string {
 
 export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [unread, setUnread] = useState(0);
@@ -124,6 +127,7 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
       <AdminScreen
         title={first ? `${greeting()}, ${first}` : 'Dashboard'}
         subtitle={dateLine}
+        bottomSpace={tabBarSpace(insets.bottom)}
         onRefresh={load}
         loading={loading && !data}
         error={!data ? error : null}

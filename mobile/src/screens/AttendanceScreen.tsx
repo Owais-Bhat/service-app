@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import MeshBackground from '../components/MeshBackground';
 import Panel from '../components/Panel';
-import GlassTabBar from '../components/GlassTabBar';
+import GlassTabBar, { tabBarSpace } from '../components/GlassTabBar';
 import FilterChips from '../components/admin/FilterChips';
 import StatusBadge from '../components/admin/StatusBadge';
 import AppHeaderBar from '../components/AppHeaderBar';
@@ -130,7 +130,7 @@ export default function AttendanceScreen({ onGoDashboard, onGoJobTools, onGoEarn
       <MeshBackground />
       <AppHeaderBar title="Attendance" subtitle="Clock in, hours & leave" onLayout={setHeaderHeight} />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4), paddingBottom: tabBarSpace(insets.bottom) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         <View style={styles.kpiRow}>

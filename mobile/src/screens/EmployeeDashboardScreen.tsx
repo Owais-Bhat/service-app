@@ -6,7 +6,7 @@ import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
 import Panel from '../components/Panel';
 import StatusBadge from '../components/admin/StatusBadge';
-import GlassTabBar, { TabItem } from '../components/GlassTabBar';
+import GlassTabBar, { TabItem, tabBarSpace } from '../components/GlassTabBar';
 import AppHeaderBar from '../components/AppHeaderBar';
 import PulseDot from '../components/PulseDot';
 import GlowButton from '../components/GlowButton';
@@ -240,7 +240,7 @@ export default function EmployeeDashboardScreen({
       />
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4), paddingBottom: tabBarSpace(insets.bottom) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={semantic.success} />}
       >
         {error ? <Text style={[styles.caption, { color: theme.err }]}>{error}</Text> : null}

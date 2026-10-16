@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView as ScrollView } from '../components/KeyboardAware';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
-import GlassTabBar from '../components/GlassTabBar';
+import GlassTabBar, { tabBarSpace } from '../components/GlassTabBar';
 import AppHeaderBar from '../components/AppHeaderBar';
 import Icon from '../components/Icon';
 import { IconName } from '../theme/icons';
@@ -132,7 +132,7 @@ export default function JobToolsScreen({
       <AppHeaderBar title="Job Tools" subtitle="Tasks, estimator, devices & reports" onLayout={setHeaderHeight} />
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}
+        contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4), paddingBottom: tabBarSpace(insets.bottom) }]}
       >
         <View style={[styles.search, { backgroundColor: theme.panel, borderColor: theme.border }]}>
           <Icon name="search" size={18} color={theme.text3} />

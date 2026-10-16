@@ -20,6 +20,8 @@ interface Props {
   headerRight?: React.ReactNode;
   /** Pinned under the header and outside the scroll area: search, filter chips. */
   toolbar?: React.ReactNode;
+  /** Room to leave under the last item, e.g. for the floating tab bar. */
+  bottomSpace?: number;
   children?: React.ReactNode;
 }
 
@@ -29,7 +31,7 @@ interface Props {
 // scroll area keeps taps working while the keyboard is up, KeyboardInsetRoot
 // lifts the screen above the keyboard, and the scroll area brings the focused
 // input into view.
-export default function AdminScreen({ title, subtitle, onBack, onRefresh, loading, error, headerRight, toolbar, children }: Props) {
+export default function AdminScreen({ title, subtitle, onBack, onRefresh, loading, error, headerRight, toolbar, bottomSpace, children }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
@@ -51,7 +53,7 @@ export default function AdminScreen({ title, subtitle, onBack, onRefresh, loadin
       {toolbar ? <View style={[styles.toolbar, { borderBottomColor: theme.line }]}>{toolbar}</View> : null}
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={{ padding: spacing(4), paddingBottom: insets.bottom + spacing(10) }}
+        contentContainerStyle={{ padding: spacing(4), paddingBottom: bottomSpace ?? insets.bottom + spacing(10) }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}

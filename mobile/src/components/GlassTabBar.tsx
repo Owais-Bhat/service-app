@@ -33,13 +33,23 @@ export default function GlassTabBar({ items, activeKey, onSelect, variant = 'emp
   // A floating bar would ride up over the field being typed in, so it steps
   // aside while the keyboard is open.
   if (useKeyboardHeight() > 0) return null;
+  const lift = spacing(3) + insets.bottom;
   return (
+    <>
+    {/* A solid band under the floating bar: lists scroll up to it and stop,
+        instead of showing through the gaps around the bar. */}
+    <View
+      pointerEvents="none"
+      style={[styles.band, { height: lift + TAB_BAR_HEIGHT + spacing(2), backgroundColor: theme.bg }]}
+    />
     <View
       style={[
         styles.wrapper,
         {
-          bottom: spacing(3) + insets.bottom,
-          backgroundColor: theme.surfaceStrong,
+          bottom: lift,
+          // Opaque: the surface tokens are translucent glass, which let the
+          // content behind the bar show through it.
+          backgroundColor: theme.panel,
           borderColor: theme.border,
           borderRadius: admin ? 20 : 26,
           shadowColor: '#000',
@@ -75,10 +85,20 @@ export default function GlassTabBar({ items, activeKey, onSelect, variant = 'emp
         );
       })}
     </View>
+    </>
   );
 }
 
+// 56 dp tabs + 6 dp padding either side + the 1 dp border.
+export const TAB_BAR_HEIGHT = 70;
+
+// How much room a scroll area must leave at its end so its last item can be
+// scrolled fully above the floating bar: the gap under the bar, the bar itself
+// and a little air.
+export const tabBarSpace = (bottomInset: number): number => spacing(3) + bottomInset + TAB_BAR_HEIGHT + spacing(4);
+
 const styles = StyleSheet.create({
+  band: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   wrapper: {
     position: 'absolute',
     left: spacing(4),

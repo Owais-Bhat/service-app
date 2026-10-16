@@ -4,7 +4,7 @@ import { KeyboardAwareScrollView as ScrollView } from '../components/KeyboardAwa
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MeshBackground from '../components/MeshBackground';
 import GlassCard from '../components/GlassCard';
-import GlassTabBar from '../components/GlassTabBar';
+import GlassTabBar, { tabBarSpace } from '../components/GlassTabBar';
 import AppHeaderBar from '../components/AppHeaderBar';
 import Icon from '../components/Icon';
 import { IconName } from '../theme/icons';
@@ -89,7 +89,7 @@ export default function ProfileScreen({
     <View style={styles.root}>
       <MeshBackground />
       <AppHeaderBar title="Profile" onOpenNotifications={onOpenNotifications} onLayout={setHeaderHeight} />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4) }]}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: topInset + spacing(4), paddingBottom: tabBarSpace(insets.bottom) }]}>
         <GlassCard>
           <View style={styles.profileRow}>
             <View style={[styles.avatar, { backgroundColor: theme.okS }]}>
