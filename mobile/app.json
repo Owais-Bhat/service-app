@@ -21,7 +21,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "package": "com.owais_07.networkingexperts",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 23
+      "versionCode": 24
     },
     "web": {
       "favicon": "./assets/favicon.png"
