@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pingAssignmentSeen } from '../api/tasks';
 import CustomerEquipment from './CustomerEquipment';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import * as Location from 'expo-location';
 import Icon from './Icon';
 import PressScale from './PressScale';
 import ServicePickerModal, { PickedService } from './ServicePickerModal';
 import PhotoPicker from './PhotoPicker';
+import BillItemsEditor from './BillItemsEditor';
 import CalendarPickerModal from './CalendarPickerModal';
 import { IconName } from '../theme/icons';
 import { useAuth } from '../context/AuthContext';
@@ -98,7 +100,6 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
   // picks quantities, and stock moves server-side when the bill saves.
   const [catalogue, setCatalogue] = useState<InventoryItem[]>([]);
   const [billItems, setBillItems] = useState<BillItemLine[]>([]);
-  const [showItemPicker, setShowItemPicker] = useState(false);
   const [gstOn, setGstOn] = useState(true);
   const [extraReason, setExtraReason] = useState('');
   const [transportKm, setTransportKm] = useState('');
@@ -188,19 +189,17 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     return () => { alive = false; };
   }, [item.inquiryId]);
 
-  const addBillItem = (inv: InventoryItem) => {
-    setBillItems((prev) => {
-      const found = prev.find((it) => it.item_id === inv.id);
-      if (found) return prev.map((it) => (it.item_id === inv.id ? { ...it, quantity: it.quantity + 1 } : it));
-      return [...prev, { item_id: inv.id, name: inv.name, quantity: 1, rate: Number(inv.selling_rate) }];
-    });
-    setShowItemPicker(false);
-  };
-
-  const changeItemQty = (itemId: string | null, delta: number) => {
-    setBillItems((prev) => prev
-      .map((it) => (it.item_id === itemId ? { ...it, quantity: Math.max(0, it.quantity + delta) } : it))
-      .filter((it) => it.quantity > 0));
+  // Parts are recorded against the technician the moment the bill is made
+  // (payment link or bill PDF), not only once the money arrives: the stock has
+  // already left the shelf, so it must show on the employee until it is paid.
+  // Saving replaces the job's set, so repeating it can never double-count.
+  const recordBillItems = async () => {
+    if (!item.inquiryId) return;
+    try {
+      await saveBillItems('inquiry', item.inquiryId, billItems.filter((it) => it.quantity > 0));
+    } catch {
+      // The bill itself still goes ahead; the parts just didn't reach stock.
+    }
   };
 
   const removeService = (id: string) => setServices((prev) => prev.filter((s) => s.id !== id));
@@ -254,6 +253,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     setError(null);
     setGeneratingPdf(true);
     try {
+      await recordBillItems();
       const url = await generateBillPdf(buildBillPdfData(), item.inquiryId);
       setBillPdfUrl(url);
     } catch (err) {
@@ -320,6 +320,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     setError(null);
     setGeneratingLink(true);
     try {
+      await recordBillItems();
       const { shortUrl } = await generatePaymentLinkForBill(item, buildResolveBill());
       setPaymentLink(shortUrl);
     } catch (err) {
@@ -339,7 +340,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
         setPaymentConfirmed(true);
         try {
           if (item.inquiryId) {
-            try { await saveBillItems('inquiry', item.inquiryId, billItems); } catch { /* bill still saves */ }
+            try { await saveBillItems('inquiry', item.inquiryId, billItems.filter((it) => it.quantity > 0)); } catch { /* bill still saves */ }
           }
           await updateTaskStatus(item, { status: 'resolved', detail: detail.trim(), bill: buildResolveBill() });
           onSaved('resolved');
@@ -435,7 +436,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
     try {
       if (status === 'resolved' && item.inquiryId) {
         try {
-          await saveBillItems('inquiry', item.inquiryId, billItems);
+          await saveBillItems('inquiry', item.inquiryId, billItems.filter((it) => it.quantity > 0));
         } catch {
           // The bill itself still saves; the parts just didn't reach stock.
         }
@@ -693,32 +694,7 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
                   </View>
                 </PressScale>
 
-                <Text style={[styles.fieldLabel, { color: theme.text3 }]}>Items Used</Text>
-                {billItems.map((it) => (
-                  <View key={it.item_id || it.name} style={[styles.serviceRow, { borderColor: theme.line }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.serviceLabel, { color: theme.text }]} numberOfLines={1}>{it.name}</Text>
-                      <Text style={[styles.serviceCost, { color: theme.text3 }]}>
-                        {it.quantity} × ₹{it.rate} = ₹{Math.round(it.quantity * it.rate)}
-                      </Text>
-                    </View>
-                    <Pressable onPress={() => changeItemQty(it.item_id, -1)} hitSlop={8} style={styles.qtyBtn}>
-                      <Text style={[styles.qtyBtnText, { color: theme.text }]}>−</Text>
-                    </Pressable>
-                    <Pressable onPress={() => changeItemQty(it.item_id, 1)} hitSlop={8} style={styles.qtyBtn}>
-                      <Text style={[styles.qtyBtnText, { color: theme.text }]}>+</Text>
-                    </Pressable>
-                  </View>
-                ))}
-                <PressScale onPress={() => setShowItemPicker(true)}>
-                  <View style={[styles.addServiceBtn, { backgroundColor: brand.fill }]}>
-                    <View style={styles.addServiceBadge}>
-                      <Text style={styles.addServiceBadgeText}>+</Text>
-                    </View>
-                    <Text style={styles.addServiceText}>Add Item</Text>
-                    <Icon name="chevron-right" size={16} color="#ffffff" />
-                  </View>
-                </PressScale>
+                <BillItemsEditor items={billItems} onChange={setBillItems} catalogue={catalogue} />
 
                 <Pressable onPress={() => setGstOn((v) => !v)} style={styles.gstRow}>
                   <View style={[styles.gstBox, { borderColor: gstOn ? theme.accent : theme.line, backgroundColor: gstOn ? theme.accent : 'transparent' }]}>
@@ -979,36 +955,6 @@ export default function TaskStatusModal({ item, onDismiss, onSaved }: Props) {
             setShowPicker(false);
           }}
         />
-      )}
-
-      {showItemPicker && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setShowItemPicker(false)}>
-          <View style={styles.pickerBackdrop}>
-            <View style={[styles.pickerCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
-              <View style={[styles.pickerHead, { borderBottomColor: theme.line }]}>
-                <Text style={[styles.pickerTitle, { color: theme.text }]}>Add Item</Text>
-                <Pressable onPress={() => setShowItemPicker(false)} hitSlop={10}>
-                  <Icon name="close" size={16} color={theme.text3} />
-                </Pressable>
-              </View>
-              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 360 }}>
-                {catalogue.length === 0 ? (
-                  <Text style={[styles.pickerEmpty, { color: theme.text3 }]}>No items in inventory yet.</Text>
-                ) : catalogue.map((inv) => (
-                  <Pressable key={inv.id} onPress={() => addBillItem(inv)} style={[styles.pickerRow, { borderBottomColor: theme.line }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.pickerName, { color: theme.text }]}>{inv.name}</Text>
-                      <Text style={[styles.pickerMeta, { color: theme.text3 }]}>
-                        {Number(inv.quantity)} {inv.unit || 'pcs'} in stock
-                      </Text>
-                    </View>
-                    <Text style={[styles.pickerRate, { color: theme.accent }]}>₹{Number(inv.selling_rate)}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
       )}
 
       {showCalendar && (
