@@ -7,6 +7,7 @@ import ActionButton from './ActionButton';
 import SearchField from './SearchField';
 import ListRow from './ListRow';
 import Icon from '../Icon';
+import NewPartyButton from './NewPartyButton';
 import { fetchItems, fetchParties, ItemRow, PartyRow } from '../../api/adminBooks';
 import { fetchLocations, StockLocationRow } from '../../api/adminStock';
 import { createPurchase, issuePurchase, PurchaseLoaded, PurchasePayload, updatePurchase } from '../../api/adminPurchases';
@@ -220,6 +221,16 @@ export default function PurchaseEditor({ visible, docType, existing, grnId = nul
           {parties.map((p) => (
             <ListRow key={p.id} icon="storefront" title={p.display_name} subtitle={p.phone || undefined} onPress={() => { setPartyId(p.id); setPartyName(p.display_name); setParties([]); setPartyQ(''); }} />
           ))}
+          <NewPartyButton
+            kind="supplier"
+            seed={partyQ}
+            onCreated={(p) => {
+              setPartyId(p.id);
+              setPartyName(p.display_name);
+              setParties([]);
+              setPartyQ('');
+            }}
+          />
         </>
       )}
 

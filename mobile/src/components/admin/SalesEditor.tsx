@@ -7,6 +7,7 @@ import ActionButton from './ActionButton';
 import SearchField from './SearchField';
 import ListRow from './ListRow';
 import Icon from '../Icon';
+import NewPartyButton from './NewPartyButton';
 import { fetchItems, fetchParties, ItemRow, PartyRow, rupees } from '../../api/adminBooks';
 import {
   amendSales,
@@ -329,6 +330,16 @@ export default function SalesEditor({ visible, docType, existing, onClose, onSav
               }}
             />
           ))}
+          <NewPartyButton
+            kind="customer"
+            seed={partyQ}
+            onCreated={(p) => {
+              setPartyId(p.id);
+              setPartyName(p.display_name);
+              setParties([]);
+              setPartyQ('');
+            }}
+          />
         </>
       )}
 

@@ -13,6 +13,7 @@ import Field from '../../components/admin/Field';
 import SectionLabel from '../../components/admin/SectionLabel';
 import Icon from '../../components/Icon';
 import { api } from '../../api/client';
+import NewPartyButton from '../../components/admin/NewPartyButton';
 import { fetchParties, PartyRow } from '../../api/adminBooks';
 import { CustomerDevice, fetchDevices } from '../../api/adminExtra';
 import { useTheme } from '../../theme/ThemeContext';
@@ -398,6 +399,16 @@ export default function SitesDevicesScreen({ onBack }: Props) {
             {parties.map((p) => (
               <ListRow key={p.id} icon="user" title={p.display_name} subtitle={p.phone || undefined} onPress={() => { setPartyId(p.id); setPartyName(p.display_name); setParties([]); setPartyQ(''); }} />
             ))}
+            <NewPartyButton
+              kind="customer"
+              seed={partyQ}
+              onCreated={(p) => {
+                setPartyId(p.id);
+                setPartyName(p.display_name);
+                setParties([]);
+                setPartyQ('');
+              }}
+            />
           </>
         )}
         {partyId ? (

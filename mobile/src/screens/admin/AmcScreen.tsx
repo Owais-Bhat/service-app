@@ -11,6 +11,7 @@ import EmptyNote from '../../components/admin/EmptyNote';
 import FormSheet from '../../components/admin/FormSheet';
 import Field from '../../components/admin/Field';
 import Icon from '../../components/Icon';
+import NewPartyButton from '../../components/admin/NewPartyButton';
 import { fetchAmc, fetchParties, PartyRow, rupees } from '../../api/adminBooks';
 import {
   AmcLoaded,
@@ -443,6 +444,16 @@ export default function AmcScreen({ onBack }: Props) {
             {parties.map((p) => (
               <ListRow key={p.id} icon="user" title={p.display_name} subtitle={p.phone || undefined} onPress={() => { setPartyId(p.id); setPartyName(p.display_name); setParties([]); setPartyQ(''); }} />
             ))}
+            <NewPartyButton
+              kind="customer"
+              seed={partyQ}
+              onCreated={(p) => {
+                setPartyId(p.id);
+                setPartyName(p.display_name);
+                setParties([]);
+                setPartyQ('');
+              }}
+            />
           </>
         )}
         <Field label="What it covers" value={title} onChangeText={setTitle} placeholder="CCTV — 8 cameras, 1 DVR" />
