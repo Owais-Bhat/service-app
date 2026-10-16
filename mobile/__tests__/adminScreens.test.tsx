@@ -83,6 +83,7 @@ const FIXTURES: { match: RegExp; body: unknown }[] = [
   { match: /\/admin\/pending-jobs/, body: [
     { id: 'pj1', employee_id: 'e1', employee_name: 'Imran Khan', ticket_no: 'NE-261013-1001', full_name: 'Asha Traders', service_item: 'CCTV no signal', status: 'assigned', assigned_at: iso, sla_deadline: new Date(Date.now() + 5 * 3600000).toISOString(), sla_paused: false, overdue: false },
     { id: 'pj2', employee_id: 'e1', employee_name: 'Imran Khan', ticket_no: 'NE-261013-1002', full_name: 'Bilal Stores', service_item: 'DVR repair', status: 'in_progress', assigned_at: iso, sla_deadline: new Date(Date.now() - 3 * 3600000).toISOString(), sla_paused: false, overdue: true },
+    { id: 'pi1', employee_id: 'e1', employee_name: 'Imran Khan', ticket_no: 'INS-261014-2001', full_name: 'Gulshan Mart', service_item: 'CCTV installation', status: 'assigned', assigned_at: null, sla_deadline: null, sla_sla: null, sla_paused: false, overdue: false, kind: 'installation', visit_date: '2026-12-20', visit_time: '10 AM - 12 PM' },
   ] },
   { match: /\/notifications\/unread-count/, body: { unread: 3 } },
   { match: /\/data\/profiles/, body: [
@@ -263,7 +264,7 @@ const CASES: { name: string; el: () => React.ReactElement; expects: string[] }[]
   { name: 'Attendance report', el: () => <AttendanceReportScreen onBack={noop} />, expects: ['Attendance Report', 'Export report', 'Imran Khan', 'Present (days)'] },
   { name: 'Request reports', el: () => <RequestReportsScreen onBack={noop} />, expects: ['Request Reports', 'TECHNICIAN REPORT', 'Export report', 'Most requested services'.toUpperCase()] },
   { name: 'Client feedback', el: () => <ClientFeedbackScreen onBack={noop} />, expects: ['Client Feedback', 'Total reviews', 'Average rating'] },
-  { name: 'Daily report', el: () => <DailyReportScreen onBack={noop} />, expects: ['Daily Report', 'MESSAGE 1 — ATTENDANCE', 'MESSAGE 2 — PENDING JOBS', 'Imran Khan', 'Not in', 'NE-261013-1002', 'Bilal Stores', 'LATE', 'Send on WhatsApp', 'DAILY REMINDER'] },
+  { name: 'Daily report', el: () => <DailyReportScreen onBack={noop} />, expects: ['Daily Report', 'MESSAGE 1 — ATTENDANCE', 'MESSAGE 2 — PENDING JOBS', 'Imran Khan', 'Not in', 'NE-261013-1002', 'Bilal Stores', 'INS-261014-2001', 'V 20 Dec', 'Send on WhatsApp', 'DAILY REMINDER'] },
   { name: 'Campaigns', el: () => <CampaignsScreen onBack={noop} />, expects: ['WhatsApp Campaigns', 'Diwali offer', '90 sent', 'Do-not-message list', 'IST'] },
 ];
 

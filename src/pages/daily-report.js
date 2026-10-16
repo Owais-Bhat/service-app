@@ -26,11 +26,14 @@ async function api(path) {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const clock = (v) => v ? new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase() : '';
+// Short form for the narrow pending-jobs table: "2:05PM".
+const shortClock = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\s/g, '').toUpperCase();
 const dayTime = (v) => {
   if (!v) return '—';
   const d = new Date(v);
-  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${clock(d)}`;
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${shortClock(d)}`;
 };
+const visitDay = (v) => (v ? new Date(`${v}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '');
 
 // Same cut-off the Attendance page uses.
 const LATE_AFTER_MIN = 10 * 60;
@@ -87,10 +90,15 @@ async function buildReport(date) {
       deadline: j.sla_deadline,
       paused: !!j.sla_paused,
       overdue: !!j.overdue,
+      install: j.kind === 'installation',
+      visitDate: j.visit_date || '',
+      visitTime: j.visit_time || '',
     });
   });
   const pending = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
-  pending.forEach(g => g.jobs.sort((a, b) => (a.deadline ? new Date(a.deadline).getTime() : Infinity) - (b.deadline ? new Date(b.deadline).getTime() : Infinity)));
+  // Earliest due first: SLA deadline for service jobs, visit date for installations.
+  const due = (j) => j.install ? (j.visitDate ? new Date(`${j.visitDate}T00:00:00`).getTime() : Infinity) : (j.deadline ? new Date(j.deadline).getTime() : Infinity);
+  pending.forEach(g => g.jobs.sort((a, b) => due(a) - due(b)));
 
   return {
     date,
@@ -122,10 +130,16 @@ function buildAttendanceText(r) {
   return rows.length ? `${head}\n\n${monoTable(['Employee', 'Clock-in'], rows)}` : `${head}\n\nNo employees found.`;
 }
 
+// "!" in front = the time has already passed. Installations have no SLA clock,
+// so their cell is the booked visit, marked with "V".
 function slaCell(j) {
+  if (j.install) {
+    if (!j.visitDate) return 'V —';
+    return `${j.overdue ? '!' : ''}V ${visitDay(j.visitDate)}${j.visitTime ? ` ${clip(j.visitTime, 12)}` : ''}`;
+  }
   if (!j.deadline) return '—';
   if (j.paused) return `${dayTime(j.deadline)} (paused)`;
-  return `${dayTime(j.deadline)}${j.overdue ? ' LATE' : ''}`;
+  return `${j.overdue ? '!' : ''}${dayTime(j.deadline)}`;
 }
 
 function buildPendingText(r) {
@@ -135,9 +149,10 @@ function buildPendingText(r) {
   if (!r.pending.length) return `${head}\n\nNo pending jobs.`;
   const parts = [`${head}\n${r.pendingTotal} pending${r.overdueTotal ? ` · ${r.overdueTotal} past SLA` : ''}`];
   r.pending.forEach(g => {
-    const rows = g.jobs.map(j => [clip(j.ticket, 18), clip(j.customer, 22), slaCell(j)]);
+    const rows = g.jobs.map(j => [clip(j.ticket, 16), clip(j.customer, 14), slaCell(j)]);
     parts.push(`*${g.name}* – ${g.jobs.length} job${g.jobs.length === 1 ? '' : 's'}\n${monoTable(['Ticket', 'Customer', 'SLA'], rows)}`);
   });
+  parts.push('! = time already passed · V = installation visit');
   return parts.join('\n\n');
 }
 
@@ -200,7 +215,7 @@ function paint(container) {
     </div>
 
     ${messageCard('att', 'Message 1 — Attendance', 'Everyone who is not clocked in shows as “Not in”. You can edit the text before sending.')}
-    ${messageCard('pend', 'Message 2 — Pending jobs', 'Open jobs per employee with the SLA deadline, as of right now (the date above does not change this one). “LATE” means the SLA time has already passed.')}
+    ${messageCard('pend', 'Message 2 — Pending jobs', 'Open jobs per employee with the SLA deadline, as of right now (the date above does not change this one). “!” means the SLA time has already passed; “V” is an installation’s booked visit (they have no SLA clock).')}
   `;
 
   const $ = (s) => container.querySelector(s);

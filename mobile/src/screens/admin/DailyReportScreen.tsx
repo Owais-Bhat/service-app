@@ -191,7 +191,7 @@ export default function DailyReportScreen({ onBack }: Props) {
           {message('Message 1 — Attendance', 'Everyone who is not clocked in shows as "Not in".', attText)}
           {message(
             'Message 2 — Pending jobs',
-            'Open jobs per employee with the SLA time, as of right now. LATE means the SLA time has passed.',
+            'Open jobs per employee with the SLA time, as of right now. "!" means the time has passed; "V" is an installation visit (installations have no SLA clock).',
             pendText,
           )}
 

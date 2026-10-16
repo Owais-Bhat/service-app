@@ -19,6 +19,10 @@ export interface PendingJob {
   deadline: string | null;
   paused: boolean;
   overdue: boolean;
+  // Installations have no SLA clock: their time is the booked visit.
+  install: boolean;
+  visitDate: string;
+  visitTime: string;
 }
 
 export interface PendingGroup {
@@ -48,6 +52,9 @@ interface RawPending {
   sla_deadline: string | null;
   sla_paused: boolean | number;
   overdue: boolean | number;
+  kind?: string;
+  visit_date?: string | null;
+  visit_time?: string | null;
 }
 
 export const localToday = () => new Date().toLocaleDateString('en-CA');
@@ -112,9 +119,20 @@ export async function fetchDailyReport(date: string): Promise<DailyReport> {
       deadline: j.sla_deadline,
       paused: !!j.sla_paused,
       overdue: !!j.overdue,
+      install: j.kind === 'installation',
+      visitDate: j.visit_date || '',
+      visitTime: j.visit_time || '',
     });
   });
-  const when = (j: PendingJob) => (j.deadline ? new Date(j.deadline).getTime() : Infinity);
+  // Earliest due first: SLA deadline for service jobs, visit date for installations.
+  const when = (j: PendingJob) =>
+    j.install
+      ? j.visitDate
+        ? new Date(`${j.visitDate}T00:00:00`).getTime()
+        : Infinity
+      : j.deadline
+        ? new Date(j.deadline).getTime()
+        : Infinity;
   const pending = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
   pending.forEach((g) => g.jobs.sort((a, b) => when(a) - when(b)));
 
@@ -133,11 +151,18 @@ export async function fetchDailyReport(date: string): Promise<DailyReport> {
 const clock = (v: string | Date) =>
   new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
 
+// Short form for the narrow pending-jobs table: "2:05PM".
+const shortClock = (d: Date) =>
+  d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\s/g, '').toUpperCase();
+
 export const dayTime = (v: string | null): string => {
   if (!v) return '—';
   const d = new Date(v);
-  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${clock(d)}`;
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${shortClock(d)}`;
 };
+
+const visitDay = (v: string) =>
+  v ? new Date(`${v}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
 
 const clip = (v: string, n: number) => {
   const t = String(v ?? '').replace(/\s+/g, ' ').trim();
@@ -163,10 +188,16 @@ export function buildAttendanceText(r: DailyReport): string {
   return `${head}\n\n${monoTable(['Employee', 'Clock-in'], rows)}`;
 }
 
+// "!" in front = the time has already passed. Installations have no SLA clock,
+// so their cell is the booked visit, marked with "V".
 export function slaCell(j: PendingJob): string {
+  if (j.install) {
+    if (!j.visitDate) return 'V —';
+    return `${j.overdue ? '!' : ''}V ${visitDay(j.visitDate)}${j.visitTime ? ` ${clip(j.visitTime, 12)}` : ''}`;
+  }
   if (!j.deadline) return '—';
   if (j.paused) return `${dayTime(j.deadline)} (paused)`;
-  return `${dayTime(j.deadline)}${j.overdue ? ' LATE' : ''}`;
+  return `${j.overdue ? '!' : ''}${dayTime(j.deadline)}`;
 }
 
 // Message 2 — per employee: ticket number, the customer it is for, SLA time.
@@ -176,8 +207,9 @@ export function buildPendingText(r: DailyReport, now = new Date()): string {
   if (r.pending.length === 0) return `${head}\n\nNo pending jobs.`;
   const parts = [`${head}\n${r.pendingTotal} pending${r.overdueTotal ? ` · ${r.overdueTotal} past SLA` : ''}`];
   r.pending.forEach((g) => {
-    const rows = g.jobs.map((j) => [clip(j.ticket, 18), clip(j.customer, 22), slaCell(j)]);
+    const rows = g.jobs.map((j) => [clip(j.ticket, 16), clip(j.customer, 14), slaCell(j)]);
     parts.push(`*${g.name}* – ${g.jobs.length} job${g.jobs.length === 1 ? '' : 's'}\n${monoTable(['Ticket', 'Customer', 'SLA'], rows)}`);
   });
+  parts.push('! = time already passed · V = installation visit');
   return parts.join('\n\n');
 }

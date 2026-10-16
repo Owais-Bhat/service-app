@@ -7370,11 +7370,14 @@ app.post('/api/bill-items', authenticateToken, async (req, res) => {
         // Only the admin, or the technician the job belongs to, may bill it.
         if (req.user.role !== 'admin') {
             const table = refType === 'inquiry' ? 'inquiries' : 'installations';
+            // A gig worker who claimed a public job owns it through claimed_by_gig_worker_id.
+            const cols = refType === 'inquiry' ? 'assigned_employee_id, claimed_by_gig_worker_id' : 'assigned_employee_id';
             const [[owner]] = await connection.query(
-                `SELECT assigned_employee_id FROM ${table} WHERE id = ? LIMIT 1`,
+                `SELECT ${cols} FROM ${table} WHERE id = ? LIMIT 1`,
                 [refId]
             );
-            if (!owner || String(owner.assigned_employee_id || '') !== String(req.user.id)) {
+            const mine = !!owner && [owner.assigned_employee_id, owner.claimed_by_gig_worker_id].some((v) => v && String(v) === String(req.user.id));
+            if (!mine) {
                 return res.status(403).json({ error: 'This job is not assigned to you' });
             }
         }
@@ -8120,7 +8123,9 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
 // Same rule the SLA alerts and the web job cards use: the clock starts at
 // assignment (12 working hours, 10:00-18:00, no Sundays), a rescheduled visit
 // time overrides it, and time the device spent at the service centre pushes it
-// out. Admin only.
+// out. Assigned installations that are not finished come along too: they have
+// no SLA clock, their time is the booked visit (preferred date + time).
+// Admin only.
 app.get('/api/admin/pending-jobs', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     let connection;
@@ -8138,7 +8143,18 @@ app.get('/api/admin/pending-jobs', authenticateToken, async (req, res) => {
               ORDER BY p.full_name ASC, i.assigned_at ASC
               LIMIT 1000`
         );
+        const [installs] = await connection.query(
+            `SELECT n.id, n.ticket_no, n.full_name, n.installation_type, n.status, n.preferred_date, n.preferred_time,
+                    n.assigned_employee_id AS employee_id, p.full_name AS employee_name
+               FROM installations n
+               LEFT JOIN profiles p ON p.id = n.assigned_employee_id
+              WHERE n.assigned_employee_id IS NOT NULL
+                AND n.status IN ('pending','assigned','in_progress')
+              ORDER BY p.full_name ASC, n.preferred_date ASC
+              LIMIT 500`
+        );
         const now = Date.now();
+        const todayKey = localDateKey();
         const out = rows.map((r) => {
             const base = r.scheduled_at ? new Date(r.scheduled_at) : (r.assigned_at ? slaDeadline(r.assigned_at) : null);
             let deadline = null;
@@ -8161,7 +8177,27 @@ app.get('/api/admin/pending-jobs', authenticateToken, async (req, res) => {
                 sla_deadline: deadline ? deadline.toISOString() : null,
                 sla_paused: paused,
                 overdue: !!deadline && !paused && deadline.getTime() < now,
+                kind: 'service',
             };
+        });
+        installs.forEach((n) => {
+            const visit = localDateKey(n.preferred_date);
+            out.push({
+                id: n.id,
+                employee_id: n.employee_id,
+                employee_name: n.employee_name,
+                ticket_no: n.ticket_no,
+                full_name: n.full_name,
+                service_item: n.installation_type,
+                status: n.status,
+                assigned_at: null,
+                sla_deadline: null,
+                sla_paused: false,
+                overdue: !!visit && visit < todayKey,
+                kind: 'installation',
+                visit_date: visit,
+                visit_time: n.preferred_time || '',
+            });
         });
         res.json(out);
     } catch (error) {
