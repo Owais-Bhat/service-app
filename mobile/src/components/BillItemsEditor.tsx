@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import Icon from './Icon';
 import PressScale from './PressScale';

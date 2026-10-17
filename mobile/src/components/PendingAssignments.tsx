@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView as RNScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView as RNScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from './Icon';

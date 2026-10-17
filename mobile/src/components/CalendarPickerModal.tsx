@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';
 import GlowButton from './GlowButton';

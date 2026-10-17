@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import { Ionicons } from '@expo/vector-icons';
 import GlowButton from './GlowButton';

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pingAssignmentSeen } from '../api/tasks';
 import CustomerEquipment from './CustomerEquipment';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import * as Location from 'expo-location';
 import Icon from './Icon';

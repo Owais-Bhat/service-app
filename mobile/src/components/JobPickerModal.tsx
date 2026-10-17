@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import GlassSurface from './GlassSurface';
 import Icon from './Icon';

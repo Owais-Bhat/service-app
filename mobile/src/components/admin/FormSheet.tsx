@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal as Modal } from '../AppModal';
 import { KeyboardAwareScrollView as ScrollView } from '../KeyboardAware';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../Icon';

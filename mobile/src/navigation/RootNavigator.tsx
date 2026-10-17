@@ -43,6 +43,7 @@ import CalendarScreen from '../screens/CalendarScreen';
 import RegisterRequestScreen from '../screens/RegisterRequestScreen';
 import JobMaterialsScreen from '../screens/JobMaterialsScreen';
 import { AttendanceProvider } from '../context/AttendanceContext';
+import { ModalHost } from '../components/AppModal';
 import ClockInGateModal from '../components/ClockInGateModal';
 
 type GuestStackParams = {
@@ -298,6 +299,8 @@ function SettingsRoute({ navigation }: any) {
 function EmployeeNavigator() {
   return (
     <AttendanceProvider>
+    {/* Inside the provider, so a sheet drawn from here can still read the attendance state. */}
+    <ModalHost>
     <EmployeeStack.Navigator screenOptions={{ headerShown: false }}>
       <EmployeeStack.Screen name="Dashboard" component={EmployeeDashboardRoute} options={{ animation: 'none' }} />
       <EmployeeStack.Screen name="Attendance" component={AttendanceRoute} options={{ animation: 'none' }} />
@@ -332,6 +335,7 @@ function EmployeeNavigator() {
       <EmployeeStack.Screen name="AiAssistant" component={AiAssistantRoute} options={{ animation: 'slide_from_right' }} />
     </EmployeeStack.Navigator>
     <ClockInGateModal />
+    </ModalHost>
     </AttendanceProvider>
   );
 }

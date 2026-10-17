@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Image, Modal, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import { KeyboardAwareScrollView as ScrollView } from './KeyboardAware';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import GlassSurface from './GlassSurface';

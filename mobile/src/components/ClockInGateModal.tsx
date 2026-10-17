@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal as Modal } from './AppModal';
 import Icon from './Icon';
 import { useAuth } from '../context/AuthContext';
 import { useAttendanceStatus } from '../context/AttendanceContext';
