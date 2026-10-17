@@ -12,6 +12,8 @@ export interface AuthUser {
   // Admin-granted: may see every service request and assign it to a technician.
   can_assign_tickets?: boolean | number;
   allowed_tabs: string | null;
+  // Admins only: the modules this admin is limited to (JSON text or a list); null = the whole portal.
+  admin_modules?: string | string[] | null;
   worker_type: WorkerType;
   installations_enabled: boolean | number;
   salary: string | number;

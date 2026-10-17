@@ -878,6 +878,7 @@ const DATA_MAX_ROWS = 20000;    // the most any list may ask for
 // them in it would make both harder to trust.
 const { ensureAccountingSchema } = require('./modules/ledger/schema.cjs');
 const { createPermissions } = require('./modules/permissions.cjs');
+const adminAccess = require('./modules/admin-access.cjs');
 const { createAudit } = require('./modules/audit.cjs');
 const { mountAccounting } = require('./modules/accounting-routes.cjs');
 const { ensureSalesSchema } = require('./modules/sales/schema.cjs');
@@ -1567,6 +1568,8 @@ const requiredColumns = {
         { name: 'can_assign_tickets', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee may see every service request and assign it to a technician'" },
         { name: 'can_update_profile', definition: 'TINYINT(1) DEFAULT 0' },
         { name: 'always_assign', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'auto_assign_enabled', definition: "TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Part of the auto-assignment queue. Off = never auto-assigned, even when clocked in'" },
+        { name: 'admin_modules', definition: "TEXT COMMENT 'Admins only: JSON array of module ids this admin may use; NULL = the whole portal'" },
         { name: 'allowed_tabs', definition: 'TEXT COMMENT \'JSON array of tab ids this employee may see; null = all\'' },
         { name: 'eod_exempt', definition: "TINYINT(1) DEFAULT 0 COMMENT 'Employee is exempt from the missed-EOD clock-in restriction'" },
         { name: 'worker_type', definition: "VARCHAR(20) DEFAULT 'fixed' COMMENT 'fixed = permanent employee, gig = public-pool competitive worker'" },
@@ -2556,6 +2559,7 @@ async function getTodayQueue(connection) {
            FROM profiles p
            LEFT JOIN attendance a ON p.id = a.user_id AND a.date = ? AND a.clock_out IS NULL
           WHERE p.role = 'employee'
+            AND COALESCE(p.auto_assign_enabled, 1) = 1
             AND (a.id IS NOT NULL OR p.always_assign = 1)
           ORDER BY p.always_assign DESC, a.clock_in ASC`,
         [today]
@@ -3093,6 +3097,29 @@ setInterval(() => {
 }, 60_000).unref();
 
 // Middleware to verify JWT
+// A limited admin (profiles.admin_modules set) may only use the parts of the API
+// that belong to their modules. The list is read at most every 30 seconds per
+// admin, and only for calls that belong to a module at all.
+const ADMIN_MODULE_CACHE_MS = 30_000;
+const adminModuleCache = new Map(); // userId -> { at, modules }
+
+async function adminModulesOf(userId) {
+    const hit = adminModuleCache.get(userId);
+    if (hit && Date.now() - hit.at < ADMIN_MODULE_CACHE_MS) return hit.modules;
+    const conn = await getConn();
+    try {
+        const [rows] = await conn.query('SELECT admin_modules FROM profiles WHERE id = ? LIMIT 1', [userId]);
+        const modules = adminAccess.parseStored(rows[0] ? rows[0].admin_modules : null);
+        adminModuleCache.set(userId, { at: Date.now(), modules });
+        return modules;
+    } finally {
+        conn.release();
+    }
+}
+
+// Keys of a data-endpoint body, whether it is one row or a list of rows.
+const bodyKeys = (body) => (Array.isArray(body) ? body : [body]).flatMap((row) => Object.keys(row && typeof row === 'object' ? row : {}));
+
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -3102,7 +3129,26 @@ function authenticateToken(req, res, next) {
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
-        next();
+        if (user.role !== 'admin') return next();
+
+        const needs = adminAccess.requiredModules(req.method, req.originalUrl || req.url);
+        if (!needs) return next();
+        adminModulesOf(user.id).then((modules) => {
+            if (modules === null) return next(); // not a limited admin
+            if (!adminAccess.verdict(modules, req.method, req.originalUrl || req.url).allowed) {
+                return res.status(403).json({ error: adminAccess.message(needs), module: needs[0] });
+            }
+            // A limited admin may not hand out roles or lift their own limit through the generic endpoint.
+            if (/^\/api\/data\/profiles/.test(req.originalUrl || '') && !['GET', 'HEAD'].includes(req.method)
+                && bodyKeys(req.body).some((k) => k === 'role' || k === 'admin_modules')) {
+                return res.status(403).json({ error: 'Only a full admin can change roles or module access.' });
+            }
+            req.user.admin_modules = modules;
+            next();
+        }).catch((e) => {
+            console.error('[admin-access] could not read the module list:', e.message);
+            res.status(503).json({ error: 'Could not verify your access. Try again.' });
+        });
     });
 }
 
@@ -3120,7 +3166,7 @@ const ALLOWED_DATA_TABLES = new Set([
 // `profiles.role`/`salary` are the obvious privilege-escalation vectors;
 // `password_hash` should only ever be touched by /api/auth/update-password.
 const ADMIN_ONLY_WRITE_COLUMNS = {
-    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_assign_tickets', 'can_update_profile', 'always_assign', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled', 'allow_foc']),
+    profiles: new Set(['role', 'salary', 'password_hash', 'can_add_service', 'can_assign_tickets', 'can_update_profile', 'always_assign', 'auto_assign_enabled', 'admin_modules', 'allowed_tabs', 'eod_exempt', 'worker_type', 'installations_enabled', 'allow_foc']),
     auth_users: new Set(['*']), // belt-and-braces; table isn't in allowlist anyway
 };
 
@@ -4221,7 +4267,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
 
         // Pull role + name + can_add_service from profile so the client can route
         // immediately without a second round-trip to /data/profiles.
-        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, can_assign_tickets, allowed_tabs, worker_type, installations_enabled, allow_foc FROM profiles WHERE id = ?', [user.id]);
+        const [profiles] = await connection.execute('SELECT role, full_name, can_add_service, can_assign_tickets, allowed_tabs, admin_modules, worker_type, installations_enabled, allow_foc FROM profiles WHERE id = ?', [user.id]);
         connection.release();
 
         const profile = profiles[0] || { role: 'client', full_name: '', can_add_service: 0, can_assign_tickets: 0, allowed_tabs: null, worker_type: 'fixed', installations_enabled: 1, allow_foc: 1 };
@@ -4238,7 +4284,7 @@ app.post('/api/auth/signin', rateLimit({ windowMs: 60_000, max: 10, key: 'signin
         );
         res.json({
             token,
-            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, can_assign_tickets: profile.can_assign_tickets || 0, allowed_tabs: profile.allowed_tabs, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled, allow_foc: profile.allow_foc === undefined ? 1 : profile.allow_foc }
+            user: { id: user.id, email: user.email, role: profile.role, full_name: profile.full_name, can_add_service: profile.can_add_service, can_assign_tickets: profile.can_assign_tickets || 0, allowed_tabs: profile.allowed_tabs, admin_modules: profile.role === 'admin' ? (profile.admin_modules ?? null) : null, worker_type: profile.worker_type || 'fixed', installations_enabled: profile.installations_enabled === undefined ? 1 : profile.installations_enabled, allow_foc: profile.allow_foc === undefined ? 1 : profile.allow_foc }
         });
     } catch (error) {
         console.error('Signin error:', error);
@@ -4263,6 +4309,12 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // --- ADMIN USER MANAGEMENT CRUD ENDPOINTS ---
 
+// The modules a limited admin can be given (the Users form draws its list from here).
+app.get('/api/admin/modules', authenticateToken, (req, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    res.json({ modules: adminAccess.MODULES, always_on: adminAccess.ALWAYS_ON });
+});
+
 app.get('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     try {
@@ -4280,7 +4332,18 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_assign_tickets, can_update_profile, alwaysAssign, eodExempt, photoClockinExempt, geofenceClockinExempt, workerType, installationsEnabled, allowFoc } = req.body;
+    const { email, password, fullName, role, phone, salary, address, company, can_add_service, can_assign_tickets, can_update_profile, alwaysAssign, autoAssignEnabled, eodExempt, photoClockinExempt, geofenceClockinExempt, workerType, installationsEnabled, allowFoc, admin_modules } = req.body;
+
+    // A limited admin cannot create admins or hand out module access.
+    if (req.user.admin_modules && (role === 'admin' || admin_modules !== undefined)) {
+        return res.status(403).json({ error: 'Only a full admin can create admins or set module access.' });
+    }
+    let modulesToStore = null;
+    try {
+        modulesToStore = role === 'admin' ? adminAccess.normalizeModules(admin_modules) : null;
+    } catch (e) {
+        return res.status(400).json({ error: e.message });
+    }
 
     if (!email || typeof email !== 'string' || email.length > 254) {
         return res.status(400).json({ error: 'Valid email is required' });
@@ -4313,7 +4376,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
             );
 
             await connection.execute(
-                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_assign_tickets, can_update_profile, always_assign, eod_exempt, photo_clockin_exempt, geofence_clockin_exempt, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO profiles (id, full_name, role, phone, salary, address, company, can_add_service, can_assign_tickets, can_update_profile, always_assign, auto_assign_enabled, admin_modules, eod_exempt, photo_clockin_exempt, geofence_clockin_exempt, worker_type, installations_enabled, allow_foc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     fullName,
@@ -4326,6 +4389,8 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
                     can_assign_tickets ? 1 : 0,
                     can_update_profile ? 1 : 0,
                     alwaysAssign ? 1 : 0,
+                    autoAssignEnabled === false || autoAssignEnabled === 0 ? 0 : 1,
+                    modulesToStore === null ? null : JSON.stringify(modulesToStore),
                     eodExempt ? 1 : 0,
                     photoClockinExempt ? 1 : 0,
                     geofenceClockinExempt ? 1 : 0,
@@ -4365,23 +4430,32 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
         can_assign_tickets,
         can_update_profile,
         alwaysAssign,
+        autoAssignEnabled,
         eodExempt,
         photoClockinExempt,
         geofenceClockinExempt,
         allowed_tabs,
         workerType,
         installationsEnabled,
-        allowFoc
+        allowFoc,
+        admin_modules
     } = req.body;
+
 
     try {
         const connection = await getConn();
 
         // Check if user exists
-        const [existing] = await connection.execute('SELECT id FROM profiles WHERE id = ?', [userId]);
+        const [existing] = await connection.execute('SELECT id, role FROM profiles WHERE id = ?', [userId]);
         if (existing.length === 0) {
             connection.release();
             return res.status(404).json({ error: 'User not found' });
+        }
+        // A limited admin cannot change roles, module access, or any admin account.
+        // (The form always sends the role, so only a real change counts.)
+        if (req.user.admin_modules && (existing[0].role === 'admin' || admin_modules !== undefined || (role !== undefined && role !== existing[0].role))) {
+            connection.release();
+            return res.status(403).json({ error: 'Only a full admin can change roles, module access or an admin account.' });
         }
 
         // If email is provided, check if it's already used by someone else
@@ -4441,6 +4515,7 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (role !== undefined) {
                 profileUpdates.push('role = ?');
                 profileParams.push(role);
+                adminModuleCache.delete(userId);
             }
             if (phone !== undefined) {
                 profileUpdates.push('phone = ?');
@@ -4474,6 +4549,17 @@ app.patch('/api/admin/users/:id', authenticateToken, async (req, res) => {
             if (alwaysAssign !== undefined) {
                 profileUpdates.push('always_assign = ?');
                 profileParams.push(alwaysAssign ? 1 : 0);
+            }
+            if (autoAssignEnabled !== undefined) {
+                profileUpdates.push('auto_assign_enabled = ?');
+                profileParams.push(autoAssignEnabled === false || autoAssignEnabled === 0 || autoAssignEnabled === '0' ? 0 : 1);
+            }
+            if (admin_modules !== undefined) {
+                // null = the whole portal; a list (even an empty one) = limited to that list.
+                const list = adminAccess.normalizeModules(admin_modules);
+                profileUpdates.push('admin_modules = ?');
+                profileParams.push(list === null ? null : JSON.stringify(list));
+                adminModuleCache.delete(userId);
             }
             if (eodExempt !== undefined) {
                 profileUpdates.push('eod_exempt = ?');
@@ -4549,7 +4635,11 @@ app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
         const connection = await getConn();
 
         // Check if user exists
-        const [existing] = await connection.execute('SELECT id FROM profiles WHERE id = ?', [userId]);
+        const [existing] = await connection.execute('SELECT id, role FROM profiles WHERE id = ?', [userId]);
+        if (existing.length > 0 && req.user.admin_modules && existing[0].role === 'admin') {
+            connection.release();
+            return res.status(403).json({ error: 'Only a full admin can delete an admin account.' });
+        }
         if (existing.length === 0) {
             connection.release();
             return res.status(404).json({ error: 'User not found' });

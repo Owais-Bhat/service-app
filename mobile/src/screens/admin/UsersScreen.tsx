@@ -32,11 +32,12 @@ const ROLE_COLOR: Record<string, string> = {
 
 // Switches the admin can flip per person. `key` is the field the server's
 // PATCH /admin/users/:id expects; `column` is where its current value is read.
-const SWITCHES: { key: keyof UserPatch; column: keyof UserRow; label: string; hint: string }[] = [
+const SWITCHES: { key: keyof UserPatch; column: keyof UserRow; label: string; hint: string; defaultOn?: boolean }[] = [
   { key: 'can_add_service', column: 'can_add_service', label: 'Can add services', hint: 'Edit the price list' },
   { key: 'can_assign_tickets', column: 'can_assign_tickets', label: 'Can assign requests', hint: 'Hand requests to technicians' },
   { key: 'can_update_profile', column: 'can_update_profile', label: 'Can edit own profile', hint: 'Name, phone and company' },
-  { key: 'alwaysAssign', column: 'always_assign', label: 'Always assign', hint: 'Gets jobs even when clocked out' },
+  { key: 'autoAssignEnabled', column: 'auto_assign_enabled', label: 'In auto-assignment', hint: 'Off = never auto-assigned, even when clocked in', defaultOn: true },
+  { key: 'alwaysAssign', column: 'always_assign', label: 'Also when clocked out', hint: 'Gets auto-assigned jobs even when clocked out' },
   { key: 'eodExempt', column: 'eod_exempt', label: 'EOD exempt', hint: 'Not blocked for missed EOD' },
   { key: 'photoClockinExempt', column: 'photo_clockin_exempt', label: 'Selfie exempt', hint: 'No photo at clock-in' },
   { key: 'geofenceClockinExempt', column: 'geofence_clockin_exempt', label: 'Location exempt', hint: 'No office-radius check' },
@@ -158,7 +159,7 @@ export default function UsersScreen({ onBack }: Props) {
           title={u.full_name || u.email || 'Unnamed'}
           subtitle={u.email || undefined}
           meta={[u.phone, u.role === 'employee' || u.role === 'team_lead' ? `${humanize(u.worker_type || 'fixed')}${Number(u.salary) ? ` · ${inr(u.salary)}` : ''}` : null].filter(Boolean).join(' · ')}
-          badge={{ label: humanize(u.role), color: ROLE_COLOR[u.role] ?? theme.info }}
+          badge={{ label: u.role === 'admin' && u.admin_modules ? 'Admin · limited' : humanize(u.role), color: ROLE_COLOR[u.role] ?? theme.info }}
           onPress={() => setPicked(u.id)}
         />
       ))}
@@ -203,7 +204,7 @@ export default function UsersScreen({ onBack }: Props) {
                       key={s.key}
                       label={s.label}
                       hint={s.hint}
-                      value={Number(current[s.column]) === 1}
+                      value={current[s.column] == null && s.defaultOn ? true : Number(current[s.column]) === 1}
                       disabled={saving === s.key}
                       onValueChange={(v) => apply(current, { [s.key]: v } as UserPatch, String(s.key))}
                       last={i === SWITCHES.length - 1}

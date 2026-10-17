@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import AdminScreen from '../../components/admin/AdminScreen';
 import AdminTabBar, { AdminTab } from '../../components/admin/AdminTabBar';
 import { tabBarSpace } from '../../components/GlassTabBar';
+import { canOpenRoute, canUseModule, parseAdminModules } from '../../navigation/adminAccess';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SectionLabel from '../../components/admin/SectionLabel';
 import StatusBadge from '../../components/admin/StatusBadge';
@@ -107,6 +108,8 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
     return { open, needsAttention, unpaid, unpaidTotal, online, installs, recent, top };
   }, [data]);
 
+  const modules = useMemo(() => parseAdminModules(user), [user]);
+  const may = (route: string) => canOpenRoute(modules, route);
   const first = (user?.full_name || '').trim().split(/\s+/)[0];
   const dateLine = new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
   const complaints = data?.complaints.length ?? 0;
@@ -147,9 +150,9 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
       >
         <View style={styles.actions}>
           <View style={styles.flex}>
-            <GlowButton label="Register request" icon="add" onPress={() => onOpen('RegisterRequest')} />
+            {may('RegisterRequest') ? <GlowButton label="Register request" icon="add" onPress={() => onOpen('RegisterRequest')} /> : null}
           </View>
-          <Pressable
+          {may('AutoAssignment') ? <Pressable
             onPress={() => onOpen('AutoAssignment')}
             accessibilityRole="button"
             accessibilityLabel="Auto assignment"
@@ -157,10 +160,10 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
           >
             <View style={[styles.dot, { backgroundColor: autoOn ? theme.ok : theme.grey }]} />
             <Text style={[styles.autoText, { color: theme.text }]}>{autoOn === null ? 'Auto-assign' : autoOn ? 'Auto-assign on' : 'Auto-assign off'}</Text>
-          </Pressable>
+          </Pressable> : null}
         </View>
 
-        <Pressable
+        {may('DailyReport') ? <Pressable
           onPress={() => onOpen('DailyReport')}
           accessibilityRole="button"
           accessibilityLabel="Daily WhatsApp report"
@@ -184,9 +187,9 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
             </Text>
           </View>
           <Icon name="chevron-right" size={16} color={theme.text3} />
-        </Pressable>
+        </Pressable> : null}
 
-        {alerts.length > 0 || view.needsAttention.length > 0 ? (
+        {!may('ServiceRequests') ? null : alerts.length > 0 || view.needsAttention.length > 0 ? (
           <>
             <SectionLabel>Needs attention</SectionLabel>
             <View style={[styles.panel, { backgroundColor: theme.panel, borderColor: theme.border }]}>
@@ -230,7 +233,7 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
         )}
 
         <View style={styles.kpiGrid}>
-          {kpis.map((k) => (
+          {kpis.filter((k) => may(k.route)).map((k) => (
             <Pressable
               key={k.label}
               onPress={() => onOpen(k.route)}
@@ -246,7 +249,7 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
           ))}
         </View>
 
-        <Pressable
+        {may('LiveLocations') ? <Pressable
           onPress={() => onOpen('LiveLocations')}
           style={({ pressed }) => [styles.liveStrip, { backgroundColor: theme.panel, borderColor: theme.border }, pressed && styles.pressed]}
         >
@@ -277,9 +280,9 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
             </Text>
           </View>
           <Icon name="map" size={22} color={theme.text2} />
-        </Pressable>
+        </Pressable> : null}
 
-        <View style={styles.headRow}>
+        {may('ServiceRequests') ? <><View style={styles.headRow}>
           <SectionLabel>Recent requests</SectionLabel>
           <Pressable onPress={() => onOpen('ServiceRequests')} hitSlop={8} accessibilityRole="button">
             <Text style={[styles.seeAll, { color: theme.accent }]}>See all</Text>
@@ -310,8 +313,9 @@ export default function AdminHomeScreen({ onTab, onOpen, onOpenNotifications }: 
             })}
           </View>
         )}
+        </> : null}
 
-        {view.top.length > 0 ? (
+        {view.top.length > 0 && canUseModule(modules, 'feedback', 'stats') ? (
           <View style={[styles.topCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
             <Text style={[styles.topTitle, { color: theme.text }]}>Top technicians · this week</Text>
             <View style={styles.topList}>

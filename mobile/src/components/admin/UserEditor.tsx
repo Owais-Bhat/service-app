@@ -4,7 +4,8 @@ import { Alert, StyleSheet, Text } from 'react-native';
 import FormSheet from './FormSheet';
 import Field from './Field';
 import ActionButton from './ActionButton';
-import { createUser, EMPLOYEE_TABS, updateUser, UserRow, UserSave } from '../../api/adminPeople';
+import { AdminModule, createUser, EMPLOYEE_TABS, fetchAdminModules, updateUser, UserRow, UserSave } from '../../api/adminPeople';
+import { parseModuleList } from '../../navigation/adminAccess';
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme';
 
@@ -20,7 +21,8 @@ const SWITCHES: { key: string; label: string; from: keyof UserRow; staffOnly?: b
   { key: 'can_add_service', label: 'Add service access', from: 'can_add_service' },
   { key: 'can_assign_tickets', label: 'Assign service requests', from: 'can_assign_tickets' },
   { key: 'can_update_profile', label: 'Profile edit access', from: 'can_update_profile' },
-  { key: 'alwaysAssign', label: 'Always auto-assign', from: 'always_assign' },
+  { key: 'autoAssignEnabled', label: 'Include in auto-assignment (off = never auto-assigned)', from: 'auto_assign_enabled', defaultOn: true },
+  { key: 'alwaysAssign', label: 'Also auto-assign when clocked out', from: 'always_assign' },
   { key: 'eodExempt', label: 'EOD exempt', from: 'eod_exempt' },
   { key: 'photoClockinExempt', label: 'Photo clock-in exempt', from: 'photo_clockin_exempt' },
   { key: 'geofenceClockinExempt', label: 'Location clock-in exempt', from: 'geofence_clockin_exempt' },
@@ -55,6 +57,11 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [tabs, setTabs] = useState<Set<string>>(new Set(EMPLOYEE_TABS.map((t) => t.id)));
   const [busy, setBusy] = useState(false);
+  // Admin accounts: limited to chosen modules, or a full admin.
+  const [limit, setLimit] = useState(false);
+  const [modules, setModules] = useState<Set<string>>(new Set());
+  const [catalogue, setCatalogue] = useState<AdminModule[] | null>(null);
+  const [catalogueError, setCatalogueError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -74,7 +81,30 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
     });
     setFlags(f);
     setTabs(parseTabs(user?.allowed_tabs) ?? new Set(EMPLOYEE_TABS.map((t) => t.id)));
+    const limited = parseModuleList(user?.admin_modules);
+    setLimit(limited !== null);
+    setModules(limited ?? new Set());
   }, [visible, user]);
+
+  // The module list comes from the server, so the phone, the web form and the
+  // server's own checks can never disagree about what exists.
+  useEffect(() => {
+    if (!visible || role !== 'admin' || catalogue) return;
+    fetchAdminModules()
+      .then((m) => {
+        setCatalogue(m);
+        setCatalogueError(null);
+      })
+      .catch(() => setCatalogueError('Could not load the module list'));
+  }, [visible, role, catalogue]);
+
+  const toggleModule = (id: string) =>
+    setModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const toggleTab = (id: string) =>
     setTabs((prev) => {
@@ -92,6 +122,7 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
     if (isEdit && password && password.length < 8) return Alert.alert('Password', 'Password must be at least 8 characters');
     if (rawPhone && !/^[6-9]\d{9}$/.test(rawPhone)) return Alert.alert('Phone', 'Enter a valid 10-digit Indian mobile number');
 
+    if (role === 'admin' && limit && !catalogue) return Alert.alert('Modules', 'The module list has not loaded yet');
     const all = tabs.size === EMPLOYEE_TABS.length;
     const body: UserSave = {
       fullName: name.trim(),
@@ -105,6 +136,7 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
       can_assign_tickets: flags.can_assign_tickets ? 1 : 0,
       can_update_profile: flags.can_update_profile ? 1 : 0,
       alwaysAssign: flags.alwaysAssign ? 1 : 0,
+      autoAssignEnabled: !!flags.autoAssignEnabled,
       eodExempt: flags.eodExempt ? 1 : 0,
       photoClockinExempt: flags.photoClockinExempt ? 1 : 0,
       geofenceClockinExempt: flags.geofenceClockinExempt ? 1 : 0,
@@ -112,6 +144,8 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
       installationsEnabled: !!flags.installationsEnabled,
       allowFoc: !!flags.allowFoc,
       allowed_tabs: all ? null : [...tabs],
+      // Sent for admins only, so a limited admin editing staff is never refused.
+      ...(role === 'admin' ? { admin_modules: limit ? [...modules] : null } : {}),
       ...(password ? { password } : {}),
     };
     setBusy(true);
@@ -162,6 +196,41 @@ export default function UserEditor({ visible, user, onClose, onSaved }: Props) {
       {staff ? <Field label="Monthly salary (₹)" value={salary} onChangeText={setSalary} keyboardType="numeric" /> : null}
       <Field label="Company / building" value={company} onChangeText={setCompany} />
       <Field label="Address" value={address} onChangeText={setAddress} multiline />
+
+      {role === 'admin' ? (
+        <>
+          <Overline>What this admin can use</Overline>
+          <Text style={[styles.hint, { color: theme.text3 }]}>
+            Dashboard, notifications and profile are always available. Off = a full admin. The server refuses every call to a module that is not ticked, on the web and in this app.
+          </Text>
+          <RowPanel>
+            <SwitchRow label="Limit to the modules ticked below" value={limit} onValueChange={setLimit} last />
+          </RowPanel>
+          {limit ? (
+            catalogue ? (
+              <>
+                <ActionButton label="Tick all" tone="neutral" onPress={() => setModules(new Set(catalogue.map((m) => m.id)))} />
+                <ActionButton label="Clear all" tone="neutral" onPress={() => setModules(new Set())} />
+                {[...new Set(catalogue.map((m) => m.group))].map((group) => {
+                  const rows = catalogue.filter((m) => m.group === group);
+                  return (
+                    <React.Fragment key={group}>
+                      <Overline>{group}</Overline>
+                      <RowPanel>
+                        {rows.map((m, i) => (
+                          <SwitchRow key={m.id} label={m.label} value={modules.has(m.id)} onValueChange={() => toggleModule(m.id)} last={i === rows.length - 1} />
+                        ))}
+                      </RowPanel>
+                    </React.Fragment>
+                  );
+                })}
+              </>
+            ) : (
+              <Text style={[styles.hint, { color: catalogueError ? theme.err : theme.text3 }]}>{catalogueError || 'Loading modules…'}</Text>
+            )
+          ) : null}
+        </>
+      ) : null}
 
       {staff ? (
         <>

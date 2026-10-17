@@ -11,6 +11,7 @@ import SectionLabel from '../../components/admin/SectionLabel';
 import EmptyNote from '../../components/admin/EmptyNote';
 import Icon from '../../components/Icon';
 import { ADMIN_MENU, AdminMenuTone } from '../../navigation/adminMenu';
+import { canOpenRoute, ModuleSet } from '../../navigation/adminAccess';
 import { useTheme } from '../../theme/ThemeContext';
 import { ThemeTokens } from '../../theme/tokens';
 import { radius, spacing, typography } from '../../theme';
@@ -18,6 +19,8 @@ import { radius, spacing, typography } from '../../theme';
 interface Props {
   /** Route names that have a real screen behind them. */
   available: Set<string>;
+  /** A limited admin's modules; pages outside them are left out. null/omitted = everything. */
+  modules?: ModuleSet;
   onOpen: (route: string) => void;
   onTab: (tab: AdminTab) => void;
 }
@@ -39,21 +42,28 @@ function tonePair(theme: ThemeTokens, tone: AdminMenuTone): [string, string] {
 // Every page of the web admin portal, grouped the way the web sidebar groups
 // them. Pages that are not built on mobile yet stay visible but dimmed, so the
 // owner can see what exists on the web and what is still to come.
-export default function AdminMenuScreen({ available, onOpen, onTab }: Props) {
+export default function AdminMenuScreen({ available, modules = null, onOpen, onTab }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
 
+  // What this admin may see at all (a limited admin never sees the rest, not even as "Soon").
+  const menu = useMemo(
+    () =>
+      ADMIN_MENU.map((g) => ({ ...g, items: g.items.filter((i) => !i.route || canOpenRoute(modules, i.route)) })).filter((g) => g.items.length > 0),
+    [modules],
+  );
+
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return ADMIN_MENU.map((g) => ({
+    return menu.map((g) => ({
       ...g,
       items: g.items.filter((i) => !q || i.label.toLowerCase().includes(q) || i.hint.toLowerCase().includes(q) || g.label.toLowerCase().includes(q)),
     })).filter((g) => g.items.length > 0);
-  }, [query]);
+  }, [query, menu]);
 
-  const total = ADMIN_MENU.reduce((n, g) => n + g.items.length, 0);
-  const built = ADMIN_MENU.reduce((n, g) => n + g.items.filter((i) => i.route && available.has(i.route)).length, 0);
+  const total = menu.reduce((n, g) => n + g.items.length, 0);
+  const built = menu.reduce((n, g) => n + g.items.filter((i) => i.route && available.has(i.route)).length, 0);
 
   return (
     <View style={styles.root}>

@@ -58,6 +58,8 @@ import AttendanceReportScreen from '../screens/admin/AttendanceReportScreen';
 import JobMaterialsScreen from '../screens/JobMaterialsScreen';
 import ClientFeedbackScreen from '../screens/admin/ClientFeedbackScreen';
 import RequestReportsScreen from '../screens/admin/RequestReportsScreen';
+import { useAuth } from '../context/AuthContext';
+import { parseAdminModules } from './adminAccess';
 import DailyReportScreen from '../screens/admin/DailyReportScreen';
 import AiAssistantScreen from '../screens/AiAssistantScreen';
 import CalendarScreen from '../screens/CalendarScreen';
@@ -171,9 +173,12 @@ function HomeRoute({ navigation }: any) {
 }
 
 function MenuRoute({ navigation }: any) {
+  const { user } = useAuth();
+  const modules = React.useMemo(() => parseAdminModules(user), [user]);
   return (
     <AdminMenuScreen
       available={AVAILABLE}
+      modules={modules}
       onOpen={(route) => navigation.navigate(route)}
       onTab={(tab) => navigation.navigate(tab === 'menu' ? 'Menu' : tab === 'notifications' ? 'Notifications' : 'Home')}
     />

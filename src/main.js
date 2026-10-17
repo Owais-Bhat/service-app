@@ -96,6 +96,24 @@ function filterTabs(items) {
   return kept;
 }
 
+// An admin account can be limited to chosen modules (profiles.admin_modules):
+// null = the whole portal. The ids are the sidebar page ids. The server enforces
+// the same list, so hiding a page here is only the courtesy.
+let adminModules = null;
+const readAdminModules = (u) => {
+  let v = u?.admin_modules;
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return new Set(); } }
+  return Array.isArray(v) ? new Set(v.map(String)) : null;
+};
+const adminMayOpen = (page) => !adminModules || ALWAYS_ON_TABS.has(page) || adminModules.has(String(page));
+function filterAdminModules(items) {
+  if (!adminModules) return items;
+  return items
+    .map(it => it.type === 'group' ? { ...it, children: it.children.filter(c => adminMayOpen(c.id)) } : it)
+    .filter(it => it.type === 'group' ? it.children.length : adminMayOpen(it.id));
+}
+
 function getNavItems(role) {
   if (role === 'employee') {
     return filterTabs([
@@ -410,6 +428,10 @@ function startGlobalNotifications() {
 let _navHistoryStarted = false;
 function navigate(page, opts = {}) {
   hidePWAInstallBtn();
+  if (currentRole === 'admin' && !adminMayOpen(page)) {
+    toast('Your account does not have access to that page.', 'warning');
+    page = 'dashboard';
+  }
   activePage = page;
   // Push to browser history so the phone's back button navigates within the app
   // (in an installed PWA, without this the back button just backgrounds the app).
@@ -419,7 +441,7 @@ function navigate(page, opts = {}) {
       else history.pushState({ page, app: true }, '', `#${page}`);
     } catch { /* history unavailable */ }
   }
-  const navItems = getNavItems(currentRole);
+  const navItems = currentRole === 'admin' ? filterAdminModules(getNavItems('admin')) : getNavItems(currentRole);
   const renderer = getPageRenderer(currentRole, page);
   renderLayout({
     user: currentUser, role: currentRole, activePage, navItems,
@@ -550,6 +572,7 @@ function showAuth() {
       }
       currentUser = user;
       currentRole = role;
+      adminModules = role === 'admin' ? readAdminModules(user) : null;
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
       if (role === 'employee') { canAddService = readCanAddService(user); canAssignTickets = readCanAssignTickets(user); allowedTabs = readAllowedTabs(user); isGigWorker = readIsGigWorker(user); installationsEnabled = readInstallationsEnabled(user); startLiveLocationPing(user.id); }
       watchMyProfile(user.id);
@@ -638,6 +661,7 @@ async function boot() {
         return;
       }
       localStorage.setItem(SESSION_DAY_KEY, todayKey());
+      adminModules = currentRole === 'admin' ? readAdminModules(currentUser) : null;
 
       if (currentRole === 'employee') { canAddService = readCanAddService(currentUser); canAssignTickets = readCanAssignTickets(currentUser); allowedTabs = readAllowedTabs(currentUser); isGigWorker = readIsGigWorker(currentUser); installationsEnabled = readInstallationsEnabled(currentUser); startLiveLocationPing(currentUser.id); }
       watchMyProfile(currentUser.id);

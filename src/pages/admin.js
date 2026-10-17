@@ -2239,7 +2239,7 @@ export async function renderUsers(container) {
                   <b>${escapeHtml(u.full_name || "-")}</b>
                   <div style="font-size:0.78rem;color:var(--text-dim);margin-top:2px;">${escapeHtml(u.email || "-")}</div>
                 </td>
-                <td><span class="badge ${u.role === "admin" ? "badge-danger" : u.role === "employee" ? "badge-open" : "badge-resolved"}">${escapeHtml(u.role || "client")}</span>${u.role === "employee" ? `<span class="badge ${u.worker_type === "gig" ? "badge-assigned" : "badge-in_progress"}" style="margin-left:4px;">${u.worker_type === "gig" ? "Gig" : "Fixed"}</span>` : ""}</td>
+                <td><span class="badge ${u.role === "admin" ? "badge-danger" : u.role === "employee" ? "badge-open" : "badge-resolved"}">${escapeHtml(u.role || "client")}</span>${u.role === "admin" && u.admin_modules ? `<span class="badge badge-assigned" style="margin-left:4px;" title="Limited to chosen modules">Limited</span>` : ""}${u.role === "employee" ? `<span class="badge ${u.worker_type === "gig" ? "badge-assigned" : "badge-in_progress"}" style="margin-left:4px;">${u.worker_type === "gig" ? "Gig" : "Fixed"}</span>` : ""}</td>
                 <td>
                   ${u.phone ? `<b>${escapeHtml(u.phone)}</b>` : '<span style="color:var(--text-dim)">—</span>'}
                 </td>
@@ -2339,6 +2339,14 @@ export async function renderUsers(container) {
       { id: "estimator", label: "Estimator" },
       { id: "service-pricing", label: "Service Pricing" },
     ];
+    // null = a full admin; otherwise the modules this admin is limited to.
+    let adminSet = null;
+    try {
+      if (user && user.admin_modules) {
+        const a = typeof user.admin_modules === "string" ? JSON.parse(user.admin_modules) : user.admin_modules;
+        if (Array.isArray(a)) adminSet = new Set(a.map(String));
+      }
+    } catch { adminSet = new Set(); /* an unreadable limit must not become full access */ }
     let allowedSet = null;
     try {
       if (user && user.allowed_tabs) {
@@ -2417,7 +2425,8 @@ export async function renderUsers(container) {
               ${toggleRow("usr-add-service", "Add Service Access (Staff only)", isEdit && user.can_add_service)}
               ${toggleRow("usr-assign-tickets", "Assign Service Requests (Staff only)", isEdit && user.can_assign_tickets)}
               ${toggleRow("usr-edit-profile", "Profile Edit Access (Staff only)", isEdit && user.can_update_profile)}
-              ${toggleRow("usr-always-assign", "Always Auto-Assign Service (Staff only)", isEdit && user.always_assign)}
+              ${toggleRow("usr-auto-assign", "Include in Auto-Assignment (Staff only). Off = never gets auto-assigned jobs", !isEdit || user.auto_assign_enabled === undefined || user.auto_assign_enabled === null || Number(user.auto_assign_enabled) === 1)}
+              ${toggleRow("usr-always-assign", "Also auto-assign when clocked out (Staff only)", isEdit && user.always_assign)}
               ${toggleRow("usr-eod-exempt", "EOD Exempt (Staff only)", isEdit && user.eod_exempt)}
               ${toggleRow("usr-photo-exempt", "Photo Clock-In Exempt (Staff only)", isEdit && user.photo_clockin_exempt)}
               ${toggleRow("usr-geofence-exempt", "Location Clock-In Exempt (Staff only)", isEdit && user.geofence_clockin_exempt)}
@@ -2429,6 +2438,13 @@ export async function renderUsers(container) {
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">
                 ${EMP_TABS.map(t => toggleRow(`usr-tab-${t.id}`, escapeHtml(t.label), allowedSet ? allowedSet.has(t.id) : true, `class="usr-tab-chk" value="${t.id}"`)).join("")}
               </div>
+            </div>
+
+            <div class="form-group" id="usr-admin-section" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+              <label style="font-weight:700;">What can this admin use</label>
+              ${toggleRow("usr-limit-modules", "Limit this admin to the modules ticked below", adminSet !== null)}
+              <p style="font-size:.78rem;color:var(--text-dim);margin:4px 0 12px;">Dashboard, Notifications and Profile are always available. Off = a full admin who can use everything. The server refuses every call to a module that is not ticked, on the web and in the mobile app.</p>
+              <div id="usr-modules-box" style="display:none;"><small style="color:var(--text-dim);">Loading modules…</small></div>
             </div>
           </form>
         </div>
@@ -2447,6 +2463,43 @@ export async function renderUsers(container) {
     overlay.onclick = (e) => {
       if (e.target === overlay) close();
     };
+
+    // ── Admin modules ──
+    const roleSel = overlay.querySelector("#usr-role");
+    const adminSection = overlay.querySelector("#usr-admin-section");
+    const limitChk = overlay.querySelector("#usr-limit-modules");
+    const modulesBox = overlay.querySelector("#usr-modules-box");
+    let moduleCatalogue = null;
+    const paintModules = () => {
+      if (!moduleCatalogue) return;
+      const groups = [...new Set(moduleCatalogue.map((m) => m.group))];
+      modulesBox.innerHTML = `
+        <div style="display:flex;gap:12px;margin-bottom:8px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="usr-mod-all">Tick all</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="usr-mod-none">Clear all</button>
+        </div>
+        ${groups.map((g) => `
+          <div style="margin-bottom:10px;">
+            <div style="font-size:.74rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px;">${escapeHtml(g)}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 24px;">
+              ${moduleCatalogue.filter((m) => m.group === g).map((m) => toggleRow(`usr-mod-${m.id}`, escapeHtml(m.label), adminSet ? adminSet.has(m.id) : false, `class="usr-mod-chk" value="${m.id}"`)).join("")}
+            </div>
+          </div>`).join("")}`;
+      const setAll = (on) => modulesBox.querySelectorAll(".usr-mod-chk").forEach((c) => { c.checked = on; });
+      modulesBox.querySelector("#usr-mod-all").onclick = () => setAll(true);
+      modulesBox.querySelector("#usr-mod-none").onclick = () => setAll(false);
+    };
+    const syncAdminSection = () => {
+      adminSection.style.display = roleSel.value === "admin" ? "" : "none";
+      modulesBox.style.display = roleSel.value === "admin" && limitChk.checked ? "" : "none";
+    };
+    roleSel.onchange = syncAdminSection;
+    limitChk.onchange = syncAdminSection;
+    syncAdminSection();
+    fetch(`${apiBase}/admin/modules`, { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Could not load the module list"))))
+      .then((d) => { moduleCatalogue = d.modules || []; paintModules(); })
+      .catch((e) => { modulesBox.innerHTML = `<small style="color:var(--danger);">${escapeHtml(e.message)}</small>`; });
 
     const phoneInput = overlay.querySelector("#usr-phone");
     phoneInput.oninput = () => {
@@ -2473,6 +2526,7 @@ export async function renderUsers(container) {
       const can_update_profile =
         overlay.querySelector("#usr-edit-profile").checked;
       const alwaysAssign = overlay.querySelector("#usr-always-assign").checked;
+      const autoAssignEnabled = overlay.querySelector("#usr-auto-assign").checked;
       const eodExempt = overlay.querySelector("#usr-eod-exempt").checked;
       const photoClockinExempt = overlay.querySelector("#usr-photo-exempt").checked;
       const geofenceClockinExempt = overlay.querySelector("#usr-geofence-exempt").checked;
@@ -2501,6 +2555,7 @@ export async function renderUsers(container) {
         can_assign_tickets: can_assign_tickets ? 1 : 0,
         can_update_profile: can_update_profile ? 1 : 0,
         alwaysAssign: alwaysAssign ? 1 : 0,
+        autoAssignEnabled,
         eodExempt: eodExempt ? 1 : 0,
         photoClockinExempt: photoClockinExempt ? 1 : 0,
         geofenceClockinExempt: geofenceClockinExempt ? 1 : 0,
@@ -2514,6 +2569,17 @@ export async function renderUsers(container) {
       const allTabChks = [...overlay.querySelectorAll(".usr-tab-chk")];
       const checkedTabs = allTabChks.filter((c) => c.checked).map((c) => c.value);
       payload.allowed_tabs = checkedTabs.length === allTabChks.length ? null : checkedTabs;
+
+      // Module limit: sent only for an admin (null = a full admin). Nothing is
+      // sent for staff, so a limited admin editing staff is never refused.
+      if (role === "admin") {
+        if (limitChk.checked) {
+          if (!moduleCatalogue) return toast("The module list has not loaded yet", "warning");
+          payload.admin_modules = [...modulesBox.querySelectorAll(".usr-mod-chk")].filter((c) => c.checked).map((c) => c.value);
+        } else {
+          payload.admin_modules = null;
+        }
+      }
 
       if (password) payload.password = password;
 

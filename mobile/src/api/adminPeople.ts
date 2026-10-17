@@ -9,6 +9,8 @@ export interface UserRow {
   company?: string | null;
   address?: string | null;
   allowed_tabs?: string | string[] | null;
+  admin_modules?: string | string[] | null;
+  auto_assign_enabled?: number | null;
   role: string;
   salary: number | string | null;
   worker_type: string | null;
@@ -38,6 +40,7 @@ export type UserPatch = Partial<{
   can_assign_tickets: boolean;
   can_update_profile: boolean;
   alwaysAssign: boolean;
+  autoAssignEnabled: boolean;
   eodExempt: boolean;
   photoClockinExempt: boolean;
   geofenceClockinExempt: boolean;
@@ -83,6 +86,7 @@ export interface UserSave {
   can_assign_tickets: number;
   can_update_profile: number;
   alwaysAssign: number;
+  autoAssignEnabled: boolean;
   eodExempt: number;
   photoClockinExempt: number;
   geofenceClockinExempt: number;
@@ -90,6 +94,20 @@ export interface UserSave {
   installationsEnabled: boolean;
   allowFoc: boolean;
   allowed_tabs: string[] | null;
+  /** Sent for admins only: null = the whole portal, a list = limited to those modules. */
+  admin_modules?: string[] | null;
+}
+
+export interface AdminModule {
+  id: string;
+  label: string;
+  group: string;
+}
+
+// The modules an admin can be limited to; the same list the web form draws.
+export async function fetchAdminModules(): Promise<AdminModule[]> {
+  const res = await api.get<{ modules?: AdminModule[] }>('/admin/modules');
+  return res.modules ?? [];
 }
 
 export function createUser(body: UserSave): Promise<unknown> {
